@@ -23,6 +23,7 @@
 - When adding interactive elements that should look like links, wrap shadcn buttons with `Link` via `asChild` rather than styling `<a>` tags manually.
 
 ## Data & Mocking
+- Primary backend services live in the Supabase project `stg_nonroco`; align env vars/secrets with that instance when wiring API calls.
 - Temporary datasets live in `lib/mock-data.ts`. Import from there for list/detail views instead of redefining mock arrays inside pages.
 - If you need extra mock entries, extend the relevant export in `lib/mock-data.ts` so the entire app shares the same fixtures.
 

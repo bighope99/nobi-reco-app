@@ -6,6 +6,7 @@ Use this handbook whenever you update the のびレコ child-growth recording ap
 - Next.js 13 App Router + TypeScript with shadcn/ui primitives under `components/ui`.
 - Two personas: **staff/facility users** (routes under `/dashboard`, `/children`, `/records`, `/attendance`, `/settings`, `/data`) and **site administrators** (routes under `/admin/**`).
 - Mock content lives in `lib/mock-data.ts`; extend these exports when you need additional seed data.
+- The backing data platform is Supabase project `stg_nonroco`; coordinate credentials/env vars with that instance when hitting real APIs.
 
 ## Implementation Guardrails
 - Wrap new staff views with `StaffLayout` and admin views with `AdminLayout` so the shared sidebar/header render correctly. Set `title`/`subtitle` props using Japanese text.
