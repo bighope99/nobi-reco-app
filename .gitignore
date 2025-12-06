@@ -23,3 +23,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+.agent
+.claude
+.ui_file
+
+.mcp.json
+setting.local.json
