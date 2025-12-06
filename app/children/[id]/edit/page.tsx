@@ -234,8 +234,8 @@ export default function ChildRegistrationForm() {
                   key={item.id}
                   href={`#${item.id} `}
                   className={`flex items - center gap - 3 px - 3 py - 2.5 text - sm font - medium rounded - lg transition - all ${activeSection === item.id
-                      ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     } `}
                 >
                   <item.icon size={18} className={activeSection === item.id ? 'text-indigo-600' : 'text-slate-400'} />
@@ -559,4 +559,3 @@ export default function ChildRegistrationForm() {
     </StaffLayout>
   );
 }
-```
