@@ -1,0 +1,7 @@
+.cursor/*
+.cursorrules
+
+node_modules
+.next/
+
+.env.local
