@@ -1,24 +1,73 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { Button } from '@/components/ui/button';
+import { LogOut, Loader2 } from 'lucide-react';
 
-export function LogoutButton() {
+interface LogoutButtonProps {
+    variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+    size?: 'default' | 'sm' | 'lg' | 'icon';
+    className?: string;
+    showIcon?: boolean;
+}
+
+export function LogoutButton({
+    variant = 'destructive',
+    size = 'default',
+    className,
+    showIcon = true
+}: LogoutButtonProps) {
     const router = useRouter();
+    const [isLoading, setIsLoading] = useState(false);
     const supabase = createClient();
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        sessionStorage.removeItem('user_session');
-        router.push('/login');
+        setIsLoading(true);
+
+        try {
+            // Supabase セッションをクリア
+            const { error } = await supabase.auth.signOut();
+
+            if (error) {
+                console.error('Logout error:', error);
+                alert('ログアウトに失敗しました。もう一度お試しください。');
+                setIsLoading(false);
+                return;
+            }
+
+            // sessionStorage をクリア
+            sessionStorage.removeItem('user_session');
+
+            // ログインページへリダイレクト
+            router.push('/login');
+        } catch (error) {
+            console.error('Logout error:', error);
+            alert('ログアウトに失敗しました。もう一度お試しください。');
+            setIsLoading(false);
+        }
     };
 
     return (
-        <button
+        <Button
             onClick={handleLogout}
-            className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+            variant={variant}
+            size={size}
+            disabled={isLoading}
+            className={className}
         >
-            ログアウト
-        </button>
+            {isLoading ? (
+                <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ログアウト中...
+                </>
+            ) : (
+                <>
+                    {showIcon && <LogOut className="mr-2 h-4 w-4" />}
+                    ログアウト
+                </>
+            )}
+        </Button>
     );
 }

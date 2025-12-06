@@ -1,5 +1,4 @@
 import { createClient } from '@/utils/supabase/server';
-import { cookies } from 'next/headers';
 
 export interface UserSession {
     user_id: string;
@@ -23,8 +22,7 @@ export interface UserSession {
 }
 
 export async function getUserSession(userId: string): Promise<UserSession | null> {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = await createClient();
 
     try {
         // 1. Fetch User Basic Info

@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Project Context
 **Name**: Nobi-Reco (のびレコ)
 **Description**: A SaaS application for visualizing children's growth and streamlining record-keeping in childcare and education settings.
