@@ -14,10 +14,10 @@ import {
   Database,
   Building2,
   Home,
-  LogOut,
   ChevronDown,
 } from "lucide-react"
 import { useState } from "react"
+import { LogoutButton } from "@/components/LogoutButton"
 
 type NavItem = {
   label: string
@@ -176,13 +176,11 @@ export function Sidebar({ type }: SidebarProps) {
       </nav>
 
       <div className="border-t border-sidebar-border p-4">
-        <Link
-          href="/login"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent"
-        >
-          <LogOut className="h-5 w-5" />
-          ログアウト
-        </Link>
+        <LogoutButton
+          variant="ghost"
+          size="default"
+          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+        />
       </div>
     </aside>
   )
