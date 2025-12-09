@@ -17,7 +17,6 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 **リクエストボディ**:
 ```typescript
 {
-  "facility_id": "uuid-facility-1",
   "class_id": "uuid-class-1",           // 対象クラス
   "activity_date": "2023-10-27",        // 活動日（YYYY-MM-DD）
   "title": "公園で外遊び",               // 活動タイトル（任意）
@@ -39,10 +38,11 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
       }
     }
   ],
-  "is_draft": true,                      // 下書きフラグ（true=下書き、false=確定）
-  "created_by": "uuid-user-1"            // 作成者（セッションから取得）
+  "is_draft": true                       // 下書きフラグ（true=下書き、false=確定）
 }
 ```
+
+**備考**: `facility_id`と`created_by`はセッション情報から自動取得します。
 
 **レスポンス** (成功):
 ```typescript
@@ -63,10 +63,16 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 2. 写真は `photos` JSONB カラムに保存
 3. 下書きの場合、確定前の状態として保存
 
+**権限別アクセス制御**:
+- **site_admin**: 自分の施設のみ（※管理ページ用、Phase 2で実装予定）
+- **company_admin**: 自社の全施設
+- **facility_admin**: 自施設のみ
+- **staff**: 担当クラスのみ（※Phase 2で実装予定、現在は全クラス操作可）
+
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足、不正な日付
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: クラスへのアクセス権限なし
+- `404 Not Found`: クラスが見つからない、またはアクセス権限なし
 - `500 Internal Server Error`: サーバーエラー
 
 ---
@@ -171,9 +177,16 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 自立、社会性、感情の安定、好奇心、表現力、忍耐力、挑戦、協調性、...
 ```
 
+**権限別アクセス制御**:
+- **site_admin**: 自分の施設のみ（※管理ページ用、Phase 2で実装予定）
+- **company_admin**: 自社の全施設
+- **facility_admin**: 自施設のみ
+- **staff**: 担当クラスのみ（※Phase 2で実装予定、現在は全クラス操作可）
+
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足、メンションなし
 - `401 Unauthorized`: 認証エラー
+- `404 Not Found`: 活動記録が見つからない、またはアクセス権限なし
 - `429 Too Many Requests`: AI APIレート制限
 - `500 Internal Server Error`: AI APIエラー
 - `503 Service Unavailable`: AI APIダウン
@@ -231,11 +244,16 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 4. 子どもの声があれば `r_voice` にも保存
 5. トランザクション処理（全て成功 or 全て失敗）
 
+**権限別アクセス制御**:
+- **site_admin**: 自分の施設のみ（※管理ページ用、Phase 2で実装予定）
+- **company_admin**: 自社の全施設
+- **facility_admin**: 自施設のみ
+- **staff**: 担当クラスのみ（※Phase 2で実装予定、現在は全クラス操作可）
+
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足、承認されていない記録あり
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: 活動記録へのアクセス権限なし
-- `404 Not Found`: 活動記録が見つからない
+- `404 Not Found`: 活動記録が見つからない、またはアクセス権限なし
 - `409 Conflict`: 既に確定済み
 - `500 Internal Server Error`: サーバーエラー
 
@@ -290,11 +308,16 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 - `unique_key` で一意に識別
 - サジェストUI上で区別できるように表示
 
+**権限別アクセス制御**:
+- **site_admin**: 自分の施設のみ（※管理ページ用、Phase 2で実装予定）
+- **company_admin**: 自社の全施設
+- **facility_admin**: 自施設のみ
+- **staff**: 担当クラスのみ（※Phase 2で実装予定、現在は全クラス閲覧可）
+
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: クラスへのアクセス権限なし
-- `404 Not Found`: クラスが見つからない
+- `404 Not Found`: クラスが見つからない、またはアクセス権限なし
 - `500 Internal Server Error`: サーバーエラー
 
 ---
@@ -309,11 +332,12 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 ```typescript
 {
   file: File;                // 画像ファイル
-  facility_id: string;       // 施設ID
   activity_date: string;     // 活動日（YYYY-MM-DD）
   caption?: string;          // 写真の説明（任意）
 }
 ```
+
+**備考**: `facility_id`はセッション情報（`current_facility_id`）から自動取得します。
 
 **レスポンス** (成功):
 ```typescript
@@ -358,13 +382,14 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 **リクエストパラメータ**:
 ```typescript
 {
-  facility_id: string;  // 施設ID
   date?: string;        // 対象日（YYYY-MM-DD、省略時は本日）
   class_id?: string;    // クラスフィルター
   limit?: number;       // 取得件数（デフォルト: 20）
   offset?: number;      // オフセット（ページネーション）
 }
 ```
+
+**備考**: `facility_id`はセッション情報（`current_facility_id`）から自動取得します。
 
 **レスポンス** (成功):
 ```typescript
@@ -587,9 +612,44 @@ const timeout = 30000;  // 30秒
 ## セキュリティ
 
 ### アクセス制御
-- ユーザーが所属する施設・クラスのデータのみアクセス可能
-- RLS（Row Level Security）で施設レベルのデータ分離
+
+#### 権限管理
+本APIは以下の4つのロールに対応しています：
+
+1. **site_admin（サイト管理者）**:
+   - 自分の施設のみアクセス可能
+   - 用途: 管理ページでの利用（Phase 2で実装予定）
+
+2. **company_admin（会社管理者）**:
+   - 自社が運営する全施設にアクセス可能
+   - 複数施設を横断的に管理
+
+3. **facility_admin（施設管理者）**:
+   - 自施設のみアクセス可能
+   - 全クラスのデータを閲覧・編集可能
+
+4. **staff（一般職員）**:
+   - 現在: 自施設の全クラスにアクセス可能
+   - Phase 2: 担当クラスのみアクセス可能に制限予定（`_user_class`テーブルで管理）
+
+#### 施設IDの取得
+- `facility_id`はリクエストパラメータではなく、セッション情報（`current_facility_id`）から自動取得します
+- これにより、ユーザーが不正な施設IDを指定することを防止します
+- **複数施設の切り替え機能はPhase 2で実装予定**
+
+#### データ分離
+- RLS（Row Level Security）で施設レベルのデータを分離
+- クエリ実行時に`facility_id`でフィルタリング
+- staffユーザーの場合、Phase 2で`_user_class`テーブルを使用したクラス単位の制限を実装予定
+
+#### エラーハンドリング戦略
+- アクセス権限がない場合: `404 Not Found`を返す
+- 理由: `403 Forbidden`ではリソースの存在を推測可能になるため、セキュリティ上`404`を優先
+
+#### AI解析のセキュリティ
 - AI解析結果は一時的にサーバーメモリに保持（保存は承認後のみ）
+- 承認前のAI生成データは永続化されません
+- Human-in-the-loop により、不適切な内容が記録されることを防止
 
 ### 入力検証
 - `content`: 最大10,000文字
@@ -600,6 +660,7 @@ const timeout = 30000;  // 30秒
 ### プライバシー保護
 - AI APIに送信する際、児童の個人情報（氏名）は仮名化を検討
 - AI処理ログは30日間保持後削除
+- 写真のEXIF情報（位置情報等）は自動削除
 
 ---
 

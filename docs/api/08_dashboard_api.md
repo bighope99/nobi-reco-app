@@ -16,11 +16,14 @@
 **リクエストパラメータ**:
 ```typescript
 {
-  facility_id: string;  // 施設ID（セッションから取得）
   date?: string;        // 対象日（省略時は本日）YYYY-MM-DD
   class_id?: string;    // クラスフィルター（省略時は全クラス）
 }
 ```
+
+**セッション情報**:
+- `facility_id`: セッションの `current_facility_id` から自動取得
+- ユーザーが所属する施設のデータのみ取得可能
 
 **レスポンス** (成功):
 ```typescript
@@ -147,10 +150,15 @@
 }
 ```
 
+**権限別アクセス制御**:
+- `site_admin`: 自分の施設のみ（※管理ページ用、Phase 2で実装予定）
+- `company_admin`: 自社の全施設
+- `facility_admin`: 自施設のみ
+- `staff`: 担当クラスのみ（※Phase 2で実装予定）
+
 **エラーレスポンス**:
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: 施設へのアクセス権限なし
-- `404 Not Found`: 施設が見つからない
+- `404 Not Found`: データが見つからない、または権限不足（権限有無を隠蔽）
 - `500 Internal Server Error`: サーバーエラー
 
 ---
@@ -165,12 +173,14 @@
 ```typescript
 {
   "child_id": "uuid-child-1",
-  "facility_id": "uuid-facility-1",
   "check_in_time": "08:30",        // HH:mm形式（省略時は現在時刻）
   "check_in_method": "manual",      // "qr" | "manual"
   "note": "予定外登園"               // 備考（任意）
 }
 ```
+
+**セッション情報**:
+- `facility_id`: セッションの `current_facility_id` から自動取得
 
 **レスポンス** (成功):
 ```typescript
@@ -193,8 +203,7 @@
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足、既に登園済み
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: 子どもへのアクセス権限なし
-- `404 Not Found`: 子どもが見つからない
+- `404 Not Found`: 子どもが見つからない、または権限不足
 - `500 Internal Server Error`: サーバーエラー
 
 ---
@@ -233,8 +242,7 @@
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: 子どもへのアクセス権限なし
-- `404 Not Found`: 子どもまたは出席予定が見つからない
+- `404 Not Found`: 子どもまたは出席予定が見つからない、または権限不足
 - `500 Internal Server Error`: サーバーエラー
 
 ---
@@ -276,8 +284,7 @@
 **エラーレスポンス**:
 - `400 Bad Request`: 必須パラメータ不足
 - `401 Unauthorized`: 認証エラー
-- `403 Forbidden`: 子どもへのアクセス権限なし
-- `404 Not Found`: 子どもが見つからない
+- `404 Not Found`: 子どもが見つからない、または権限不足
 - `500 Internal Server Error`: サーバーエラー
 
 ---
@@ -442,12 +449,25 @@ CREATE INDEX idx_h_attendance_child_date_in
 ## セキュリティ
 
 ### アクセス制御
-- ユーザーが所属する施設のデータのみ取得可能
+
+#### 権限別アクセス範囲
+- **site_admin**: 自分の施設のみ（※管理ページ用、Phase 2で実装予定）
+- **company_admin**: 自社の全施設のデータにアクセス可能
+- **facility_admin**: 自施設のみのデータにアクセス可能
+- **staff**: 担当クラスのみのデータにアクセス可能（※Phase 2で実装予定）
+
+#### セッション管理
+- `facility_id`: セッションの `current_facility_id` から自動取得
+- 複数施設担当の職員: Phase 2で施設切り替え機能を実装予定（`/api/auth/switch-facility`）
+- 現在は単一施設のみ対応
+
+#### データ分離
 - RLS（Row Level Security）で施設レベルのデータ分離
-- API呼び出し時に`facility_id`をセッションから取得し検証
+- ユーザーが所属する施設のデータのみ取得可能
+- 権限不足の場合は `404 Not Found` を返す（権限有無を隠蔽）
 
 ### 入力検証
-- `child_id`, `facility_id`: UUID形式チェック
+- `child_id`: UUID形式チェック
 - `date`: YYYY-MM-DD形式チェック
 - `check_in_time`: HH:mm形式チェック
 
@@ -458,14 +478,16 @@ CREATE INDEX idx_h_attendance_child_date_in
 ### 共通エラーコード
 ```typescript
 {
-  "CHILD_NOT_FOUND": "子どもが見つかりません",
+  "CHILD_NOT_FOUND": "子どもが見つかりません",  // 404エラー
   "ALREADY_CHECKED_IN": "既に登園済みです",
   "INVALID_DATE_FORMAT": "日付形式が不正です",
   "INVALID_TIME_FORMAT": "時刻形式が不正です",
-  "FACILITY_ACCESS_DENIED": "施設へのアクセス権限がありません",
-  "ATTENDANCE_NOT_FOUND": "出席予定が見つかりません"
+  "ATTENDANCE_NOT_FOUND": "出席予定が見つかりません",  // 404エラー
+  "UNAUTHORIZED": "認証が必要です"  // 401エラー
 }
 ```
+
+**注意**: 権限不足の場合も `404 Not Found` を返し、エラーコードは `CHILD_NOT_FOUND` 等を使用（権限有無を隠蔽）
 
 ---
 
