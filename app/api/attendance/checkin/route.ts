@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
