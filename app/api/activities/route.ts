@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { ChatOpenAI } from '@langchain/openai';
+import { PromptTemplate } from '@langchain/core/prompts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -123,6 +125,134 @@ export async function GET(request: NextRequest) {
         activities: formattedActivities,
         total: count || formattedActivities.length,
         has_more: (count || 0) > offset + limit,
+      },
+    });
+
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+
+    // 認証チェック
+    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    if (authError || !session) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // セッションからfacility_idを取得
+    const userSession = await getUserSession(session.user.id);
+    if (!userSession?.current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Facility not found in session' },
+        { status: 400 }
+      );
+    }
+
+    const facility_id = userSession.current_facility_id;
+    const body = await request.json();
+    const { activity_date, class_id, title, content, snack, child_ids, is_draft } = body;
+
+    if (!activity_date || !class_id || !content) {
+      return NextResponse.json(
+        { success: false, error: 'activity_date, class_id, and content are required' },
+        { status: 400 }
+      );
+    }
+
+    // 活動記録を作成
+    const { data: activity, error: activityError } = await supabase
+      .from('r_activity')
+      .insert({
+        facility_id,
+        class_id,
+        activity_date,
+        title: title || '活動記録',
+        content,
+        snack,
+        is_draft: is_draft || false,
+        status: is_draft ? 'draft' : 'published',
+        created_by: session.user.id,
+      })
+      .select()
+      .single();
+
+    if (activityError) {
+      console.error('Activity insert error:', activityError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to create activity' },
+        { status: 500 }
+      );
+    }
+
+    // LangChainで個別記録を生成（簡素化版：入力をそのまま返す）
+    const observations = [];
+    if (child_ids && child_ids.length > 0) {
+      // Initialize LangChain
+      const model = new ChatOpenAI({
+        modelName: 'gpt-4o-mini',
+        temperature: 0.7,
+        openAIApiKey: process.env.OPENAI_API_KEY,
+      });
+
+      // Simple prompt that returns the input as-is
+      const template = `以下の活動内容から、児童の様子を記録してください。
+
+活動内容: {content}
+
+記録:`;
+
+      const prompt = PromptTemplate.fromTemplate(template);
+      const chain = prompt.pipe(model);
+
+      for (const child_id of child_ids) {
+        try {
+          // Call LangChain (minimal implementation)
+          const result = await chain.invoke({ content });
+          const observationContent = result.content || content;
+
+          // Insert observation record
+          const { error: obsError } = await supabase
+            .from('r_observation')
+            .insert({
+              child_id,
+              facility_id,
+              activity_id: activity.id,
+              recorded_at: new Date().toISOString(),
+              content: observationContent,
+              created_by: session.user.id,
+            });
+
+          if (!obsError) {
+            observations.push({ child_id, content: observationContent });
+          }
+        } catch (error) {
+          console.error('LangChain error for child:', child_id, error);
+          // Continue with next child even if one fails
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        activity_id: activity.id,
+        activity_date: activity.activity_date,
+        title: activity.title,
+        content: activity.content,
+        is_draft: activity.is_draft,
+        observations_created: observations.length,
+        observations,
       },
     });
 
