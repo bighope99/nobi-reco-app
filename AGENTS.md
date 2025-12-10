@@ -6,6 +6,8 @@ Use this repository in alignment with the specifications in the `docs/` folder. 
 - Preserve the multi-tenant hierarchy (organization → facility → class) and the staff-facing web UX outlined in `docs/01_requirements.md`. Out-of-scope MVP items (guardian mobile app, billing, email delivery) must remain stubbed unless the specs change.
 - Keep user access within defined roles (system/organization/facility admins and staff). Design data filters and UI visibility to match those scopes.
 - When you open a PR, cite the specific doc sections that justify the change; explain how the work stays within spec.
+- Place implementation plans under the top-level `plan/` directory with numbered filenames (e.g., `01_*.md`) instead of `docs/`.
+- Commit and push changes frequently to keep the repository history granular and up to date.
 
 ## Data and schema alignment
 - Reflect the database updates in `docs/03_database.md` and `docs/08_database_additions.md`: adopt `m_guardians`, `_child_guardian`, `_child_sibling`, `r_report`, `h_report_share`, and treat guardian columns in `m_children` as deprecated, not authoritative.
