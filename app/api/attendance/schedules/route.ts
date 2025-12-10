@@ -1,0 +1,130 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/utils/supabase/server';
+import { getUserSession } from '@/lib/auth/session';
+
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+
+    // 認証チェック
+    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    if (authError || !session) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // セッションからfacility_idを取得
+    const userSession = await getUserSession(session.user.id);
+    if (!userSession?.current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Facility not found in session' },
+        { status: 400 }
+      );
+    }
+
+    const facility_id = userSession.current_facility_id;
+    const class_id = searchParams.get('class_id');
+    const search = searchParams.get('search');
+
+    // 児童の出席予定パターンを取得
+    let query = supabase
+      .from('m_children')
+      .select(`
+        id,
+        family_name,
+        given_name,
+        family_name_kana,
+        given_name_kana,
+        photo_url,
+        _child_class!inner (
+          class_id,
+          m_classes!inner (
+            id,
+            name,
+            grade
+          )
+        ),
+        s_attendance_schedule (
+          monday,
+          tuesday,
+          wednesday,
+          thursday,
+          friday,
+          saturday,
+          sunday,
+          updated_at
+        )
+      `)
+      .eq('facility_id', facility_id)
+      .eq('enrollment_status', 'enrolled')
+      .eq('_child_class.is_current', true)
+      .is('deleted_at', null);
+
+    // クラスフィルター
+    if (class_id) {
+      query = query.eq('_child_class.class_id', class_id);
+    }
+
+    // 検索フィルター
+    if (search) {
+      query = query.or(`family_name.ilike.%${search}%,given_name.ilike.%${search}%,family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
+    }
+
+    const { data: children, error } = await query;
+
+    if (error) {
+      console.error('Database error:', error);
+      return NextResponse.json(
+        { success: false, error: 'Database error' },
+        { status: 500 }
+      );
+    }
+
+    // データを整形
+    const formattedChildren = children.map((child: any) => {
+      const childClass = Array.isArray(child._child_class) ? child._child_class[0] : child._child_class;
+      const classData = childClass?.m_classes;
+      const schedule = Array.isArray(child.s_attendance_schedule) && child.s_attendance_schedule.length > 0
+        ? child.s_attendance_schedule[0]
+        : null;
+
+      return {
+        child_id: child.id,
+        name: `${child.family_name} ${child.given_name}`,
+        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        class_id: classData?.id || null,
+        class_name: classData?.name || '',
+        grade: classData?.grade || '',
+        photo_url: child.photo_url,
+        schedule: {
+          monday: schedule?.monday || false,
+          tuesday: schedule?.tuesday || false,
+          wednesday: schedule?.wednesday || false,
+          thursday: schedule?.thursday || false,
+          friday: schedule?.friday || false,
+          saturday: schedule?.saturday || false,
+          sunday: schedule?.sunday || false,
+        },
+        updated_at: schedule?.updated_at || null,
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        children: formattedChildren,
+        total: formattedChildren.length,
+      },
+    });
+
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
