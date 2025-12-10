@@ -325,14 +325,7 @@ export default function ChildRegistrationForm() {
 
         {/* Header */}
         <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center text-sm text-slate-500 gap-2">
-                <span className="hover:text-indigo-600 cursor-pointer">児童台帳</span>
-                <ChevronRight size={14} />
-                <span className="font-medium text-slate-900">新規登録</span>
-              </div>
-            </div>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-end">
             <div className="flex items-center gap-2">
               <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-medium border border-indigo-100">
                 編集中...
