@@ -376,7 +376,7 @@ export default function StatusPage() {
                                         月間記録率 <SortIcon colKey="record_rate" currentSort={sortConfig} />
                                     </th>
 
-                                    <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[350px]">
+                                    <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider lg:min-w-[350px]">
                                         月間ヒートマップ(1日〜{recordsData.period.days_in_month}日)
                                     </th>
 

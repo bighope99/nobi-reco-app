@@ -360,7 +360,7 @@ export default function ChildcareDashboard() {
             <div className="lg:col-span-8 flex flex-col gap-6">
 
               {/* KPI Section */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                   <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">本日の出席予定</h3>
                   <div className="flex items-baseline gap-1">
