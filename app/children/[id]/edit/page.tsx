@@ -141,16 +141,102 @@ const Switch = ({ checked, onChange, label, description }: any) => (
  * Main Application Component
  * ============================================================================
  */
-export default function ChildRegistrationForm() {
+export default function ChildEditForm({ params }: { params: { id: string } }) {
+  const childId = params.id;
+
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
   const [siblingResult, setSiblingResult] = useState<any>(null);
   const [hasAllergy, setHasAllergy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [classes, setClasses] = useState<Array<{ class_id: string; class_name: string }>>([]);
 
-  // フォームの状態（一部抜粋）
+  // フォームの状態
+  const [formData, setFormData] = useState({
+    family_name: '',
+    given_name: '',
+    family_name_kana: '',
+    given_name_kana: '',
+    nickname: '',
+    gender: 'male' as 'male' | 'female',
+    birth_date: '',
+    enrollment_status: 'enrolled' as 'enrolled' | 'withdrawn' | 'suspended',
+    contract_type: 'regular' as 'regular' | 'temporary' | 'spot',
+    enrollment_date: '',
+    withdrawal_date: '',
+    class_id: '',
+    parent_name: '',
+    parent_phone: '',
+    parent_email: '',
+    has_allergy: false,
+    allergy_detail: '',
+    photo_allowed: true,
+    report_allowed: true,
+  });
+
   const [emergencyContacts, setEmergencyContacts] = useState([
     { id: 1, name: '', relation: '', phone: '' }
   ]);
+
+  // Fetch child data and classes on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch classes
+        const classesResponse = await fetch('/api/children');
+        const classesResult = await classesResponse.json();
+        if (classesResult.success && classesResult.data.filters.classes) {
+          setClasses(classesResult.data.filters.classes);
+        }
+
+        // Fetch child data
+        const childResponse = await fetch(`/api/children/${childId}`);
+        const childResult = await childResponse.json();
+
+        if (!childResponse.ok) {
+          throw new Error(childResult.error || 'Failed to fetch child data');
+        }
+
+        if (childResult.success && childResult.data) {
+          const data = childResult.data;
+          setFormData({
+            family_name: data.basic_info.family_name,
+            given_name: data.basic_info.given_name,
+            family_name_kana: data.basic_info.family_name_kana || '',
+            given_name_kana: data.basic_info.given_name_kana || '',
+            nickname: data.basic_info.nickname || '',
+            gender: data.basic_info.gender,
+            birth_date: data.basic_info.birth_date,
+            enrollment_status: data.affiliation.enrollment_status,
+            contract_type: data.affiliation.contract_type,
+            enrollment_date: data.affiliation.enrollment_date || '',
+            withdrawal_date: data.affiliation.withdrawal_date || '',
+            class_id: data.affiliation.class_id || '',
+            parent_name: '',
+            parent_phone: data.contact.parent_phone || '',
+            parent_email: data.contact.parent_email || '',
+            has_allergy: data.care_info.has_allergy,
+            allergy_detail: data.care_info.allergy_detail || '',
+            photo_allowed: data.permissions.photo_allowed,
+            report_allowed: data.permissions.report_allowed,
+          });
+          setHasAllergy(data.care_info.has_allergy);
+        }
+      } catch (err) {
+        console.error('Failed to fetch child data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch child data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [childId]);
 
   // デモ用: スクロールスパイの実装
   useEffect(() => {
@@ -195,6 +281,112 @@ export default function ChildRegistrationForm() {
   const removeEmergencyContact = (id: number) => {
     setEmergencyContacts(emergencyContacts.filter(c => c.id !== id));
   };
+
+  // Handle form submit (PUT)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.family_name || !formData.given_name || !formData.birth_date || !formData.class_id) {
+      setError('必須項目を入力してください');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      const requestBody = {
+        basic_info: {
+          family_name: formData.family_name,
+          given_name: formData.given_name,
+          family_name_kana: formData.family_name_kana,
+          given_name_kana: formData.given_name_kana,
+          nickname: formData.nickname,
+          gender: formData.gender,
+          birth_date: formData.birth_date,
+        },
+        affiliation: {
+          enrollment_status: formData.enrollment_status,
+          contract_type: formData.contract_type,
+          enrollment_date: formData.enrollment_date,
+          withdrawal_date: formData.withdrawal_date || null,
+          class_id: formData.class_id,
+        },
+        contact: {
+          parent_phone: formData.parent_phone,
+          parent_email: formData.parent_email,
+        },
+        care_info: {
+          has_allergy: formData.has_allergy,
+          allergy_detail: formData.allergy_detail,
+        },
+        permissions: {
+          photo_allowed: formData.photo_allowed,
+          report_allowed: formData.report_allowed,
+        },
+      };
+
+      const response = await fetch(`/api/children/${childId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '更新に失敗しました');
+      }
+
+      if (result.success) {
+        alert('児童情報を更新しました');
+        window.location.href = '/children';
+      }
+    } catch (err) {
+      console.error('Failed to update child:', err);
+      setError(err instanceof Error ? err.message : '更新に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle delete
+  const handleDelete = async () => {
+    if (!confirm('本当にこの児童を削除しますか？この操作は取り消せません。')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      const response = await fetch(`/api/children/${childId}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '削除に失敗しました');
+      }
+
+      if (result.success) {
+        alert('児童を削除しました');
+        window.location.href = '/children';
+      }
+    } catch (err) {
+      console.error('Failed to delete child:', err);
+      setError(err instanceof Error ? err.message : '削除に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Sync hasAllergy state with formData
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, has_allergy: hasAllergy }));
+  }, [hasAllergy]);
 
   return (
     <StaffLayout title="園児編集">
@@ -254,7 +446,25 @@ export default function ChildRegistrationForm() {
 
             {/* Main Form Area */}
             <main className="lg:col-span-9">
-              <form onSubmit={(e) => e.preventDefault()}>
+              {/* Loading State */}
+              {loading && (
+                <div className="bg-white rounded-xl p-12 text-center">
+                  <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div>
+                  <p className="text-slate-500 mt-4">読み込み中...</p>
+                </div>
+              )}
+
+              {/* Error Display */}
+              {error && !loading && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                  <p className="text-red-600 text-sm flex items-center gap-2">
+                    <AlertTriangle size={16} /> {error}
+                  </p>
+                </div>
+              )}
+
+              {!loading && (
+              <form id="child-edit-form" onSubmit={handleSubmit}>
 
                 {/* 1. 基本情報 */}
                 <SectionCard
@@ -532,6 +742,7 @@ export default function ChildRegistrationForm() {
                 </SectionCard>
 
               </form>
+              )}
             </main>
           </div>
         </div>
@@ -539,17 +750,42 @@ export default function ChildRegistrationForm() {
         {/* Sticky Action Bar */}
         <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-40">
           <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6">
-            <button type="button" className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors">
-              キャンセル
-            </button>
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-slate-400 hidden sm:inline">最終保存: 10分前</span>
-              <button type="button" className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all text-sm">
-                一時保存
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.location.href = '/children'}
+                className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors"
+              >
+                キャンセル
               </button>
-              <button type="button" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2">
-                <Save size={18} />
-                登録する
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={loading || saving}
+                className="bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 font-medium py-2 px-4 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                削除
+              </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                type="submit"
+                form="child-edit-form"
+                disabled={loading || saving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    更新中...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    更新する
+                  </>
+                )}
               </button>
             </div>
           </div>

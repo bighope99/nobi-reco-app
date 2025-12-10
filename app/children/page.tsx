@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 
 import {
@@ -19,7 +19,53 @@ import {
 // --- Types ---
 
 type ContractType = 'regular' | 'temporary' | 'spot';
+type EnrollmentStatus = 'enrolled' | 'withdrawn' | 'suspended';
 type StatusType = 'active' | 'inactive';
+
+interface APIChild {
+    child_id: string;
+    name: string;
+    kana: string;
+    gender: 'male' | 'female';
+    birth_date: string;
+    grade: string;
+    class_id: string | null;
+    class_name: string;
+    enrollment_status: EnrollmentStatus;
+    contract_type: ContractType;
+    has_allergy: boolean;
+    allergy_detail: string | null;
+    photo_allowed: boolean;
+    report_allowed: boolean;
+    parent_name: string | null;
+    parent_phone: string | null;
+    siblings: Array<{ child_id: string; name: string; relationship: string }>;
+    created_at: string;
+    updated_at: string;
+}
+
+interface ChildrenAPIResponse {
+    success: boolean;
+    data: {
+        children: APIChild[];
+        pagination: {
+            total: number;
+            page: number;
+            limit: number;
+            total_pages: number;
+        };
+        summary: {
+            total_children: number;
+            enrolled: number;
+            withdrawn: number;
+            suspended: number;
+        };
+        filters: {
+            classes: Array<{ class_id: string; class_name: string }>;
+        };
+    };
+    error?: string;
+}
 
 interface Student {
     id: string;
@@ -27,24 +73,16 @@ interface Student {
     kana: string;
     gender: 'male' | 'female';
     birthDate: string;
-    grade: string;     // 学年 (例: "1年生")
-    gradeOrder: number; // ソート用数値 (例: 1)
-    className: string; // クラス名
-
-    // Contact
+    grade: string;
+    gradeOrder: number;
+    className: string;
     parentName: string;
     parentPhone: string;
-
-    // Family
-    siblings: string[]; // 兄弟の名前リスト
-
-    // Alerts & Permissions
+    siblings: string[];
     hasAllergy: boolean;
     allergyDetail?: string;
     photoAllowed: boolean;
     reportAllowed: boolean;
-
-    // Contract
     status: StatusType;
     contractType: ContractType;
 }
@@ -52,150 +90,134 @@ interface Student {
 type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings';
 type SortOrder = 'asc' | 'desc';
 
-// --- Mock Data ---
+// --- Helper Functions ---
 
-const INITIAL_STUDENTS: Student[] = [
-    {
-        id: 's1',
-        name: '田中 陽翔',
-        kana: 'たなか はると',
-        gender: 'male',
-        birthDate: '2013-05-15',
-        grade: '5年生',
-        gradeOrder: 5,
-        className: 'ひまわり組', // 異年齢混合クラスの想定
-        parentName: '田中 優子',
-        parentPhone: '090-1111-2222',
-        siblings: ['田中 結衣 (1年生)'], // 兄弟あり
-        hasAllergy: true,
-        allergyDetail: '卵、乳製品、ピーナッツ、そば、エビ、カニ、ゴマ',
-        photoAllowed: true,
-        reportAllowed: true,
-        status: 'active',
-        contractType: 'regular',
-    },
-    {
-        id: 's2',
-        name: '鈴木 さくら',
-        kana: 'すずき さくら',
-        gender: 'female',
-        birthDate: '2015-08-20',
-        grade: '3年生',
-        gradeOrder: 3,
-        className: 'さくら組',
-        parentName: '鈴木 大輔',
-        parentPhone: '090-3333-4444',
-        siblings: [],
-        hasAllergy: false,
-        photoAllowed: true,
-        reportAllowed: false,
-        status: 'active',
-        contractType: 'regular',
-    },
-    {
-        id: 's3',
-        name: '佐藤 健太',
-        kana: 'さとう けんた',
-        gender: 'male',
-        birthDate: '2016-02-10',
-        grade: '2年生',
-        gradeOrder: 2,
-        className: 'ひまわり組', // 陽翔と同じクラスだが学年は違う
-        parentName: '佐藤 麻衣',
-        parentPhone: '090-5555-6666',
-        siblings: [],
-        hasAllergy: false,
-        photoAllowed: false,
-        reportAllowed: true,
-        status: 'inactive',
-        contractType: 'temporary',
-    },
-    {
-        id: 's4',
-        name: '高橋 結衣',
-        kana: 'たかはし ゆい',
-        gender: 'female',
-        birthDate: '2011-11-05',
-        grade: '6年生',
-        gradeOrder: 6,
-        className: 'さくら組',
-        parentName: '高橋 健一',
-        parentPhone: '090-7777-8888',
-        siblings: ['高橋 蓮 (4年生)'], // 兄弟あり
-        hasAllergy: true,
-        allergyDetail: 'そば',
-        photoAllowed: true,
-        reportAllowed: true,
-        status: 'active',
-        contractType: 'spot',
-    },
-    {
-        id: 's5',
-        name: '伊藤 湊',
-        kana: 'いとう みなと',
-        gender: 'male',
-        birthDate: '2016-04-02',
-        grade: '1年生',
-        gradeOrder: 1,
-        className: 'ちゅうりっぷ組',
-        parentName: '伊藤 美咲',
-        parentPhone: '090-9999-0000',
-        siblings: [],
-        hasAllergy: false,
-        photoAllowed: true,
-        reportAllowed: true,
-        status: 'active',
-        contractType: 'regular',
-    },
-    {
-        id: 's6',
-        name: '渡辺 蓮',
-        kana: 'わたなべ れん',
-        gender: 'male',
-        birthDate: '2014-06-15',
-        grade: '4年生',
-        gradeOrder: 4,
-        className: 'さくら組', // 結衣と同じクラス
-        parentName: '渡辺 健二',
-        parentPhone: '090-1234-5678',
-        siblings: ['渡辺 結衣 (6年生)'], // 兄弟あり（相互リンク想定）
-        hasAllergy: true,
-        allergyDetail: 'キウイ、バナナ、パイナップル',
-        photoAllowed: true,
-        reportAllowed: true,
-        status: 'active',
-        contractType: 'regular',
-    }
-];
+const convertAPIChildToStudent = (apiChild: APIChild): Student => {
+    // Extract grade order from grade string (e.g., "1年生" -> 1)
+    const gradeMatch = apiChild.grade.match(/(\d+)/);
+    const gradeOrder = gradeMatch ? parseInt(gradeMatch[1]) : 0;
+
+    // Map enrollment_status to status
+    const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
+
+    // Format siblings array
+    const siblings = apiChild.siblings.map(s => s.name);
+
+    return {
+        id: apiChild.child_id,
+        name: apiChild.name,
+        kana: apiChild.kana,
+        gender: apiChild.gender,
+        birthDate: apiChild.birth_date,
+        grade: apiChild.grade,
+        gradeOrder,
+        className: apiChild.class_name,
+        parentName: apiChild.parent_name || '',
+        parentPhone: apiChild.parent_phone || '',
+        siblings,
+        hasAllergy: apiChild.has_allergy,
+        allergyDetail: apiChild.allergy_detail || undefined,
+        photoAllowed: apiChild.photo_allowed,
+        reportAllowed: apiChild.report_allowed,
+        status,
+        contractType: apiChild.contract_type,
+    };
+};
 
 // --- Components ---
 
 export default function StudentList() {
     // State
-    const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
+    const [students, setStudents] = useState<Student[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterClass, setFilterClass] = useState('all');
     const [activeTab, setActiveTab] = useState<StatusType>('active');
+    const [classOptions, setClassOptions] = useState<Array<{ class_id: string; class_name: string }>>([]);
+    const [totalCount, setTotalCount] = useState(0);
 
     // Sort State
     const [sortKey, setSortKey] = useState<SortKey>('grade');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
-    // Toggle Status Function
-    const toggleStatus = (id: string, currentStatus: StatusType) => {
+    // Fetch children data from API
+    useEffect(() => {
+        const fetchChildren = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                const params = new URLSearchParams();
+
+                // Map activeTab to enrollment status
+                if (activeTab === 'active') {
+                    params.append('status', 'enrolled');
+                } else {
+                    params.append('status', 'withdrawn');
+                }
+
+                if (filterClass !== 'all') {
+                    params.append('class_id', filterClass);
+                }
+
+                if (searchTerm) {
+                    params.append('search', searchTerm);
+                }
+
+                const response = await fetch(`/api/children?${params.toString()}`);
+                const result: ChildrenAPIResponse = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to fetch children');
+                }
+
+                if (result.success) {
+                    const convertedStudents = result.data.children.map(convertAPIChildToStudent);
+                    setStudents(convertedStudents);
+                    setClassOptions(result.data.filters.classes);
+                    setTotalCount(result.data.summary.total_children);
+                }
+            } catch (err) {
+                console.error('Failed to fetch children:', err);
+                setError(err instanceof Error ? err.message : 'Failed to fetch children');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchChildren();
+    }, [activeTab, filterClass, searchTerm]);
+
+    // Toggle Status Function (Now updates via API)
+    const toggleStatus = async (id: string, currentStatus: StatusType) => {
         const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+        const newEnrollmentStatus = newStatus === 'active' ? 'enrolled' : 'withdrawn';
+
         if (confirm(`${currentStatus === 'active' ? '退所済みに変更' : '所属中に復帰'}しますか？`)) {
-            setStudents(prev => prev.map(s =>
-                s.id === id ? { ...s, status: newStatus } : s
-            ));
+            try {
+                const response = await fetch(`/api/children/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        affiliation: { enrollment_status: newEnrollmentStatus }
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update status');
+                }
+
+                // Optimistically update UI
+                setStudents(prev => prev.map(s =>
+                    s.id === id ? { ...s, status: newStatus } : s
+                ));
+            } catch (err) {
+                console.error('Failed to update status:', err);
+                alert('ステータスの更新に失敗しました');
+            }
         }
     };
-
-    // Extract Unique Classes for Filter (Dynamic from data)
-    const classOptions = useMemo(() => {
-        const classes = new Set(students.map(s => s.className));
-        return Array.from(classes).sort();
-    }, [students]);
 
     // Sort Handler
     const handleSort = (key: SortKey) => {
@@ -295,11 +317,14 @@ export default function StudentList() {
                                 児童台帳
                             </h1>
                             <p className="text-sm text-slate-500 mt-1" >
-                                全 {students.length} 名の児童情報を管理 （{activeTab === 'active' ? '所属中' : '退所済み'} 表示中）
+                                {loading ? '読み込み中...' : `全 ${totalCount} 名の児童情報を管理 （${activeTab === 'active' ? '所属中' : '退所済み'} 表示中）`}
                             </p>
                         </div>
 
-                        <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm" >
+                        <button
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm"
+                            onClick={() => window.location.href = '/children/new'}
+                        >
                             <Plus size={18} />
                             新規登録
                         </button>
@@ -353,7 +378,7 @@ export default function StudentList() {
                                     <option value="all" > 全クラス </option>
                                     {
                                         classOptions.map(cls => (
-                                            <option key={cls} value={cls} > {cls} </option>
+                                            <option key={cls.class_id} value={cls.class_id} > {cls.class_name} </option>
                                         ))
                                     }
                                 </select>
@@ -368,10 +393,22 @@ export default function StudentList() {
                         </div>
                     </div>
 
+                    {/* Error State */}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                            <p className="text-red-600 text-sm">エラー: {error}</p>
+                        </div>
+                    )}
+
                     {/* Student List Table */}
                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" >
-                        <div className="overflow-x-auto" >
-                            <table className="w-full text-left border-collapse min-w-[1100px]" >
+                        {loading ? (
+                            <div className="p-12 text-center text-slate-400">
+                                <p>読み込み中...</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto" >
+                                <table className="w-full text-left border-collapse min-w-[1100px]" >
                                 <thead className="bg-gray-50 border-b border-gray-100" >
                                     <tr>
                                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12 text-center" >
@@ -441,7 +478,7 @@ export default function StudentList() {
                                             <tr
                                                 key={student.id}
                                                 className={`group transition-colors cursor-pointer ${student.status === 'inactive' ? 'bg-slate-50/50' : 'hover:bg-indigo-50/30'}`}
-                                                onClick={() => console.log('Open details for:', student.name)}
+                                                onClick={() => window.location.href = `/children/${student.id}/edit`}
                                             >
                                                 {/* Status Toggle */}
                                                 <td className="px-6 py-4 text-center" >
@@ -553,15 +590,16 @@ export default function StudentList() {
                                         ))}
                                 </tbody>
                             </table>
-                        </div>
 
-                        {
-                            processedStudents.length === 0 && (
-                                <div className="p-12 text-center text-slate-400" >
-                                    <p>該当する児童は見つかりませんでした </p>
-                                </div>
-                            )
-                        }
+                            {
+                                processedStudents.length === 0 && !loading && (
+                                    <div className="p-12 text-center text-slate-400" >
+                                        <p>該当する児童は見つかりませんでした </p>
+                                    </div>
+                                )
+                            }
+                        </div>
+                        )}
                     </div>
 
                 </div>

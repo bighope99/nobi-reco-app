@@ -145,11 +145,61 @@ export default function ChildRegistrationForm() {
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
   const [siblingResult, setSiblingResult] = useState<any>(null);
   const [hasAllergy, setHasAllergy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [classes, setClasses] = useState<Array<{ class_id: string; class_name: string }>>([]);
 
-  // フォームの状態（一部抜粋）
+  // フォームの状態
+  const [formData, setFormData] = useState({
+    // 基本情報
+    family_name: '',
+    given_name: '',
+    family_name_kana: '',
+    given_name_kana: '',
+    nickname: '',
+    gender: 'male' as 'male' | 'female',
+    birth_date: '',
+
+    // 所属・契約
+    enrollment_status: 'enrolled' as 'enrolled' | 'withdrawn' | 'suspended',
+    contract_type: 'regular' as 'regular' | 'temporary' | 'spot',
+    enrollment_date: '',
+    withdrawal_date: '',
+    class_id: '',
+
+    // 連絡先
+    parent_name: '',
+    parent_phone: '',
+    parent_email: '',
+
+    // ケア
+    has_allergy: false,
+    allergy_detail: '',
+
+    // 権限
+    photo_allowed: true,
+    report_allowed: true,
+  });
+
   const [emergencyContacts, setEmergencyContacts] = useState([
     { id: 1, name: '', relation: '', phone: '' }
   ]);
+
+  // Fetch classes on mount
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const response = await fetch('/api/children');
+        const result = await response.json();
+        if (result.success && result.data.filters.classes) {
+          setClasses(result.data.filters.classes);
+        }
+      } catch (err) {
+        console.error('Failed to fetch classes:', err);
+      }
+    };
+    fetchClasses();
+  }, []);
 
   // デモ用: スクロールスパイの実装
   useEffect(() => {
@@ -194,6 +244,80 @@ export default function ChildRegistrationForm() {
   const removeEmergencyContact = (id: number) => {
     setEmergencyContacts(emergencyContacts.filter(c => c.id !== id));
   };
+
+  // Handle form submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.family_name || !formData.given_name || !formData.birth_date || !formData.class_id) {
+      setError('必須項目を入力してください');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const requestBody = {
+        basic_info: {
+          family_name: formData.family_name,
+          given_name: formData.given_name,
+          family_name_kana: formData.family_name_kana,
+          given_name_kana: formData.given_name_kana,
+          nickname: formData.nickname,
+          gender: formData.gender,
+          birth_date: formData.birth_date,
+        },
+        affiliation: {
+          enrollment_status: formData.enrollment_status,
+          contract_type: formData.contract_type,
+          enrollment_date: formData.enrollment_date,
+          withdrawal_date: formData.withdrawal_date || null,
+          class_id: formData.class_id,
+        },
+        contact: {
+          parent_phone: formData.parent_phone,
+          parent_email: formData.parent_email,
+        },
+        care_info: {
+          has_allergy: formData.has_allergy,
+          allergy_detail: formData.allergy_detail,
+        },
+        permissions: {
+          photo_allowed: formData.photo_allowed,
+          report_allowed: formData.report_allowed,
+        },
+      };
+
+      const response = await fetch('/api/children', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '登録に失敗しました');
+      }
+
+      if (result.success) {
+        alert('児童を登録しました');
+        window.location.href = '/children';
+      }
+    } catch (err) {
+      console.error('Failed to register child:', err);
+      setError(err instanceof Error ? err.message : '登録に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sync hasAllergy state with formData
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, has_allergy: hasAllergy }));
+  }, [hasAllergy]);
 
   return (
     <StaffLayout title="園児登録">
@@ -253,7 +377,16 @@ export default function ChildRegistrationForm() {
 
             {/* Main Form Area */}
             <main className="lg:col-span-9">
-              <form onSubmit={(e) => e.preventDefault()}>
+              {/* Error Display */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                  <p className="text-red-600 text-sm flex items-center gap-2">
+                    <AlertTriangle size={16} /> {error}
+                  </p>
+                </div>
+              )}
+
+              <form id="child-registration-form" onSubmit={handleSubmit}>
 
                 {/* 1. 基本情報 */}
                 <SectionCard
@@ -278,36 +411,77 @@ export default function ChildRegistrationForm() {
                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <FieldGroup label="氏名（漢字）" required>
                         <div className="flex gap-2">
-                          <Input placeholder="姓" />
-                          <Input placeholder="名" />
+                          <Input
+                            placeholder="姓"
+                            value={formData.family_name}
+                            onChange={(e: any) => setFormData({ ...formData, family_name: e.target.value })}
+                          />
+                          <Input
+                            placeholder="名"
+                            value={formData.given_name}
+                            onChange={(e: any) => setFormData({ ...formData, given_name: e.target.value })}
+                          />
                         </div>
                       </FieldGroup>
                       <FieldGroup label="氏名（フリガナ）" required>
                         <div className="flex gap-2">
-                          <Input placeholder="セイ" />
-                          <Input placeholder="メイ" />
+                          <Input
+                            placeholder="セイ"
+                            value={formData.family_name_kana}
+                            onChange={(e: any) => setFormData({ ...formData, family_name_kana: e.target.value })}
+                          />
+                          <Input
+                            placeholder="メイ"
+                            value={formData.given_name_kana}
+                            onChange={(e: any) => setFormData({ ...formData, given_name_kana: e.target.value })}
+                          />
                         </div>
                       </FieldGroup>
 
                       <FieldGroup label="呼び名（愛称）">
-                        <Input placeholder="例: れんくん" />
+                        <Input
+                          placeholder="例: れんくん"
+                          value={formData.nickname}
+                          onChange={(e: any) => setFormData({ ...formData, nickname: e.target.value })}
+                        />
                       </FieldGroup>
 
                       <FieldGroup label="性別" required>
                         <div className="flex gap-4 pt-1">
-                          {['男児', '女児', 'その他'].map((gender) => (
-                            <label key={gender} className="flex items-center gap-2 cursor-pointer group">
-                              <input type="radio" name="gender" className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500" />
-                              <span className="text-sm text-slate-700 group-hover:text-indigo-700">{gender}</span>
-                            </label>
-                          ))}
+                          <label className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="radio"
+                              name="gender"
+                              value="male"
+                              checked={formData.gender === 'male'}
+                              onChange={(e) => setFormData({ ...formData, gender: 'male' })}
+                              className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                            />
+                            <span className="text-sm text-slate-700 group-hover:text-indigo-700">男児</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="radio"
+                              name="gender"
+                              value="female"
+                              checked={formData.gender === 'female'}
+                              onChange={(e) => setFormData({ ...formData, gender: 'female' })}
+                              className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                            />
+                            <span className="text-sm text-slate-700 group-hover:text-indigo-700">女児</span>
+                          </label>
                         </div>
                       </FieldGroup>
 
                       <FieldGroup label="生年月日" required className="sm:col-span-2">
                         <div className="flex gap-2 items-center">
-                          <Input type="date" className="max-w-[200px]" icon={Calendar} />
-                          <span className="text-sm text-slate-500 ml-2">（満 5歳 3ヶ月）</span>
+                          <Input
+                            type="date"
+                            className="max-w-[200px]"
+                            icon={Calendar}
+                            value={formData.birth_date}
+                            onChange={(e: any) => setFormData({ ...formData, birth_date: e.target.value })}
+                          />
                         </div>
                       </FieldGroup>
                     </div>
@@ -324,42 +498,56 @@ export default function ChildRegistrationForm() {
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <FieldGroup label="ステータス" required>
-                      <Select>
-                        <option>在籍中</option>
-                        <option>休園中</option>
-                        <option>退所済</option>
-                        <option>入所前</option>
+                      <Select
+                        value={formData.enrollment_status}
+                        onChange={(e: any) => setFormData({ ...formData, enrollment_status: e.target.value as any })}
+                      >
+                        <option value="enrolled">在籍中</option>
+                        <option value="suspended">休園中</option>
+                        <option value="withdrawn">退所済</option>
                       </Select>
                     </FieldGroup>
 
                     <FieldGroup label="契約形態" required>
-                      <Select>
-                        <option>通年契約（月極）</option>
-                        <option>一時保育</option>
-                        <option>スポット利用</option>
+                      <Select
+                        value={formData.contract_type}
+                        onChange={(e: any) => setFormData({ ...formData, contract_type: e.target.value as any })}
+                      >
+                        <option value="regular">通年契約（月極）</option>
+                        <option value="temporary">一時保育</option>
+                        <option value="spot">スポット利用</option>
                       </Select>
                     </FieldGroup>
 
                     <FieldGroup label="在籍期間" required>
                       <div className="flex items-center gap-2">
-                        <Input type="date" />
+                        <Input
+                          type="date"
+                          value={formData.enrollment_date}
+                          onChange={(e: any) => setFormData({ ...formData, enrollment_date: e.target.value })}
+                        />
                         <span className="text-slate-400">~</span>
-                        <Input type="date" placeholder="未定" />
+                        <Input
+                          type="date"
+                          placeholder="未定"
+                          value={formData.withdrawal_date}
+                          onChange={(e: any) => setFormData({ ...formData, withdrawal_date: e.target.value })}
+                        />
                       </div>
                     </FieldGroup>
 
                     <FieldGroup label="現在のクラス" required>
-                      <Select>
+                      <Select
+                        value={formData.class_id}
+                        onChange={(e: any) => setFormData({ ...formData, class_id: e.target.value })}
+                      >
                         <option value="">クラスを選択...</option>
-                        <option>ひよこ組（0歳児）</option>
-                        <option>りす組（1歳児）</option>
-                        <option>うさぎ組（2歳児）</option>
-                        <option>きりん組（3-5歳児）</option>
+                        {classes.map((cls) => (
+                          <option key={cls.class_id} value={cls.class_id}>
+                            {cls.class_name}
+                          </option>
+                        ))}
                       </Select>
-                    </FieldGroup>
-
-                    <FieldGroup label="保護者勤務先（主）" className="sm:col-span-2">
-                      <Input icon={Briefcase} placeholder="株式会社〇〇" />
                     </FieldGroup>
                   </div>
                 </SectionCard>
@@ -379,19 +567,32 @@ export default function ChildRegistrationForm() {
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <FieldGroup label="保護者氏名" required>
-                        <Input placeholder="佐藤 太郎" />
-                      </FieldGroup>
-                      <FieldGroup label="続柄" required>
-                        <Input placeholder="父" className="max-w-[120px]" />
+                        <Input
+                          placeholder="佐藤 太郎"
+                          value={formData.parent_name}
+                          onChange={(e: any) => setFormData({ ...formData, parent_name: e.target.value })}
+                        />
                       </FieldGroup>
                       <FieldGroup label="メールアドレス">
-                        <Input icon={Mail} type="email" placeholder="example@email.com" />
+                        <Input
+                          icon={Mail}
+                          type="email"
+                          placeholder="example@email.com"
+                          value={formData.parent_email}
+                          onChange={(e: any) => setFormData({ ...formData, parent_email: e.target.value })}
+                        />
                       </FieldGroup>
 
                       {/* 兄弟紐づけトリガー */}
-                      <FieldGroup label="携帯電話番号" required className="relative">
+                      <FieldGroup label="携帯電話番号" required className="relative sm:col-span-2">
                         <div className="flex gap-2">
-                          <Input icon={Phone} type="tel" placeholder="090-0000-0000" />
+                          <Input
+                            icon={Phone}
+                            type="tel"
+                            placeholder="090-0000-0000"
+                            value={formData.parent_phone}
+                            onChange={(e: any) => setFormData({ ...formData, parent_phone: e.target.value })}
+                          />
                           <button
                             type="button"
                             onClick={handleSiblingSearch}
@@ -492,6 +693,8 @@ export default function ChildRegistrationForm() {
                           <Textarea
                             className="border-orange-200 focus:ring-orange-500 focus:border-orange-500"
                             placeholder="例: 卵、そば、キウイフルーツ。完全除去か微量なら可かなど詳細に記載。"
+                            value={formData.allergy_detail}
+                            onChange={(e: any) => setFormData({ ...formData, allergy_detail: e.target.value })}
                           />
                         </FieldGroup>
                         <div className="flex items-start gap-2 text-orange-800 bg-orange-100/50 p-3 rounded text-xs leading-relaxed">
@@ -517,13 +720,20 @@ export default function ChildRegistrationForm() {
                       <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Shield size={16} className="text-teal-500" /> 権限・プライバシー</h4>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
-                          <Switch label="HP/SNSへの写真掲載" description="園だより等への顔写真掲載許可" checked={true} onChange={() => { }} />
+                          <Switch
+                            label="HP/SNSへの写真掲載"
+                            description="園だより等への顔写真掲載許可"
+                            checked={formData.photo_allowed}
+                            onChange={(checked: boolean) => setFormData({ ...formData, photo_allowed: checked })}
+                          />
                         </div>
                         <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
-                          <Switch label="レポートへの記名" description="クラス内共有物への名前記載" checked={true} onChange={() => { }} />
-                        </div>
-                        <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
-                          <Switch label="医療行為の同意" description="緊急時の応急処置への同意" checked={false} onChange={() => { }} />
+                          <Switch
+                            label="レポートへの記名"
+                            description="クラス内共有物への名前記載"
+                            checked={formData.report_allowed}
+                            onChange={(checked: boolean) => setFormData({ ...formData, report_allowed: checked })}
+                          />
                         </div>
                       </div>
                     </div>
@@ -538,17 +748,31 @@ export default function ChildRegistrationForm() {
         {/* Sticky Action Bar */}
         <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-40">
           <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6">
-            <button type="button" className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors">
+            <button
+              type="button"
+              onClick={() => window.location.href = '/children'}
+              className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors"
+            >
               キャンセル
             </button>
             <div className="flex items-center gap-4">
-              <span className="text-xs text-slate-400 hidden sm:inline">最終保存: 10分前</span>
-              <button type="button" className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all text-sm">
-                一時保存
-              </button>
-              <button type="button" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2">
-                <Save size={18} />
-                登録する
+              <button
+                type="submit"
+                form="child-registration-form"
+                disabled={loading}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    登録中...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    登録する
+                  </>
+                )}
               </button>
             </div>
           </div>
