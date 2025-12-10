@@ -408,7 +408,7 @@ export default function StudentList() {
                             </div>
                         ) : (
                             <div className="overflow-x-auto" >
-                                <table className="w-full text-left border-collapse min-w-[1100px]" >
+                                <table className="w-full text-left border-collapse lg:min-w-[1100px]" >
                                 <thead className="bg-gray-50 border-b border-gray-100" >
                                     <tr>
                                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12 text-center" >

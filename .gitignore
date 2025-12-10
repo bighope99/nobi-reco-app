@@ -28,3 +28,6 @@ yarn-error.log*
 .ui_file
 .mcp.json
 setting.local.json
+
+# typescript
+*.tsbuildinfo
