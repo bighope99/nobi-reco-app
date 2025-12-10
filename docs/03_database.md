@@ -1,0 +1,811 @@
+# のびレコ データベース設計書
+
+## 📋 目次
+
+1. [データベース概要](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#1-%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E6%A6%82%E8%A6%81)
+2. [技術スタック](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#2-%E6%8A%80%E8%A1%93%E3%82%B9%E3%82%BF%E3%83%83%E3%82%AF)
+3. [ENUM型定義](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#3-enum%E5%9E%8B%E5%AE%9A%E7%BE%A9)
+4. [マスタテーブル](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#4-%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB)
+5. [記録テーブル](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#5-%E8%A8%98%E9%8C%B2%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB)
+6. [設定テーブル](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#6-%E8%A8%AD%E5%AE%9A%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB)
+7. [履歴・ログテーブル](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#7-%E5%B1%A5%E6%AD%B4%E3%83%AD%E3%82%B0%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB)
+8. [中間テーブル](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#8-%E4%B8%AD%E9%96%93%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB)
+9. [テーブル関連図](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#9-%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB%E9%96%A2%E9%80%A3%E5%9B%B3)
+10. [インデックス戦略](https://claude.ai/chat/a124b55d-b68a-4833-a41e-f455665f97a7#10-%E3%82%A4%E3%83%B3%E3%83%87%E3%83%83%E3%82%AF%E3%82%B9%E6%88%A6%E7%95%A5)
+
+---
+
+## 1. データベース概要
+
+### 1.1 基本方針
+
+- **RDBMS**: PostgreSQL（Supabase）
+- **命名規則**: [06_database_naming_rules.md](https://claude.ai/chat/06_database_naming_rules.md) に準拠
+- **認証**: Supabase Auth を使用
+- **論理削除**: 全マスタテーブルに `deleted_at` カラムを実装
+
+### 1.2 テーブル分類
+
+|接頭辞|分類|説明|テーブル数|
+|---|---|---|---|
+|`m_`|マスタ|会社、施設、職員、子どもなど基本エンティティ|6|
+|`r_`|記録|日々の業務記録|4|
+|`s_`|設定|施設設定、スケジュールパターンなど|1|
+|`h_`|履歴・ログ|システムログ、監査用データ|1|
+|`_`|中間テーブル|多対多リレーションの紐付け|4|
+
+---
+
+## 2. 技術スタック
+
+### 2.1 データベース
+
+- **PostgreSQL 15+**（Supabase経由）
+- **拡張機能**:
+    - `uuid-ossp`: UUID生成
+    - `pg_trgm`: 日本語全文検索
+
+### 2.2 認証
+
+- **Supabase Auth**
+    - `auth.users` テーブル（Supabase管理）
+    - `m_users` テーブル（業務情報）
+    - 両者を `id` で紐づけ
+
+### 2.3 ファイルストレージ
+
+- **Supabase Storage**
+    - 子どもの顔写真
+    - 活動記録の写真
+    - レポートPDF
+
+---
+
+## 3. ENUM型定義
+
+### 3.1 ユーザー権限
+
+```sql
+CREATE TYPE user_role AS ENUM (
+  'site_admin',      -- サイト管理者（全システム管理）
+  'company_admin',   -- 会社経営者（自社の全施設管理）
+  'facility_admin',  -- 施設管理者（自施設のみ管理）
+  'staff'            -- 一般職員（記録入力のみ）
+);
+```
+
+### 3.2 性別
+
+```sql
+CREATE TYPE gender_type AS ENUM (
+  'male',
+  'female',
+  'other'
+);
+```
+
+### 3.3 在籍状況
+
+```sql
+CREATE TYPE enrollment_status_type AS ENUM (
+  'enrolled',   -- 在籍中
+  'withdrawn'   -- 退所
+);
+```
+
+### 3.4 契約形態
+
+```sql
+CREATE TYPE enrollment_type AS ENUM (
+  'regular',    -- 通年
+  'temporary',  -- 一時（長期利用）
+  'spot'        -- スポット
+);
+```
+
+### 3.5 出席ステータス
+
+```sql
+CREATE TYPE attendance_status_type AS ENUM (
+  'scheduled',  -- 予定通り出席
+  'absent',     -- 欠席
+  'irregular'   -- イレギュラー出席
+);
+```
+
+### 3.6 チェック方法
+
+```sql
+CREATE TYPE check_method_type AS ENUM (
+  'qr',      -- QRコード
+  'manual'   -- 手動
+);
+```
+
+---
+
+## 4. マスタテーブル
+
+### 4.1 会社マスタ（`m_companies`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_companies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(200) NOT NULL,                    -- 会社名
+  name_kana VARCHAR(200),                        -- 会社名カナ
+  postal_code VARCHAR(10),                       -- 郵便番号
+  address VARCHAR(500),                          -- 住所
+  phone VARCHAR(20),                             -- 電話番号
+  email VARCHAR(255),                            -- 代表メールアドレス
+  is_active BOOLEAN NOT NULL DEFAULT true,       -- 有効/無効
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_companies_is_active ON m_companies(is_active) WHERE deleted_at IS NULL;
+```
+
+---
+
+### 4.2 施設マスタ（`m_facilities`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_facilities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES m_companies(id),  -- 所属会社
+  name VARCHAR(200) NOT NULL,                           -- 施設名
+  name_kana VARCHAR(200),                               -- 施設名カナ
+  postal_code VARCHAR(10),                              -- 郵便番号
+  address VARCHAR(500),                                 -- 住所
+  phone VARCHAR(20),                                    -- 電話番号
+  email VARCHAR(255),                                   -- 施設メールアドレス
+  capacity INTEGER,                                     -- 定員
+  is_active BOOLEAN NOT NULL DEFAULT true,              -- 有効/無効
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_facilities_company_id ON m_facilities(company_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_facilities_is_active ON m_facilities(is_active) WHERE deleted_at IS NULL;
+```
+
+---
+
+### 4.3 クラスマスタ（`m_classes`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,                  -- クラス名（例: ひまわり組）
+  grade VARCHAR(50),                           -- 学年（例: 年長、小1）
+  school_year INTEGER NOT NULL,                -- 年度（例: 2025）
+  capacity INTEGER,                            -- 定員
+  is_active BOOLEAN NOT NULL DEFAULT true,     -- 有効/無効
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_classes_facility_id ON m_classes(facility_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_classes_school_year ON m_classes(school_year) WHERE deleted_at IS NULL;
+```
+
+---
+
+### 4.4 ユーザーマスタ（`m_users`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_users (
+  id UUID PRIMARY KEY,  -- auth.users.id と同じ値を使用
+  company_id UUID REFERENCES m_companies(id),  -- 所属会社（site_adminはNULL）
+  name VARCHAR(100) NOT NULL,                  -- 氏名（漢字）
+  name_kana VARCHAR(100),                      -- 氏名（カナ）
+  email VARCHAR(255) NOT NULL UNIQUE,          -- メールアドレス（auth.usersと同期）
+  role user_role NOT NULL DEFAULT 'staff',     -- 権限
+  is_active BOOLEAN NOT NULL DEFAULT true,     -- 有効/無効
+  is_retired BOOLEAN NOT NULL DEFAULT false,   -- 退職フラグ
+  retired_at TIMESTAMP WITH TIME ZONE,         -- 退職日
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_users_company_id ON m_users(company_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_role ON m_users(role) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_is_active ON m_users(is_active) WHERE deleted_at IS NULL;
+```
+
+**認証との連携**:
+
+- `id` は Supabase Auth の `auth.users.id` と同じ値
+- ユーザー作成時に `m_users` にも同時登録
+
+---
+
+### 4.5 子どもマスタ（`m_children`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_children (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),  -- 所属施設
+  
+  -- 基本情報
+  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
+  given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
+  family_name_kana VARCHAR(50),                  -- 姓（カナ）
+  given_name_kana VARCHAR(50),                   -- 名（カナ）
+  nickname VARCHAR(50),                          -- 呼び名・略称
+  gender gender_type,                            -- 性別
+  birth_date DATE NOT NULL,                      -- 生年月日
+  
+  -- 写真・画像
+  photo_url TEXT,                                -- 顔写真URL（Supabase Storage）
+  photo_permission_public BOOLEAN DEFAULT false, -- 外部公開OK
+  photo_permission_share BOOLEAN DEFAULT false,  -- 他の保護者に共有OK
+  
+  -- 保護者情報
+  parent_name VARCHAR(100),                      -- 保護者名
+  parent_email VARCHAR(255),                     -- 保護者メールアドレス
+  parent_phone VARCHAR(20),                      -- 保護者電話番号
+  emergency_contact_name VARCHAR(100),           -- 緊急連絡先名
+  emergency_contact_phone VARCHAR(20),           -- 緊急連絡先電話番号
+  sibling_id UUID REFERENCES m_children(id),     -- 兄弟姉妹の紐づけ
+  
+  -- レポート設定
+  report_name_permission BOOLEAN DEFAULT true,   -- レポートに名前表示OK
+  
+  -- 健康・特性情報
+  allergies TEXT,                                -- アレルギー情報
+  health_notes TEXT,                             -- 健康に関する特記事項
+  special_needs TEXT,                            -- 特別な支援が必要な場合の詳細
+  child_characteristics TEXT,                    -- 子どもの基本特性
+  parent_characteristics TEXT,                   -- 親の特性・要望
+  
+  -- 在籍情報
+  enrollment_status enrollment_status_type NOT NULL DEFAULT 'enrolled',
+  enrollment_type enrollment_type NOT NULL DEFAULT 'regular',
+  enrolled_at TIMESTAMP WITH TIME ZONE,          -- 入所日
+  withdrawn_at TIMESTAMP WITH TIME ZONE,         -- 退所日
+  
+  -- 共通カラム
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_children_facility_id ON m_children(facility_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_children_enrollment_status ON m_children(enrollment_status) WHERE deleted_at IS NULL;
+CREATE INDEX idx_children_birth_date ON m_children(birth_date);
+CREATE INDEX idx_children_sibling_id ON m_children(sibling_id) WHERE sibling_id IS NOT NULL;
+
+-- フルテキスト検索用インデックス（名前検索）
+CREATE INDEX idx_children_name_search ON m_children 
+  USING gin(to_tsvector('japanese', family_name || ' ' || given_name || ' ' || COALESCE(nickname, '')));
+```
+
+---
+
+### 4.6 観点タグマスタ（`m_observation_tags`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_observation_tags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(50) NOT NULL UNIQUE,              -- タグ名（例: 自立、社会性）
+  name_en VARCHAR(50),                           -- 英語名（将来の国際展開用）
+  description TEXT,                              -- 説明
+  color VARCHAR(7),                              -- 表示色（HEX: #FF5733）
+  sort_order INTEGER NOT NULL DEFAULT 0,         -- 表示順序
+  is_active BOOLEAN NOT NULL DEFAULT true,       -- 有効/無効
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_observation_tags_is_active ON m_observation_tags(is_active) WHERE deleted_at IS NULL;
+CREATE INDEX idx_observation_tags_sort_order ON m_observation_tags(sort_order);
+```
+
+**初期データ**:
+
+```sql
+INSERT INTO m_observation_tags (name, name_en, description, color, sort_order) VALUES
+  ('自立', 'Independence', '自分でできることが増える', '#4CAF50', 1),
+  ('社会性', 'Sociability', '友達と関わる力', '#2196F3', 2),
+  ('感情の安定', 'Emotional Stability', '気持ちのコントロール', '#FF9800', 3),
+  ('好奇心', 'Curiosity', '新しいことへの興味', '#9C27B0', 4),
+  ('表現力', 'Expressiveness', '言葉や身体で伝える力', '#E91E63', 5);
+```
+
+---
+
+## 5. 記録テーブル
+
+### 5.1 活動記録（`r_activity`）
+
+```sql
+CREATE TABLE IF NOT EXISTS r_activity (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+  class_id UUID REFERENCES m_classes(id),        -- クラス単位の活動の場合
+  
+  -- 記録日時
+  activity_date DATE NOT NULL,                   -- 活動日（今日の日付）
+  
+  -- 活動内容
+  title VARCHAR(200),                            -- タイトル（例: 公園で外遊び）
+  content TEXT NOT NULL,                         -- 活動内容（本文）
+  snack TEXT,                                    -- おやつ
+  
+  -- 写真（JSONBで複数枚保存）
+  photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
+  
+  -- 記録者情報
+  created_by UUID NOT NULL REFERENCES m_users(id),
+  updated_by UUID REFERENCES m_users(id),
+  
+  -- リアルタイム編集用
+  last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
+  last_edited_at TIMESTAMP WITH TIME ZONE,       -- 最後の編集日時
+  
+  -- 共通カラム
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_activity_facility_id ON r_activity(facility_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_activity_class_id ON r_activity(class_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_activity_date ON r_activity(activity_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_activity_created_by ON r_activity(created_by);
+CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
+```
+
+---
+
+### 5.2 子ども観察記録（`r_observation`）
+
+```sql
+CREATE TABLE IF NOT EXISTS r_observation (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id),
+  activity_id UUID REFERENCES r_activity(id),    -- 元になった活動記録（ある場合）
+  
+  -- 記録日時
+  observation_date DATE NOT NULL,                -- 観察日
+  
+  -- 観察内容
+  content TEXT NOT NULL,                         -- 観察内容（本文）
+  is_fact BOOLEAN DEFAULT true,                  -- 事実か所感か（AIで判定）
+  
+  -- 写真
+  photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
+  
+  -- 記録者情報
+  created_by UUID NOT NULL REFERENCES m_users(id),
+  updated_by UUID REFERENCES m_users(id),
+  
+  -- 共通カラム
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_observation_child_id ON r_observation(child_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_observation_activity_id ON r_observation(activity_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_observation_date ON r_observation(observation_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_observation_created_by ON r_observation(created_by);
+CREATE INDEX idx_observation_child_date ON r_observation(child_id, observation_date) WHERE deleted_at IS NULL;
+```
+
+---
+
+### 5.3 子どもの声記録（`r_voice`）
+
+```sql
+CREATE TABLE IF NOT EXISTS r_voice (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id),
+  
+  -- 記録日時
+  voice_date DATE NOT NULL,                      -- 記録日
+  
+  -- 子どもの声
+  content TEXT NOT NULL,                         -- 子どもが言ったこと・意見
+  context TEXT,                                  -- どんな場面での発言か
+  
+  -- 記録者情報
+  created_by UUID NOT NULL REFERENCES m_users(id),
+  
+  -- 共通カラム
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_voice_child_id ON r_voice(child_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_voice_date ON r_voice(voice_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_voice_child_date ON r_voice(child_id, voice_date) WHERE deleted_at IS NULL;
+```
+
+---
+
+### 5.4 日次出席予定（`r_daily_attendance`）
+
+```sql
+CREATE TABLE IF NOT EXISTS r_daily_attendance (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+  child_id UUID NOT NULL REFERENCES m_children(id),
+  
+  -- 出席予定日
+  attendance_date DATE NOT NULL,
+  
+  -- 出席ステータス
+  status attendance_status_type NOT NULL DEFAULT 'scheduled',
+  
+  -- 備考（欠席理由など）
+  note TEXT,
+  
+  -- 登録者
+  created_by UUID NOT NULL REFERENCES m_users(id),
+  updated_by UUID REFERENCES m_users(id),
+  
+  -- 共通カラム
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(child_id, attendance_date)
+);
+
+-- インデックス
+CREATE INDEX idx_daily_attendance_facility_date ON r_daily_attendance(facility_id, attendance_date);
+CREATE INDEX idx_daily_attendance_child_id ON r_daily_attendance(child_id);
+CREATE INDEX idx_daily_attendance_date ON r_daily_attendance(attendance_date);
+CREATE INDEX idx_daily_attendance_status ON r_daily_attendance(status);
+```
+
+---
+
+## 6. 設定テーブル
+
+### 6.1 曜日通所設定（`s_attendance_schedule`）
+
+```sql
+CREATE TABLE IF NOT EXISTS s_attendance_schedule (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id) ON DELETE CASCADE,
+  
+  -- 曜日別の通所設定（true = その曜日に来る）
+  monday BOOLEAN NOT NULL DEFAULT false,
+  tuesday BOOLEAN NOT NULL DEFAULT false,
+  wednesday BOOLEAN NOT NULL DEFAULT false,
+  thursday BOOLEAN NOT NULL DEFAULT false,
+  friday BOOLEAN NOT NULL DEFAULT false,
+  saturday BOOLEAN NOT NULL DEFAULT false,
+  sunday BOOLEAN NOT NULL DEFAULT false,
+  
+  -- 有効期間
+  valid_from DATE NOT NULL,                      -- 設定開始日
+  valid_to DATE,                                 -- 設定終了日（NULL = 無期限）
+  
+  is_active BOOLEAN NOT NULL DEFAULT true,       -- 有効/無効
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- インデックス
+CREATE INDEX idx_attendance_schedule_child_id ON s_attendance_schedule(child_id);
+CREATE INDEX idx_attendance_schedule_valid_from ON s_attendance_schedule(valid_from);
+CREATE INDEX idx_attendance_schedule_is_active ON s_attendance_schedule(is_active) WHERE is_active = true;
+```
+
+---
+
+## 7. 履歴・ログテーブル
+
+### 7.1 出欠実績ログ（`h_attendance`）
+
+```sql
+CREATE TABLE IF NOT EXISTS h_attendance (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+  
+  -- チェックイン情報
+  checked_in_at TIMESTAMP WITH TIME ZONE NOT NULL,  -- チェックイン日時
+  check_in_method check_method_type NOT NULL DEFAULT 'qr',
+  
+  -- チェックアウト情報（帰宅時）
+  checked_out_at TIMESTAMP WITH TIME ZONE,          -- チェックアウト日時
+  check_out_method check_method_type,
+  
+  -- 記録者（手動の場合）
+  checked_in_by UUID REFERENCES m_users(id),
+  checked_out_by UUID REFERENCES m_users(id),
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- インデックス
+CREATE INDEX idx_h_attendance_child_id ON h_attendance(child_id);
+CREATE INDEX idx_h_attendance_facility_id ON h_attendance(facility_id);
+CREATE INDEX idx_h_attendance_checked_in_at ON h_attendance(checked_in_at);
+CREATE INDEX idx_h_attendance_facility_date ON h_attendance(facility_id, DATE(checked_in_at));
+```
+
+---
+
+## 8. 中間テーブル
+
+### 8.1 職員-施設（`_user_facility`）
+
+```sql
+CREATE TABLE IF NOT EXISTS _user_facility (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
+  is_primary BOOLEAN NOT NULL DEFAULT false,  -- 主担当施設フラグ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(user_id, facility_id)
+);
+
+-- インデックス
+CREATE INDEX idx_user_facility_user_id ON _user_facility(user_id);
+CREATE INDEX idx_user_facility_facility_id ON _user_facility(facility_id);
+CREATE INDEX idx_user_facility_is_primary ON _user_facility(is_primary) WHERE is_primary = true;
+```
+
+---
+
+### 8.2 職員-クラス（`_user_class`）
+
+```sql
+CREATE TABLE IF NOT EXISTS _user_class (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
+  is_homeroom BOOLEAN NOT NULL DEFAULT false,  -- 担任フラグ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(user_id, class_id)
+);
+
+-- インデックス
+CREATE INDEX idx_user_class_user_id ON _user_class(user_id);
+CREATE INDEX idx_user_class_class_id ON _user_class(class_id);
+CREATE INDEX idx_user_class_is_homeroom ON _user_class(is_homeroom) WHERE is_homeroom = true;
+```
+
+---
+
+### 8.3 子ども-クラス（`_child_class`）
+
+```sql
+CREATE TABLE IF NOT EXISTS _child_class (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
+  school_year INTEGER NOT NULL,                  -- 年度（例: 2025）
+  started_at DATE NOT NULL,                      -- クラス開始日
+  ended_at DATE,                                 -- クラス終了日（進級・退所時）
+  is_current BOOLEAN NOT NULL DEFAULT true,      -- 現在所属中か
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(child_id, class_id, school_year)
+);
+
+-- インデックス
+CREATE INDEX idx_child_class_child_id ON _child_class(child_id);
+CREATE INDEX idx_child_class_class_id ON _child_class(class_id);
+CREATE INDEX idx_child_class_is_current ON _child_class(is_current) WHERE is_current = true;
+CREATE INDEX idx_child_class_school_year ON _child_class(school_year);
+```
+
+---
+
+### 8.4 観察記録-タグ（`_record_tag`）
+
+```sql
+CREATE TABLE IF NOT EXISTS _record_tag (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  observation_id UUID NOT NULL REFERENCES r_observation(id) ON DELETE CASCADE,
+  tag_id UUID NOT NULL REFERENCES m_observation_tags(id) ON DELETE CASCADE,
+  
+  -- AI自動付与か人間が手動で付けたか
+  is_auto_tagged BOOLEAN NOT NULL DEFAULT false,
+  confidence_score DECIMAL(3,2),                 -- AI信頼度（0.00 - 1.00）
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(observation_id, tag_id)
+);
+
+-- インデックス
+CREATE INDEX idx_record_tag_observation_id ON _record_tag(observation_id);
+CREATE INDEX idx_record_tag_tag_id ON _record_tag(tag_id);
+CREATE INDEX idx_record_tag_is_auto ON _record_tag(is_auto_tagged);
+```
+
+---
+
+## 9. テーブル関連図
+
+```
+m_companies (会社)
+  ├─ m_facilities (施設) ← company_id
+  │   ├─ m_classes (クラス) ← facility_id
+  │   │   ├─ _user_class (職員-クラス)
+  │   │   └─ _child_class (子ども-クラス)
+  │   │
+  │   ├─ m_children (子ども) ← facility_id
+  │   │   ├─ s_attendance_schedule (曜日通所設定)
+  │   │   ├─ r_daily_attendance (日次出席予定)
+  │   │   ├─ r_observation (観察記録)
+  │   │   ├─ r_voice (子どもの声)
+  │   │   ├─ h_attendance (出欠実績ログ)
+  │   │   └─ _child_class (子ども-クラス)
+  │   │
+  │   ├─ r_activity (活動記録) ← facility_id
+  │   ├─ r_daily_attendance (日次出席予定) ← facility_id
+  │   └─ _user_facility (職員-施設)
+  │
+  └─ m_users (職員) ← company_id
+      ├─ _user_facility (職員-施設)
+      └─ _user_class (職員-クラス)
+
+m_observation_tags (観点タグ)
+  └─ _record_tag (観察記録-タグ)
+
+r_observation (観察記録)
+  ├─ _record_tag (観察記録-タグ)
+  └─ r_activity (活動記録) ← activity_id（元記録）
+```
+
+---
+
+## 10. インデックス戦略
+
+### 10.1 基本方針
+
+- **外部キー**: すべての外部キーにインデックス
+- **検索条件**: WHERE句で頻繁に使うカラムにインデックス
+- **複合インデックス**: 施設+日付など、セットで検索するカラム
+- **論理削除**: `WHERE deleted_at IS NULL` を含む部分インデックス
+
+### 10.2 主要な複合インデックス
+
+```sql
+-- 施設 × 日付（頻出パターン）
+CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_observation_child_date ON r_observation(child_id, observation_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_daily_attendance_facility_date ON r_daily_attendance(facility_id, attendance_date);
+```
+
+### 10.3 全文検索インデックス
+
+```sql
+-- 子ども名前検索
+CREATE INDEX idx_children_name_search ON m_children 
+  USING gin(to_tsvector('japanese', family_name || ' ' || given_name || ' ' || COALESCE(nickname, '')));
+```
+
+---
+
+## 11. 今後の拡張予定
+
+### 11.1 追加予定テーブル
+
+```
+r_report                 レポート
+h_report_share           レポート共有履歴
+h_login                  ログイン履歴
+h_data_export            データエクスポート履歴
+s_template               定型文・テンプレート
+```
+
+### 11.2 将来的な機能拡張
+
+- 保護者向けポータル（`m_parents`, `_parent_child`）
+- 外部提出資料（`r_submission`）
+- AIタグ自動付与の学習データ
+- レポートテンプレート管理
+
+---
+
+## 12. データ整合性ルール
+
+### 12.1 カスケード削除
+
+- **施設削除** → クラス、活動記録も削除
+- **子ども削除** → 観察記録、声記録、出席記録も削除
+- **ユーザー削除** → 中間テーブルの紐付けを削除
+
+### 12.2 論理削除対象
+
+- `m_companies`
+- `m_facilities`
+- `m_classes`
+- `m_users`
+- `m_children`
+- `m_observation_tags`
+- `r_activity`
+- `r_observation`
+- `r_voice`
+
+### 12.3 物理削除対象（ログ系）
+
+- `h_attendance`
+- `h_login`（将来）
+- `h_report_share`（将来）
+
+---
+
+## 13. セキュリティ考慮事項
+
+### 13.1 Row Level Security（RLS）
+
+Supabase の RLS 機能を使用して、以下を実現：
+
+```sql
+-- 例: 施設管理者は自施設のデータのみ閲覧可能
+CREATE POLICY facility_access ON r_activity
+  FOR SELECT
+  USING (
+    facility_id IN (
+      SELECT facility_id FROM _user_facility WHERE user_id = auth.uid()
+    )
+  );
+```
+
+### 13.2 個人情報の暗号化
+
+- 子どもの写真URL
+- 保護者の連絡先
+- アレルギー情報
+
+→ Supabase Storage の暗号化機能を使用
+
+---
+
+## 14. パフォーマンス考慮事項
+
+### 14.1 想定データ量（5年後）
+
+|テーブル|レコード数|
+|---|---|
+|`m_children`|10,000件|
+|`m_users`|1,000件|
+|`m_facilities`|200件|
+|`r_activity`|100,000件|
+|`r_observation`|500,000件|
+|`h_attendance`|1,000,000件|
+
+### 14.2 パーティショニング検討
+
+5年後以降、以下のテーブルは日付でパーティショニング：
+
+- `r_activity`（月単位）
+- `r_observation`（月単位）
+- `h_attendance`（月単位）
+
+---
+
+**作成日**: 2025年1月  
+**最終更新**: 2025年1月  
+**管理者**: プロジェクトリーダー
