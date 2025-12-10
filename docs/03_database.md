@@ -250,13 +250,13 @@ CREATE TABLE IF NOT EXISTS m_children (
   photo_permission_public BOOLEAN DEFAULT false, -- 外部公開OK
   photo_permission_share BOOLEAN DEFAULT false,  -- 他の保護者に共有OK
   
-  -- 保護者情報
-  parent_name VARCHAR(100),                      -- 保護者名
-  parent_email VARCHAR(255),                     -- 保護者メールアドレス
-  parent_phone VARCHAR(20),                      -- 保護者電話番号
-  emergency_contact_name VARCHAR(100),           -- 緊急連絡先名
-  emergency_contact_phone VARCHAR(20),           -- 緊急連絡先電話番号
-  sibling_id UUID REFERENCES m_children(id),     -- 兄弟姉妹の紐づけ
+  -- 保護者情報（DEPRECATED: m_guardians + _child_guardian を使用）
+  parent_name VARCHAR(100),                      -- 保護者名（非推奨）
+  parent_email VARCHAR(255),                     -- 保護者メールアドレス（非推奨）
+  parent_phone VARCHAR(20),                      -- 保護者電話番号（非推奨）
+  emergency_contact_name VARCHAR(100),           -- 緊急連絡先名（非推奨）
+  emergency_contact_phone VARCHAR(20),           -- 緊急連絡先電話番号（非推奨）
+  sibling_id UUID REFERENCES m_children(id),     -- 兄弟姉妹の紐づけ（DEPRECATED: _child_sibling を使用）
   
   -- レポート設定
   report_name_permission BOOLEAN DEFAULT true,   -- レポートに名前表示OK
@@ -323,6 +323,46 @@ INSERT INTO m_observation_tags (name, name_en, description, color, sort_order) V
   ('感情の安定', 'Emotional Stability', '気持ちのコントロール', '#FF9800', 3),
   ('好奇心', 'Curiosity', '新しいことへの興味', '#9C27B0', 4),
   ('表現力', 'Expressiveness', '言葉や身体で伝える力', '#E91E63', 5);
+```
+
+---
+
+### 4.7 保護者マスタ（`m_guardians`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_guardians (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+
+  -- 基本情報
+  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
+  given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
+  family_name_kana VARCHAR(50),                  -- 姓（カナ）
+  given_name_kana VARCHAR(50),                   -- 名（カナ）
+
+  -- 連絡先
+  phone VARCHAR(20),                             -- 電話番号
+  email VARCHAR(255),                            -- メールアドレス
+  postal_code VARCHAR(10),                       -- 郵便番号
+  address TEXT,                                  -- 住所
+
+  -- 備考
+  notes TEXT,                                    -- 特記事項
+
+  -- 共通カラム
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_guardians_facility_id ON m_guardians(facility_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_guardians_phone ON m_guardians(phone) WHERE deleted_at IS NULL;
+CREATE INDEX idx_guardians_email ON m_guardians(email) WHERE deleted_at IS NULL;
+
+-- フルテキスト検索用インデックス（名前検索）
+CREATE INDEX idx_guardians_name_search ON m_guardians
+  USING gin(to_tsvector('japanese', family_name || ' ' || given_name));
 ```
 
 ---
@@ -619,7 +659,59 @@ CREATE INDEX idx_child_class_school_year ON _child_class(school_year);
 
 ---
 
-### 8.4 観察記録-タグ（`_record_tag`）
+### 8.4 子ども-保護者（`_child_guardian`）
+
+```sql
+CREATE TABLE IF NOT EXISTS _child_guardian (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id) ON DELETE CASCADE,
+  guardian_id UUID NOT NULL REFERENCES m_guardians(id) ON DELETE CASCADE,
+
+  -- 関係
+  relationship VARCHAR(20),                      -- 父 / 母 / 祖父 / 祖母 / その他
+  is_primary BOOLEAN NOT NULL DEFAULT false,     -- 主たる連絡先
+  is_emergency_contact BOOLEAN NOT NULL DEFAULT false,  -- 緊急連絡先
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  UNIQUE(child_id, guardian_id)
+);
+
+-- インデックス
+CREATE INDEX idx_child_guardian_child_id ON _child_guardian(child_id);
+CREATE INDEX idx_child_guardian_guardian_id ON _child_guardian(guardian_id);
+CREATE INDEX idx_child_guardian_is_primary ON _child_guardian(is_primary) WHERE is_primary = true;
+CREATE INDEX idx_child_guardian_is_emergency ON _child_guardian(is_emergency_contact) WHERE is_emergency_contact = true;
+```
+
+---
+
+### 8.5 子ども-兄弟姉妹（`_child_sibling`）
+
+```sql
+CREATE TABLE IF NOT EXISTS _child_sibling (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_id UUID NOT NULL REFERENCES m_children(id) ON DELETE CASCADE,
+  sibling_id UUID NOT NULL REFERENCES m_children(id) ON DELETE CASCADE,
+
+  -- 関係
+  relationship VARCHAR(20),                      -- 兄 / 姉 / 弟 / 妹
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  UNIQUE(child_id, sibling_id),
+  CHECK (child_id != sibling_id)
+);
+
+-- インデックス
+CREATE INDEX idx_child_sibling_child_id ON _child_sibling(child_id);
+CREATE INDEX idx_child_sibling_sibling_id ON _child_sibling(sibling_id);
+```
+
+---
+
+### 8.6 観察記録-タグ（`_record_tag`）
 
 ```sql
 CREATE TABLE IF NOT EXISTS _record_tag (
@@ -659,7 +751,12 @@ m_companies (会社)
   │   │   ├─ r_observation (観察記録)
   │   │   ├─ r_voice (子どもの声)
   │   │   ├─ h_attendance (出欠実績ログ)
-  │   │   └─ _child_class (子ども-クラス)
+  │   │   ├─ _child_class (子ども-クラス)
+  │   │   ├─ _child_guardian (子ども-保護者)
+  │   │   └─ _child_sibling (子ども-兄弟姉妹)
+  │   │
+  │   ├─ m_guardians (保護者) ← facility_id
+  │   │   └─ _child_guardian (子ども-保護者)
   │   │
   │   ├─ r_activity (活動記録) ← facility_id
   │   ├─ r_daily_attendance (日次出席予定) ← facility_id
@@ -709,22 +806,27 @@ CREATE INDEX idx_children_name_search ON m_children
 
 ## 11. 今後の拡張予定
 
-### 11.1 追加予定テーブル
+### 11.1 追加予定テーブル（Phase 2以降）
 
 ```
-r_report                 レポート
-h_report_share           レポート共有履歴
 h_login                  ログイン履歴
 h_data_export            データエクスポート履歴
 s_template               定型文・テンプレート
 ```
 
+**注**: 以下のテーブルは追加実装済み（詳細は`08_database_additions.md`を参照）
+- `m_guardians` - 保護者マスタ
+- `_child_guardian` - 子ども-保護者紐付け
+- `_child_sibling` - 子ども-兄弟姉妹紐付け
+- `r_report` - レポート
+- `h_report_share` - レポート共有履歴
+
 ### 11.2 将来的な機能拡張
 
-- 保護者向けポータル（`m_parents`, `_parent_child`）
+- 保護者向けポータル（認証連携が必要）
 - 外部提出資料（`r_submission`）
 - AIタグ自動付与の学習データ
-- レポートテンプレート管理
+- レポートテンプレート管理（複数テンプレート対応）
 
 ---
 
