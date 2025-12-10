@@ -334,23 +334,24 @@ export default function ChildcareDashboard() {
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
           {/* Header */}
-          <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-200 pb-6">
+          <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6 border-b border-gray-200 pb-4 sm:pb-6">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <LayoutDashboard size={20} className="text-slate-500" />
-                <h1 className="text-xl font-bold text-slate-800">安全管理ダッシュボード</h1>
+                <LayoutDashboard size={18} className="text-slate-500 sm:w-5 sm:h-5" />
+                <h1 className="text-lg sm:text-xl font-bold text-slate-800">安全管理ダッシュボード</h1>
               </div>
-              <p className="text-sm text-slate-500 pl-7">
-                {dashboardData.current_date.replace(/-/g, '/')} <span className="mx-2">|</span> 現在時刻 <span className="font-mono font-bold text-slate-700">{dashboardData.current_time}</span>
+              <p className="text-xs sm:text-sm text-slate-500 pl-6 sm:pl-7">
+                {dashboardData.current_date.replace(/-/g, '/')} <span className="mx-1 sm:mx-2">|</span> 現在時刻 <span className="font-mono font-bold text-slate-700">{dashboardData.current_time}</span>
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-100">
+              <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-100">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                システム稼働中
+                <span className="hidden sm:inline">システム稼働中</span>
+                <span className="sm:hidden">稼働中</span>
               </span>
             </div>
           </header>
@@ -490,7 +491,8 @@ export default function ChildcareDashboard() {
                       className={`text-xs font-bold px-3 py-1.5 rounded-md border transition-colors flex items-center gap-2 ${showUnscheduled ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-gray-300 hover:bg-gray-50'}`}
                     >
                       {showUnscheduled ? <UserX size={14} /> : <UserPlus size={14} />}
-                      {showUnscheduled ? '予定なしを表示中' : '予定なしを表示'}
+                      <span className="hidden sm:inline">{showUnscheduled ? '予定なしを表示中' : '予定なしを表示'}</span>
+                      <span className="sm:hidden">{showUnscheduled ? '予定なし' : '予定外'}</span>
                     </button>
                   </div>
 
@@ -499,7 +501,8 @@ export default function ChildcareDashboard() {
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* デスクトップ: テーブル表示 */}
+                <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-white border-b border-gray-100 text-slate-500 text-xs uppercase tracking-wider">
@@ -547,12 +550,57 @@ export default function ChildcareDashboard() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* モバイル: カード表示 */}
+                <div className="lg:hidden divide-y divide-gray-100">
+                  {filteredAndSortedChildren.map(child => (
+                    <div key={child.child_id} className="p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex-1">
+                          <div className="font-bold text-slate-800 mb-1">{child.name}</div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <span>{child.class_name}</span>
+                            <span>•</span>
+                            <span>{child.grade}</span>
+                          </div>
+                        </div>
+                        <StatusBadge child={child} />
+                      </div>
+
+                      {child.is_scheduled_today && (
+                        <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
+                          <div>
+                            <div className="text-slate-400 mb-1">予定</div>
+                            <div className="text-slate-600">
+                              <div>IN: {child.scheduled_start_time || '-'}</div>
+                              <div>OUT: {child.scheduled_end_time || '-'}</div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 mb-1">実績</div>
+                            <div className="text-slate-600">
+                              {child.actual_in_time ? (
+                                <div className="text-emerald-600 font-medium">
+                                  {child.actual_in_time}<br />〜 {child.actual_out_time || '...'}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <ActionButtons child={child} />
+                    </div>
+                  ))}
+                </div>
               </div>
 
             </div>
 
             <div className="lg:col-span-4 h-full flex flex-col gap-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col items-center justify-center gap-2">
                   <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform">
                     <FileText size={20} />
@@ -567,7 +615,7 @@ export default function ChildcareDashboard() {
                 </button>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col sticky top-6">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col lg:sticky lg:top-6">
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-indigo-50/30">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
                     <ShieldAlert size={16} className="text-indigo-600" />
@@ -578,7 +626,7 @@ export default function ChildcareDashboard() {
                   </span>
                 </div>
 
-                <div className="flex-1 overflow-auto max-h-[500px] p-2 space-y-2">
+                <div className="flex-1 overflow-auto lg:max-h-[500px] p-2 space-y-2">
                   {dashboardData.record_support.length === 0 ? (
                     <div className="p-8 text-center text-slate-400">
                       <p className="text-sm">推奨される記録候補はありません</p>
