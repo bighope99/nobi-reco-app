@@ -11,7 +11,9 @@ import {
   Plus,
   X,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  Search,
+  Check
 } from 'lucide-react';
 
 // Mock data
@@ -28,8 +30,8 @@ const mockClass = {
     { id: '2', name: '佐藤先生', role: '副担任' }
   ],
   children: [
-    { id: '1', name: '山田太郎', age: 0, kana: 'やまだたろう' },
-    { id: '2', name: '鈴木花子', age: 1, kana: 'すずきはなこ' }
+    { id: '1', name: '山田太郎', age: 0, kana: 'やまだたろう', grade: '0歳' },
+    { id: '2', name: '鈴木花子', age: 1, kana: 'すずきはなこ', grade: '1歳' }
   ]
 };
 
@@ -42,6 +44,15 @@ const mockAvailableTeachers = [
   { id: '3', name: '高橋先生' },
   { id: '4', name: '伊藤先生' },
   { id: '5', name: '渡辺先生' }
+];
+
+// Available children (not in this class)
+const mockAvailableChildren = [
+  { id: '3', name: '佐藤一郎', age: 0, kana: 'さとういちろう', grade: '0歳', className: '未配属' },
+  { id: '4', name: '田中美咲', age: 1, kana: 'たなかみさき', grade: '1歳', className: '未配属' },
+  { id: '5', name: '高橋健太', age: 2, kana: 'たかはしけんた', grade: '2歳', className: 'りす組' },
+  { id: '6', name: '伊藤さくら', age: 0, kana: 'いとうさくら', grade: '0歳', className: '未配属' },
+  { id: '7', name: '渡辺翔太', age: 1, kana: 'わたなべしょうた', grade: '1歳', className: '未配属' }
 ];
 
 const Input = ({ className = "", ...props }: any) => (
@@ -94,6 +105,11 @@ export default function ClassDetailPage() {
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [selectedTeacherRole, setSelectedTeacherRole] = useState('副担任');
 
+  // Child management
+  const [showAddChildModal, setShowAddChildModal] = useState(false);
+  const [childSearchTerm, setChildSearchTerm] = useState('');
+  const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
+
   const handleAddTeacher = () => {
     if (selectedTeacherId) {
       const teacher = mockAvailableTeachers.find(t => t.id === selectedTeacherId);
@@ -120,6 +136,43 @@ export default function ClassDetailPage() {
       });
     }
   };
+
+  // Child management functions
+  const handleToggleChild = (childId: string) => {
+    if (selectedChildIds.includes(childId)) {
+      setSelectedChildIds(selectedChildIds.filter(id => id !== childId));
+    } else {
+      setSelectedChildIds([...selectedChildIds, childId]);
+    }
+  };
+
+  const handleAddChildren = () => {
+    const childrenToAdd = mockAvailableChildren.filter(child =>
+      selectedChildIds.includes(child.id)
+    );
+    setClassData({
+      ...classData,
+      children: [...classData.children, ...childrenToAdd]
+    });
+    setSelectedChildIds([]);
+    setShowAddChildModal(false);
+    setChildSearchTerm('');
+  };
+
+  const handleRemoveChild = (childId: string) => {
+    if (confirm('このクラスから児童を除外しますか？')) {
+      setClassData({
+        ...classData,
+        children: classData.children.filter(c => c.id !== childId)
+      });
+    }
+  };
+
+  // Filter available children (exclude already in class)
+  const availableChildren = mockAvailableChildren.filter(child =>
+    !classData.children.some(c => c.id === child.id) &&
+    (child.name.includes(childSearchTerm) || child.kana.includes(childSearchTerm))
+  );
 
   return (
     <StaffLayout title="クラス詳細">
@@ -319,11 +372,20 @@ export default function ClassDetailPage() {
 
           {/* Children Summary Section */}
           <section className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-            <div className="px-6 py-5 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-800">在籍児童</h2>
-              <p className="text-sm text-slate-500 mt-1">
-                {classData.children.length}名 / 定員{classData.capacity}名
-              </p>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">在籍児童</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {classData.children.length}名 / 定員{classData.capacity}名
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddChildModal(true)}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow-sm transition-colors font-bold text-sm"
+              >
+                <Plus size={18} />
+                児童を追加
+              </button>
             </div>
             <div className="p-6">
               {/* Progress Bar */}
@@ -347,16 +409,25 @@ export default function ClassDetailPage() {
                 {classData.children.map((child) => (
                   <div
                     key={child.id}
-                    className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                    onClick={() => window.location.href = `/children/${child.id}`}
+                    className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors group"
                   >
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
                       {child.age}歳
                     </div>
-                    <div className="flex-1">
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => window.location.href = `/children/${child.id}`}
+                    >
                       <p className="font-bold text-slate-800 text-sm">{child.name}</p>
                       <p className="text-xs text-slate-500">{child.kana}</p>
                     </div>
+                    <button
+                      onClick={() => handleRemoveChild(child.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                      title="除外"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -400,6 +471,131 @@ export default function ClassDetailPage() {
             </button>
           </div>
         </div>
+
+        {/* Add Child Modal */}
+        {showAddChildModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 rounded-lg">
+                    <Users size={20} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">児童を追加</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {selectedChildIds.length > 0 ? `${selectedChildIds.length}名選択中` : 'チェックを入れて追加'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAddChildModal(false);
+                    setSelectedChildIds([]);
+                    setChildSearchTerm('');
+                  }}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="px-6 py-4 border-b border-slate-100 shrink-0">
+                <div className="relative">
+                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="名前・ふりがなで検索..."
+                    className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                    value={childSearchTerm}
+                    onChange={(e) => setChildSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Modal Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-2">
+                  {availableChildren.map((child) => (
+                    <div
+                      key={child.id}
+                      onClick={() => handleToggleChild(child.id)}
+                      className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all ${
+                        selectedChildIds.includes(child.id)
+                          ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-100'
+                          : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                        selectedChildIds.includes(child.id)
+                          ? 'bg-indigo-600 border-indigo-600'
+                          : 'bg-white border-slate-300'
+                      }`}>
+                        {selectedChildIds.includes(child.id) && (
+                          <Check size={14} className="text-white" strokeWidth={3} />
+                        )}
+                      </div>
+
+                      {/* Child Info */}
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
+                        {child.age}歳
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-800 text-sm">{child.name}</p>
+                        <p className="text-xs text-slate-500">{child.kana}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-slate-500">{child.grade}</p>
+                        <p className="text-xs text-slate-400">{child.className}</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {availableChildren.length === 0 && (
+                    <div className="text-center py-12 text-slate-400">
+                      <Users size={48} className="mx-auto mb-3 opacity-50" />
+                      <p>該当する児童が見つかりませんでした</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 rounded-b-xl shrink-0">
+                <p className="text-sm text-slate-600">
+                  {selectedChildIds.length > 0 ? (
+                    <span className="font-bold text-indigo-600">{selectedChildIds.length}名</span>
+                  ) : (
+                    '児童を選択してください'
+                  )}
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowAddChildModal(false);
+                      setSelectedChildIds([]);
+                      setChildSearchTerm('');
+                    }}
+                    className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium text-sm transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleAddChildren}
+                    disabled={selectedChildIds.length === 0}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={16} />
+                    {selectedChildIds.length > 0 ? `${selectedChildIds.length}名を追加` : '追加'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </StaffLayout>

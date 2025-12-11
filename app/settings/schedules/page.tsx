@@ -9,26 +9,64 @@ import {
   Trash2,
   Edit2,
   ChevronRight,
-  Users
+  Users,
+  Check
 } from 'lucide-react';
 
-// Mock data
+// Weekdays
+const weekdays = [
+  { id: 'mon', label: '月' },
+  { id: 'tue', label: '火' },
+  { id: 'wed', label: '水' },
+  { id: 'thu', label: '木' },
+  { id: 'fri', label: '金' },
+  { id: 'sat', label: '土' },
+  { id: 'sun', label: '日' }
+];
+
+// Grades
+const grades = [
+  { id: '1', label: '1年生' },
+  { id: '2', label: '2年生' },
+  { id: '3', label: '3年生' },
+  { id: '4', label: '4年生' },
+  { id: '5', label: '5年生' },
+  { id: '6', label: '6年生' }
+];
+
+// Mock data with grades as array of IDs and weekdays
 const mockSchools = [
   {
     id: '1',
     name: '第一小学校',
-    grades: [
-      { gradeId: '1', gradeName: '1年生', arrivalTime: '08:00', departureTime: '15:00' },
-      { gradeId: '2', gradeName: '2年生', arrivalTime: '08:00', departureTime: '15:30' },
-      { gradeId: '3-4', gradeName: '3・4年生', arrivalTime: '08:00', departureTime: '16:00' }
+    schedules: [
+      {
+        scheduleId: '1',
+        gradeIds: ['1', '2'],
+        weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+        arrivalTime: '08:00',
+        departureTime: '15:00'
+      },
+      {
+        scheduleId: '2',
+        gradeIds: ['3', '4', '5', '6'],
+        weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+        arrivalTime: '08:00',
+        departureTime: '16:00'
+      }
     ]
   },
   {
     id: '2',
     name: '第二小学校',
-    grades: [
-      { gradeId: '1-2', gradeName: '1・2年生', arrivalTime: '08:30', departureTime: '15:00' },
-      { gradeId: '3-6', gradeName: '3〜6年生', arrivalTime: '08:30', departureTime: '16:30' }
+    schedules: [
+      {
+        scheduleId: '3',
+        gradeIds: ['1', '2', '3', '4', '5', '6'],
+        weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+        arrivalTime: '08:30',
+        departureTime: '16:30'
+      }
     ]
   }
 ];
@@ -67,7 +105,7 @@ export default function ScheduleSettingsPage() {
       const newSchool = {
         id: String(Date.now()),
         name: newSchoolName,
-        grades: []
+        schedules: []
       };
       setSchools([...schools, newSchool]);
       setNewSchoolName('');
@@ -76,17 +114,18 @@ export default function ScheduleSettingsPage() {
     }
   };
 
-  // Add grade to school
-  const handleAddGrade = (schoolId: string) => {
+  // Add schedule to school
+  const handleAddSchedule = (schoolId: string) => {
     setSchools(schools.map(school => {
       if (school.id === schoolId) {
         return {
           ...school,
-          grades: [
-            ...school.grades,
+          schedules: [
+            ...school.schedules,
             {
-              gradeId: String(Date.now()),
-              gradeName: '',
+              scheduleId: String(Date.now()),
+              gradeIds: [],
+              weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
               arrivalTime: '08:00',
               departureTime: '15:00'
             }
@@ -97,17 +136,20 @@ export default function ScheduleSettingsPage() {
     }));
   };
 
-  // Update grade info
-  const handleUpdateGrade = (schoolId: string, gradeId: string, field: string, value: string) => {
+  // Toggle grade selection
+  const handleToggleGrade = (schoolId: string, scheduleId: string, gradeId: string) => {
     setSchools(schools.map(school => {
       if (school.id === schoolId) {
         return {
           ...school,
-          grades: school.grades.map(grade => {
-            if (grade.gradeId === gradeId) {
-              return { ...grade, [field]: value };
+          schedules: school.schedules.map(schedule => {
+            if (schedule.scheduleId === scheduleId) {
+              const gradeIds = schedule.gradeIds.includes(gradeId)
+                ? schedule.gradeIds.filter(id => id !== gradeId)
+                : [...schedule.gradeIds, gradeId];
+              return { ...schedule, gradeIds };
             }
-            return grade;
+            return schedule;
           })
         };
       }
@@ -115,14 +157,53 @@ export default function ScheduleSettingsPage() {
     }));
   };
 
-  // Remove grade
-  const handleRemoveGrade = (schoolId: string, gradeId: string) => {
-    if (confirm('この学年設定を削除しますか？')) {
+  // Toggle weekday selection
+  const handleToggleWeekday = (schoolId: string, scheduleId: string, weekdayId: string) => {
+    setSchools(schools.map(school => {
+      if (school.id === schoolId) {
+        return {
+          ...school,
+          schedules: school.schedules.map(schedule => {
+            if (schedule.scheduleId === scheduleId) {
+              const weekdays = schedule.weekdays.includes(weekdayId)
+                ? schedule.weekdays.filter(id => id !== weekdayId)
+                : [...schedule.weekdays, weekdayId];
+              return { ...schedule, weekdays };
+            }
+            return schedule;
+          })
+        };
+      }
+      return school;
+    }));
+  };
+
+  // Update time
+  const handleUpdateTime = (schoolId: string, scheduleId: string, field: 'arrivalTime' | 'departureTime', value: string) => {
+    setSchools(schools.map(school => {
+      if (school.id === schoolId) {
+        return {
+          ...school,
+          schedules: school.schedules.map(schedule => {
+            if (schedule.scheduleId === scheduleId) {
+              return { ...schedule, [field]: value };
+            }
+            return schedule;
+          })
+        };
+      }
+      return school;
+    }));
+  };
+
+  // Remove schedule
+  const handleRemoveSchedule = (schoolId: string, scheduleId: string) => {
+    if (confirm('このスケジュール設定を削除しますか？')) {
       setSchools(schools.map(school => {
         if (school.id === schoolId) {
           return {
             ...school,
-            grades: school.grades.filter(g => g.gradeId !== gradeId)
+            schedules: school.schedules.filter(s => s.scheduleId !== scheduleId)
           };
         }
         return school;
@@ -132,9 +213,27 @@ export default function ScheduleSettingsPage() {
 
   // Remove school
   const handleRemoveSchool = (schoolId: string) => {
-    if (confirm('この学校を削除しますか？紐づく学年設定もすべて削除されます。')) {
+    if (confirm('この学校を削除しますか？紐づくスケジュール設定もすべて削除されます。')) {
       setSchools(schools.filter(s => s.id !== schoolId));
     }
+  };
+
+  // Get grade names from IDs
+  const getGradeNames = (gradeIds: string[]) => {
+    if (gradeIds.length === 0) return '学年未選択';
+    return gradeIds
+      .map(id => grades.find(g => g.id === id)?.label)
+      .filter(Boolean)
+      .join('・');
+  };
+
+  // Get weekday names from IDs
+  const getWeekdayNames = (weekdayIds: string[]) => {
+    if (weekdayIds.length === 0) return '曜日未選択';
+    return weekdayIds
+      .map(id => weekdays.find(w => w.id === id)?.label)
+      .filter(Boolean)
+      .join('');
   };
 
   return (
@@ -154,7 +253,7 @@ export default function ScheduleSettingsPage() {
                 登校時刻設定
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                学校ごと、学年ごとに来校・帰宅時刻を設定
+                学校ごと、学年ごと、曜日ごとに来校・帰宅時刻を設定
               </p>
             </div>
 
@@ -217,7 +316,7 @@ export default function ScheduleSettingsPage() {
                     <div>
                       <h2 className="text-lg font-bold text-slate-800">{school.name}</h2>
                       <p className="text-sm text-slate-500 mt-0.5">
-                        {school.grades.length}つの学年設定
+                        {school.schedules.length}つのスケジュール設定
                       </p>
                     </div>
                   </div>
@@ -239,102 +338,148 @@ export default function ScheduleSettingsPage() {
                   </div>
                 </div>
 
-                {/* Grades List */}
+                {/* Schedules List */}
                 <div className="p-6">
                   {editingSchool === school.id && (
                     <button
-                      onClick={() => handleAddGrade(school.id)}
+                      onClick={() => handleAddSchedule(school.id)}
                       className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm"
                     >
                       <Plus size={18} />
-                      学年を追加
+                      スケジュールを追加
                     </button>
                   )}
 
-                  <div className="space-y-3">
-                    {school.grades.map((grade) => (
+                  <div className="space-y-4">
+                    {school.schedules.map((schedule) => (
                       <div
-                        key={grade.gradeId}
-                        className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${
+                        key={schedule.scheduleId}
+                        className={`p-4 rounded-lg border transition-all ${
                           editingSchool === school.id
                             ? 'bg-slate-50 border-slate-200'
                             : 'bg-white border-slate-100'
-                        } group`}
+                        }`}
                       >
                         {editingSchool === school.id ? (
-                          <>
-                            {/* Edit Mode */}
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <Input
-                                placeholder="例: 1年生 または 1・2年生"
-                                value={grade.gradeName}
-                                onChange={(e: any) =>
-                                  handleUpdateGrade(school.id, grade.gradeId, 'gradeName', e.target.value)
-                                }
-                              />
-                              <div className="flex items-center gap-2">
-                                <Clock size={16} className="text-slate-400" />
-                                <Input
-                                  type="time"
-                                  value={grade.arrivalTime}
-                                  onChange={(e: any) =>
-                                    handleUpdateGrade(school.id, grade.gradeId, 'arrivalTime', e.target.value)
-                                  }
-                                />
-                                <span className="text-sm text-slate-500">登校</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Clock size={16} className="text-slate-400" />
-                                <Input
-                                  type="time"
-                                  value={grade.departureTime}
-                                  onChange={(e: any) =>
-                                    handleUpdateGrade(school.id, grade.gradeId, 'departureTime', e.target.value)
-                                  }
-                                />
-                                <span className="text-sm text-slate-500">下校</span>
+                          <div className="space-y-4">
+                            {/* Grade Selection */}
+                            <div>
+                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">学年選択 (複数選択可)</label>
+                              <div className="flex flex-wrap gap-2">
+                                {grades.map((grade) => (
+                                  <button
+                                    key={grade.id}
+                                    onClick={() => handleToggleGrade(school.id, schedule.scheduleId, grade.id)}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                                      schedule.gradeIds.includes(grade.id)
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300 hover:bg-indigo-50'
+                                    }`}
+                                  >
+                                    {schedule.gradeIds.includes(grade.id) && (
+                                      <Check size={14} className="inline mr-1" />
+                                    )}
+                                    {grade.label}
+                                  </button>
+                                ))}
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleRemoveGrade(school.id, grade.gradeId)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              title="削除"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </>
+
+                            {/* Weekday Selection */}
+                            <div>
+                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">曜日選択 (複数選択可)</label>
+                              <div className="flex flex-wrap gap-2">
+                                {weekdays.map((day) => (
+                                  <button
+                                    key={day.id}
+                                    onClick={() => handleToggleWeekday(school.id, schedule.scheduleId, day.id)}
+                                    className={`w-10 h-10 rounded-lg text-sm font-bold transition-all border ${
+                                      schedule.weekdays.includes(day.id)
+                                        ? 'bg-purple-600 text-white border-purple-600'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:border-purple-300 hover:bg-purple-50'
+                                    }`}
+                                  >
+                                    {day.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Time Inputs */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">登校時刻</label>
+                                <div className="flex items-center gap-2">
+                                  <Clock size={16} className="text-slate-400" />
+                                  <Input
+                                    type="time"
+                                    value={schedule.arrivalTime}
+                                    onChange={(e: any) =>
+                                      handleUpdateTime(school.id, schedule.scheduleId, 'arrivalTime', e.target.value)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">下校時刻</label>
+                                <div className="flex items-center gap-2">
+                                  <Clock size={16} className="text-slate-400" />
+                                  <Input
+                                    type="time"
+                                    value={schedule.departureTime}
+                                    onChange={(e: any) =>
+                                      handleUpdateTime(school.id, schedule.scheduleId, 'departureTime', e.target.value)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Delete Button */}
+                            <div className="flex justify-end pt-2">
+                              <button
+                                onClick={() => handleRemoveSchedule(school.id, schedule.scheduleId)}
+                                className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
+                              >
+                                <Trash2 size={16} />
+                                このスケジュールを削除
+                              </button>
+                            </div>
+                          </div>
                         ) : (
-                          <>
-                            {/* View Mode */}
-                            <div className="flex items-center gap-3 flex-1">
-                              <div className="p-2 bg-white rounded-lg border border-slate-200">
-                                <Users size={20} className="text-indigo-600" />
-                              </div>
-                              <div className="flex-1">
-                                <h3 className="font-bold text-slate-800 text-sm">{grade.gradeName}</h3>
-                                <p className="text-xs text-slate-500 flex items-center gap-4 mt-1">
-                                  <span className="flex items-center gap-1">
-                                    <Clock size={12} />
-                                    登校: {grade.arrivalTime}
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <Clock size={12} />
-                                    下校: {grade.departureTime}
-                                  </span>
-                                </p>
-                              </div>
+                          <div className="flex items-center gap-4">
+                            <div className="p-2 bg-white rounded-lg border border-slate-200">
+                              <Users size={20} className="text-indigo-600" />
                             </div>
-                          </>
+                            <div className="flex-1">
+                              <h3 className="font-bold text-slate-800 text-sm mb-1">
+                                {getGradeNames(schedule.gradeIds)}
+                              </h3>
+                              <p className="text-xs text-slate-500 flex items-center gap-4">
+                                <span className="flex items-center gap-1">
+                                  <Clock size={12} />
+                                  登校: {schedule.arrivalTime}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock size={12} />
+                                  下校: {schedule.departureTime}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  📅 {getWeekdayNames(schedule.weekdays)}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
                         )}
                       </div>
                     ))}
 
-                    {school.grades.length === 0 && (
+                    {school.schedules.length === 0 && (
                       <div className="text-center py-8 text-slate-400">
                         <Users size={48} className="mx-auto mb-3 opacity-50" />
-                        <p>学年設定がありません</p>
+                        <p>スケジュール設定がありません</p>
                         {editingSchool === school.id && (
-                          <p className="text-sm mt-1">上の「学年を追加」ボタンから追加してください</p>
+                          <p className="text-sm mt-1">上の「スケジュールを追加」ボタンから追加してください</p>
                         )}
                       </div>
                     )}

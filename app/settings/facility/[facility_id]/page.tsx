@@ -12,7 +12,9 @@ import {
   X,
   Trash2,
   Users,
-  ChevronLeft
+  ChevronLeft,
+  UserCheck,
+  ChevronRight
 } from 'lucide-react';
 
 // Mock data
@@ -23,9 +25,9 @@ const mockFacility = {
   phone: '03-1234-5678',
   email: 'honten@himawari.example.com',
   classes: [
-    { id: '1', name: 'ひよこ組', capacity: 10, currentCount: 8 },
-    { id: '2', name: 'りす組', capacity: 12, currentCount: 12 },
-    { id: '3', name: 'うさぎ組', capacity: 15, currentCount: 13 }
+    { id: '1', name: 'ひよこ組', capacity: 10, currentCount: 8, teachers: ['田中先生', '佐藤先生'] },
+    { id: '2', name: 'りす組', capacity: 12, currentCount: 12, teachers: ['山田先生'] },
+    { id: '3', name: 'うさぎ組', capacity: 15, currentCount: 13, teachers: ['鈴木先生', '高橋先生'] }
   ]
 };
 
@@ -71,7 +73,8 @@ export default function FacilityDetailPage() {
         id: String(Date.now()),
         name: newClassName,
         capacity: parseInt(newClassCapacity),
-        currentCount: 0
+        currentCount: 0,
+        teachers: []
       };
       setFacility({
         ...facility,
@@ -227,21 +230,40 @@ export default function FacilityDetailPage() {
                 {facility.classes.map((cls) => (
                   <div
                     key={cls.id}
-                    className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors group"
+                    className="flex items-center justify-between p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg transition-colors group cursor-pointer"
+                    onClick={() => window.location.href = `/settings/classes/${cls.id}`}
                   >
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <div className="p-2 bg-white rounded-lg border border-slate-200 group-hover:border-indigo-200 transition-colors">
                         <Users size={20} className="text-indigo-600" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-bold text-slate-800">{cls.name}</h3>
-                        <p className="text-sm text-slate-500">
+                        <h3 className="font-bold text-slate-800 mb-1">{cls.name}</h3>
+                        <p className="text-sm text-slate-500 mb-2">
                           在籍 {cls.currentCount}名 / 定員 {cls.capacity}名
                         </p>
+                        {/* Teachers */}
+                        <div className="flex items-center gap-2">
+                          <UserCheck size={14} className="text-slate-400" />
+                          <div className="flex flex-wrap gap-1">
+                            {cls.teachers && cls.teachers.length > 0 ? (
+                              cls.teachers.map((teacher, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200"
+                                >
+                                  {teacher}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-400">担任未設定</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       {/* Progress Bar */}
                       <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div
@@ -256,8 +278,13 @@ export default function FacilityDetailPage() {
                         />
                       </div>
 
+                      <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+
                       <button
-                        onClick={() => handleRemoveClass(cls.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveClass(cls.id);
+                        }}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                         title="削除"
                       >
