@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Users,
@@ -14,44 +14,30 @@ import {
   ChevronRight
 } from 'lucide-react';
 
-// Mock data
-const mockUsers = [
-  {
-    id: '1',
-    name: '田中太郎',
-    email: 'tanaka@example.com',
-    phone: '090-1234-5678',
-    role: 'admin',
-    status: 'active'
-  },
-  {
-    id: '2',
-    name: '佐藤花子',
-    email: 'sato@example.com',
-    phone: '090-2345-6789',
-    role: 'staff',
-    status: 'active'
-  },
-  {
-    id: '3',
-    name: '鈴木次郎',
-    email: 'suzuki@example.com',
-    phone: '090-3456-7890',
-    role: 'staff',
-    status: 'active'
-  }
-];
+interface User {
+  user_id: string;
+  email: string;
+  name: string;
+  name_kana?: string;
+  phone?: string;
+  role: string;
+  is_active: boolean;
+  assigned_classes?: Array<{
+    class_id: string;
+    class_name: string;
+    is_main: boolean;
+  }>;
+}
 
 const roleOptions = [
-  { value: 'admin', label: '管理者', color: 'bg-red-50 text-red-700 border-red-200' },
+  { value: 'facility_admin', label: '施設管理者', color: 'bg-red-50 text-red-700 border-red-200' },
   { value: 'staff', label: '職員', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { value: 'viewer', label: '閲覧者', color: 'bg-slate-50 text-slate-700 border-slate-200' }
 ];
 
 const Input = ({ icon: Icon, className = "", ...props }: any) => (
   <div className="relative group">
     {Icon && (
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:indigo-500 transition-colors">
         <Icon size={16} />
       </div>
     )}
@@ -91,11 +77,11 @@ const FieldGroup = ({ label, required, children }: any) => (
 );
 
 export default function UsersSettingsPage() {
-  const [users, setUsers] = useState(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // New user form
   const [newUser, setNewUser] = useState({
@@ -105,34 +91,120 @@ export default function UsersSettingsPage() {
     role: 'staff'
   });
 
-  const filteredUsers = users.filter(user =>
-    user.name.includes(searchTerm) ||
-    user.email.includes(searchTerm) ||
-    user.phone.includes(searchTerm)
-  );
+  // 初期ロード
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
-  const handleAddUser = () => {
-    if (newUser.name && newUser.email) {
-      const user = {
-        id: String(Date.now()),
-        ...newUser,
-        status: 'active'
-      };
-      setUsers([...users, user]);
-      setNewUser({ name: '', email: '', phone: '', role: 'staff' });
-      setShowAddModal(false);
+  // ユーザー一覧を取得
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const url = new URL('/api/users', window.location.origin);
+      if (searchTerm) {
+        url.searchParams.set('search', searchTerm);
+      }
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch users');
+      }
+
+      setUsers(data.data.users);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleUpdateUserRole = (userId: string, newRole: string) => {
-    setUsers(users.map(user =>
-      user.id === userId ? { ...user, role: newRole } : user
-    ));
+  // 検索実行
+  const handleSearch = () => {
+    fetchUsers();
   };
 
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('このユーザーを削除しますか？')) {
-      setUsers(users.filter(u => u.id !== userId));
+  const filteredUsers = users.filter(user =>
+    user.name.includes(searchTerm) ||
+    user.email.includes(searchTerm) ||
+    (user.phone && user.phone.includes(searchTerm))
+  );
+
+  const handleAddUser = async () => {
+    if (!newUser.name || !newUser.email) return;
+
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create user');
+      }
+
+      alert(`職員を追加しました。初期パスワード: ${data.data.initial_password}`);
+      setNewUser({ name: '', email: '', phone: '', role: 'staff' });
+      setShowAddModal(false);
+      fetchUsers();
+    } catch (err) {
+      console.error('Error creating user:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create user');
+    }
+  };
+
+  const handleUpdateUserRole = async (userId: string, newRole: string) => {
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update user role');
+      }
+
+      // ローカル状態を更新
+      setUsers(users.map(user =>
+        user.user_id === userId ? { ...user, role: newRole } : user
+      ));
+    } catch (err) {
+      console.error('Error updating user role:', err);
+      alert(err instanceof Error ? err.message : 'Failed to update user role');
+      // エラー時は元の状態に戻すため再取得
+      fetchUsers();
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('このユーザーを削除しますか？')) return;
+
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete user');
+      }
+
+      // ローカル状態を更新
+      setUsers(users.filter(u => u.user_id !== userId));
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete user');
     }
   };
 
@@ -142,7 +214,11 @@ export default function UsersSettingsPage() {
       <span className={`px-3 py-1 rounded-full text-xs font-bold border ${option.color}`}>
         {option.label}
       </span>
-    ) : null;
+    ) : (
+      <span className="px-3 py-1 rounded-full text-xs font-bold border bg-gray-50 text-gray-700 border-gray-200">
+        {role}
+      </span>
+    );
   };
 
   return (
@@ -175,114 +251,139 @@ export default function UsersSettingsPage() {
             </button>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
           {/* Search Bar */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6">
-            <div className="relative">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="名前・メール・電話番号で検索..."
-                className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="名前・メール・電話番号で検索..."
+                  className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
+              >
+                検索
+              </button>
             </div>
           </div>
 
-          {/* Users Table */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      職員名
-                    </th>
-                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      メールアドレス
-                    </th>
-                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      電話番号
-                    </th>
-                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      権限
-                    </th>
-                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      操作
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredUsers.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="group hover:bg-indigo-50/30 transition-colors"
-                    >
-                      {/* Name */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                            {user.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-800">{user.name}</p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Email */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                          <Mail size={14} className="text-slate-400" />
-                          <span>{user.email}</span>
-                        </div>
-                      </td>
-
-                      {/* Phone */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                          <Phone size={14} className="text-slate-400" />
-                          <span>{user.phone}</span>
-                        </div>
-                      </td>
-
-                      {/* Role (Editable) */}
-                      <td className="px-6 py-4">
-                        <Select
-                          value={user.role}
-                          onChange={(e: any) => handleUpdateUserRole(user.id, e.target.value)}
-                          className="max-w-[140px] text-xs"
+          {/* Loading State */}
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+            </div>
+          ) : (
+            <>
+              {/* Users Table */}
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          職員名
+                        </th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          メールアドレス
+                        </th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          電話番号
+                        </th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          権限
+                        </th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          操作
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredUsers.map((user) => (
+                        <tr
+                          key={user.user_id}
+                          className="group hover:bg-indigo-50/30 transition-colors"
                         >
-                          {roleOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </td>
+                          {/* Name */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                                {user.name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-800">{user.name}</p>
+                              </div>
+                            </div>
+                          </td>
 
-                      {/* Actions */}
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                          title="削除"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          {/* Email */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <Mail size={14} className="text-slate-400" />
+                              <span>{user.email}</span>
+                            </div>
+                          </td>
 
-              {filteredUsers.length === 0 && (
-                <div className="p-12 text-center text-slate-400">
-                  <p>該当する職員が見つかりませんでした</p>
+                          {/* Phone */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <Phone size={14} className="text-slate-400" />
+                              <span>{user.phone || '-'}</span>
+                            </div>
+                          </td>
+
+                          {/* Role (Editable) */}
+                          <td className="px-6 py-4">
+                            <Select
+                              value={user.role}
+                              onChange={(e: any) => handleUpdateUserRole(user.user_id, e.target.value)}
+                              className="max-w-[140px] text-xs"
+                            >
+                              {roleOptions.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </Select>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => handleDeleteUser(user.user_id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              title="削除"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {filteredUsers.length === 0 && (
+                    <div className="p-12 text-center text-slate-400">
+                      <p>該当する職員が見つかりませんでした</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
 
         </div>
 
@@ -348,7 +449,7 @@ export default function UsersSettingsPage() {
                     ))}
                   </Select>
                   <p className="text-xs text-slate-500 mt-1">
-                    管理者は全ての機能にアクセスできます
+                    施設管理者は全ての機能にアクセスできます
                   </p>
                 </FieldGroup>
               </div>
