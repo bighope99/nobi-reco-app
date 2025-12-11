@@ -28,9 +28,9 @@
 
 |接頭辞|分類|説明|テーブル数|
 |---|---|---|---|
-|`m_`|マスタ|会社、施設、職員、子どもなど基本エンティティ|6|
+|`m_`|マスタ|会社、施設、職員、子ども、学校など基本エンティティ|7|
 |`r_`|記録|日々の業務記録|4|
-|`s_`|設定|施設設定、スケジュールパターンなど|1|
+|`s_`|設定|施設設定、スケジュールパターンなど|3|
 |`h_`|履歴・ログ|システムログ、監査用データ|1|
 |`_`|中間テーブル|多対多リレーションの紐付け|4|
 
@@ -550,6 +550,90 @@ CREATE INDEX idx_attendance_schedule_child_id ON s_attendance_schedule(child_id)
 CREATE INDEX idx_attendance_schedule_valid_from ON s_attendance_schedule(valid_from);
 CREATE INDEX idx_attendance_schedule_is_active ON s_attendance_schedule(is_active) WHERE is_active = true;
 ```
+
+---
+
+### 6.2 学校マスタ（`m_schools`）
+
+```sql
+CREATE TABLE IF NOT EXISTS m_schools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+
+  -- 基本情報
+  name VARCHAR(200) NOT NULL,                      -- 学校名（例: 第一小学校）
+  name_kana VARCHAR(200),                          -- 学校名カナ
+  postal_code VARCHAR(10),                         -- 郵便番号
+  address VARCHAR(500),                            -- 住所
+  phone VARCHAR(20),                               -- 電話番号
+
+  -- ステータス
+  is_active BOOLEAN NOT NULL DEFAULT true,         -- 有効/無効
+
+  -- タイムスタンプ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_m_schools_facility
+  ON m_schools(facility_id)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX idx_m_schools_name
+  ON m_schools(name)
+  WHERE deleted_at IS NULL;
+```
+
+**説明**:
+- 学童保育施設が連携する小学校を管理
+- 1施設に複数の学校が紐づく可能性がある
+- 学校ごとに登校時刻のパターンを設定
+
+---
+
+### 6.3 学校登校スケジュール（`s_school_schedules`）
+
+```sql
+CREATE TABLE IF NOT EXISTS s_school_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES m_schools(id) ON DELETE CASCADE,
+
+  -- 対象学年（複数選択可能、配列形式）
+  grades TEXT[] NOT NULL,  -- 例: ['1', '2', '3'] → 1~3年生
+
+  -- 曜日別登校時刻
+  monday_time TIME,                                -- 月曜日の登校時刻
+  tuesday_time TIME,                               -- 火曜日の登校時刻
+  wednesday_time TIME,                             -- 水曜日の登校時刻
+  thursday_time TIME,                              -- 木曜日の登校時刻
+  friday_time TIME,                                -- 金曜日の登校時刻
+  saturday_time TIME,                              -- 土曜日の登校時刻（通常NULL）
+  sunday_time TIME,                                -- 日曜日の登校時刻（通常NULL）
+
+  -- タイムスタンプ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_s_school_schedules_school
+  ON s_school_schedules(school_id)
+  WHERE deleted_at IS NULL;
+
+-- 学年配列の検索用GINインデックス
+CREATE INDEX idx_s_school_schedules_grades
+  ON s_school_schedules USING gin(grades)
+  WHERE deleted_at IS NULL;
+```
+
+**説明**:
+- 学校ごと・学年グループごとの登校時刻パターン
+- 例: 「1~2年生は月~金 08:00登校」「3~6年生は月~金 08:00登校」
+- 曜日ごとに異なる時刻を設定可能（短縮授業など）
+- 時刻がNULLの曜日は「登校なし」を意味する
 
 ---
 
