@@ -189,10 +189,10 @@ export default function ChildRegistrationForm() {
   useEffect(() => {
     const fetchClasses = async () => {
       try {
-        const response = await fetch('/api/children');
+        const response = await fetch('/api/children/classes');
         const result = await response.json();
-        if (result.success && result.data.filters.classes) {
-          setClasses(result.data.filters.classes);
+        if (result.success && result.data.classes) {
+          setClasses(result.data.classes);
         }
       } catch (err) {
         console.error('Failed to fetch classes:', err);
@@ -220,21 +220,51 @@ export default function ChildRegistrationForm() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 兄弟検索ロジック（モック）
-  const handleSiblingSearch = () => {
+  // 兄弟検索ロジック
+  const handleSiblingSearch = async () => {
+    // 電話番号が入力されていない場合はスキップ
+    if (!formData.parent_phone) {
+      setError('電話番号を入力してください');
+      return;
+    }
+
     setIsSearchingSibling(true);
-    // 擬似的なAPIコール
-    setTimeout(() => {
-      setSiblingResult({
-        id: 101,
-        name: '佐藤 蓮',
-        kana: 'サトウ レン',
-        class: 'きりん組（4歳児）',
-        status: '在園中',
-        image: 'https://i.pravatar.cc/150?u=ren'
+    setSiblingResult(null);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/children/search-siblings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formData.parent_phone }),
       });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '検索に失敗しました');
+      }
+
+      if (result.success && result.data.found && result.data.candidates.length > 0) {
+        // 最初の候補を表示
+        const candidate = result.data.candidates[0];
+        setSiblingResult({
+          id: candidate.child_id,
+          name: candidate.name,
+          kana: candidate.kana,
+          class: `${candidate.class_name}${candidate.age ? ` (${candidate.age}歳)` : ''}`,
+          status: candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済',
+          image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
+        });
+      } else {
+        setError('同じ電話番号の児童が見つかりませんでした');
+      }
+    } catch (err) {
+      console.error('Failed to search siblings:', err);
+      setError(err instanceof Error ? err.message : '兄弟検索に失敗しました');
+    } finally {
       setIsSearchingSibling(false);
-    }, 1000);
+    }
   };
 
   const addEmergencyContact = () => {
