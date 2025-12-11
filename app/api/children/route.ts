@@ -47,18 +47,18 @@ export async function GET(request: NextRequest) {
         birth_date,
         photo_url,
         enrollment_status,
-        contract_type,
-        enrollment_date,
-        withdrawal_date,
+        enrollment_type,
+        enrolled_at,
+        withdrawn_at,
         parent_phone,
         parent_email,
-        has_allergy,
-        allergy_detail,
-        photo_allowed,
-        report_allowed,
-        _child_class!inner (
+        allergies,
+        photo_permission_public,
+        report_name_permission,
+        _child_class (
           class_id,
-          m_classes!inner (
+          is_current,
+          m_classes (
             id,
             name,
             grade
@@ -67,7 +67,6 @@ export async function GET(request: NextRequest) {
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', status)
-      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     if (class_id) {
@@ -79,11 +78,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (has_allergy !== null) {
-      childrenQuery = childrenQuery.eq('has_allergy', has_allergy === 'true');
+      if (has_allergy === 'true') {
+        childrenQuery = childrenQuery.not('allergies', 'is', null);
+      } else {
+        childrenQuery = childrenQuery.is('allergies', null);
+      }
     }
 
     if (contract_type) {
-      childrenQuery = childrenQuery.eq('contract_type', contract_type);
+      childrenQuery = childrenQuery.eq('enrollment_type', contract_type);
     }
 
     // ソート
@@ -147,7 +150,9 @@ export async function GET(request: NextRequest) {
 
     // データ整形
     const children = childrenData.map((child: any) => {
-      const classInfo = child._child_class[0]?.m_classes;
+      // クラス情報（現在所属中のクラスのみ）
+      const currentClass = child._child_class?.find((cc: any) => cc.is_current);
+      const classInfo = currentClass?.m_classes;
 
       // 年齢計算
       const birthDate = new Date(child.birth_date);
@@ -159,7 +164,8 @@ export async function GET(request: NextRequest) {
         .filter((s: any) => s.child_id === child.id)
         .map((s: any) => {
           const siblingInfo = s.m_children;
-          const siblingClass = siblingInfo?._child_class?.[0]?.m_classes;
+          const siblingCurrentClass = siblingInfo?._child_class?.find((cc: any) => cc.is_current);
+          const siblingClass = siblingCurrentClass?.m_classes;
           return {
             child_id: siblingInfo?.id,
             name: `${siblingInfo?.family_name} ${siblingInfo?.given_name}`,
@@ -180,18 +186,18 @@ export async function GET(request: NextRequest) {
         class_name: classInfo?.name || '',
         photo_url: child.photo_url,
         enrollment_status: child.enrollment_status,
-        contract_type: child.contract_type,
-        enrollment_date: child.enrollment_date,
-        withdrawal_date: child.withdrawal_date,
+        contract_type: child.enrollment_type,
+        enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
+        withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
         parent_name: null, // TODO: 保護者テーブルから取得
         parent_phone: child.parent_phone,
         parent_email: child.parent_email,
         siblings: childSiblings,
         has_sibling: childSiblings.length > 0,
-        has_allergy: child.has_allergy,
-        allergy_detail: child.allergy_detail,
-        photo_allowed: child.photo_allowed,
-        report_allowed: child.report_allowed,
+        has_allergy: !!child.allergies,
+        allergy_detail: child.allergies,
+        photo_allowed: child.photo_permission_public,
+        report_allowed: child.report_name_permission,
         created_at: child.created_at,
         updated_at: child.updated_at,
       };
@@ -205,13 +211,13 @@ export async function GET(request: NextRequest) {
     // サマリー取得
     const { data: summaryData } = await supabase
       .from('m_children')
-      .select('enrollment_status, has_allergy', { count: 'exact' })
+      .select('enrollment_status, allergies', { count: 'exact' })
       .eq('facility_id', facility_id)
       .is('deleted_at', null);
 
     const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
     const withdrawnCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'withdrawn').length;
-    const hasAllergyCount = (summaryData || []).filter((c: any) => c.has_allergy).length;
+    const hasAllergyCount = (summaryData || []).filter((c: any) => c.allergies !== null).length;
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
 
     // クラス一覧（フィルター用）
