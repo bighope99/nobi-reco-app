@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
         status,
         created_at,
         updated_at,
-        m_classes!inner (
+        class_id,
+        m_classes (
           id,
           name
         ),
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
       content: activity.content,
       snack: activity.snack,
       photos: activity.photos || [],
-      class_name: activity.m_classes?.name || '',
+      class_name: activity.m_classes?.name || '未設定',
       created_by: activity.m_users?.name || '',
       created_at: activity.created_at,
       is_draft: activity.is_draft || false,
