@@ -199,11 +199,35 @@ export default function AttendanceSchedulePage() {
 
     setSaving(true)
     try {
-      // Here you would call your API to save the schedules
-      // For now, just simulate a save
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // 変更された予定をAPI形式に変換
+      const updates = Array.from(modifiedSchedules.entries()).map(([child_id, schedule]) => ({
+        child_id,
+        schedule,
+      }))
 
-      // Update local state
+      // APIを呼び出して一括更新
+      const response = await fetch('/api/attendance/schedules/bulk-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ updates }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to save schedules')
+      }
+
+      // 保存成功時の処理
+      if (result.data.failed_count > 0) {
+        alert(`保存しました（${result.data.updated_count}件成功、${result.data.failed_count}件失敗）`)
+      } else {
+        alert(`保存しました（${result.data.updated_count}件更新）`)
+      }
+
+      // ローカル状態を更新
       if (scheduleData) {
         const updatedChildren = scheduleData.children.map(child => {
           const modified = modifiedSchedules.get(child.child_id)
@@ -217,10 +241,9 @@ export default function AttendanceSchedulePage() {
 
       setModifiedSchedules(new Map())
       setEditMode(false)
-      alert('保存しました')
     } catch (err) {
       console.error('Failed to save schedules:', err)
-      alert('保存に失敗しました')
+      alert(`保存に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`)
     } finally {
       setSaving(false)
     }
