@@ -47,18 +47,18 @@ export async function GET(request: NextRequest) {
         birth_date,
         photo_url,
         enrollment_status,
-        contract_type,
-        enrollment_date,
-        withdrawal_date,
+        enrollment_type,
+        enrolled_at,
+        withdrawn_at,
         parent_phone,
         parent_email,
-        has_allergy,
-        allergy_detail,
-        photo_allowed,
-        report_allowed,
-        _child_class!inner (
+        allergies,
+        photo_permission_public,
+        report_name_permission,
+        _child_class (
           class_id,
-          m_classes!inner (
+          is_current,
+          m_classes (
             id,
             name,
             grade
@@ -67,7 +67,6 @@ export async function GET(request: NextRequest) {
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', status)
-      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     if (class_id) {
@@ -79,11 +78,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (has_allergy !== null) {
-      childrenQuery = childrenQuery.eq('has_allergy', has_allergy === 'true');
+      if (has_allergy === 'true') {
+        childrenQuery = childrenQuery.not('allergies', 'is', null);
+      } else {
+        childrenQuery = childrenQuery.is('allergies', null);
+      }
     }
 
     if (contract_type) {
-      childrenQuery = childrenQuery.eq('contract_type', contract_type);
+      childrenQuery = childrenQuery.eq('enrollment_type', contract_type);
     }
 
     // ソート
@@ -147,7 +150,9 @@ export async function GET(request: NextRequest) {
 
     // データ整形
     const children = childrenData.map((child: any) => {
-      const classInfo = child._child_class[0]?.m_classes;
+      // クラス情報（現在所属中のクラスのみ）
+      const currentClass = child._child_class?.find((cc: any) => cc.is_current);
+      const classInfo = currentClass?.m_classes;
 
       // 年齢計算
       const birthDate = new Date(child.birth_date);
@@ -159,7 +164,8 @@ export async function GET(request: NextRequest) {
         .filter((s: any) => s.child_id === child.id)
         .map((s: any) => {
           const siblingInfo = s.m_children;
-          const siblingClass = siblingInfo?._child_class?.[0]?.m_classes;
+          const siblingCurrentClass = siblingInfo?._child_class?.find((cc: any) => cc.is_current);
+          const siblingClass = siblingCurrentClass?.m_classes;
           return {
             child_id: siblingInfo?.id,
             name: `${siblingInfo?.family_name} ${siblingInfo?.given_name}`,
@@ -180,18 +186,18 @@ export async function GET(request: NextRequest) {
         class_name: classInfo?.name || '',
         photo_url: child.photo_url,
         enrollment_status: child.enrollment_status,
-        contract_type: child.contract_type,
-        enrollment_date: child.enrollment_date,
-        withdrawal_date: child.withdrawal_date,
+        contract_type: child.enrollment_type,
+        enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
+        withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
         parent_name: null, // TODO: 保護者テーブルから取得
         parent_phone: child.parent_phone,
         parent_email: child.parent_email,
         siblings: childSiblings,
         has_sibling: childSiblings.length > 0,
-        has_allergy: child.has_allergy,
-        allergy_detail: child.allergy_detail,
-        photo_allowed: child.photo_allowed,
-        report_allowed: child.report_allowed,
+        has_allergy: !!child.allergies,
+        allergy_detail: child.allergies,
+        photo_allowed: child.photo_permission_public,
+        report_allowed: child.report_name_permission,
         created_at: child.created_at,
         updated_at: child.updated_at,
       };
@@ -205,13 +211,13 @@ export async function GET(request: NextRequest) {
     // サマリー取得
     const { data: summaryData } = await supabase
       .from('m_children')
-      .select('enrollment_status, has_allergy', { count: 'exact' })
+      .select('enrollment_status, allergies', { count: 'exact' })
       .eq('facility_id', facility_id)
       .is('deleted_at', null);
 
     const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
     const withdrawnCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'withdrawn').length;
-    const hasAllergyCount = (summaryData || []).filter((c: any) => c.has_allergy).length;
+    const hasAllergyCount = (summaryData || []).filter((c: any) => c.allergies !== null).length;
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
 
     // クラス一覧（フィルター用）
@@ -297,8 +303,14 @@ export async function POST(request: NextRequest) {
     const { basic_info, affiliation, care_info, permissions } = body;
 
     // バリデーション
-    if (!basic_info?.family_name || !basic_info?.given_name || !basic_info?.birth_date || !affiliation?.class_id) {
+    if (!basic_info?.family_name || !basic_info?.given_name || !basic_info?.birth_date || !affiliation?.enrollment_date) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // アレルギー情報の統合
+    let allergiesText = null;
+    if (care_info?.has_allergy && care_info?.allergy_detail) {
+      allergiesText = care_info.allergy_detail;
     }
 
     // 子ども情報作成
@@ -314,15 +326,14 @@ export async function POST(request: NextRequest) {
         gender: basic_info.gender || 'other',
         birth_date: basic_info.birth_date,
         enrollment_status: affiliation.enrollment_status || 'enrolled',
-        contract_type: affiliation.contract_type || 'regular',
-        enrollment_date: affiliation.enrollment_date || new Date().toISOString().split('T')[0],
-        withdrawal_date: affiliation.expected_withdrawal_date || null,
-        parent_phone: body.primary_guardian?.phone || '',
-        parent_email: body.primary_guardian?.email || '',
-        has_allergy: care_info?.has_allergy || false,
-        allergy_detail: care_info?.allergy_detail || null,
-        photo_allowed: permissions?.photo_allowed !== false,
-        report_allowed: permissions?.report_allowed !== false,
+        enrollment_type: affiliation.contract_type || 'regular',
+        enrolled_at: affiliation.enrollment_date ? new Date(affiliation.enrollment_date).toISOString() : new Date().toISOString(),
+        withdrawn_at: affiliation.withdrawal_date ? new Date(affiliation.withdrawal_date).toISOString() : null,
+        parent_phone: body.contact?.parent_phone || '',
+        parent_email: body.contact?.parent_email || '',
+        allergies: allergiesText,
+        photo_permission_public: permissions?.photo_allowed !== false,
+        report_name_permission: permissions?.report_allowed !== false,
       })
       .select()
       .single();
@@ -332,18 +343,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create child' }, { status: 500 });
     }
 
-    // クラス所属を記録
-    const { error: classError } = await supabase
-      .from('_child_class')
-      .insert({
-        child_id: childData.id,
-        class_id: affiliation.class_id,
-        is_current: true,
-      });
+    // クラス所属を記録（class_idがある場合のみ）
+    if (affiliation.class_id) {
+      const currentYear = new Date().getFullYear();
+      const enrollmentDate = affiliation.enrollment_date || new Date().toISOString().split('T')[0];
 
-    if (classError) {
-      console.error('Class assignment error:', classError);
-      // ロールバックはSupabaseのトランザクションで処理されるべきですが、簡略化のため警告のみ
+      const { error: classError } = await supabase
+        .from('_child_class')
+        .insert({
+          child_id: childData.id,
+          class_id: affiliation.class_id,
+          school_year: currentYear,
+          started_at: enrollmentDate,
+          is_current: true,
+        });
+
+      if (classError) {
+        console.error('Class assignment error:', classError);
+        // クラス紐付けエラーは警告のみ（子ども登録は成功）
+      }
     }
 
     // レスポンス構築

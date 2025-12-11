@@ -29,7 +29,7 @@ export async function GET(
       .from('m_children')
       .select(`
         *,
-        _child_class!inner (
+        _child_class (
           class_id,
           is_current,
           m_classes (
