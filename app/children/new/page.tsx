@@ -158,7 +158,9 @@ export default function ChildRegistrationForm() {
     given_name_kana: '',
     nickname: '',
     gender: 'male' as 'male' | 'female',
-    birth_date: '',
+    birth_year: '',
+    birth_month: '',
+    birth_day: '',
 
     // 所属・契約
     enrollment_status: 'enrolled' as 'enrolled' | 'withdrawn' | 'suspended',
@@ -279,9 +281,14 @@ export default function ChildRegistrationForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // 生年月日の組み立て
+    const birthDate = formData.birth_year && formData.birth_month && formData.birth_day
+      ? `${formData.birth_year}-${formData.birth_month.padStart(2, '0')}-${formData.birth_day.padStart(2, '0')}`
+      : '';
+
     // Validation
-    if (!formData.family_name || !formData.given_name || !formData.birth_date || !formData.class_id) {
-      setError('必須項目を入力してください');
+    if (!formData.family_name || !formData.given_name || !birthDate || !formData.enrollment_date) {
+      setError('必須項目を入力してください（氏名、生年月日、入所開始日は必須です）');
       return;
     }
 
@@ -297,14 +304,14 @@ export default function ChildRegistrationForm() {
           given_name_kana: formData.given_name_kana,
           nickname: formData.nickname,
           gender: formData.gender,
-          birth_date: formData.birth_date,
+          birth_date: birthDate,
         },
         affiliation: {
           enrollment_status: formData.enrollment_status,
           contract_type: formData.contract_type,
           enrollment_date: formData.enrollment_date,
           withdrawal_date: formData.withdrawal_date || null,
-          class_id: formData.class_id,
+          class_id: formData.class_id || null,
         },
         contact: {
           parent_phone: formData.parent_phone,
@@ -506,12 +513,35 @@ export default function ChildRegistrationForm() {
                       <FieldGroup label="生年月日" required className="sm:col-span-2">
                         <div className="flex gap-2 items-center">
                           <Input
-                            type="date"
-                            className="max-w-[200px]"
-                            icon={Calendar}
-                            value={formData.birth_date}
-                            onChange={(e: any) => setFormData({ ...formData, birth_date: e.target.value })}
+                            type="number"
+                            placeholder="年"
+                            className="max-w-[100px]"
+                            value={formData.birth_year}
+                            onChange={(e: any) => setFormData({ ...formData, birth_year: e.target.value })}
+                            min="1900"
+                            max={new Date().getFullYear()}
                           />
+                          <span className="text-slate-500">年</span>
+                          <Input
+                            type="number"
+                            placeholder="月"
+                            className="max-w-[80px]"
+                            value={formData.birth_month}
+                            onChange={(e: any) => setFormData({ ...formData, birth_month: e.target.value })}
+                            min="1"
+                            max="12"
+                          />
+                          <span className="text-slate-500">月</span>
+                          <Input
+                            type="number"
+                            placeholder="日"
+                            className="max-w-[80px]"
+                            value={formData.birth_day}
+                            onChange={(e: any) => setFormData({ ...formData, birth_day: e.target.value })}
+                            min="1"
+                            max="31"
+                          />
+                          <span className="text-slate-500">日</span>
                         </div>
                       </FieldGroup>
                     </div>
@@ -549,24 +579,24 @@ export default function ChildRegistrationForm() {
                       </Select>
                     </FieldGroup>
 
-                    <FieldGroup label="在籍期間" required>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="date"
-                          value={formData.enrollment_date}
-                          onChange={(e: any) => setFormData({ ...formData, enrollment_date: e.target.value })}
-                        />
-                        <span className="text-slate-400">~</span>
-                        <Input
-                          type="date"
-                          placeholder="未定"
-                          value={formData.withdrawal_date}
-                          onChange={(e: any) => setFormData({ ...formData, withdrawal_date: e.target.value })}
-                        />
-                      </div>
+                    <FieldGroup label="入所開始日" required>
+                      <Input
+                        type="date"
+                        value={formData.enrollment_date}
+                        onChange={(e: any) => setFormData({ ...formData, enrollment_date: e.target.value })}
+                      />
                     </FieldGroup>
 
-                    <FieldGroup label="現在のクラス" required>
+                    <FieldGroup label="退所日（退所後に入力）">
+                      <Input
+                        type="date"
+                        placeholder="未定"
+                        value={formData.withdrawal_date}
+                        onChange={(e: any) => setFormData({ ...formData, withdrawal_date: e.target.value })}
+                      />
+                    </FieldGroup>
+
+                    <FieldGroup label="現在のクラス">
                       <Select
                         value={formData.class_id}
                         onChange={(e: any) => setFormData({ ...formData, class_id: e.target.value })}
@@ -578,6 +608,7 @@ export default function ChildRegistrationForm() {
                           </option>
                         ))}
                       </Select>
+                      <p className="text-xs text-slate-400 mt-1">※クラスは後から設定することもできます</p>
                     </FieldGroup>
                   </div>
                 </SectionCard>

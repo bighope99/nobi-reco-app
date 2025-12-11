@@ -297,8 +297,14 @@ export async function POST(request: NextRequest) {
     const { basic_info, affiliation, care_info, permissions } = body;
 
     // バリデーション
-    if (!basic_info?.family_name || !basic_info?.given_name || !basic_info?.birth_date || !affiliation?.class_id) {
+    if (!basic_info?.family_name || !basic_info?.given_name || !basic_info?.birth_date || !affiliation?.enrollment_date) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // アレルギー情報の統合
+    let allergiesText = null;
+    if (care_info?.has_allergy && care_info?.allergy_detail) {
+      allergiesText = care_info.allergy_detail;
     }
 
     // 子ども情報作成
@@ -314,15 +320,14 @@ export async function POST(request: NextRequest) {
         gender: basic_info.gender || 'other',
         birth_date: basic_info.birth_date,
         enrollment_status: affiliation.enrollment_status || 'enrolled',
-        contract_type: affiliation.contract_type || 'regular',
-        enrollment_date: affiliation.enrollment_date || new Date().toISOString().split('T')[0],
-        withdrawal_date: affiliation.expected_withdrawal_date || null,
-        parent_phone: body.primary_guardian?.phone || '',
-        parent_email: body.primary_guardian?.email || '',
-        has_allergy: care_info?.has_allergy || false,
-        allergy_detail: care_info?.allergy_detail || null,
-        photo_allowed: permissions?.photo_allowed !== false,
-        report_allowed: permissions?.report_allowed !== false,
+        enrollment_type: affiliation.contract_type || 'regular',
+        enrolled_at: affiliation.enrollment_date ? new Date(affiliation.enrollment_date).toISOString() : new Date().toISOString(),
+        withdrawn_at: affiliation.withdrawal_date ? new Date(affiliation.withdrawal_date).toISOString() : null,
+        parent_phone: body.contact?.parent_phone || '',
+        parent_email: body.contact?.parent_email || '',
+        allergies: allergiesText,
+        photo_permission_public: permissions?.photo_allowed !== false,
+        report_name_permission: permissions?.report_allowed !== false,
       })
       .select()
       .single();
@@ -332,18 +337,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create child' }, { status: 500 });
     }
 
-    // クラス所属を記録
-    const { error: classError } = await supabase
-      .from('_child_class')
-      .insert({
-        child_id: childData.id,
-        class_id: affiliation.class_id,
-        is_current: true,
-      });
+    // クラス所属を記録（class_idがある場合のみ）
+    if (affiliation.class_id) {
+      const currentYear = new Date().getFullYear();
+      const enrollmentDate = affiliation.enrollment_date || new Date().toISOString().split('T')[0];
 
-    if (classError) {
-      console.error('Class assignment error:', classError);
-      // ロールバックはSupabaseのトランザクションで処理されるべきですが、簡略化のため警告のみ
+      const { error: classError } = await supabase
+        .from('_child_class')
+        .insert({
+          child_id: childData.id,
+          class_id: affiliation.class_id,
+          school_year: currentYear,
+          started_at: enrollmentDate,
+          is_current: true,
+        });
+
+      if (classError) {
+        console.error('Class assignment error:', classError);
+        // クラス紐付けエラーは警告のみ（子ども登録は成功）
+      }
     }
 
     // レスポンス構築
