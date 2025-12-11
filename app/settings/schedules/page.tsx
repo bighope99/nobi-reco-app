@@ -75,55 +75,6 @@ const frontendToApi = (frontendTimes: any) => {
   return result;
 };
 
-// Mock data with weekday-specific times (for fallback)
-const mockSchools: School[] = [
-  {
-    id: '1',
-    name: '第一小学校',
-    schedules: [
-      {
-        scheduleId: '1',
-        gradeIds: ['1', '2'],
-        weekdayTimes: {
-          mon: '08:00',
-          tue: '08:00',
-          wed: '08:00',
-          thu: '08:00',
-          fri: '08:00'
-        }
-      },
-      {
-        scheduleId: '2',
-        gradeIds: ['3', '4', '5', '6'],
-        weekdayTimes: {
-          mon: '08:00',
-          tue: '08:00',
-          wed: '08:00',
-          thu: '08:00',
-          fri: '08:00'
-        }
-      }
-    ]
-  },
-  {
-    id: '2',
-    name: '第二小学校',
-    schedules: [
-      {
-        scheduleId: '3',
-        gradeIds: ['1', '2', '3', '4', '5', '6'],
-        weekdayTimes: {
-          mon: '08:30',
-          tue: '08:30',
-          wed: '08:30',
-          thu: '08:30',
-          fri: '08:30'
-        }
-      }
-    ]
-  }
-];
-
 const Input = ({ className = "", ...props }: any) => (
   <input
     className={`w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 transition-all placeholder:text-slate-400 ${className}`}
