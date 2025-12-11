@@ -39,9 +39,10 @@ export async function GET(request: NextRequest) {
         family_name_kana,
         given_name_kana,
         photo_url,
-        _child_class!inner (
+        _child_class (
           class_id,
-          m_classes!inner (
+          is_current,
+          m_classes (
             id,
             name,
             grade
@@ -60,7 +61,6 @@ export async function GET(request: NextRequest) {
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', 'enrolled')
-      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     // クラスフィルター
@@ -85,8 +85,9 @@ export async function GET(request: NextRequest) {
 
     // データを整形
     const formattedChildren = children.map((child: any) => {
-      const childClass = Array.isArray(child._child_class) ? child._child_class[0] : child._child_class;
-      const classData = childClass?.m_classes;
+      // 現在所属中のクラスのみを取得
+      const currentClass = child._child_class?.find((cc: any) => cc.is_current);
+      const classData = currentClass?.m_classes;
       const schedule = Array.isArray(child.s_attendance_schedule) && child.s_attendance_schedule.length > 0
         ? child.s_attendance_schedule[0]
         : null;

@@ -54,9 +54,10 @@ export async function GET(request: NextRequest) {
         family_name_kana,
         given_name_kana,
         photo_url,
-        _child_class!inner (
+        _child_class (
           class_id,
-          m_classes!inner (
+          is_current,
+          m_classes (
             id,
             name,
             grade
@@ -65,7 +66,6 @@ export async function GET(request: NextRequest) {
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', 'enrolled')
-      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     if (class_id) {
@@ -145,7 +145,9 @@ export async function GET(request: NextRequest) {
 
     // データ整形
     const children = childrenData.map((child: any) => {
-      const classInfo = child._child_class[0]?.m_classes;
+      // 現在所属中のクラスのみを取得
+      const currentClass = child._child_class?.find((cc: any) => cc.is_current);
+      const classInfo = currentClass?.m_classes;
 
       // 月間統計
       const monthlyAttendances = (monthlyAttendanceData || []).filter((a: any) => a.child_id === child.id);
