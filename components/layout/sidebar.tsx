@@ -104,7 +104,10 @@ type SidebarProps = {
 export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
-  const [openMenus, setOpenMenus] = useState<string[]>([])
+
+  // デフォルトで全てのプルダウンメニューを開いた状態にする
+  const defaultOpenMenus = navItems.filter(item => item.children).map(item => item.label)
+  const [openMenus, setOpenMenus] = useState<string[]>(defaultOpenMenus)
 
   const toggleMenu = (label: string) => {
     setOpenMenus((prev) => (prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]))
