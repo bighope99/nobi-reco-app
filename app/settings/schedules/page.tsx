@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Clock,
@@ -12,15 +12,35 @@ import {
   Check
 } from 'lucide-react';
 
+interface Schedule {
+  scheduleId: string;
+  gradeIds: string[];
+  weekdayTimes: {
+    mon?: string;
+    tue?: string;
+    wed?: string;
+    thu?: string;
+    fri?: string;
+    sat?: string;
+    sun?: string;
+  };
+}
+
+interface School {
+  id: string;
+  name: string;
+  schedules: Schedule[];
+}
+
 // Weekdays
 const weekdays = [
-  { id: 'mon', label: '月', fullLabel: '月曜日' },
-  { id: 'tue', label: '火', fullLabel: '火曜日' },
-  { id: 'wed', label: '水', fullLabel: '水曜日' },
-  { id: 'thu', label: '木', fullLabel: '木曜日' },
-  { id: 'fri', label: '金', fullLabel: '金曜日' },
-  { id: 'sat', label: '土', fullLabel: '土曜日' },
-  { id: 'sun', label: '日', fullLabel: '日曜日' }
+  { id: 'mon', label: '月', fullLabel: '月曜日', apiKey: 'monday' },
+  { id: 'tue', label: '火', fullLabel: '火曜日', apiKey: 'tuesday' },
+  { id: 'wed', label: '水', fullLabel: '水曜日', apiKey: 'wednesday' },
+  { id: 'thu', label: '木', fullLabel: '木曜日', apiKey: 'thursday' },
+  { id: 'fri', label: '金', fullLabel: '金曜日', apiKey: 'friday' },
+  { id: 'sat', label: '土', fullLabel: '土曜日', apiKey: 'saturday' },
+  { id: 'sun', label: '日', fullLabel: '日曜日', apiKey: 'sunday' }
 ];
 
 // Grades
@@ -33,8 +53,30 @@ const grades = [
   { id: '6', label: '6年生' }
 ];
 
-// Mock data with weekday-specific times
-const mockSchools = [
+// Helper function to convert API weekday times to frontend format
+const apiToFrontend = (apiTimes: any) => {
+  const result: any = {};
+  weekdays.forEach((day) => {
+    const apiValue = apiTimes[day.apiKey];
+    if (apiValue) {
+      result[day.id] = apiValue;
+    }
+  });
+  return result;
+};
+
+// Helper function to convert frontend weekday times to API format
+const frontendToApi = (frontendTimes: any) => {
+  const result: any = {};
+  weekdays.forEach((day) => {
+    const frontendValue = frontendTimes[day.id];
+    result[day.apiKey] = frontendValue || null;
+  });
+  return result;
+};
+
+// Mock data with weekday-specific times (for fallback)
+const mockSchools: School[] = [
   {
     id: '1',
     name: '第一小学校',
@@ -104,53 +146,139 @@ const FieldGroup = ({ label, required, children }: any) => (
 );
 
 export default function ScheduleSettingsPage() {
-  const [schools, setSchools] = useState(mockSchools);
+  const [schools, setSchools] = useState<School[]>([]);
   const [showAddSchool, setShowAddSchool] = useState(false);
   const [newSchoolName, setNewSchoolName] = useState('');
   const [editingSchool, setEditingSchool] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // 初期ロード
+  useEffect(() => {
+    fetchSchools();
+  }, []);
+
+  // 学校一覧を取得
+  const fetchSchools = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/schools');
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch schools');
+      }
+
+      // API形式からフロントエンド形式に変換
+      const transformedSchools = data.data.schools.map((school: any) => ({
+        id: school.school_id,
+        name: school.name,
+        schedules: school.schedules.map((schedule: any) => ({
+          scheduleId: schedule.schedule_id,
+          gradeIds: schedule.grades || [],
+          weekdayTimes: apiToFrontend(schedule.weekday_times),
+        })),
+      }));
+
+      setSchools(transformedSchools);
+    } catch (err) {
+      console.error('Error fetching schools:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Add new school
-  const handleAddSchool = () => {
-    if (newSchoolName.trim()) {
-      const newSchool = {
-        id: String(Date.now()),
-        name: newSchoolName,
-        schedules: []
+  const handleAddSchool = async () => {
+    if (!newSchoolName.trim()) return;
+
+    try {
+      setLoading(true);
+
+      const response = await fetch('/api/schools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newSchoolName }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create school');
+      }
+
+      const newSchool: School = {
+        id: data.data.school_id,
+        name: data.data.name,
+        schedules: [],
       };
+
       setSchools([...schools, newSchool]);
       setNewSchoolName('');
       setShowAddSchool(false);
       setEditingSchool(newSchool.id);
+    } catch (err) {
+      console.error('Error creating school:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create school');
+    } finally {
+      setLoading(false);
     }
   };
 
   // Add schedule to school
-  const handleAddSchedule = (schoolId: string) => {
-    setSchools(schools.map(school => {
-      if (school.id === schoolId) {
-        return {
-          ...school,
-          schedules: [
-            ...school.schedules,
-            {
-              scheduleId: String(Date.now()),
-              gradeIds: [],
-              weekdayTimes: {
-                mon: '08:00',
-                tue: '08:00',
-                wed: '08:00',
-                thu: '08:00',
-                fri: '08:00',
-                sat: '',
-                sun: ''
-              }
-            }
-          ]
-        };
+  const handleAddSchedule = async (schoolId: string) => {
+    try {
+      const response = await fetch(`/api/schools/${schoolId}/schedules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grades: ['1'],  // デフォルトで1年生を選択
+          weekday_times: {
+            monday: '08:00',
+            tuesday: '08:00',
+            wednesday: '08:00',
+            thursday: '08:00',
+            friday: '08:00',
+            saturday: null,
+            sunday: null,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create schedule');
       }
-      return school;
-    }));
+
+      // ローカル状態を更新
+      setSchools(
+        schools.map((school) => {
+          if (school.id === schoolId) {
+            return {
+              ...school,
+              schedules: [
+                ...school.schedules,
+                {
+                  scheduleId: data.data.schedule_id,
+                  gradeIds: data.data.grades,
+                  weekdayTimes: apiToFrontend(data.data.weekday_times),
+                },
+              ],
+            };
+          }
+          return school;
+        })
+      );
+    } catch (err) {
+      console.error('Error creating schedule:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create schedule');
+    }
   };
 
   // Toggle grade selection
@@ -172,6 +300,7 @@ export default function ScheduleSettingsPage() {
       }
       return school;
     }));
+    setHasChanges(true);
   };
 
   // Update weekday time
@@ -196,27 +325,100 @@ export default function ScheduleSettingsPage() {
       }
       return school;
     }));
+    setHasChanges(true);
   };
 
   // Remove schedule
-  const handleRemoveSchedule = (schoolId: string, scheduleId: string) => {
-    if (confirm('このスケジュール設定を削除しますか？')) {
-      setSchools(schools.map(school => {
-        if (school.id === schoolId) {
-          return {
-            ...school,
-            schedules: school.schedules.filter(s => s.scheduleId !== scheduleId)
-          };
-        }
-        return school;
-      }));
+  const handleRemoveSchedule = async (schoolId: string, scheduleId: string) => {
+    if (!confirm('このスケジュール設定を削除しますか？')) return;
+
+    try {
+      const response = await fetch(`/api/schools/${schoolId}/schedules/${scheduleId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete schedule');
+      }
+
+      // ローカル状態を更新
+      setSchools(
+        schools.map((school) => {
+          if (school.id === schoolId) {
+            return {
+              ...school,
+              schedules: school.schedules.filter((s) => s.scheduleId !== scheduleId),
+            };
+          }
+          return school;
+        })
+      );
+    } catch (err) {
+      console.error('Error deleting schedule:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete schedule');
     }
   };
 
   // Remove school
-  const handleRemoveSchool = (schoolId: string) => {
-    if (confirm('この学校を削除しますか？紐づくスケジュール設定もすべて削除されます。')) {
-      setSchools(schools.filter(s => s.id !== schoolId));
+  const handleRemoveSchool = async (schoolId: string) => {
+    if (!confirm('この学校を削除しますか？紐づくスケジュール設定もすべて削除されます。')) return;
+
+    try {
+      const response = await fetch(`/api/schools/${schoolId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete school');
+      }
+
+      // ローカル状態を更新
+      setSchools(schools.filter((s) => s.id !== schoolId));
+    } catch (err) {
+      console.error('Error deleting school:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete school');
+    }
+  };
+
+  // Save all changes (bulk update)
+  const handleSaveChanges = async () => {
+    if (!hasChanges) return;
+
+    try {
+      setSaving(true);
+
+      // すべてのスケジュールを集めて一括更新
+      const updates = schools.flatMap((school) =>
+        school.schedules.map((schedule) => ({
+          schedule_id: schedule.scheduleId,
+          grades: schedule.gradeIds,
+          weekday_times: frontendToApi(schedule.weekdayTimes),
+        }))
+      );
+
+      const response = await fetch('/api/schools/schedules/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save changes');
+      }
+
+      setHasChanges(false);
+      alert('変更を保存しました');
+    } catch (err) {
+      console.error('Error saving changes:', err);
+      alert(err instanceof Error ? err.message : 'Failed to save changes');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -268,6 +470,13 @@ export default function ScheduleSettingsPage() {
             </button>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
           {/* Add School Form */}
           {showAddSchool && (
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6 animate-in fade-in slide-in-from-top-2">
@@ -298,9 +507,16 @@ export default function ScheduleSettingsPage() {
             </div>
           )}
 
-          {/* Schools List */}
-          <div className="space-y-6">
-            {schools.map((school) => (
+          {/* Loading State */}
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+            </div>
+          ) : (
+            <>
+              {/* Schools List */}
+              <div className="space-y-6">
+                {schools.map((school) => (
               <section
                 key={school.id}
                 className={`bg-white rounded-xl border shadow-sm transition-all ${
@@ -471,13 +687,15 @@ export default function ScheduleSettingsPage() {
             ))}
           </div>
 
-          {/* Empty State */}
-          {schools.length === 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-              <School size={48} className="mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500 mb-4">学校が登録されていません</p>
-              <p className="text-sm text-slate-400">「学校を追加」ボタンから学校を登録してください</p>
-            </div>
+              {/* Empty State */}
+              {schools.length === 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+                  <School size={48} className="mx-auto text-slate-300 mb-4" />
+                  <p className="text-slate-500 mb-4">学校が登録されていません</p>
+                  <p className="text-sm text-slate-400">「学校を追加」ボタンから学校を登録してください</p>
+                </div>
+              )}
+            </>
           )}
 
         </div>
@@ -487,10 +705,11 @@ export default function ScheduleSettingsPage() {
           <div className="max-w-6xl mx-auto flex items-center justify-end px-4 sm:px-6">
             <button
               type="button"
-              disabled={loading}
+              onClick={handleSaveChanges}
+              disabled={saving || !hasChanges}
               className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {saving ? (
                 <>
                   <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
                   保存中...
@@ -498,7 +717,7 @@ export default function ScheduleSettingsPage() {
               ) : (
                 <>
                   <Save size={18} />
-                  変更を保存
+                  {hasChanges ? '変更を保存' : '保存済み'}
                 </>
               )}
             </button>
