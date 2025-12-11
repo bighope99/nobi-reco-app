@@ -1,18 +1,84 @@
-# 施設情報設定API仕様書
+# 施設管理API仕様書
 
 ## 概要
-施設の基本情報の管理機能のAPI仕様を定義します。
-施設名、住所、連絡先などの基本情報の取得・更新をサポートします。
+施設の一覧表示、詳細情報の取得・更新機能のAPI仕様を定義します。
+会社管理者は複数施設を管理でき、施設管理者は自施設のみを管理できます。
 
 ---
 
 ## エンドポイント一覧
 
-### 1. 施設情報取得
+### 1. 施設一覧取得
 
-**エンドポイント**: `GET /api/facility`
+**エンドポイント**: `GET /api/facilities`
 
-**説明**: 現在ログイン中のユーザーの施設情報を取得します。
+**説明**: ユーザーがアクセス可能な施設の一覧を取得します。
+
+**リクエストパラメータ**:
+```typescript
+{
+  search?: string;  // 検索キーワード（施設名・住所）
+}
+```
+
+**レスポンス** (成功):
+```typescript
+{
+  "success": true,
+  "data": {
+    "facilities": [
+      {
+        "facility_id": "uuid-facility-1",
+        "name": "ひまわり保育園 本園",
+        "address": "東京都渋谷区〇〇町1-2-3",
+        "phone": "03-1234-5678",
+        "email": "[email protected]",
+
+        // 統計情報
+        "class_count": 5,
+        "children_count": 45,
+        "staff_count": 12,
+
+        "created_at": "2010-04-01T10:00:00+09:00",
+        "updated_at": "2024-01-15T10:00:00+09:00"
+      },
+      {
+        "facility_id": "uuid-facility-2",
+        "name": "ひまわり保育園 分園",
+        "address": "東京都渋谷区△△町4-5-6",
+        "phone": "03-8765-4321",
+        "email": "[email protected]",
+
+        "class_count": 3,
+        "children_count": 28,
+        "staff_count": 8,
+
+        "created_at": "2015-04-01T10:00:00+09:00",
+        "updated_at": "2024-01-15T10:00:00+09:00"
+      }
+    ],
+    "total": 2
+  }
+}
+```
+
+**権限別アクセス制御**:
+- **site_admin**: 全施設
+- **company_admin**: 自社の全施設
+- **facility_admin**: 自施設のみ
+- **staff**: 自施設のみ（閲覧のみ）
+
+**エラーレスポンス**:
+- `401 Unauthorized`: 認証エラー
+- `500 Internal Server Error`: サーバーエラー
+
+---
+
+### 2. 施設詳細情報取得
+
+**エンドポイント**: `GET /api/facilities/:facility_id`
+
+**説明**: 特定の施設の詳細情報を取得します。
 
 **レスポンス** (成功):
 ```typescript
@@ -61,8 +127,6 @@
 }
 ```
 
-**備考**: `facility_id`はセッション情報（`current_facility_id`）から自動取得します。
-
 **権限別アクセス制御**:
 - **site_admin**: 自分の施設のみ
 - **company_admin**: 自社の全施設
@@ -76,9 +140,9 @@
 
 ---
 
-### 2. 施設情報更新
+### 3. 施設情報更新
 
-**エンドポイント**: `PUT /api/facility`
+**エンドポイント**: `PUT /api/facilities/:facility_id`
 
 **説明**: 施設の基本情報を更新します。
 
@@ -110,8 +174,6 @@
   }
 }
 ```
-
-**備考**: `facility_id`はセッション情報（`current_facility_id`）から自動取得します。
 
 **レスポンス** (成功):
 ```typescript
@@ -145,9 +207,78 @@
 
 ---
 
-### 3. 施設ロゴアップロード
+### 4. 施設新規作成
 
-**エンドポイント**: `POST /api/facility/logo`
+**エンドポイント**: `POST /api/facilities`
+
+**説明**: 新しい施設を作成します。
+
+**リクエストボディ**:
+```typescript
+{
+  "name": "ひまわり保育園 第三園",
+  "address": "東京都渋谷区◇◇町7-8-9",
+  "phone": "03-9999-8888",
+  "email": "[email protected]",
+  "postal_code": "150-0002",
+  "fax": "03-9999-8889",           // 任意
+  "website": "https://himawari-daisan.example.com",  // 任意
+  "director_name": "鈴木 一郎",
+  "capacity": 100,
+  "established_date": "2025-04-01",  // 任意
+  "license_number": "東京都認可第67890号",  // 任意
+
+  // 業務時間
+  "opening_time": "07:00",
+  "closing_time": "19:00",
+  "business_days": {
+    "monday": true,
+    "tuesday": true,
+    "wednesday": true,
+    "thursday": true,
+    "friday": true,
+    "saturday": false,
+    "sunday": false,
+    "national_holidays": false
+  }
+}
+```
+
+**レスポンス** (成功):
+```typescript
+{
+  "success": true,
+  "data": {
+    "facility_id": "uuid-facility-new",
+    "name": "ひまわり保育園 第三園",
+    "created_at": "2025-01-11T10:00:00+09:00"
+  },
+  "message": "施設を作成しました"
+}
+```
+
+**処理内容**:
+1. `m_facilities`テーブルに新規レコードを作成
+2. `company_id`はセッション情報から自動取得
+3. 初期状態は`is_active: true`
+
+**権限別アクセス制御**:
+- **site_admin**: 不可
+- **company_admin**: 自社に施設を追加可能
+- **facility_admin**: 不可
+- **staff**: 不可
+
+**エラーレスポンス**:
+- `400 Bad Request`: 必須パラメータ不足、無効なデータ形式
+- `401 Unauthorized`: 認証エラー
+- `403 Forbidden`: 権限なし
+- `500 Internal Server Error`: サーバーエラー
+
+---
+
+### 5. 施設ロゴアップロード
+
+**エンドポイント**: `POST /api/facilities/:facility_id/logo`
 
 **説明**: 施設のロゴ画像をアップロードします。
 
@@ -267,7 +398,48 @@ CREATE INDEX idx_h_facility_changes_created
 
 ## クエリ例
 
-### 施設情報取得クエリ
+### 施設一覧取得クエリ
+
+```sql
+SELECT
+  f.id as facility_id,
+  f.name,
+  f.address,
+  f.phone,
+  f.email,
+
+  -- 統計情報
+  (SELECT COUNT(*) FROM m_classes WHERE facility_id = f.id AND deleted_at IS NULL) as class_count,
+  (SELECT COUNT(*) FROM m_children WHERE facility_id = f.id AND enrollment_status = 'enrolled' AND deleted_at IS NULL) as children_count,
+  (SELECT COUNT(*) FROM _user_facility uf WHERE uf.facility_id = f.id AND uf.is_current = true) as staff_count,
+
+  f.created_at,
+  f.updated_at
+
+FROM m_facilities f
+INNER JOIN m_companies c ON f.company_id = c.id
+
+WHERE
+  -- 権限に応じたフィルタ
+  (
+    ($1 = 'site_admin') OR  -- site_adminは全施設
+    ($1 = 'company_admin' AND c.id = $2) OR  -- company_adminは自社の全施設
+    ($1 = 'facility_admin' AND f.id = $3) OR  -- facility_adminは自施設のみ
+    ($1 = 'staff' AND f.id = $3)  -- staffは自施設のみ
+  )
+  AND f.deleted_at IS NULL
+
+  -- 検索フィルタ
+  AND (
+    $4::VARCHAR IS NULL
+    OR f.name ILIKE '%' || $4 || '%'
+    OR f.address ILIKE '%' || $4 || '%'
+  )
+
+ORDER BY f.name;
+```
+
+### 施設詳細情報取得クエリ
 
 ```sql
 SELECT
