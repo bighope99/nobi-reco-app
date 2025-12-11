@@ -1,7 +1,7 @@
 "use client"
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Users,
   Building2,
@@ -18,44 +18,42 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 
-// Mock data
-const mockClass = {
-  id: '1',
-  name: 'ひよこ組',
-  facilityId: '1',
-  facility: 'ひまわり保育園 本園',
-  capacity: 10,
-  ageRange: '0-1歳',
-  description: '0歳から1歳までの乳児クラスです',
-  teachers: [
-    { id: '1', name: '田中先生', role: '主任' },
-    { id: '2', name: '佐藤先生', role: '副担任' }
-  ],
-  children: [
-    { id: '1', name: '山田太郎', age: 0, kana: 'やまだたろう', grade: '0歳' },
-    { id: '2', name: '鈴木花子', age: 1, kana: 'すずきはなこ', grade: '1歳' }
-  ]
-};
+// Types
+interface Teacher {
+  id: string;
+  name: string;
+  role?: string;
+  is_main?: boolean;
+}
 
-const mockFacilities = [
-  { id: '1', name: 'ひまわり保育園 本園' },
-  { id: '2', name: 'ひまわり保育園 分園' }
-];
+interface Child {
+  id: string;
+  name: string;
+  name_kana: string;
+  age: number;
+  birth_date?: string;
+  enrollment_status?: string;
+}
 
-const mockAvailableTeachers = [
-  { id: '3', name: '高橋先生' },
-  { id: '4', name: '伊藤先生' },
-  { id: '5', name: '渡辺先生' }
-];
+interface Facility {
+  facility_id: string;
+  name: string;
+}
 
-// Available children (not in this class)
-const mockAvailableChildren = [
-  { id: '3', name: '佐藤一郎', age: 0, kana: 'さとういちろう', grade: '0歳', className: '未配属' },
-  { id: '4', name: '田中美咲', age: 1, kana: 'たなかみさき', grade: '1歳', className: '未配属' },
-  { id: '5', name: '高橋健太', age: 2, kana: 'たかはしけんた', grade: '2歳', className: 'りす組' },
-  { id: '6', name: '伊藤さくら', age: 0, kana: 'いとうさくら', grade: '0歳', className: '未配属' },
-  { id: '7', name: '渡辺翔太', age: 1, kana: 'わたなべしょうた', grade: '1歳', className: '未配属' }
-];
+interface ClassData {
+  class_id: string;
+  name: string;
+  age_group: string;
+  capacity: number;
+  room_number?: string;
+  color_code?: string;
+  display_order?: number;
+  is_active?: boolean;
+  facility_id: string;
+  facility_name: string;
+  staff: Teacher[];
+  children: Child[];
+}
 
 const Input = ({ className = "", ...props }: any) => (
   <input
@@ -101,11 +99,18 @@ const FieldGroup = ({ label, required, children }: any) => (
 
 export default function ClassDetailPage() {
   const params = useParams();
-  const [classData, setClassData] = useState(mockClass);
-  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const classId = params.class_id as string;
+
+  const [classData, setClassData] = useState<ClassData | null>(null);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+  const [allChildren, setAllChildren] = useState<Child[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showAddTeacher, setShowAddTeacher] = useState(false);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
-  const [selectedTeacherRole, setSelectedTeacherRole] = useState('副担任');
+  const [selectedTeacherIsMain, setSelectedTeacherIsMain] = useState(false);
 
   // Child management
   const [showAddChildModal, setShowAddChildModal] = useState(false);
@@ -114,29 +119,141 @@ export default function ClassDetailPage() {
   const [filterClassName, setFilterClassName] = useState('all');
   const [sortBy, setSortBy] = useState<'name' | 'grade'>('grade');
 
-  const handleAddTeacher = () => {
-    if (selectedTeacherId) {
-      const teacher = mockAvailableTeachers.find(t => t.id === selectedTeacherId);
-      if (teacher) {
-        setClassData({
-          ...classData,
-          teachers: [
-            ...classData.teachers,
-            { id: teacher.id, name: teacher.name, role: selectedTeacherRole }
-          ]
-        });
-        setShowAddTeacher(false);
-        setSelectedTeacherId('');
-        setSelectedTeacherRole('副担任');
+  // Fetch class data
+  useEffect(() => {
+    fetchClassData();
+    fetchFacilities();
+    fetchAllTeachers();
+    fetchAllChildren();
+  }, [classId]);
+
+  const fetchClassData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/classes/${classId}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setClassData(result.data);
+      } else {
+        alert(result.error || 'クラス情報の取得に失敗しました');
       }
+    } catch (error) {
+      console.error('Error fetching class:', error);
+      alert('クラス情報の取得中にエラーが発生しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchFacilities = async () => {
+    try {
+      const response = await fetch('/api/facilities');
+      const result = await response.json();
+
+      if (result.success) {
+        setFacilities(result.data.facilities || []);
+      }
+    } catch (error) {
+      console.error('Error fetching facilities:', error);
+    }
+  };
+
+  const fetchAllTeachers = async () => {
+    try {
+      const response = await fetch('/api/users');
+      const result = await response.json();
+
+      if (result.success) {
+        setAllTeachers(result.data.users.map((u: any) => ({
+          id: u.user_id,
+          name: u.name,
+          role: u.role
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching teachers:', error);
+    }
+  };
+
+  const fetchAllChildren = async () => {
+    try {
+      const response = await fetch('/api/children');
+      const result = await response.json();
+
+      if (result.success) {
+        setAllChildren(result.data.children || []);
+      }
+    } catch (error) {
+      console.error('Error fetching children:', error);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!classData) return;
+
+    try {
+      setSaving(true);
+      const response = await fetch(`/api/classes/${classId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: classData.name,
+          age_group: classData.age_group,
+          capacity: classData.capacity,
+          room_number: classData.room_number,
+          color_code: classData.color_code,
+          display_order: classData.display_order,
+          is_active: classData.is_active
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('クラス情報を更新しました');
+        fetchClassData();
+      } else {
+        alert(result.error || '更新に失敗しました');
+      }
+    } catch (error) {
+      console.error('Error saving class:', error);
+      alert('更新中にエラーが発生しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddTeacher = () => {
+    if (!classData || !selectedTeacherId) return;
+
+    const teacher = allTeachers.find(t => t.id === selectedTeacherId);
+    if (teacher) {
+      setClassData({
+        ...classData,
+        staff: [
+          ...classData.staff,
+          {
+            id: teacher.id,
+            name: teacher.name,
+            role: teacher.role,
+            is_main: selectedTeacherIsMain
+          }
+        ]
+      });
+      setShowAddTeacher(false);
+      setSelectedTeacherId('');
+      setSelectedTeacherIsMain(false);
     }
   };
 
   const handleRemoveTeacher = (teacherId: string) => {
+    if (!classData) return;
+
     if (confirm('この担任を解除しますか？')) {
       setClassData({
         ...classData,
-        teachers: classData.teachers.filter(t => t.id !== teacherId)
+        staff: classData.staff.filter(t => t.id !== teacherId)
       });
     }
   };
@@ -151,7 +268,9 @@ export default function ClassDetailPage() {
   };
 
   const handleAddChildren = () => {
-    const childrenToAdd = mockAvailableChildren.filter(child =>
+    if (!classData) return;
+
+    const childrenToAdd = allChildren.filter(child =>
       selectedChildIds.includes(child.id)
     );
     setClassData({
@@ -164,6 +283,8 @@ export default function ClassDetailPage() {
   };
 
   const handleRemoveChild = (childId: string) => {
+    if (!classData) return;
+
     if (confirm('このクラスから児童を除外しますか？')) {
       setClassData({
         ...classData,
@@ -172,27 +293,44 @@ export default function ClassDetailPage() {
     }
   };
 
-  // Get unique class names for filter
-  const classNames = Array.from(new Set(mockAvailableChildren.map(c => c.className)));
+  // Available teachers (not already in class)
+  const availableTeachers = allTeachers.filter(
+    teacher => !classData?.staff.some(s => s.id === teacher.id)
+  );
 
   // Filter and sort available children (exclude already in class)
-  const availableChildren = mockAvailableChildren
+  const availableChildren = allChildren
     .filter(child =>
-      !classData.children.some(c => c.id === child.id) &&
-      (child.name.includes(childSearchTerm) || child.kana.includes(childSearchTerm)) &&
-      (filterClassName === 'all' || child.className === filterClassName)
+      !classData?.children.some(c => c.id === child.id) &&
+      (child.name.includes(childSearchTerm) || child.name_kana.includes(childSearchTerm))
     )
     .sort((a, b) => {
       if (sortBy === 'grade') {
-        // Sort by age (extracted from grade string)
-        const ageA = parseInt(a.grade) || 0;
-        const ageB = parseInt(b.grade) || 0;
-        return ageA - ageB;
+        return a.age - b.age;
       } else {
-        // Sort by name (kana)
-        return a.kana.localeCompare(b.kana);
+        return a.name_kana.localeCompare(b.name_kana);
       }
     });
+
+  if (loading) {
+    return (
+      <StaffLayout title="クラス詳細">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+        </div>
+      </StaffLayout>
+    );
+  }
+
+  if (!classData) {
+    return (
+      <StaffLayout title="クラス詳細">
+        <div className="flex items-center justify-center min-h-screen">
+          <p className="text-slate-500">クラス情報が見つかりませんでした</p>
+        </div>
+      </StaffLayout>
+    );
+  }
 
   return (
     <StaffLayout title="クラス詳細">
@@ -242,8 +380,8 @@ export default function ClassDetailPage() {
 
                 <FieldGroup label="対象年齢" required>
                   <Input
-                    value={classData.ageRange}
-                    onChange={(e: any) => setClassData({ ...classData, ageRange: e.target.value })}
+                    value={classData.age_group}
+                    onChange={(e: any) => setClassData({ ...classData, age_group: e.target.value })}
                     placeholder="例: 0-1歳"
                   />
                 </FieldGroup>
@@ -252,36 +390,44 @@ export default function ClassDetailPage() {
                   <Input
                     type="number"
                     value={classData.capacity}
-                    onChange={(e: any) => setClassData({ ...classData, capacity: parseInt(e.target.value) })}
+                    onChange={(e: any) => setClassData({ ...classData, capacity: parseInt(e.target.value) || 0 })}
                     min="1"
                   />
                 </FieldGroup>
 
                 <FieldGroup label="所属施設" required>
                   <Select
-                    value={classData.facilityId}
+                    value={classData.facility_id}
                     onChange={(e: any) => {
-                      const facility = mockFacilities.find(f => f.id === e.target.value);
+                      const facility = facilities.find(f => f.facility_id === e.target.value);
                       setClassData({
                         ...classData,
-                        facilityId: e.target.value,
-                        facility: facility?.name || ''
+                        facility_id: e.target.value,
+                        facility_name: facility?.name || ''
                       });
                     }}
                   >
-                    {mockFacilities.map(facility => (
-                      <option key={facility.id} value={facility.id}>
+                    {facilities.map(facility => (
+                      <option key={facility.facility_id} value={facility.facility_id}>
                         {facility.name}
                       </option>
                     ))}
                   </Select>
                 </FieldGroup>
 
-                <FieldGroup label="クラス説明" className="sm:col-span-2">
-                  <Textarea
-                    value={classData.description}
-                    onChange={(e: any) => setClassData({ ...classData, description: e.target.value })}
-                    placeholder="クラスの特徴や方針を入力..."
+                <FieldGroup label="部屋番号">
+                  <Input
+                    value={classData.room_number || ''}
+                    onChange={(e: any) => setClassData({ ...classData, room_number: e.target.value })}
+                    placeholder="例: 101"
+                  />
+                </FieldGroup>
+
+                <FieldGroup label="カラーコード">
+                  <Input
+                    value={classData.color_code || ''}
+                    onChange={(e: any) => setClassData({ ...classData, color_code: e.target.value })}
+                    placeholder="例: #FF5733"
                   />
                 </FieldGroup>
               </div>
@@ -315,23 +461,23 @@ export default function ClassDetailPage() {
                         onChange={(e: any) => setSelectedTeacherId(e.target.value)}
                       >
                         <option value="">選択してください</option>
-                        {mockAvailableTeachers.map(teacher => (
+                        {availableTeachers.map(teacher => (
                           <option key={teacher.id} value={teacher.id}>
                             {teacher.name}
                           </option>
                         ))}
                       </Select>
                     </FieldGroup>
-                    <FieldGroup label="役割">
-                      <Select
-                        value={selectedTeacherRole}
-                        onChange={(e: any) => setSelectedTeacherRole(e.target.value)}
-                        className="max-w-[120px]"
-                      >
-                        <option value="主任">主任</option>
-                        <option value="副担任">副担任</option>
-                        <option value="補助">補助</option>
-                      </Select>
+                    <FieldGroup label="主担任">
+                      <div className="flex items-center gap-2 h-[42px]">
+                        <input
+                          type="checkbox"
+                          checked={selectedTeacherIsMain}
+                          onChange={(e) => setSelectedTeacherIsMain(e.target.checked)}
+                          className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-700">主担任として設定</span>
+                      </div>
                     </FieldGroup>
                     <button
                       onClick={handleAddTeacher}
@@ -352,7 +498,7 @@ export default function ClassDetailPage() {
 
               {/* Teachers List */}
               <div className="space-y-3">
-                {classData.teachers.map((teacher) => (
+                {classData.staff.map((teacher) => (
                   <div
                     key={teacher.id}
                     className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors group"
@@ -363,9 +509,18 @@ export default function ClassDetailPage() {
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-800">{teacher.name}</h3>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                          {teacher.role}
-                        </span>
+                        <div className="flex gap-2 mt-1">
+                          {teacher.is_main && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              主担任
+                            </span>
+                          )}
+                          {teacher.role && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                              {teacher.role}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -379,7 +534,7 @@ export default function ClassDetailPage() {
                   </div>
                 ))}
 
-                {classData.teachers.length === 0 && (
+                {classData.staff.length === 0 && (
                   <div className="text-center py-12 text-slate-400">
                     <UserCheck size={48} className="mx-auto mb-3 opacity-50" />
                     <p>担任が設定されていません</p>
@@ -439,7 +594,7 @@ export default function ClassDetailPage() {
                       onClick={() => window.location.href = `/children/${child.id}`}
                     >
                       <p className="font-bold text-slate-800 text-sm">{child.name}</p>
-                      <p className="text-xs text-slate-500">{child.kana}</p>
+                      <p className="text-xs text-slate-500">{child.name_kana}</p>
                     </div>
                     <button
                       onClick={() => handleRemoveChild(child.id)}
@@ -474,10 +629,11 @@ export default function ClassDetailPage() {
             </button>
             <button
               type="button"
-              disabled={loading}
+              onClick={handleSave}
+              disabled={saving}
               className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {saving ? (
                 <>
                   <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
                   保存中...
@@ -535,24 +691,8 @@ export default function ClassDetailPage() {
                   />
                 </div>
 
-                {/* Filter and Sort */}
+                {/* Sort */}
                 <div className="flex gap-3">
-                  {/* Class Filter */}
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1">
-                    <Filter size={16} className="text-slate-400 shrink-0" />
-                    <select
-                      className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 w-full"
-                      value={filterClassName}
-                      onChange={(e) => setFilterClassName(e.target.value)}
-                    >
-                      <option value="all">全クラス</option>
-                      {classNames.map(className => (
-                        <option key={className} value={className}>{className}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Sort */}
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1">
                     <ArrowUpDown size={16} className="text-slate-400 shrink-0" />
                     <select
@@ -560,7 +700,7 @@ export default function ClassDetailPage() {
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as 'name' | 'grade')}
                     >
-                      <option value="grade">学年順</option>
+                      <option value="grade">年齢順</option>
                       <option value="name">名前順</option>
                     </select>
                   </div>
@@ -597,11 +737,10 @@ export default function ClassDetailPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-slate-800 text-sm">{child.name}</p>
-                        <p className="text-xs text-slate-500">{child.kana}</p>
+                        <p className="text-xs text-slate-500">{child.name_kana}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs text-slate-500">{child.grade}</p>
-                        <p className="text-xs text-slate-400">{child.className}</p>
+                        <p className="text-xs text-slate-500">{child.enrollment_status || '未配属'}</p>
                       </div>
                     </div>
                   ))}
