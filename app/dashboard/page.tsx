@@ -123,22 +123,97 @@ export default function ChildcareDashboard() {
 
   // --- Actions ---
 
+  // データ再取得
+  const refreshData = async () => {
+    try {
+      const response = await fetch('/api/dashboard/summary');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDashboardData(result.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+    }
+  };
+
   // 登園処理
-  const handleCheckIn = async (childId: string) => {
-    // TODO: API実装
-    alert(`登園処理: ${childId}`);
+  const handleCheckIn = async (childId: string, status: 'present' | 'late' = 'present') => {
+    try {
+      const response = await fetch('/api/attendance/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ child_id: childId, status }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await refreshData();
+      } else {
+        alert(`エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Check-in error:', error);
+      alert('登園処理に失敗しました');
+    }
+  };
+
+  // 遅刻処理
+  const handleCheckInLate = async (childId: string) => {
+    await handleCheckIn(childId, 'late');
   };
 
   // 欠席処理
   const handleMarkAbsent = async (childId: string) => {
-    // TODO: API実装
-    alert(`欠席処理: ${childId}`);
+    try {
+      const response = await fetch('/api/attendance/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ child_id: childId, status: 'absent' }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await refreshData();
+      } else {
+        alert(`エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Mark absent error:', error);
+      alert('欠席処理に失敗しました');
+    }
+  };
+
+  // チェックアウト処理
+  const handleCheckOut = async (childId: string, isEarlyLeave: boolean = false) => {
+    try {
+      const response = await fetch('/api/attendance/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ child_id: childId, is_early_leave: isEarlyLeave }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await refreshData();
+      } else {
+        alert(`エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Check-out error:', error);
+      alert('チェックアウト処理に失敗しました');
+    }
   };
 
   // 予定外登園の確認
   const handleConfirmUnexpected = async (childId: string) => {
-    // TODO: API実装
-    alert(`予定外登園確認: ${childId}`);
+    // 予定外登園を確認済みにする（ステータスは変更しない）
+    alert(`予定外登園を確認しました`);
+    await refreshData();
   };
 
   // --- Utility Functions ---
@@ -260,14 +335,23 @@ export default function ChildcareDashboard() {
   };
 
   const ActionButtons = ({ child }: { child: Child }) => {
-    const loginButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded shadow-sm transition-colors whitespace-nowrap";
-    const absentButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded shadow-sm transition-colors whitespace-nowrap";
+    const [showActions, setShowActions] = useState(false);
 
+    const loginButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded shadow-sm transition-colors whitespace-nowrap";
+    const lateButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded shadow-sm transition-colors whitespace-nowrap";
+    const absentButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded shadow-sm transition-colors whitespace-nowrap";
+    const checkoutButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded shadow-sm transition-colors whitespace-nowrap";
+    const earlyLeaveButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100 rounded shadow-sm transition-colors whitespace-nowrap";
+
+    // 未登園（予定あり）
     if (child.status === 'absent' && child.is_scheduled_today) {
       return (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
             <LogIn size={14} /> 登園
+          </button>
+          <button onClick={() => handleCheckInLate(child.child_id)} className={lateButtonClass}>
+            <Clock size={14} /> 遅刻
           </button>
           <button onClick={() => handleMarkAbsent(child.child_id)} className={absentButtonClass}>
             <UserX size={14} /> 欠席
@@ -276,21 +360,56 @@ export default function ChildcareDashboard() {
       );
     }
 
+    // 未登園（予定なし）
     if (child.status === 'absent' && !child.is_scheduled_today) {
       return (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
             <LogIn size={14} /> 登園
-          </button>
-          <button className={absentButtonClass}>
-            <CalendarPlus size={14} /> 予定追加
           </button>
         </div>
       );
     }
 
+    // 在所中
     if (child.status === 'checked_in') {
-      return <button className="text-xs text-slate-400 hover:text-slate-600 underline">ステータス変更</button>;
+      return (
+        <div className="relative">
+          <button
+            onClick={() => setShowActions(!showActions)}
+            className="text-xs text-slate-600 hover:text-indigo-600 underline font-medium"
+          >
+            アクション ▼
+          </button>
+          {showActions && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[140px]">
+              <button
+                onClick={() => { handleCheckOut(child.child_id, false); setShowActions(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-gray-50 flex items-center gap-2 rounded-t-lg"
+              >
+                <UserMinus size={14} /> 帰宅
+              </button>
+              <button
+                onClick={() => { handleCheckOut(child.child_id, true); setShowActions(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 flex items-center gap-2"
+              >
+                <Clock size={14} /> 早退
+              </button>
+              <button
+                onClick={() => { handleMarkAbsent(child.child_id); setShowActions(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-gray-100 rounded-b-lg"
+              >
+                <UserX size={14} /> 欠席に変更
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 帰宅済
+    if (child.status === 'checked_out') {
+      return <span className="text-xs text-slate-400">-</span>;
     }
 
     return <span className="text-xs text-slate-300">-</span>;
@@ -437,6 +556,9 @@ export default function ChildcareDashboard() {
                         </button>
                         <button onClick={() => handleMarkAbsent(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-bold text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">
                           <UserX size={14} /> 欠席
+                        </button>
+                        <button onClick={() => handleCheckInLate(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-orange-500 text-white border border-orange-600 rounded-md font-bold text-sm hover:bg-orange-600 flex items-center justify-center gap-1 whitespace-nowrap">
+                          <Clock size={14} /> 遅刻
                         </button>
                         <button onClick={() => handleCheckIn(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-blue-500 text-white border border-blue-600 rounded-md font-bold text-sm hover:bg-blue-600 flex items-center justify-center gap-1 whitespace-nowrap">
                           <LogIn size={14} /> 到着
