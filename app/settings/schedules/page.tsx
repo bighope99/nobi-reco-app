@@ -8,20 +8,19 @@ import {
   Save,
   Trash2,
   Edit2,
-  ChevronRight,
   Users,
   Check
 } from 'lucide-react';
 
 // Weekdays
 const weekdays = [
-  { id: 'mon', label: '月' },
-  { id: 'tue', label: '火' },
-  { id: 'wed', label: '水' },
-  { id: 'thu', label: '木' },
-  { id: 'fri', label: '金' },
-  { id: 'sat', label: '土' },
-  { id: 'sun', label: '日' }
+  { id: 'mon', label: '月', fullLabel: '月曜日' },
+  { id: 'tue', label: '火', fullLabel: '火曜日' },
+  { id: 'wed', label: '水', fullLabel: '水曜日' },
+  { id: 'thu', label: '木', fullLabel: '木曜日' },
+  { id: 'fri', label: '金', fullLabel: '金曜日' },
+  { id: 'sat', label: '土', fullLabel: '土曜日' },
+  { id: 'sun', label: '日', fullLabel: '日曜日' }
 ];
 
 // Grades
@@ -34,7 +33,7 @@ const grades = [
   { id: '6', label: '6年生' }
 ];
 
-// Mock data with grades as array of IDs and weekdays
+// Mock data with weekday-specific times
 const mockSchools = [
   {
     id: '1',
@@ -43,16 +42,24 @@ const mockSchools = [
       {
         scheduleId: '1',
         gradeIds: ['1', '2'],
-        weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
-        arrivalTime: '08:00',
-        departureTime: '15:00'
+        weekdayTimes: {
+          mon: '08:00',
+          tue: '08:00',
+          wed: '08:00',
+          thu: '08:00',
+          fri: '08:00'
+        }
       },
       {
         scheduleId: '2',
         gradeIds: ['3', '4', '5', '6'],
-        weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
-        arrivalTime: '08:00',
-        departureTime: '16:00'
+        weekdayTimes: {
+          mon: '08:00',
+          tue: '08:00',
+          wed: '08:00',
+          thu: '08:00',
+          fri: '08:00'
+        }
       }
     ]
   },
@@ -63,9 +70,13 @@ const mockSchools = [
       {
         scheduleId: '3',
         gradeIds: ['1', '2', '3', '4', '5', '6'],
-        weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
-        arrivalTime: '08:30',
-        departureTime: '16:30'
+        weekdayTimes: {
+          mon: '08:30',
+          tue: '08:30',
+          wed: '08:30',
+          thu: '08:30',
+          fri: '08:30'
+        }
       }
     ]
   }
@@ -125,9 +136,15 @@ export default function ScheduleSettingsPage() {
             {
               scheduleId: String(Date.now()),
               gradeIds: [],
-              weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
-              arrivalTime: '08:00',
-              departureTime: '15:00'
+              weekdayTimes: {
+                mon: '08:00',
+                tue: '08:00',
+                wed: '08:00',
+                thu: '08:00',
+                fri: '08:00',
+                sat: '',
+                sun: ''
+              }
             }
           ]
         };
@@ -157,36 +174,21 @@ export default function ScheduleSettingsPage() {
     }));
   };
 
-  // Toggle weekday selection
-  const handleToggleWeekday = (schoolId: string, scheduleId: string, weekdayId: string) => {
+  // Update weekday time
+  const handleUpdateWeekdayTime = (schoolId: string, scheduleId: string, weekdayId: string, time: string) => {
     setSchools(schools.map(school => {
       if (school.id === schoolId) {
         return {
           ...school,
           schedules: school.schedules.map(schedule => {
             if (schedule.scheduleId === scheduleId) {
-              const weekdays = schedule.weekdays.includes(weekdayId)
-                ? schedule.weekdays.filter(id => id !== weekdayId)
-                : [...schedule.weekdays, weekdayId];
-              return { ...schedule, weekdays };
-            }
-            return schedule;
-          })
-        };
-      }
-      return school;
-    }));
-  };
-
-  // Update time
-  const handleUpdateTime = (schoolId: string, scheduleId: string, field: 'arrivalTime' | 'departureTime', value: string) => {
-    setSchools(schools.map(school => {
-      if (school.id === schoolId) {
-        return {
-          ...school,
-          schedules: school.schedules.map(schedule => {
-            if (schedule.scheduleId === scheduleId) {
-              return { ...schedule, [field]: value };
+              return {
+                ...schedule,
+                weekdayTimes: {
+                  ...schedule.weekdayTimes,
+                  [weekdayId]: time
+                }
+              };
             }
             return schedule;
           })
@@ -227,11 +229,11 @@ export default function ScheduleSettingsPage() {
       .join('・');
   };
 
-  // Get weekday names from IDs
-  const getWeekdayNames = (weekdayIds: string[]) => {
-    if (weekdayIds.length === 0) return '曜日未選択';
-    return weekdayIds
-      .map(id => weekdays.find(w => w.id === id)?.label)
+  // Get active weekdays (those with times set)
+  const getActiveWeekdays = (weekdayTimes: any) => {
+    return Object.entries(weekdayTimes)
+      .filter(([_, time]) => time)
+      .map(([dayId, _]) => weekdays.find(w => w.id === dayId)?.label)
       .filter(Boolean)
       .join('');
   };
@@ -253,7 +255,7 @@ export default function ScheduleSettingsPage() {
                 登校時刻設定
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                学校ごと、学年ごと、曜日ごとに来校・帰宅時刻を設定
+                学校ごと、学年ごと、曜日ごとに来校時刻を設定
               </p>
             </div>
 
@@ -385,54 +387,30 @@ export default function ScheduleSettingsPage() {
                               </div>
                             </div>
 
-                            {/* Weekday Selection */}
+                            {/* Weekday Times */}
                             <div>
-                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">曜日選択 (複数選択可)</label>
-                              <div className="flex flex-wrap gap-2">
+                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 block">曜日ごとの登校時刻</label>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                 {weekdays.map((day) => (
-                                  <button
-                                    key={day.id}
-                                    onClick={() => handleToggleWeekday(school.id, schedule.scheduleId, day.id)}
-                                    className={`w-10 h-10 rounded-lg text-sm font-bold transition-all border ${
-                                      schedule.weekdays.includes(day.id)
-                                        ? 'bg-purple-600 text-white border-purple-600'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:border-purple-300 hover:bg-purple-50'
-                                    }`}
-                                  >
-                                    {day.label}
-                                  </button>
+                                  <div key={day.id} className="flex flex-col gap-1">
+                                    <label className="text-xs text-slate-500 font-medium">{day.fullLabel}</label>
+                                    <div className="flex items-center gap-2">
+                                      <Clock size={14} className="text-slate-400 shrink-0" />
+                                      <Input
+                                        type="time"
+                                        value={schedule.weekdayTimes[day.id] || ''}
+                                        onChange={(e: any) =>
+                                          handleUpdateWeekdayTime(school.id, schedule.scheduleId, day.id, e.target.value)
+                                        }
+                                        className="text-sm py-1.5"
+                                      />
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
-                            </div>
-
-                            {/* Time Inputs */}
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">登校時刻</label>
-                                <div className="flex items-center gap-2">
-                                  <Clock size={16} className="text-slate-400" />
-                                  <Input
-                                    type="time"
-                                    value={schedule.arrivalTime}
-                                    onChange={(e: any) =>
-                                      handleUpdateTime(school.id, schedule.scheduleId, 'arrivalTime', e.target.value)
-                                    }
-                                  />
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">下校時刻</label>
-                                <div className="flex items-center gap-2">
-                                  <Clock size={16} className="text-slate-400" />
-                                  <Input
-                                    type="time"
-                                    value={schedule.departureTime}
-                                    onChange={(e: any) =>
-                                      handleUpdateTime(school.id, schedule.scheduleId, 'departureTime', e.target.value)
-                                    }
-                                  />
-                                </div>
-                              </div>
+                              <p className="text-xs text-slate-500 mt-2">
+                                ※ 時刻を空欄にすると、その曜日は未設定になります
+                              </p>
                             </div>
 
                             {/* Delete Button */}
@@ -452,22 +430,26 @@ export default function ScheduleSettingsPage() {
                               <Users size={20} className="text-indigo-600" />
                             </div>
                             <div className="flex-1">
-                              <h3 className="font-bold text-slate-800 text-sm mb-1">
+                              <h3 className="font-bold text-slate-800 text-sm mb-2">
                                 {getGradeNames(schedule.gradeIds)}
                               </h3>
-                              <p className="text-xs text-slate-500 flex items-center gap-4">
-                                <span className="flex items-center gap-1">
-                                  <Clock size={12} />
-                                  登校: {schedule.arrivalTime}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Clock size={12} />
-                                  下校: {schedule.departureTime}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  📅 {getWeekdayNames(schedule.weekdays)}
-                                </span>
-                              </p>
+                              <div className="space-y-1">
+                                {Object.entries(schedule.weekdayTimes)
+                                  .filter(([_, time]) => time)
+                                  .map(([dayId, time]) => {
+                                    const day = weekdays.find(w => w.id === dayId);
+                                    return (
+                                      <p key={dayId} className="text-xs text-slate-500 flex items-center gap-2">
+                                        <span className="w-12 font-medium text-slate-600">{day?.fullLabel}</span>
+                                        <Clock size={12} />
+                                        <span>{time}</span>
+                                      </p>
+                                    );
+                                  })}
+                                {Object.values(schedule.weekdayTimes).every(time => !time) && (
+                                  <p className="text-xs text-slate-400">曜日未設定</p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )}

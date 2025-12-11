@@ -13,7 +13,9 @@ import {
   Trash2,
   ChevronRight,
   Search,
-  Check
+  Check,
+  Filter,
+  ArrowUpDown
 } from 'lucide-react';
 
 // Mock data
@@ -109,6 +111,8 @@ export default function ClassDetailPage() {
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [childSearchTerm, setChildSearchTerm] = useState('');
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
+  const [filterClassName, setFilterClassName] = useState('all');
+  const [sortBy, setSortBy] = useState<'name' | 'grade'>('grade');
 
   const handleAddTeacher = () => {
     if (selectedTeacherId) {
@@ -168,11 +172,27 @@ export default function ClassDetailPage() {
     }
   };
 
-  // Filter available children (exclude already in class)
-  const availableChildren = mockAvailableChildren.filter(child =>
-    !classData.children.some(c => c.id === child.id) &&
-    (child.name.includes(childSearchTerm) || child.kana.includes(childSearchTerm))
-  );
+  // Get unique class names for filter
+  const classNames = Array.from(new Set(mockAvailableChildren.map(c => c.className)));
+
+  // Filter and sort available children (exclude already in class)
+  const availableChildren = mockAvailableChildren
+    .filter(child =>
+      !classData.children.some(c => c.id === child.id) &&
+      (child.name.includes(childSearchTerm) || child.kana.includes(childSearchTerm)) &&
+      (filterClassName === 'all' || child.className === filterClassName)
+    )
+    .sort((a, b) => {
+      if (sortBy === 'grade') {
+        // Sort by age (extracted from grade string)
+        const ageA = parseInt(a.grade) || 0;
+        const ageB = parseInt(b.grade) || 0;
+        return ageA - ageB;
+      } else {
+        // Sort by name (kana)
+        return a.kana.localeCompare(b.kana);
+      }
+    });
 
   return (
     <StaffLayout title="クラス詳細">
@@ -501,8 +521,9 @@ export default function ClassDetailPage() {
                 </button>
               </div>
 
-              {/* Search Bar */}
-              <div className="px-6 py-4 border-b border-slate-100 shrink-0">
+              {/* Search and Filter Bar */}
+              <div className="px-6 py-4 border-b border-slate-100 shrink-0 space-y-3">
+                {/* Search */}
                 <div className="relative">
                   <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -512,6 +533,37 @@ export default function ClassDetailPage() {
                     value={childSearchTerm}
                     onChange={(e) => setChildSearchTerm(e.target.value)}
                   />
+                </div>
+
+                {/* Filter and Sort */}
+                <div className="flex gap-3">
+                  {/* Class Filter */}
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1">
+                    <Filter size={16} className="text-slate-400 shrink-0" />
+                    <select
+                      className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 w-full"
+                      value={filterClassName}
+                      onChange={(e) => setFilterClassName(e.target.value)}
+                    >
+                      <option value="all">全クラス</option>
+                      {classNames.map(className => (
+                        <option key={className} value={className}>{className}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Sort */}
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1">
+                    <ArrowUpDown size={16} className="text-slate-400 shrink-0" />
+                    <select
+                      className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 w-full"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'name' | 'grade')}
+                    >
+                      <option value="grade">学年順</option>
+                      <option value="name">名前順</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
