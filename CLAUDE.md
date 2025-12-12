@@ -1,7 +1,13 @@
 # Project Context
 **Name**: Nobi-Reco (のびレコ)
-**Description**: A SaaS application for visualizing children's growth and streamlining record-keeping in childcare and education settings.
+**Target**: After-school care programs (学童保育 - Gakudō Hoiku) for elementary school children
+**Description**: A SaaS application for visualizing children's growth and streamlining record-keeping in after-school care settings.
 **Goal**: Automate individual record extraction from daily activity logs using AI, visualize growth, and facilitate information sharing with parents.
+
+## Important Domain Knowledge
+- **Classes are NOT grade-based**: Unlike elementary schools, after-school care classes (e.g., "Sunflower Group", "Sakura Group") are fixed and do NOT change by school year or grade level.
+- **Classes persist across years**: The same class name is used continuously, and children may move between classes within the facility.
+- **Mixed-age groups**: Classes often contain children from different grades (e.g., 1st-3rd graders in one class).
 # Technology Stack
 - **Frontend**: Next.js 15 (App Router), React 19
 - **Language**: TypeScript
@@ -11,6 +17,18 @@
 - **Database**: Supabase (PostgreSQL) - Project ID: `biwqvayouhlvnumdjtjb` (stg_nobireco)
 - **Auth**: Supabase Auth / Firebase Auth (as per docs, but Supabase is primary DB)
 - **AI**: OpenAI GPT-4o-mini
+# Database & API Design Rules
+
+## Database Schema Reference
+**CRITICAL**: ALWAYS refer to `docs/03_database.md` as the **single source of truth** for database schema when:
+- Designing new API endpoints
+- Modifying existing API implementations
+- Writing database queries
+- Creating or updating tables
+- Understanding table relationships and constraints
+
+The database schema in `docs/03_database.md` is the definitive specification. If you find discrepancies between the code and the documentation, the documentation should be considered correct unless explicitly stated otherwise.
+
 # Database Naming Conventions
 Strictly adhere to the following table prefixes:
 - `m_`: Master tables (e.g., `m_companies`, `m_children`) - Basic entities, rarely deleted.

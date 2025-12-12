@@ -182,9 +182,11 @@ CREATE TABLE IF NOT EXISTS m_classes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
   name VARCHAR(100) NOT NULL,                  -- クラス名（例: ひまわり組）
-  grade VARCHAR(50),                           -- 学年（例: 年長、小1）
-  school_year INTEGER NOT NULL,                -- 年度（例: 2025）
+  age_group VARCHAR(50),                       -- 対象年齢（例: 0歳児、1-2歳児、混合）
   capacity INTEGER,                            -- 定員
+  room_number VARCHAR(20),                     -- 部屋番号
+  color_code VARCHAR(7),                       -- クラスカラー（HEX: #RRGGBB）
+  display_order INTEGER,                       -- 表示順序
   is_active BOOLEAN NOT NULL DEFAULT true,     -- 有効/無効
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -193,7 +195,7 @@ CREATE TABLE IF NOT EXISTS m_classes (
 
 -- インデックス
 CREATE INDEX idx_classes_facility_id ON m_classes(facility_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_classes_school_year ON m_classes(school_year) WHERE deleted_at IS NULL;
+CREATE INDEX idx_classes_display_order ON m_classes(facility_id, display_order) WHERE deleted_at IS NULL;
 ```
 
 ---
@@ -681,9 +683,15 @@ CREATE TABLE IF NOT EXISTS _user_facility (
   user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
   facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
   is_primary BOOLEAN NOT NULL DEFAULT false,  -- 主担当施設フラグ
+
+  -- 期間管理（退職・異動時に履歴として保持）
+  start_date DATE,                             -- 配属開始日
+  end_date DATE,                               -- 配属終了日（退職・異動時）
+  is_current BOOLEAN NOT NULL DEFAULT true,    -- 現在所属中か
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
+
   UNIQUE(user_id, facility_id)
 );
 
@@ -691,6 +699,7 @@ CREATE TABLE IF NOT EXISTS _user_facility (
 CREATE INDEX idx_user_facility_user_id ON _user_facility(user_id);
 CREATE INDEX idx_user_facility_facility_id ON _user_facility(facility_id);
 CREATE INDEX idx_user_facility_is_primary ON _user_facility(is_primary) WHERE is_primary = true;
+CREATE INDEX idx_user_facility_is_current ON _user_facility(user_id, is_current) WHERE is_current = true;
 ```
 
 ---
@@ -702,17 +711,26 @@ CREATE TABLE IF NOT EXISTS _user_class (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
   class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
-  is_homeroom BOOLEAN NOT NULL DEFAULT false,  -- 担任フラグ
+
+  -- クラス内での役割
+  class_role VARCHAR(20),                      -- 'main' (主担任) / 'sub' (副担任) / 'assistant' (補助) など
+
+  -- 期間管理（担任変更時に履歴として保持）
+  start_date DATE NOT NULL,                    -- 担当開始日
+  end_date DATE,                               -- 担当終了日
+  is_current BOOLEAN NOT NULL DEFAULT true,    -- 現在担当中か
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
-  UNIQUE(user_id, class_id)
+
+  UNIQUE(user_id, class_id, start_date)
 );
 
 -- インデックス
 CREATE INDEX idx_user_class_user_id ON _user_class(user_id);
 CREATE INDEX idx_user_class_class_id ON _user_class(class_id);
-CREATE INDEX idx_user_class_is_homeroom ON _user_class(is_homeroom) WHERE is_homeroom = true;
+CREATE INDEX idx_user_class_is_current ON _user_class(user_id, is_current) WHERE is_current = true;
+CREATE INDEX idx_user_class_role ON _user_class(class_role);
 ```
 
 ---
@@ -992,6 +1010,31 @@ CREATE POLICY facility_access ON r_activity
 
 ---
 
-**作成日**: 2025年1月  
-**最終更新**: 2025年1月  
+## 15. 変更履歴
+
+### Phase 2（2025年1月）
+
+#### `m_classes`テーブルの変更
+- **削除**: `school_year`, `grade` - クラスは年度に紐づかないため不要
+- **追加**: `age_group`, `room_number`, `color_code`, `display_order`
+- **理由**: 保育園では年度ごとにクラスを作り直さず、固定のクラス名を使い続けるため
+
+#### `_user_facility`テーブルの変更
+- **追加**: `is_current`, `start_date`, `end_date`
+- **理由**: 退職・異動時にデータを履歴として保持するため
+
+#### `_user_class`テーブルの変更
+- **削除**: `is_homeroom`
+- **追加**: `class_role` ('main'/'sub'/'assistant'), `is_current`, `start_date`, `end_date`
+- **理由**:
+  - 主担任・副担任を区別するため
+  - 拡張性向上（補助、見習いなどの役割を追加可能）
+  - 担任変更の履歴を保持するため
+
+**詳細**: `docs/08_02_schema_updates.md` 参照
+
+---
+
+**作成日**: 2025年1月
+**最終更新**: 2025年1月12日（Phase 2 スキーマ更新）
 **管理者**: プロジェクトリーダー
