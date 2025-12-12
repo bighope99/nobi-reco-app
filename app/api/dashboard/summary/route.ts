@@ -47,12 +47,13 @@ export async function GET(request: NextRequest) {
           m_classes (
             id,
             name,
-            grade
+            age_group
           )
         )
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', 'enrolled')
+      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     if (class_id) {
@@ -94,7 +95,26 @@ export async function GET(request: NextRequest) {
       .is('deleted_at', null);
 
     // データ整形
-    const attendanceList = childrenData.map((child: any) => {
+    type AttendanceListItem = {
+      child_id: string;
+      name: string;
+      kana: string;
+      class_id: string | null;
+      class_name: string;
+      age_group: string;
+      photo_url: string | null;
+      status: 'checked_in' | 'checked_out' | 'absent';
+      is_scheduled_today: boolean;
+      scheduled_start_time: string | null;
+      scheduled_end_time: string | null;
+      actual_in_time: string | null;
+      actual_out_time: string | null;
+      guardian_phone: string;
+      last_record_date: string | null;
+      weekly_record_count: number;
+    };
+
+    const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
@@ -120,7 +140,7 @@ export async function GET(request: NextRequest) {
         kana: `${child.family_name_kana} ${child.given_name_kana}`,
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
-        grade: classInfo?.grade || '',
+        age_group: classInfo?.age_group || '',
         photo_url: child.photo_url,
         status,
         is_scheduled_today: !!dailyAttendance,
@@ -158,7 +178,7 @@ export async function GET(request: NextRequest) {
         name: c.name,
         kana: c.kana,
         class_name: c.class_name,
-        grade: c.grade,
+        age_group: c.age_group,
         scheduled_end_time: c.scheduled_end_time,
         actual_in_time: c.actual_in_time,
         minutes_overdue: getMinutesDiff(currentTime, c.scheduled_end_time || ''),
@@ -175,7 +195,7 @@ export async function GET(request: NextRequest) {
         name: c.name,
         kana: c.kana,
         class_name: c.class_name,
-        grade: c.grade,
+        age_group: c.age_group,
         scheduled_start_time: c.scheduled_start_time,
         minutes_late: getMinutesDiff(currentTime, c.scheduled_start_time || ''),
         guardian_phone: c.guardian_phone,
@@ -188,7 +208,7 @@ export async function GET(request: NextRequest) {
         name: c.name,
         kana: c.kana,
         class_name: c.class_name,
-        grade: c.grade,
+        age_group: c.age_group,
         actual_in_time: c.actual_in_time,
       }));
 

@@ -5,7 +5,7 @@ import { getUserSession } from '@/lib/auth/session';
 // GET /api/children/:id - 子ども詳細取得
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -22,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
-    const child_id = params.id;
+    const { id: child_id } = await params;
 
     // 子ども情報取得
     const { data: childData, error: childError } = await supabase
@@ -35,7 +35,7 @@ export async function GET(
           m_classes (
             id,
             name,
-            grade
+            age_group
           )
         )
       `)
@@ -87,7 +87,7 @@ export async function GET(
           withdrawal_date: childData.withdrawal_date,
           class_id: classInfo?.id || null,
           class_name: classInfo?.name || '',
-          grade: classInfo?.grade || '',
+          age_group: classInfo?.age_group || '',
         },
         contact: {
           parent_phone: childData.parent_phone,
@@ -121,7 +121,7 @@ export async function GET(
 // PUT /api/children/:id - 子ども情報更新
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -138,7 +138,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
-    const child_id = params.id;
+    const { id: child_id } = await params;
     const body = await request.json();
     const { basic_info, affiliation, contact, care_info, permissions } = body;
 
@@ -244,7 +244,7 @@ export async function PUT(
 // DELETE /api/children/:id - 子ども削除（論理削除）
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -261,7 +261,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
-    const child_id = params.id;
+    const { id: child_id } = await params;
 
     // 論理削除
     const { error: deleteError } = await supabase

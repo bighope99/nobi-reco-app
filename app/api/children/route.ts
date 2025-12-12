@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
           m_classes (
             id,
             name,
-            grade
+            age_group
           )
         )
       `)
@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
           _child_class!inner (
             m_classes (
               name,
-              grade
+              age_group
             )
           )
         )
@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
           return {
             child_id: siblingInfo?.id,
             name: `${siblingInfo?.family_name} ${siblingInfo?.given_name}`,
-            grade: siblingClass?.grade || '',
+            age_group: siblingClass?.age_group || '',
             relationship: s.relationship,
           };
         });
@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
         gender: child.gender,
         birth_date: child.birth_date,
         age,
-        grade: classInfo?.grade || '',
+        age_group: classInfo?.age_group || '',
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         photo_url: child.photo_url,

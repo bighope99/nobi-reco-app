@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
           m_classes (
             id,
             name,
-            grade
+            age_group
           )
         ),
         s_attendance_schedule (
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
         kana: `${child.family_name_kana} ${child.given_name_kana}`,
         class_id: classData?.id || null,
         class_name: classData?.name || '',
-        grade: classData?.grade || '',
+        age_group: classData?.age_group || '',
         photo_url: child.photo_url,
         status,
         is_expected: isExpected,
