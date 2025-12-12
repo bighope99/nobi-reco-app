@@ -7,11 +7,11 @@ import { createClient } from '@/utils/supabase/server';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { facility_id: string } }
+  { params }: { params: Promise<{ facility_id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const facilityId = params.facility_id;
+    const { facility_id: facilityId } = await params;
 
     // 認証チェック
     const {
@@ -38,16 +38,6 @@ export async function GET(
         postal_code,
         phone,
         email,
-        fax,
-        website,
-        logo_url,
-        director_name,
-        capacity,
-        established_date,
-        license_number,
-        opening_time,
-        closing_time,
-        business_days,
         created_at,
         updated_at,
         m_companies (
@@ -142,18 +132,10 @@ export async function GET(
         postal_code: facility.postal_code,
         phone: facility.phone,
         email: facility.email,
-        fax: facility.fax,
-        website: facility.website,
-        logo_url: facility.logo_url,
-        director_name: facility.director_name,
-        capacity: facility.capacity,
-        established_date: facility.established_date,
-        license_number: facility.license_number,
-        opening_time: facility.opening_time,
-        closing_time: facility.closing_time,
-        business_days: facility.business_days,
         company_id: facility.company_id,
-        company_name: facility.m_companies?.name,
+        company_name: Array.isArray(facility.m_companies)
+          ? facility.m_companies[0]?.name
+          : (facility.m_companies as any)?.name,
         current_children_count: childrenCount || 0,
         current_staff_count: staffCount || 0,
         current_classes_count: classesCount || 0,
@@ -180,11 +162,11 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { facility_id: string } }
+  { params }: { params: Promise<{ facility_id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const facilityId = params.facility_id;
+    const { facility_id: facilityId } = await params;
 
     // 認証チェック
     const {
@@ -274,13 +256,6 @@ export async function PUT(
         postal_code: body.postal_code,
         phone: body.phone,
         email: body.email,
-        fax: body.fax,
-        website: body.website,
-        director_name: body.director_name,
-        capacity: body.capacity,
-        opening_time: body.opening_time,
-        closing_time: body.closing_time,
-        business_days: body.business_days,
         updated_at: new Date().toISOString(),
       })
       .eq('id', facilityId)

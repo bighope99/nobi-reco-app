@@ -24,10 +24,6 @@ interface Facility {
   phone: string;
   email?: string;
   postal_code?: string;
-  fax?: string;
-  website?: string;
-  director_name?: string;
-  capacity?: number;
   company_name?: string;
   current_children_count?: number;
   current_staff_count?: number;
@@ -129,10 +125,6 @@ export default function FacilityDetailPage() {
           phone: facility.phone,
           email: facility.email || null,
           postal_code: facility.postal_code || null,
-          fax: facility.fax || null,
-          website: facility.website || null,
-          director_name: facility.director_name || null,
-          capacity: facility.capacity || null,
         }),
       });
 
@@ -247,28 +239,11 @@ export default function FacilityDetailPage() {
                   />
                 </FieldGroup>
 
-                <FieldGroup label="施設長名">
-                  <Input
-                    value={facility.director_name || ''}
-                    onChange={(e: any) => setFacility({ ...facility, director_name: e.target.value })}
-                    placeholder="例: 山田 太郎"
-                  />
-                </FieldGroup>
-
                 <FieldGroup label="郵便番号">
                   <Input
                     value={facility.postal_code || ''}
                     onChange={(e: any) => setFacility({ ...facility, postal_code: e.target.value })}
                     placeholder="150-0001"
-                  />
-                </FieldGroup>
-
-                <FieldGroup label="定員">
-                  <Input
-                    type="number"
-                    value={facility.capacity || ''}
-                    onChange={(e: any) => setFacility({ ...facility, capacity: parseInt(e.target.value) || undefined })}
-                    placeholder="120"
                   />
                 </FieldGroup>
               </div>
@@ -293,15 +268,6 @@ export default function FacilityDetailPage() {
                   />
                 </FieldGroup>
 
-                <FieldGroup label="FAX番号">
-                  <Input
-                    type="tel"
-                    value={facility.fax || ''}
-                    onChange={(e: any) => setFacility({ ...facility, fax: e.target.value })}
-                    placeholder="03-1234-5679"
-                  />
-                </FieldGroup>
-
                 <FieldGroup label="メールアドレス">
                   <Input
                     icon={Mail}
@@ -309,15 +275,6 @@ export default function FacilityDetailPage() {
                     value={facility.email || ''}
                     onChange={(e: any) => setFacility({ ...facility, email: e.target.value })}
                     placeholder="info@example.com"
-                  />
-                </FieldGroup>
-
-                <FieldGroup label="ウェブサイト">
-                  <Input
-                    type="url"
-                    value={facility.website || ''}
-                    onChange={(e: any) => setFacility({ ...facility, website: e.target.value })}
-                    placeholder="https://example.com"
                   />
                 </FieldGroup>
               </div>
