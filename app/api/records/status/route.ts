@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
           m_classes (
             id,
             name,
-            grade
+            age_group
           )
         )
       `)
@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
         kana: `${child.family_name_kana} ${child.given_name_kana}`,
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
-        grade: classInfo?.grade || '',
+        age_group: classInfo?.age_group || '',
         photo_url: child.photo_url,
         last_record_date: lastRecordDate,
         is_recorded_today: isRecordedToday,

@@ -28,7 +28,7 @@ interface APIChild {
     kana: string;
     gender: 'male' | 'female';
     birth_date: string;
-    grade: string;
+    age_group: string;
     class_id: string | null;
     class_name: string;
     enrollment_status: EnrollmentStatus;
@@ -73,7 +73,7 @@ interface Student {
     kana: string;
     gender: 'male' | 'female';
     birthDate: string;
-    grade: string;
+    age_group: string;
     gradeOrder: number;
     className: string;
     parentName: string;
@@ -93,9 +93,9 @@ type SortOrder = 'asc' | 'desc';
 // --- Helper Functions ---
 
 const convertAPIChildToStudent = (apiChild: APIChild): Student => {
-    // Extract grade order from grade string (e.g., "1年生" -> 1)
-    const gradeMatch = apiChild.grade.match(/(\d+)/);
-    const gradeOrder = gradeMatch ? parseInt(gradeMatch[1]) : 0;
+    // age_groupは文字列なので、ソート用に数値化を試みる（例: "1-2歳" -> 1）
+    const ageGroupMatch = apiChild.age_group?.match(/(\d+)/);
+    const gradeOrder = ageGroupMatch ? parseInt(ageGroupMatch[1]) : 0;
 
     // Map enrollment_status to status
     const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
@@ -109,7 +109,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         kana: apiChild.kana,
         gender: apiChild.gender,
         birthDate: apiChild.birth_date,
-        grade: apiChild.grade,
+        grade: apiChild.age_group || '',
         gradeOrder,
         className: apiChild.class_name,
         parentName: apiChild.parent_name || '',
@@ -257,7 +257,10 @@ export default function StudentList() {
                     comparison = a.kana.localeCompare(b.kana);
                     break;
                 case 'grade':
-                    comparison = a.gradeOrder - b.gradeOrder;
+                    // age_groupでソート（文字列比較、数値が含まれる場合は数値順）
+                    comparison = a.gradeOrder !== b.gradeOrder 
+                        ? a.gradeOrder - b.gradeOrder 
+                        : (a.grade || '').localeCompare(b.grade || '');
                     break;
                 case 'className':
                     comparison = a.className.localeCompare(b.className);

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
           m_classes!inner (
             id,
             name,
-            grade
+            age_group
           )
         )
       `)
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         birth_date: child.birth_date,
         age,
         class_name: classInfo?.name || '',
-        grade: classInfo?.grade || '',
+        age_group: classInfo?.age_group || '',
         enrollment_status: child.enrollment_status,
         photo_url: child.photo_url,
       };

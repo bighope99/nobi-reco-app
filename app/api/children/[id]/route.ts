@@ -35,7 +35,7 @@ export async function GET(
           m_classes (
             id,
             name,
-            grade
+            age_group
           )
         )
       `)
@@ -87,7 +87,7 @@ export async function GET(
           withdrawal_date: childData.withdrawal_date,
           class_id: classInfo?.id || null,
           class_name: classInfo?.name || '',
-          grade: classInfo?.grade || '',
+          age_group: classInfo?.age_group || '',
         },
         contact: {
           parent_phone: childData.parent_phone,

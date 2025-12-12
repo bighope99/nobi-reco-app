@@ -30,7 +30,7 @@ interface ChildSchedule {
   kana: string
   class_id: string | null
   class_name: string
-  grade: string
+  age_group: string
   photo_url: string | null
   schedule: {
     monday: boolean
@@ -133,7 +133,7 @@ export default function AttendanceSchedulePage() {
           comparison = a.class_name.localeCompare(b.class_name)
           break
         case 'grade':
-          comparison = a.grade.localeCompare(b.grade)
+          comparison = (a.age_group || '').localeCompare(b.age_group || '')
           break
       }
       return sortOrder === 'asc' ? comparison : -comparison
@@ -432,7 +432,7 @@ export default function AttendanceSchedulePage() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="text-sm font-medium text-slate-700">{child.grade}</span>
+                            <span className="text-sm font-medium text-slate-700">{child.age_group || '-'}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-sm text-slate-600">{child.class_name}</span>
