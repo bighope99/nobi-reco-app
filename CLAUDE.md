@@ -31,6 +31,7 @@ Strictly adhere to the following table prefixes:
 - **Server Components**: Default to Server Components in Next.js App Router unless `use client` is required.
 - **Styling**: Use Tailwind CSS utility classes.
 - **File Structure**: Follow the existing Next.js App Router structure.
+- **Supabase Import Path**: ALWAYS use `@/utils/supabase/server` for server-side Supabase client imports in API routes. DO NOT use `@/lib/supabase/server` as it does not exist in this project.
 # Authentication & Session Management
 - **Authentication**: Use Supabase Auth for email/password authentication
 - **Session Storage**: Store UserSession data in sessionStorage after successful login

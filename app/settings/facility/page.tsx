@@ -13,39 +13,60 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 
-// Mock data (実際にはAPIから取得)
-const mockFacilities = [
-  {
-    id: '1',
-    name: 'ひまわり保育園 本園',
-    address: '東京都渋谷区〇〇町1-2-3',
-    phone: '03-1234-5678',
-    email: 'honten@himawari.example.com',
-    classCount: 5,
-    childrenCount: 45,
-    staffCount: 12
-  },
-  {
-    id: '2',
-    name: 'ひまわり保育園 分園',
-    address: '東京都渋谷区△△町4-5-6',
-    phone: '03-8765-4321',
-    email: 'bunten@himawari.example.com',
-    classCount: 3,
-    childrenCount: 28,
-    staffCount: 8
-  }
-];
+interface Facility {
+  facility_id: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  class_count: number;
+  children_count: number;
+  staff_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function FacilityListPage() {
-  const [facilities, setFacilities] = useState(mockFacilities);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredFacilities = facilities.filter(facility =>
-    facility.name.includes(searchTerm) ||
-    facility.address.includes(searchTerm)
-  );
+  // 施設一覧を取得
+  useEffect(() => {
+    fetchFacilities();
+  }, []);
+
+  const fetchFacilities = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const url = new URL('/api/facilities', window.location.origin);
+      if (searchTerm) {
+        url.searchParams.set('search', searchTerm);
+      }
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch facilities');
+      }
+
+      setFacilities(data.data.facilities);
+    } catch (err) {
+      console.error('Error fetching facilities:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 検索実行
+  const handleSearch = () => {
+    fetchFacilities();
+  };
 
   return (
     <StaffLayout title="施設管理">
@@ -79,104 +100,133 @@ export default function FacilityListPage() {
 
           {/* Search Bar */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6">
-            <div className="relative">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="施設名・住所で検索..."
-                className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="施設名・住所で検索..."
+                  className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
+              >
+                検索
+              </button>
             </div>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
           {/* Facility Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredFacilities.map((facility) => (
-              <div
-                key={facility.id}
-                className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer group"
-                onClick={() => window.location.href = `/settings/facility/${facility.id}`}
-              >
-                <div className="p-6">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div className="p-3 bg-indigo-50 rounded-lg shrink-0">
-                        <Building2 size={24} className="text-indigo-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h2 className="text-lg font-bold text-slate-800 mb-1 truncate">
-                          {facility.name}
-                        </h2>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                          <MapPin size={14} />
-                          <span className="truncate">{facility.address}</span>
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {facilities.map((facility) => (
+                <div
+                  key={facility.facility_id}
+                  className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                  onClick={() => window.location.href = `/settings/facility/${facility.facility_id}`}
+                >
+                  <div className="p-6">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="p-3 bg-indigo-50 rounded-lg shrink-0">
+                          <Building2 size={24} className="text-indigo-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-lg font-bold text-slate-800 mb-1 truncate">
+                            {facility.name}
+                          </h2>
+                          <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <MapPin size={14} />
+                            <span className="truncate">{facility.address}</span>
+                          </div>
                         </div>
                       </div>
+                      <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" />
                     </div>
-                    <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" />
-                  </div>
 
-                  {/* Contact Info */}
-                  <div className="space-y-2 mb-4 pl-[52px]">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Phone size={14} className="text-slate-400" />
-                      <span>{facility.phone}</span>
+                    {/* Contact Info */}
+                    <div className="space-y-2 mb-4 pl-[52px]">
+                      <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Phone size={14} className="text-slate-400" />
+                        <span>{facility.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Mail size={14} className="text-slate-400" />
+                        <span className="truncate">{facility.email}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Mail size={14} className="text-slate-400" />
-                      <span className="truncate">{facility.email}</span>
-                    </div>
-                  </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-4 pt-4 border-t border-slate-100 pl-[52px]">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
-                        <Users size={14} className="text-blue-600" />
+                    {/* Stats */}
+                    <div className="flex items-center gap-4 pt-4 border-t border-slate-100 pl-[52px]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                          <Users size={14} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">クラス</p>
+                          <p className="text-sm font-bold text-slate-800">{facility.class_count}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-500">クラス</p>
-                        <p className="text-sm font-bold text-slate-800">{facility.classCount}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                          <Users size={14} className="text-emerald-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">児童数</p>
+                          <p className="text-sm font-bold text-slate-800">{facility.children_count}名</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <Users size={14} className="text-emerald-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500">児童数</p>
-                        <p className="text-sm font-bold text-slate-800">{facility.childrenCount}名</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center">
-                        <Users size={14} className="text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500">職員数</p>
-                        <p className="text-sm font-bold text-slate-800">{facility.staffCount}名</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center">
+                          <Users size={14} className="text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">職員数</p>
+                          <p className="text-sm font-bold text-slate-800">{facility.staff_count}名</p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Empty State */}
-          {filteredFacilities.length === 0 && (
+          {!loading && facilities.length === 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
               <Building2 size={48} className="mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500 mb-4">該当する施設が見つかりませんでした</p>
-              <button
-                className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
-                onClick={() => setSearchTerm('')}
-              >
-                検索をクリア
-              </button>
+              <p className="text-slate-500 mb-4">
+                {searchTerm ? '該当する施設が見つかりませんでした' : '施設が登録されていません'}
+              </p>
+              {searchTerm && (
+                <button
+                  className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+                  onClick={() => {
+                    setSearchTerm('');
+                    fetchFacilities();
+                  }}
+                >
+                  検索をクリア
+                </button>
+              )}
             </div>
           )}
         </div>

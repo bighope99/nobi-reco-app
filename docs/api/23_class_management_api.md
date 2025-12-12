@@ -12,7 +12,15 @@
 
 **エンドポイント**: `GET /api/classes`
 
-**説明**: 施設内のクラス一覧を取得します。
+**説明**: クラス一覧を取得します。権限に応じてアクセス可能な施設のクラスを返します。
+
+**リクエストパラメータ**:
+```typescript
+{
+  facility_id?: string;  // 施設フィルター（任意）
+  search?: string;       // 検索キーワード（クラス名・担任名）
+}
+```
 
 **レスポンス** (成功):
 ```typescript
@@ -23,10 +31,13 @@
       {
         "class_id": "uuid-class-1",
         "name": "ひよこ組",
+        "facility_id": "uuid-facility-1",
+        "facility_name": "ひまわり保育園 本園",
         "age_group": "0歳児",
         "capacity": 12,
         "current_count": 8,
         "staff_count": 3,
+        "teachers": ["田中先生", "佐藤先生"],  // 担任リスト
         "room_number": "1-A",
         "color_code": "#FFD700",  // クラスカラー
         "is_active": true,
@@ -37,10 +48,13 @@
       {
         "class_id": "uuid-class-2",
         "name": "りす組",
+        "facility_id": "uuid-facility-1",
+        "facility_name": "ひまわり保育園 本園",
         "age_group": "1歳児",
         "capacity": 15,
         "current_count": 12,
         "staff_count": 4,
+        "teachers": ["山田先生"],
         "room_number": "1-B",
         "color_code": "#FF6B6B",
         "is_active": true,
@@ -51,10 +65,13 @@
       {
         "class_id": "uuid-class-3",
         "name": "うさぎ組",
+        "facility_id": "uuid-facility-1",
+        "facility_name": "ひまわり保育園 本園",
         "age_group": "2歳児",
         "capacity": 18,
         "current_count": 15,
         "staff_count": 4,
+        "teachers": ["鈴木先生", "高橋先生"],
         "room_number": "2-A",
         "color_code": "#4ECDC4",
         "is_active": true,
@@ -70,7 +87,10 @@
 }
 ```
 
-**備考**: `facility_id`はセッション情報（`current_facility_id`）から自動取得します。
+**備考**:
+- `facility_id`パラメータが指定されていない場合、ユーザーの権限に応じてアクセス可能な全施設のクラスを返します
+- company_adminは複数施設のクラスを取得可能
+- facility_adminとstaffは自施設のクラスのみ取得可能
 
 **権限別アクセス制御**:
 - **site_admin**: 自分の施設のみ
@@ -443,9 +463,21 @@ CREATE INDEX idx_h_class_changes_created
 ### クラス一覧取得クエリ
 
 ```sql
+WITH teacher_list AS (
+  -- 担任リストを集約
+  SELECT
+    uc.class_id,
+    array_agg(u.name ORDER BY uc.is_main DESC, u.name) as teachers
+  FROM _user_class uc
+  INNER JOIN m_users u ON uc.user_id = u.id AND u.deleted_at IS NULL
+  WHERE uc.is_current = true
+  GROUP BY uc.class_id
+)
 SELECT
   c.id as class_id,
   c.name,
+  c.facility_id,
+  f.name as facility_name,
   c.age_group,
   c.capacity,
   c.room_number,
@@ -470,13 +502,44 @@ SELECT
      AND uc.is_current = true
   ) as staff_count,
 
+  -- 担任リスト
+  COALESCE(tl.teachers, ARRAY[]::VARCHAR[]) as teachers,
+
   c.created_at,
   c.updated_at
 
 FROM m_classes c
-WHERE c.facility_id = $1  -- facility_id (from session)
-  AND c.deleted_at IS NULL
-ORDER BY c.display_order ASC, c.created_at ASC;
+INNER JOIN m_facilities f ON c.facility_id = f.id AND f.deleted_at IS NULL
+LEFT JOIN teacher_list tl ON c.id = tl.class_id
+
+WHERE
+  c.deleted_at IS NULL
+
+  -- 施設フィルタ
+  AND ($1::UUID IS NULL OR c.facility_id = $1)
+
+  -- 検索フィルタ
+  AND (
+    $2::VARCHAR IS NULL
+    OR c.name ILIKE '%' || $2 || '%'
+    OR EXISTS (
+      SELECT 1 FROM _user_class uc
+      INNER JOIN m_users u ON uc.user_id = u.id
+      WHERE uc.class_id = c.id
+        AND uc.is_current = true
+        AND u.name ILIKE '%' || $2 || '%'
+    )
+  )
+
+  -- 権限に応じたフィルタ (セッションから取得)
+  AND (
+    ($3 = 'site_admin') OR
+    ($3 = 'company_admin' AND f.company_id = $4) OR
+    ($3 = 'facility_admin' AND c.facility_id = $5) OR
+    ($3 = 'staff' AND c.facility_id = $5)
+  )
+
+ORDER BY f.name, c.display_order ASC, c.created_at ASC;
 ```
 
 ### クラス新規作成クエリ
