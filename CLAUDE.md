@@ -25,6 +25,19 @@ Strictly adhere to the following table prefixes:
 - Timestamps: `created_at`, `updated_at`, `deleted_at` (for soft deletes)
 - Booleans: `is_{state}`, `has_{attribute}`
 - Date/Time: `{action}_at` (timestamp), `{period}_date` (date only)
+# Database Schema Reference Rules
+**CRITICAL**: When writing API code or API specifications, ALWAYS verify database schema from official documentation.
+- **Single Source of Truth**: `docs/03_database.md` is the ONLY authoritative source for database schema
+- **Never Guess Column Names**: Always check `docs/03_database.md` before using any table or column name
+- **Check Additional Changes**: Review `docs/08_database_additions.md` for any schema additions or modifications
+- **Verify Before Writing**: Before writing SQL queries or Supabase calls, copy the exact table definition from docs
+- **Common Mistakes to Avoid**:
+  - ❌ `_user_facility.is_current` does NOT exist (correct: `is_primary`)
+  - ❌ `_user_class.is_main` does NOT exist (correct: `is_homeroom`)
+  - ❌ `_user_class.is_current`, `start_date`, `end_date` do NOT exist
+  - ✅ `_child_class.is_current` DOES exist (this is the only intermediate table with this column)
+- **Reference Guide**: See `docs/99_db_reference_rules.md` for detailed guidelines and examples
+
 # Coding Guidelines
 - **Functional Components**: Use React functional components with hooks.
 - **Type Safety**: Use strict TypeScript types. Avoid `any`.
