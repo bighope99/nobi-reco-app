@@ -639,9 +639,15 @@ RETURNING id, name, updated_at;
 ---
 
 **作成日**: 2025-01-09
-**最終更新**: 2025-01-09
+**最終更新**: 2025-01-12
+**更新履歴**:
+- 2025-01-12: `_user_facility`テーブルのスキーマ更新を反映
+  - 期間管理カラム（`start_date`, `end_date`, `is_current`）の追加
+  - クエリで`is_current = true`を使用して現在所属中の職員のみカウント
+
 **関連ドキュメント**:
 - `03_database.md` - データベース設計
+- `08_02_schema_updates.md` - データベーススキーマ更新（Phase 2）
 - `04_api.md` - API基本設計
 - `23_class_management_api.md` - クラス管理API
 - `24_user_management_api.md` - 職員管理API
