@@ -131,13 +131,13 @@
         "user_id": "uuid-user-1",
         "name": "田中 花子",
         "role": "facility_admin",
-        "is_main": true  // 主担任
+        "class_role": "main"  // 主担任 ('main', 'sub', 'assistant')
       },
       {
         "user_id": "uuid-user-2",
         "name": "佐藤 太郎",
         "role": "staff",
-        "is_main": false  // 副担任
+        "class_role": "sub"  // 副担任
       }
     ],
 
@@ -399,16 +399,16 @@ CREATE INDEX idx_m_classes_display_order
 ```sql
 CREATE TABLE IF NOT EXISTS _user_class (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES m_users(id),
-  class_id UUID NOT NULL REFERENCES m_classes(id),
+  user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
 
-  -- 担当区分
-  is_main BOOLEAN DEFAULT false,  -- 主担任/副担任
+  -- クラス内での役割
+  class_role VARCHAR(20),  -- 'main' (主担任) / 'sub' (副担任) / 'assistant' (補助) など
 
-  -- 期間
-  start_date DATE NOT NULL,
-  end_date DATE,
-  is_current BOOLEAN DEFAULT true,
+  -- 期間管理（担任変更時に履歴として保持）
+  start_date DATE NOT NULL,                    -- 担当開始日
+  end_date DATE,                               -- 担当終了日
+  is_current BOOLEAN NOT NULL DEFAULT true,    -- 現在担当中か
 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -422,9 +422,12 @@ CREATE INDEX idx_user_class_user
 CREATE INDEX idx_user_class_class
   ON _user_class(class_id);
 
-CREATE INDEX idx_user_class_current
+CREATE INDEX idx_user_class_is_current
   ON _user_class(user_id, is_current)
   WHERE is_current = true;
+
+CREATE INDEX idx_user_class_role
+  ON _user_class(class_role);
 ```
 
 #### 3. _child_class（子ども-クラス紐付け）
@@ -467,7 +470,15 @@ WITH teacher_list AS (
   -- 担任リストを集約
   SELECT
     uc.class_id,
-    array_agg(u.name ORDER BY uc.is_main DESC, u.name) as teachers
+    array_agg(u.name ORDER BY
+      CASE uc.class_role
+        WHEN 'main' THEN 1
+        WHEN 'sub' THEN 2
+        WHEN 'assistant' THEN 3
+        ELSE 4
+      END,
+      u.name
+    ) as teachers
   FROM _user_class uc
   INNER JOIN m_users u ON uc.user_id = u.id AND u.deleted_at IS NULL
   WHERE uc.is_current = true
@@ -728,9 +739,16 @@ WHERE class_id = $1
 ---
 
 **作成日**: 2025-01-09
-**最終更新**: 2025-01-09
+**最終更新**: 2025-01-12
+**更新履歴**:
+- 2025-01-12: `_user_class`テーブルのスキーマ更新（`is_homeroom` → `class_role`）
+  - `is_homeroom`（主担任/副担任フラグ）を削除
+  - `class_role`（'main'/'sub'/'assistant'）を追加
+  - 期間管理カラム（`start_date`, `end_date`, `is_current`）の追加を反映
+
 **関連ドキュメント**:
 - `03_database.md` - データベース設計
+- `08_02_schema_updates.md` - データベーススキーマ更新（Phase 2）
 - `04_api.md` - API基本設計
 - `22_facility_settings_api.md` - 施設情報設定API
 - `24_user_management_api.md` - 職員管理API
