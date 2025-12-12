@@ -111,7 +111,7 @@
   "data": {
     "class_id": "uuid-class-1",
     "name": "ひよこ組",
-    "age_group": "0歳児",
+    "grade": "0歳児",
     "capacity": 12,
     "current_count": 8,
     "room_number": "1-A",
@@ -177,7 +177,7 @@
 ```typescript
 {
   "name": "ぱんだ組",
-  "age_group": "3歳児",         // 0歳児 / 1歳児 / 2歳児 / 3歳児 / 4歳児 / 5歳児 / 混合
+  "grade": "3歳児",         // 0歳児 / 1歳児 / 2歳児 / 3歳児 / 4歳児 / 5歳児 / 混合
   "capacity": 20,
   "room_number": "2-B",         // 任意
   "color_code": "#9B59B6",      // 任意（HEXカラーコード）
@@ -194,7 +194,7 @@
   "data": {
     "class_id": "uuid-class-new",
     "name": "ぱんだ組",
-    "age_group": "3歳児",
+    "grade": "3歳児",
     "capacity": 20,
     "current_count": 0,
     "created_at": "2024-01-15T10:00:00+09:00"
@@ -232,7 +232,7 @@
 ```typescript
 {
   "name": "ぱんだ組（改）",
-  "age_group": "3歳児",
+  "grade": "3歳児",
   "capacity": 22,
   "room_number": "2-B",
   "color_code": "#9B59B6",
