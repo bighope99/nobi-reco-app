@@ -17,7 +17,8 @@ export interface UserSession {
         class_id: string;
         class_name: string;
         facility_id: string;
-        is_homeroom: boolean;
+        class_role: string | null;
+        is_homeroom: boolean; // 後方互換性のため保持（class_role === 'main'で計算）
     }>;
 }
 
@@ -48,7 +49,7 @@ export async function getUserSession(userId: string): Promise<UserSession | null
             return null;
         }
 
-        // 2. Fetch Facilities
+        // 2. Fetch Facilities (現在所属中の施設のみ)
         const { data: facilitiesData, error: facilitiesError } = await supabase
             .from('_user_facility')
             .select(`
@@ -58,25 +59,27 @@ export async function getUserSession(userId: string): Promise<UserSession | null
           name
         )
       `)
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .eq('is_current', true);
 
         if (facilitiesError) {
             console.error('Error fetching facilities:', facilitiesError);
             return null;
         }
 
-        // 3. Fetch Classes
+        // 3. Fetch Classes (現在担当中のクラスのみ)
         const { data: classesData, error: classesError } = await supabase
             .from('_user_class')
             .select(`
-        is_homeroom,
+        class_role,
         m_classes (
           id,
           name,
           facility_id
         )
       `)
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .eq('is_current', true);
 
         if (classesError) {
             console.error('Error fetching classes:', classesError);
@@ -84,17 +87,18 @@ export async function getUserSession(userId: string): Promise<UserSession | null
         }
 
         // Transform Data
-        const facilities = facilitiesData.map((item: any) => ({
+        const facilities: UserSession['facilities'] = facilitiesData.map((item: any) => ({
             facility_id: item.m_facilities.id,
             facility_name: item.m_facilities.name,
             is_primary: item.is_primary,
-        })).sort((a, b) => (b.is_primary === a.is_primary ? 0 : b.is_primary ? 1 : -1));
+        })).sort((a: UserSession['facilities'][0], b: UserSession['facilities'][0]) => (b.is_primary === a.is_primary ? 0 : b.is_primary ? 1 : -1));
 
         const classes = classesData.map((item: any) => ({
             class_id: item.m_classes.id,
             class_name: item.m_classes.name,
             facility_id: item.m_classes.facility_id,
-            is_homeroom: item.is_homeroom,
+            class_role: item.class_role,
+            is_homeroom: item.class_role === 'main', // 後方互換性のため計算
         }));
 
         // Determine Current Facility (Default to primary)
