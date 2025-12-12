@@ -109,20 +109,31 @@ export async function GET(
 
     const staff =
       staffAssignments?.map((sa: any) => ({
-        user_id: sa.m_users.id,
+        id: sa.m_users.id,
         name: sa.m_users.name,
         role: sa.m_users.role,
         is_main: sa.is_main,
       })) || [];
 
-    // 所属児童取得
-    const { data: children } = await supabase
-      .from('m_children')
-      .select('id, name, name_kana, birth_date, photo_url, enrollment_status')
+    // 所属児童取得（中間テーブル経由）
+    const { data: childClassAssignments } = await supabase
+      .from('_child_class')
+      .select(
+        `
+        m_children!inner (
+          id,
+          name,
+          name_kana,
+          birth_date,
+          photo_url,
+          enrollment_status
+        )
+      `
+      )
       .eq('class_id', classId)
-      .eq('enrollment_status', 'enrolled')
-      .is('deleted_at', null)
-      .order('name_kana');
+      .eq('is_current', true);
+
+    const children = childClassAssignments?.map((cc: any) => cc.m_children) || [];
 
     // 在籍児童数カウント
     const currentCount = children?.length || 0;
@@ -144,7 +155,7 @@ export async function GET(
         staff: staff,
         children:
           children?.map((child) => ({
-            child_id: child.id,
+            id: child.id,
             name: child.name,
             name_kana: child.name_kana,
             birth_date: child.birth_date,

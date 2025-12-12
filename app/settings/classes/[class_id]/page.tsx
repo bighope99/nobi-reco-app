@@ -182,7 +182,16 @@ export default function ClassDetailPage() {
       const result = await response.json();
 
       if (result.success) {
-        setAllChildren(result.data.children || []);
+        // APIレスポンスをフロントエンド用の形式に変換
+        const children = (result.data.children || []).map((child: any) => ({
+          id: child.child_id,
+          name: child.name,
+          name_kana: child.kana,
+          age: child.age,
+          birth_date: child.birth_date,
+          enrollment_status: child.enrollment_status,
+        }));
+        setAllChildren(children);
       }
     } catch (error) {
       console.error('Error fetching children:', error);
