@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // クラス一覧取得（施設に紐づくクラス）
     const { data: classesData, error: classesError } = await supabase
       .from('m_classes')
-      .select('id, name, grade, capacity')
+      .select('id, name, age_group, capacity')
       .eq('facility_id', facility_id)
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     const classes = (classesData || []).map((cls: any) => ({
       class_id: cls.id,
       class_name: cls.name,
-      age_group: cls.grade || '',
+      age_group: cls.age_group || '',
       capacity: cls.capacity || 0,
       current_count: currentCount[cls.id] || 0,
     }));
