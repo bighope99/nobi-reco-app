@@ -6,11 +6,11 @@ import { PromptTemplate } from '@langchain/core/prompts';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const child_id = params.id;
+    const { id: child_id } = await params;
 
     // 認証チェック
     const { data: { session }, error: authError } = await supabase.auth.getSession();

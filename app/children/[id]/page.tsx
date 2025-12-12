@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -49,7 +49,8 @@ interface ChildSummary {
   generated_at: string
 }
 
-export default function ChildDetailPage({ params }: { params: { id: string } }) {
+export default function ChildDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [summary, setSummary] = useState<ChildSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +61,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
         setLoading(true)
         setError(null)
 
-        const response = await fetch(`/api/children/${params.id}/summary`)
+        const response = await fetch(`/api/children/${id}/summary`)
         const result = await response.json()
 
         if (!response.ok) {
@@ -79,7 +80,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
     }
 
     fetchSummary()
-  }, [params.id])
+  }, [id])
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -132,13 +133,13 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/children/${params.id}/edit`}>
+                  <Link href={`/children/${id}/edit`}>
                     <Edit className="mr-2 h-4 w-4" />
                     編集
                   </Link>
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/children/${params.id}/summary`}>
+                  <Link href={`/children/${id}/summary`}>
                     <BarChart3 className="mr-2 h-4 w-4" />
                     成長サマリ
                   </Link>
