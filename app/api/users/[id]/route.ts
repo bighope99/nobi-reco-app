@@ -242,15 +242,16 @@ export async function DELETE(
       throw deleteError;
     }
 
-    // クラス担当を終了
-    await supabase
-      .from('_user_class')
-      .update({
-        is_current: false,
-        end_date: deletedAt.split('T')[0],
-      })
-      .eq('user_id', targetUserId)
-      .eq('is_current', true);
+    // TODO: クラス担当を終了（マイグレーション後に有効化）
+    // マイグレーション実行後、以下のコメントを解除してください:
+    // await supabase
+    //   .from('_user_class')
+    //   .update({
+    //     is_current: false,
+    //     ended_at: deletedAt.split('T')[0],
+    //   })
+    //   .eq('user_id', targetUserId)
+    //   .eq('is_current', true);
 
     return NextResponse.json({
       success: true,

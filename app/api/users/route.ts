@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       .from('_user_facility')
       .select('facility_id')
       .eq('user_id', user.id)
-      .eq('is_current', true)
+      .eq('is_primary', true)
       .single();
 
     if (!userFacility) {
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
       .from('_user_facility')
       .select('facility_id')
       .eq('user_id', user.id)
-      .eq('is_current', true)
+      .eq('is_primary', true)
       .single();
 
     if (!userFacility) {

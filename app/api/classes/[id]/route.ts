@@ -34,12 +34,10 @@ export async function GET(
         `
         id,
         name,
-        age_group,
+        grade,
+        school_year,
         capacity,
-        room_number,
-        color_code,
         is_active,
-        display_order,
         facility_id,
         m_facilities!inner (
           id,
@@ -80,7 +78,7 @@ export async function GET(
         .from('_user_facility')
         .select('facility_id')
         .eq('user_id', user.id)
-        .eq('is_current', true);
+        .eq('is_primary', true);
 
       const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
       if (!facilityIds.includes(classData.facility_id)) {
@@ -96,7 +94,7 @@ export async function GET(
       .from('_user_class')
       .select(
         `
-        is_main,
+        is_homeroom,
         m_users!inner (
           id,
           name,
@@ -104,15 +102,14 @@ export async function GET(
         )
       `
       )
-      .eq('class_id', classId)
-      .eq('is_current', true);
+      .eq('class_id', classId);
 
     const staff =
       staffAssignments?.map((sa: any) => ({
         id: sa.m_users.id,
         name: sa.m_users.name,
         role: sa.m_users.role,
-        is_main: sa.is_main,
+        is_homeroom: sa.is_homeroom,
       })) || [];
 
     // 所属児童取得（中間テーブル経由）
@@ -143,13 +140,11 @@ export async function GET(
       data: {
         class_id: classData.id,
         name: classData.name,
-        age_group: classData.age_group,
+        grade: classData.grade,
+        school_year: classData.school_year,
         capacity: classData.capacity,
         current_count: currentCount,
-        room_number: classData.room_number,
-        color_code: classData.color_code,
         is_active: classData.is_active,
-        display_order: classData.display_order,
         facility_id: classData.facility_id,
         facility_name: (classData.m_facilities as any).name,
         staff: staff,
@@ -254,7 +249,7 @@ export async function PUT(
         .from('_user_facility')
         .select('facility_id')
         .eq('user_id', user.id)
-        .eq('is_current', true);
+        .eq('is_primary', true);
 
       const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
       if (!facilityIds.includes(classData.facility_id)) {
@@ -273,11 +268,9 @@ export async function PUT(
     };
 
     if (body.name !== undefined) updateData.name = body.name;
-    if (body.age_group !== undefined) updateData.age_group = body.age_group;
+    if (body.grade !== undefined) updateData.grade = body.grade;
+    if (body.school_year !== undefined) updateData.school_year = body.school_year;
     if (body.capacity !== undefined) updateData.capacity = body.capacity;
-    if (body.room_number !== undefined) updateData.room_number = body.room_number;
-    if (body.color_code !== undefined) updateData.color_code = body.color_code;
-    if (body.display_order !== undefined) updateData.display_order = body.display_order;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
     // クラス情報更新
@@ -383,7 +376,7 @@ export async function DELETE(
         .from('_user_facility')
         .select('facility_id')
         .eq('user_id', user.id)
-        .eq('is_current', true);
+        .eq('is_primary', true);
 
       const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
       if (!facilityIds.includes(classData.facility_id)) {

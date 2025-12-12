@@ -48,12 +48,10 @@ export async function GET(request: NextRequest) {
         `
         id,
         name,
-        age_group,
+        grade,
+        school_year,
         capacity,
-        room_number,
-        color_code,
         is_active,
-        display_order,
         facility_id,
         m_facilities!inner (
           id,
@@ -83,7 +81,7 @@ export async function GET(request: NextRequest) {
         .from('_user_facility')
         .select('facility_id')
         .eq('user_id', user.id)
-        .eq('is_current', true);
+        .eq('is_primary', true);
 
       if (userFacilities && userFacilities.length > 0) {
         const facilityIds = userFacilities.map((uf) => uf.facility_id);
@@ -115,7 +113,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: classes, error: classesError } = await query.order(
-      'display_order',
+      'name',
       { ascending: true }
     );
 
@@ -137,23 +135,21 @@ export async function GET(request: NextRequest) {
         const { count: staffCount } = await supabase
           .from('_user_class')
           .select('user_id', { count: 'exact', head: true })
-          .eq('class_id', cls.id)
-          .eq('is_current', true);
+          .eq('class_id', cls.id);
 
         // 担任リスト取得
         const { data: teachers } = await supabase
           .from('_user_class')
           .select(
             `
-            is_main,
+            is_homeroom,
             m_users!inner (
               name
             )
           `
           )
           .eq('class_id', cls.id)
-          .eq('is_current', true)
-          .order('is_main', { ascending: false });
+          .order('is_homeroom', { ascending: false });
 
         const teacherNames =
           teachers?.map((t: any) => t.m_users.name) || [];
@@ -163,15 +159,13 @@ export async function GET(request: NextRequest) {
           name: cls.name,
           facility_id: cls.facility_id,
           facility_name: cls.m_facilities.name,
-          age_group: cls.age_group,
+          grade: cls.grade,
+          school_year: cls.school_year,
           capacity: cls.capacity,
           current_count: currentCount || 0,
           staff_count: staffCount || 0,
           teachers: teacherNames,
-          room_number: cls.room_number,
-          color_code: cls.color_code,
           is_active: cls.is_active,
-          display_order: cls.display_order,
           created_at: cls.created_at,
           updated_at: cls.updated_at,
         };
@@ -266,24 +260,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 必須パラメータチェック
-    if (!body.facility_id || !body.name || !body.capacity) {
+    if (!body.facility_id || !body.name || !body.capacity || !body.school_year) {
       return NextResponse.json(
         { success: false, error: 'Missing required parameters' },
         { status: 400 }
       );
     }
-
-    // display_orderの自動採番
-    const { data: maxOrder } = await supabase
-      .from('m_classes')
-      .select('display_order')
-      .eq('facility_id', body.facility_id)
-      .is('deleted_at', null)
-      .order('display_order', { ascending: false })
-      .limit(1)
-      .single();
-
-    const nextOrder = (maxOrder?.display_order || 0) + 1;
 
     // クラス作成
     const { data: newClass, error: createError } = await supabase
@@ -291,11 +273,9 @@ export async function POST(request: NextRequest) {
       .insert({
         facility_id: body.facility_id,
         name: body.name,
-        age_group: body.age_group,
+        grade: body.grade,
+        school_year: body.school_year,
         capacity: body.capacity,
-        room_number: body.room_number,
-        color_code: body.color_code || '#6366F1',
-        display_order: body.display_order || nextOrder,
         is_active: true,
       })
       .select()
@@ -310,7 +290,8 @@ export async function POST(request: NextRequest) {
       data: {
         class_id: newClass.id,
         name: newClass.name,
-        age_group: newClass.age_group,
+        grade: newClass.grade,
+        school_year: newClass.school_year,
         capacity: newClass.capacity,
         current_count: 0,
         created_at: newClass.created_at,

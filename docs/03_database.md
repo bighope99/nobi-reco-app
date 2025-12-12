@@ -680,17 +680,23 @@ CREATE TABLE IF NOT EXISTS _user_facility (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
   facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
-  is_primary BOOLEAN NOT NULL DEFAULT false,  -- 主担当施設フラグ
+  school_year INTEGER NOT NULL,                -- 年度（例: 2025）
+  is_primary BOOLEAN NOT NULL DEFAULT false,   -- 主担当施設フラグ
+  started_at DATE NOT NULL,                    -- 配属開始日
+  ended_at DATE,                               -- 配属終了日
+  is_current BOOLEAN NOT NULL DEFAULT true,    -- 現在配属中か
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
-  UNIQUE(user_id, facility_id)
+
+  UNIQUE(user_id, facility_id, school_year)
 );
 
 -- インデックス
 CREATE INDEX idx_user_facility_user_id ON _user_facility(user_id);
 CREATE INDEX idx_user_facility_facility_id ON _user_facility(facility_id);
 CREATE INDEX idx_user_facility_is_primary ON _user_facility(is_primary) WHERE is_primary = true;
+CREATE INDEX idx_user_facility_is_current ON _user_facility(is_current) WHERE is_current = true;
+CREATE INDEX idx_user_facility_school_year ON _user_facility(school_year);
 ```
 
 ---
@@ -702,17 +708,23 @@ CREATE TABLE IF NOT EXISTS _user_class (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
   class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
+  school_year INTEGER NOT NULL,                -- 年度（例: 2025）
   is_homeroom BOOLEAN NOT NULL DEFAULT false,  -- 担任フラグ
+  started_at DATE NOT NULL,                    -- 担当開始日
+  ended_at DATE,                               -- 担当終了日
+  is_current BOOLEAN NOT NULL DEFAULT true,    -- 現在担当中か
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
-  UNIQUE(user_id, class_id)
+
+  UNIQUE(user_id, class_id, school_year)
 );
 
 -- インデックス
 CREATE INDEX idx_user_class_user_id ON _user_class(user_id);
 CREATE INDEX idx_user_class_class_id ON _user_class(class_id);
 CREATE INDEX idx_user_class_is_homeroom ON _user_class(is_homeroom) WHERE is_homeroom = true;
+CREATE INDEX idx_user_class_is_current ON _user_class(is_current) WHERE is_current = true;
+CREATE INDEX idx_user_class_school_year ON _user_class(school_year);
 ```
 
 ---
