@@ -1,45 +1,65 @@
-# AGENTS — NobiReco
+# Project Context
+**Name**: Nobi-Reco (のびレコ)
+**Target**: After-school care programs (学童保育 - Gakudō Hoiku) for elementary school children
+**Description**: A SaaS application for visualizing children's growth and streamlining record-keeping in after-school care settings.
+**Goal**: Automate individual record extraction from daily activity logs using AI, visualize growth, and facilitate information sharing with parents.
 
-Use this handbook whenever you update the のびレコ child-growth recording app.
+## Important Domain Knowledge
+- **Classes are NOT grade-based**: Unlike elementary schools, after-school care classes (e.g., "Sunflower Group", "Sakura Group") are fixed and do NOT change by school year or grade level.
+- **Classes persist across years**: The same class name is used continuously, and children may move between classes within the facility.
+- **Mixed-age groups**: Classes often contain children from different grades (e.g., 1st-3rd graders in one class).
+# Technology Stack
+- **Frontend**: Next.js 15 (App Router), React 19
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4 (Vanilla CSS for complex animations if needed)
+- **UI Components**: Radix UI, Lucide React
+- **Backend**: Next.js API Routes
+- **Database**: Supabase (PostgreSQL) - Project ID: `biwqvayouhlvnumdjtjb` (stg_nobireco)
+- **Auth**: Supabase Auth / Firebase Auth (as per docs, but Supabase is primary DB)
+- **AI**: OpenAI GPT-4o-mini
+# Database & API Design Rules
 
-## Product Snapshot
-- Next.js 13 App Router + TypeScript with shadcn/ui primitives under `components/ui`.
-- Two personas: **staff/facility users** (routes under `/dashboard`, `/children`, `/records`, `/attendance`, `/settings`, `/data`) and **site administrators** (routes under `/admin/**`).
-- Mock content lives in `lib/mock-data.ts`; extend these exports when you need additional seed data.
-- The backing data platform is Supabase project `stg_nonroco`; coordinate credentials/env vars with that instance when hitting real APIs.
+## Database Schema Reference
+**CRITICAL**: ALWAYS refer to `docs/03_database.md` as the **single source of truth** for database schema when:
+- Designing new API endpoints
+- Modifying existing API implementations
+- Writing database queries
+- Creating or updating tables
+- Understanding table relationships and constraints
 
-## Implementation Guardrails
-- Wrap new staff views with `StaffLayout` and admin views with `AdminLayout` so the shared sidebar/header render correctly. Set `title`/`subtitle` props using Japanese text.
-- Favor composition with existing UI primitives (`Card`, `Button`, `Input`, `Badge`, etc.) and Tailwind utility classes already used in the repo. Avoid raw HTML buttons/inputs so theming stays consistent.
-- Maintain the routing conventions already in `app/`: list pages at `/section`, creation at `/section/new`, detail at `/section/[id]`, edit at `/section/[id]/edit`.
-- Keep copy concise and in Japanese; reuse domain terms like "児童", "記録", "出席" to maintain tone.
+The database schema in `docs/03_database.md` is the definitive specification. If you find discrepancies between the code and the documentation, the documentation should be considered correct unless explicitly stated otherwise.
 
-## Working Agreements
-- When scaffolding new features, document any project-specific rules in `.cursor/rules/` and keep this file updated.
-- Prefer lightweight mock-backed flows over dynamic data until real APIs exist; surface TODO comments if API contracts are missing.
-- Run relevant Next.js or lint commands before shipping significant UI work, and capture manual testing steps in PR summaries.
-# Agent Guidance for nobi-reco-app
-
-Use this repository in alignment with the specifications in the `docs/` folder. The rules below apply everywhere in this repo.
-
-## Delivery rules
-- Preserve the multi-tenant hierarchy (organization → facility → class) and the staff-facing web UX outlined in `docs/01_requirements.md`. Out-of-scope MVP items (guardian mobile app, billing, email delivery) must remain stubbed unless the specs change.
-- Keep user access within defined roles (system/organization/facility admins and staff). Design data filters and UI visibility to match those scopes.
-- When you open a PR, cite the specific doc sections that justify the change; explain how the work stays within spec.
-
-## Data and schema alignment
-- Reflect the database updates in `docs/03_database.md` and `docs/08_database_additions.md`: adopt `m_guardians`, `_child_guardian`, `_child_sibling`, `r_report`, `h_report_share`, and treat guardian columns in `m_children` as deprecated, not authoritative.
-- Follow the naming conventions in `docs/06_database_naming_rules.md` and avoid reintroducing single-guardian assumptions in models, migrations, or seeds.
-- API work should respect the required endpoints and versioning expectations captured in `docs/04_api.md`, `docs/07_auth_api.md`, and `docs/09_api_updates_required.md`.
-
-## Security and compliance (highest priority from `docs/00_nonfunctional_requirements_review.md`)
-- Define and enforce password policy (length/complexity, reuse bans, lockout), MFA where applicable, and explicit session/refresh token lifetimes.
-- Encrypt PII columns (children/guardians phone, email, address, allergies, health notes) with AES-256-GCM or the platform’s equivalent. Do not store or transmit plaintext PII.
-- Mask personal data before sending content to AI APIs; use pseudonyms for names and avoid leaking identifiers in logs.
-- Apply RLS policies that scope every table to the tenant, facility, and class relationships; keep policy examples from the docs in mind when adding queries.
-- Add rate limiting and WAF/CDN considerations where new network surfaces appear; avoid `dangerouslySetInnerHTML` unless there is a documented, sanitized need.
-
-## Quality and testing expectations
-- Favor Supabase client/parameterized queries over raw SQL. Do not weaken existing constraints or validation.
-- Plan automated coverage with Jest, Supertest, and Playwright; add meaningful unit/e2e coverage for new behavior and keep CI friendliness in mind.
-- Document operational hooks (logging, Sentry/Datadog APM, incident response) when adding production-facing changes to stay aligned with the reviewed nonfunctional requirements.
+# Database Naming Conventions
+Strictly adhere to the following table prefixes:
+- `m_`: Master tables (e.g., `m_companies`, `m_children`) - Basic entities, rarely deleted.
+- `r_`: Record tables (e.g., `r_activity`, `r_observation`) - Daily transactional data.
+- `s_`: Setting tables (e.g., `s_attendance_schedule`) - Configuration and patterns.
+- `h_`: History/Log tables (e.g., `h_login`, `h_attendance`) - Audit logs, append-only.
+- `_`: Intermediate tables (e.g., `_user_facility`) - Many-to-many relationships.
+- `tmp_`: Temporary tables (e.g., `tmp_import`) - Work tables.
+**Column Rules**:
+- Primary Key: `id` (UUID recommended)
+- Foreign Key: `{singular_table_name}_id` (e.g., `child_id`, not `children_id`)
+- Timestamps: `created_at`, `updated_at`, `deleted_at` (for soft deletes)
+- Booleans: `is_{state}`, `has_{attribute}`
+- Date/Time: `{action}_at` (timestamp), `{period}_date` (date only)
+# Coding Guidelines
+- **Functional Components**: Use React functional components with hooks.
+- **Type Safety**: Use strict TypeScript types. Avoid `any`.
+- **Server Components**: Default to Server Components in Next.js App Router unless `use client` is required.
+- **Styling**: Use Tailwind CSS utility classes.
+- **File Structure**: Follow the existing Next.js App Router structure.
+- **Supabase Import Path**: ALWAYS use `@/utils/supabase/server` for server-side Supabase client imports in API routes. DO NOT use `@/lib/supabase/server` as it does not exist in this project.
+# Authentication & Session Management
+- **Authentication**: Use Supabase Auth for email/password authentication
+- **Session Storage**: Store UserSession data in sessionStorage after successful login
+- **Session Structure**: Follow the UserSession interface defined in `/lib/auth/session.ts`
+  - Must include: user_id, email, name, role, company_id, company_name
+  - Must include: facilities array, current_facility_id, classes array
+- **Session API**: Use `/api/auth/session` POST endpoint to fetch full session data after Supabase auth
+- **Protected Routes**: Check Supabase session via middleware before accessing protected pages
+- **Logout**: Clear both Supabase session and sessionStorage data
+# Critical Rules
+- **Aesthetics**: Prioritize premium, modern, and dynamic designs. Use micro-animations and smooth transitions.
+- **Performance**: Ensure fast load times and responsive interactions.
+- **Security**: Implement RLS in Supabase and proper validation in API routes.
