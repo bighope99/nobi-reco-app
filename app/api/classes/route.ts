@@ -129,9 +129,11 @@ export async function GET(request: NextRequest) {
         // 在籍児童数
         const { count: currentCount } = await supabase
           .from('_child_class')
-          .select('child_id', { count: 'exact', head: true })
+          .select('child_id, m_children!inner(id)', { count: 'exact', head: true })
           .eq('class_id', cls.id)
-          .eq('is_current', true);
+          .eq('is_current', true)
+          .eq('m_children.enrollment_status', 'enrolled')
+          .is('m_children.deleted_at', null);
 
         // 担当職員数
         const { count: staffCount } = await supabase
@@ -145,7 +147,7 @@ export async function GET(request: NextRequest) {
           .from('_user_class')
           .select(
             `
-            is_main,
+            class_role,
             m_users!inner (
               name
             )
@@ -153,10 +155,27 @@ export async function GET(request: NextRequest) {
           )
           .eq('class_id', cls.id)
           .eq('is_current', true)
-          .order('is_main', { ascending: false });
+          .order('class_role');
+
+        const rolePriority: Record<string, number> = {
+          main: 1,
+          sub: 2,
+          assistant: 3,
+        };
 
         const teacherNames =
-          teachers?.map((t: any) => t.m_users.name) || [];
+          teachers
+            ?.sort((a: any, b: any) => {
+              const aPriority = rolePriority[a.class_role] || 4;
+              const bPriority = rolePriority[b.class_role] || 4;
+
+              if (aPriority !== bPriority) {
+                return aPriority - bPriority;
+              }
+
+              return (a.m_users.name || '').localeCompare(b.m_users.name || '');
+            })
+            .map((t: any) => t.m_users.name) || [];
 
         return {
           class_id: cls.id,

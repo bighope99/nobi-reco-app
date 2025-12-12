@@ -96,7 +96,7 @@ export async function GET(
       .from('_user_class')
       .select(
         `
-        is_main,
+        class_role,
         m_users!inner (
           id,
           name,
@@ -107,22 +107,53 @@ export async function GET(
       .eq('class_id', classId)
       .eq('is_current', true);
 
+    const rolePriority: Record<string, number> = {
+      main: 1,
+      sub: 2,
+      assistant: 3,
+    };
+
     const staff =
-      staffAssignments?.map((sa: any) => ({
-        user_id: sa.m_users.id,
-        name: sa.m_users.name,
-        role: sa.m_users.role,
-        is_main: sa.is_main,
-      })) || [];
+      staffAssignments
+        ?.sort((a: any, b: any) => {
+          const aPriority = rolePriority[a.class_role] || 4;
+          const bPriority = rolePriority[b.class_role] || 4;
+
+          if (aPriority !== bPriority) {
+            return aPriority - bPriority;
+          }
+
+          return (a.m_users.name || '').localeCompare(b.m_users.name || '');
+        })
+        .map((sa: any) => ({
+          user_id: sa.m_users.id,
+          name: sa.m_users.name,
+          role: sa.m_users.role,
+          class_role: sa.class_role,
+        })) || [];
 
     // 所属児童取得
     const { data: children } = await supabase
-      .from('m_children')
-      .select('id, name, name_kana, birth_date, photo_url, enrollment_status')
+      .from('_child_class')
+      .select(
+        `
+        child_id,
+        m_children!inner (
+          id,
+          name,
+          name_kana,
+          birth_date,
+          photo_url,
+          enrollment_status,
+          deleted_at
+        )
+      `
+      )
       .eq('class_id', classId)
-      .eq('enrollment_status', 'enrolled')
-      .is('deleted_at', null)
-      .order('name_kana');
+      .eq('is_current', true)
+      .eq('m_children.enrollment_status', 'enrolled')
+      .is('m_children.deleted_at', null)
+      .order('name_kana', { foreignTable: 'm_children' });
 
     // 在籍児童数カウント
     const currentCount = children?.length || 0;
@@ -143,20 +174,26 @@ export async function GET(
         facility_name: (classData.m_facilities as any).name,
         staff: staff,
         children:
-          children?.map((child) => ({
-            child_id: child.id,
-            name: child.name,
-            name_kana: child.name_kana,
-            birth_date: child.birth_date,
-            age: child.birth_date
-              ? Math.floor(
-                  (new Date().getTime() - new Date(child.birth_date).getTime()) /
-                    (365.25 * 24 * 60 * 60 * 1000)
-                )
-              : null,
-            photo_url: child.photo_url,
-            enrollment_status: child.enrollment_status,
-          })) || [],
+          children
+            ?.map((child) => {
+              const childData = (child as any).m_children;
+
+              return {
+                child_id: childData.id,
+                name: childData.name,
+                name_kana: childData.name_kana,
+                birth_date: childData.birth_date,
+                age: childData.birth_date
+                  ? Math.floor(
+                      (new Date().getTime() -
+                        new Date(childData.birth_date).getTime()) /
+                        (365.25 * 24 * 60 * 60 * 1000)
+                    )
+                  : null,
+                photo_url: childData.photo_url,
+                enrollment_status: childData.enrollment_status,
+              };
+            }) || [],
         created_at: classData.created_at,
         updated_at: classData.updated_at,
       },
