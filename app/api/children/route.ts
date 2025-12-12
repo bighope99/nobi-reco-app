@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', status)
+      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     if (class_id) {
