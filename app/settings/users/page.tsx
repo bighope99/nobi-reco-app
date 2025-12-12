@@ -25,7 +25,8 @@ interface User {
   assigned_classes?: Array<{
     class_id: string;
     class_name: string;
-    is_main: boolean;
+    class_role?: 'main' | 'sub' | 'assistant' | string;
+    is_main?: boolean;
   }>;
 }
 

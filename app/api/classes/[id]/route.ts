@@ -96,7 +96,7 @@ export async function GET(
       .from('_user_class')
       .select(
         `
-        is_main,
+        class_role,
         m_users!inner (
           id,
           name,
@@ -109,10 +109,12 @@ export async function GET(
 
     const staff =
       staffAssignments?.map((sa: any) => ({
+        id: sa.m_users.id,
         user_id: sa.m_users.id,
         name: sa.m_users.name,
         role: sa.m_users.role,
-        is_main: sa.is_main,
+        class_role: sa.class_role,
+        is_main: sa.class_role === 'main',
       })) || [];
 
     // 所属児童取得

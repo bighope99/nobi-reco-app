@@ -145,18 +145,29 @@ export async function GET(request: NextRequest) {
           .from('_user_class')
           .select(
             `
-            is_main,
+            class_role,
             m_users!inner (
               name
             )
           `
           )
           .eq('class_id', cls.id)
-          .eq('is_current', true)
-          .order('is_main', { ascending: false });
+          .eq('is_current', true);
+
+        const classRoleOrder = (role?: string | null) => {
+          if (role === 'main') return 0;
+          if (role === 'sub') return 1;
+          if (role === 'assistant') return 2;
+          return 3;
+        };
 
         const teacherNames =
-          teachers?.map((t: any) => t.m_users.name) || [];
+          teachers
+            ?.sort(
+              (a: any, b: any) =>
+                classRoleOrder(a.class_role) - classRoleOrder(b.class_role)
+            )
+            .map((t: any) => t.m_users.name) || [];
 
         return {
           class_id: cls.id,

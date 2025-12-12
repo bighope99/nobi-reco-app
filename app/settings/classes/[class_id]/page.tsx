@@ -23,6 +23,7 @@ interface Teacher {
   id: string;
   name: string;
   role?: string;
+  class_role?: 'main' | 'sub' | 'assistant' | string;
   is_main?: boolean;
 }
 
@@ -229,6 +230,7 @@ export default function ClassDetailPage() {
 
     const teacher = allTeachers.find(t => t.id === selectedTeacherId);
     if (teacher) {
+      const classRole = selectedTeacherIsMain ? 'main' : 'sub';
       setClassData({
         ...classData,
         staff: [
@@ -237,6 +239,7 @@ export default function ClassDetailPage() {
             id: teacher.id,
             name: teacher.name,
             role: teacher.role,
+            class_role: classRole,
             is_main: selectedTeacherIsMain
           }
         ]
@@ -311,6 +314,14 @@ export default function ClassDetailPage() {
         return a.name_kana.localeCompare(b.name_kana);
       }
     });
+
+  const getClassRoleBadge = (teacher: Teacher) => {
+    const role = teacher.class_role || (teacher.is_main ? 'main' : undefined);
+    if (role === 'main') return '主担任';
+    if (role === 'sub') return '副担任';
+    if (role === 'assistant') return '補助';
+    return role;
+  };
 
   if (loading) {
     return (
@@ -498,41 +509,45 @@ export default function ClassDetailPage() {
 
               {/* Teachers List */}
               <div className="space-y-3">
-                {classData.staff.map((teacher) => (
-                  <div
-                    key={teacher.id}
-                    className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-white rounded-lg border border-slate-200">
-                        <UserCheck size={20} className="text-indigo-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800">{teacher.name}</h3>
-                        <div className="flex gap-2 mt-1">
-                          {teacher.is_main && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              主担任
-                            </span>
-                          )}
-                          {teacher.role && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                              {teacher.role}
-                            </span>
-                          )}
+                {classData.staff.map((teacher) => {
+                  const classRoleBadge = getClassRoleBadge(teacher);
+
+                  return (
+                    <div
+                      key={teacher.id}
+                      className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-2 bg-white rounded-lg border border-slate-200">
+                          <UserCheck size={20} className="text-indigo-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800">{teacher.name}</h3>
+                          <div className="flex gap-2 mt-1">
+                            {classRoleBadge && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {classRoleBadge}
+                              </span>
+                            )}
+                            {teacher.role && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                                {teacher.role}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <button
-                      onClick={() => handleRemoveTeacher(teacher.id)}
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                      title="担任解除"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        onClick={() => handleRemoveTeacher(teacher.id)}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                        title="担任解除"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  );
+                })}
 
                 {classData.staff.length === 0 && (
                   <div className="text-center py-12 text-slate-400">

@@ -54,7 +54,7 @@
       "class_id": "456e7890-e89b-12d3-a456-426614174000",
       "class_name": "ひまわり組",
       "facility_id": "789e0123-e89b-12d3-a456-426614174000",
-      "is_homeroom": true
+      "class_role": "main"    // 'main' | 'sub' | 'assistant'
     }
   ]
 }
@@ -151,7 +151,8 @@ interface UserSession {
     class_id: string;
     class_name: string;
     facility_id: string;        // どの施設のクラスか
-    is_homeroom: boolean;       // 担任か
+    class_role: 'main' | 'sub' | 'assistant' | string | null; // クラス内役割
+    is_homeroom?: boolean;      // 後方互換: class_role === 'main' で計算
   }>;
 }
 ```
@@ -322,6 +323,9 @@ CREATE TABLE _user_facility (
   user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
   facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
   is_primary BOOLEAN NOT NULL DEFAULT false,
+  is_current BOOLEAN NOT NULL DEFAULT true,
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  end_date DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, facility_id)
@@ -334,10 +338,13 @@ CREATE TABLE _user_class (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
   class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
-  is_homeroom BOOLEAN NOT NULL DEFAULT false,
+  class_role VARCHAR(20),  -- 'main' / 'sub' / 'assistant' など
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  end_date DATE,
+  is_current BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, class_id)
+  UNIQUE(user_id, class_id, start_date)
 );
 ```
 

@@ -66,7 +66,8 @@ interface UserSession {
     class_id: string;
     class_name: string;
     facility_id: string;        // どの施設のクラスか
-    is_homeroom: boolean;       // 担任か
+    class_role: 'main' | 'sub' | 'assistant' | string | null; // クラス内役割
+    is_homeroom?: boolean;      // 後方互換: class_role === 'main' で計算
   }>;
 }
 ```
