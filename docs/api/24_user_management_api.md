@@ -45,7 +45,7 @@
           {
             "class_id": "uuid-class-1",
             "class_name": "ひよこ組",
-            "is_main": true  // 主担任
+            "is_homeroom": true  // 担任
           }
         ],
 
@@ -76,12 +76,12 @@
           {
             "class_id": "uuid-class-1",
             "class_name": "ひよこ組",
-            "is_main": false  // 副担任
+            "is_homeroom": false  // 副担任
           },
           {
             "class_id": "uuid-class-2",
             "class_name": "りす組",
-            "is_main": false
+            "is_homeroom": false
           }
         ],
 
@@ -158,23 +158,12 @@
       ]
     },
 
-    // 担当クラス（履歴含む）
+    // 担当クラス
     "class_assignments": [
       {
         "class_id": "uuid-class-1",
         "class_name": "ひよこ組",
-        "is_main": true,
-        "start_date": "2024-04-01",
-        "end_date": null,
-        "is_current": true
-      },
-      {
-        "class_id": "uuid-class-old",
-        "class_name": "うさぎ組",
-        "is_main": true,
-        "start_date": "2023-04-01",
-        "end_date": "2024-03-31",
-        "is_current": false
+        "is_homeroom": true
       }
     ],
 
@@ -246,8 +235,7 @@
   "assigned_classes": [
     {
       "class_id": "uuid-class-2",
-      "is_main": true,
-      "start_date": "2024-04-01"
+      "is_homeroom": true
     }
   ],
 
@@ -322,8 +310,7 @@
   "assigned_classes": [
     {
       "class_id": "uuid-class-2",
-      "is_main": true,
-      "start_date": "2024-04-01"
+      "is_homeroom": true
     }
   ]
 }
@@ -569,34 +556,34 @@ CREATE INDEX idx_m_users_supabase
 ```sql
 CREATE TABLE IF NOT EXISTS _user_facility (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES m_users(id),
-  facility_id UUID NOT NULL REFERENCES m_facilities(id),
-
-  -- 期間
-  start_date DATE NOT NULL,
-  end_date DATE,
-  is_current BOOLEAN DEFAULT true,
-
+  user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
+  is_primary BOOLEAN NOT NULL DEFAULT false,  -- 主担当施設フラグ
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-  UNIQUE (user_id, facility_id, start_date)
+  UNIQUE(user_id, facility_id)
 );
 
-CREATE INDEX idx_user_facility_user
-  ON _user_facility(user_id);
-
-CREATE INDEX idx_user_facility_facility
-  ON _user_facility(facility_id);
-
-CREATE INDEX idx_user_facility_current
-  ON _user_facility(user_id, is_current)
-  WHERE is_current = true;
+-- インデックス
+CREATE INDEX idx_user_facility_user_id ON _user_facility(user_id);
+CREATE INDEX idx_user_facility_facility_id ON _user_facility(facility_id);
+CREATE INDEX idx_user_facility_is_primary ON _user_facility(is_primary) WHERE is_primary = true;
 ```
 
 #### 3. _user_class（職員-クラス紐付け）
 ```sql
--- 既に23_class_management_api.mdで定義済み
+-- docs/03_database.md および docs/api/23_class_management_api.md を参照
+CREATE TABLE IF NOT EXISTS _user_class (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
+  is_homeroom BOOLEAN NOT NULL DEFAULT false,  -- 担任フラグ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  UNIQUE(user_id, class_id)
+);
 ```
 
 #### 4. h_user_changes（ユーザー変更履歴）
@@ -637,13 +624,12 @@ WITH user_classes AS (
       json_build_object(
         'class_id', c.id,
         'class_name', c.name,
-        'is_main', uc.is_main
+        'is_homeroom', uc.is_homeroom
       )
-      ORDER BY c.display_order
-    ) FILTER (WHERE uc.is_current = true) as classes
+      ORDER BY c.name
+    ) as classes
   FROM _user_class uc
   INNER JOIN m_classes c ON uc.class_id = c.id AND c.deleted_at IS NULL
-  WHERE uc.is_current = true
   GROUP BY uc.user_id
 )
 SELECT
@@ -666,10 +652,11 @@ SELECT
   u.updated_at
 
 FROM m_users u
-INNER JOIN _user_facility uf ON u.id = uf.user_id AND uf.is_current = true
+INNER JOIN _user_facility uf ON u.id = uf.user_id
 LEFT JOIN user_classes uc ON u.id = uc.user_id
 
 WHERE uf.facility_id = $1  -- facility_id (from session)
+  AND uf.is_primary = true  -- 主担当施設のみ
   AND u.deleted_at IS NULL
 
   -- フィルター
@@ -726,12 +713,10 @@ RETURNING id;
 INSERT INTO _user_facility (
   user_id,
   facility_id,
-  start_date,
-  is_current
+  is_primary
 ) VALUES (
   $12, -- user_id (from step 1)
   $13, -- facility_id (from session)
-  $14, -- start_date (hire_date)
   true
 );
 
@@ -739,16 +724,12 @@ INSERT INTO _user_facility (
 INSERT INTO _user_class (
   user_id,
   class_id,
-  is_main,
-  start_date,
-  is_current
+  is_homeroom
 )
 SELECT
   $12,  -- user_id
   class_assignment->>'class_id',
-  (class_assignment->>'is_main')::BOOLEAN,
-  (class_assignment->>'start_date')::DATE,
-  true
+  (class_assignment->>'is_homeroom')::BOOLEAN
 FROM json_array_elements($15::json) AS class_assignment
 WHERE $15 IS NOT NULL;
 

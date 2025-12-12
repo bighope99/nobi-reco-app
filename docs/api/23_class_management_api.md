@@ -131,13 +131,13 @@
         "user_id": "uuid-user-1",
         "name": "田中 花子",
         "role": "facility_admin",
-        "is_main": true  // 主担任
+        "is_homeroom": true  // 担任
       },
       {
         "user_id": "uuid-user-2",
         "name": "佐藤 太郎",
         "role": "staff",
-        "is_main": false  // 副担任
+        "is_homeroom": false  // 副担任
       }
     ],
 
@@ -367,64 +367,39 @@
 ```sql
 CREATE TABLE IF NOT EXISTS m_classes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  facility_id UUID NOT NULL REFERENCES m_facilities(id),
-
-  -- 基本情報
-  name VARCHAR(50) NOT NULL,
-  age_group VARCHAR(20),         -- 0歳児 / 1歳児 / 2歳児 / 3歳児 / 4歳児 / 5歳児 / 混合
-  capacity INTEGER NOT NULL,
-  room_number VARCHAR(20),
-  color_code VARCHAR(7),          -- HEXカラーコード (#RRGGBB)
-  is_active BOOLEAN DEFAULT true,
-  display_order INTEGER,
-
-  -- タイムスタンプ
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,                  -- クラス名（例: ひまわり組）
+  grade VARCHAR(50),                           -- 学年（例: 年長、小1）
+  school_year INTEGER NOT NULL,                -- 年度（例: 2025）
+  capacity INTEGER,                            -- 定員
+  is_active BOOLEAN NOT NULL DEFAULT true,     -- 有効/無効
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  deleted_at TIMESTAMP WITH TIME ZONE,
-
-  UNIQUE(facility_id, name) WHERE deleted_at IS NULL
+  deleted_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX idx_m_classes_facility
-  ON m_classes(facility_id)
-  WHERE deleted_at IS NULL;
-
-CREATE INDEX idx_m_classes_display_order
-  ON m_classes(facility_id, display_order)
-  WHERE deleted_at IS NULL;
+-- インデックス
+CREATE INDEX idx_classes_facility_id ON m_classes(facility_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_classes_school_year ON m_classes(school_year) WHERE deleted_at IS NULL;
 ```
 
 #### 2. _user_class（職員-クラス紐付け）
 ```sql
 CREATE TABLE IF NOT EXISTS _user_class (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES m_users(id),
-  class_id UUID NOT NULL REFERENCES m_classes(id),
-
-  -- 担当区分
-  is_main BOOLEAN DEFAULT false,  -- 主担任/副担任
-
-  -- 期間
-  start_date DATE NOT NULL,
-  end_date DATE,
-  is_current BOOLEAN DEFAULT true,
-
+  user_id UUID NOT NULL REFERENCES m_users(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES m_classes(id) ON DELETE CASCADE,
+  is_homeroom BOOLEAN NOT NULL DEFAULT false,  -- 担任フラグ
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-  UNIQUE (user_id, class_id, start_date)
+  UNIQUE(user_id, class_id)
 );
 
-CREATE INDEX idx_user_class_user
-  ON _user_class(user_id);
-
-CREATE INDEX idx_user_class_class
-  ON _user_class(class_id);
-
-CREATE INDEX idx_user_class_current
-  ON _user_class(user_id, is_current)
-  WHERE is_current = true;
+-- インデックス
+CREATE INDEX idx_user_class_user_id ON _user_class(user_id);
+CREATE INDEX idx_user_class_class_id ON _user_class(class_id);
+CREATE INDEX idx_user_class_is_homeroom ON _user_class(is_homeroom) WHERE is_homeroom = true;
 ```
 
 #### 3. _child_class（子ども-クラス紐付け）
@@ -467,10 +442,9 @@ WITH teacher_list AS (
   -- 担任リストを集約
   SELECT
     uc.class_id,
-    array_agg(u.name ORDER BY uc.is_main DESC, u.name) as teachers
+    array_agg(u.name ORDER BY uc.is_homeroom DESC, u.name) as teachers
   FROM _user_class uc
   INNER JOIN m_users u ON uc.user_id = u.id AND u.deleted_at IS NULL
-  WHERE uc.is_current = true
   GROUP BY uc.class_id
 )
 SELECT
@@ -499,7 +473,6 @@ SELECT
   (SELECT COUNT(*)
    FROM _user_class uc
    WHERE uc.class_id = c.id
-     AND uc.is_current = true
   ) as staff_count,
 
   -- 担任リスト
@@ -526,7 +499,6 @@ WHERE
       SELECT 1 FROM _user_class uc
       INNER JOIN m_users u ON uc.user_id = u.id
       WHERE uc.class_id = c.id
-        AND uc.is_current = true
         AND u.name ILIKE '%' || $2 || '%'
     )
   )
@@ -592,11 +564,9 @@ SET deleted_at = NOW(), updated_at = NOW()
 WHERE id = $1
   AND deleted_at IS NULL;
 
--- 担当職員の紐付けを解除
-UPDATE _user_class
-SET is_current = false, end_date = CURRENT_DATE, updated_at = NOW()
-WHERE class_id = $1
-  AND is_current = true;
+-- 担当職員の紐付けを解除（物理削除）
+DELETE FROM _user_class
+WHERE class_id = $1;
 ```
 
 ---
