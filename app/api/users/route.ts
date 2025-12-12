@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     // 施設フィルター
     query = query.eq('_user_facility.facility_id', userFacility.facility_id);
-    query = query.eq('_user_facility.is_current', true);
+    query = query.eq('_user_facility.is_primary', true);
 
     // ロールフィルター
     if (roleFilter) {
@@ -123,21 +123,20 @@ export async function GET(request: NextRequest) {
           .from('_user_class')
           .select(
             `
-            is_main,
+            is_homeroom,
             m_classes!inner (
               id,
               name
             )
           `
           )
-          .eq('user_id', u.id)
-          .eq('is_current', true);
+          .eq('user_id', u.id);
 
         const assignedClasses =
           classAssignments?.map((ca: any) => ({
             class_id: ca.m_classes.id,
             class_name: ca.m_classes.name,
-            is_main: ca.is_main,
+            is_homeroom: ca.is_homeroom,
           })) || [];
 
         return {
@@ -305,8 +304,7 @@ export async function POST(request: NextRequest) {
     await supabase.from('_user_facility').insert({
       user_id: newUser.id,
       facility_id: userFacility.facility_id,
-      start_date: newUser.hire_date,
-      is_current: true,
+      is_primary: true,
     });
 
     // クラス担当設定（任意）
@@ -314,9 +312,7 @@ export async function POST(request: NextRequest) {
       const classAssignments = body.assigned_classes.map((assignment: any) => ({
         user_id: newUser.id,
         class_id: assignment.class_id,
-        is_main: assignment.is_main || false,
-        start_date: assignment.start_date || newUser.hire_date,
-        is_current: true,
+        is_homeroom: assignment.is_homeroom || false,
       }));
 
       await supabase.from('_user_class').insert(classAssignments);

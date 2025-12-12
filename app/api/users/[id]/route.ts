@@ -114,24 +114,18 @@ export async function PUT(
 
     // クラス担当更新（管理者のみ）
     if (body.assigned_classes && !isStaff) {
-      // 既存の担当を終了
+      // 既存の担当を削除
       await supabase
         .from('_user_class')
-        .update({
-          is_current: false,
-          end_date: new Date().toISOString().split('T')[0],
-        })
-        .eq('user_id', targetUserId)
-        .eq('is_current', true);
+        .delete()
+        .eq('user_id', targetUserId);
 
       // 新しい担当を追加
       if (body.assigned_classes.length > 0) {
         const classAssignments = body.assigned_classes.map((assignment: any) => ({
           user_id: targetUserId,
           class_id: assignment.class_id,
-          is_main: assignment.is_main || false,
-          start_date: assignment.start_date || new Date().toISOString().split('T')[0],
-          is_current: true,
+          is_homeroom: assignment.is_homeroom || false,
         }));
 
         await supabase.from('_user_class').insert(classAssignments);
