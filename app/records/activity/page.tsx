@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 
 interface Activity {
   activity_id: string
@@ -15,8 +14,6 @@ interface Activity {
   class_name: string
   created_by: string
   created_at: string
-  is_draft: boolean
-  status: string
   individual_record_count: number
 }
 
@@ -101,11 +98,6 @@ export default function ActivityRecordPage() {
                           <span className="text-sm font-medium text-muted-foreground">
                             {activity.class_name}
                           </span>
-                          {activity.is_draft && (
-                            <Badge variant="outline" className="bg-yellow-50 border-yellow-300 text-yellow-700">
-                              下書き
-                            </Badge>
-                          )}
                         </div>
                         <h3 className="font-semibold text-lg mb-1">{activity.title}</h3>
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-2">

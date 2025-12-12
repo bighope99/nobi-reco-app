@@ -46,8 +46,6 @@ export async function GET(request: NextRequest) {
         content,
         snack,
         photos,
-        is_draft,
-        status,
         created_at,
         updated_at,
         m_classes!inner (
@@ -114,8 +112,6 @@ export async function GET(request: NextRequest) {
       class_name: activity.m_classes?.name || '',
       created_by: activity.m_users?.name || '',
       created_at: activity.created_at,
-      is_draft: activity.is_draft || false,
-      status: activity.status || 'draft',
       individual_record_count: observationCounts[activity.id] || 0,
     }));
 
@@ -161,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     const facility_id = userSession.current_facility_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, child_ids, is_draft } = body;
+    const { activity_date, class_id, title, content, snack, child_ids } = body;
 
     if (!activity_date || !class_id || !content) {
       return NextResponse.json(
@@ -180,8 +176,6 @@ export async function POST(request: NextRequest) {
         title: title || '活動記録',
         content,
         snack,
-        is_draft: is_draft || false,
-        status: is_draft ? 'draft' : 'published',
         created_by: session.user.id,
       })
       .select()
@@ -250,7 +244,6 @@ export async function POST(request: NextRequest) {
         activity_date: activity.activity_date,
         title: activity.title,
         content: activity.content,
-        is_draft: activity.is_draft,
         observations_created: observations.length,
         observations,
       },

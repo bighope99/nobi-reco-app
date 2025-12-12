@@ -32,6 +32,21 @@ Use this repository in alignment with the specifications in the `docs/` folder. 
 - Follow the naming conventions in `docs/06_database_naming_rules.md` and avoid reintroducing single-guardian assumptions in models, migrations, or seeds.
 - API work should respect the required endpoints and versioning expectations captured in `docs/04_api.md`, `docs/07_auth_api.md`, and `docs/09_api_updates_required.md`.
 
+## Database schema changes (CRITICAL)
+- **NEVER add, modify, or remove database columns, tables, or indexes without explicit user approval.**
+- Before making any schema changes:
+  1. Identify the necessity and business justification for the change
+  2. Present the proposed change to the user for approval
+  3. Only after receiving explicit approval, proceed with:
+     - Creating migration files in `supabase/migrations/`
+     - Updating `docs/03_database.md` to reflect the schema change
+     - Updating any affected code
+- If code references a column that doesn't exist in the schema, **do not add the column automatically**. Instead:
+  1. Remove the code reference to the non-existent column
+  2. Inform the user about the mismatch
+  3. Propose the schema change and wait for approval
+- Schema changes affect data integrity, migrations, and documentation - they require careful consideration and approval.
+
 ## Security and compliance (highest priority from `docs/00_nonfunctional_requirements_review.md`)
 - Define and enforce password policy (length/complexity, reuse bans, lockout), MFA where applicable, and explicit session/refresh token lifetimes.
 - Encrypt PII columns (children/guardians phone, email, address, allergies, health notes) with AES-256-GCM or the platform’s equivalent. Do not store or transmit plaintext PII.
