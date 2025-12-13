@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/server';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -25,7 +25,7 @@ export async function GET(
       );
     }
 
-    const { id: classId } = params;
+    const { id: classId } = await params;
 
     // クラス基本情報取得
     const { data: classData, error: classError } = await supabase
@@ -96,7 +96,7 @@ export async function GET(
       .from('_user_class')
       .select(
         `
-        is_main,
+        class_role,
         m_users!inner (
           id,
           name,
@@ -112,7 +112,7 @@ export async function GET(
         user_id: sa.m_users.id,
         name: sa.m_users.name,
         role: sa.m_users.role,
-        is_main: sa.is_main,
+        class_role: sa.class_role,
       })) || [];
 
     // 所属児童取得
@@ -150,9 +150,9 @@ export async function GET(
             birth_date: child.birth_date,
             age: child.birth_date
               ? Math.floor(
-                  (new Date().getTime() - new Date(child.birth_date).getTime()) /
-                    (365.25 * 24 * 60 * 60 * 1000)
-                )
+                (new Date().getTime() - new Date(child.birth_date).getTime()) /
+                (365.25 * 24 * 60 * 60 * 1000)
+              )
               : null,
             photo_url: child.photo_url,
             enrollment_status: child.enrollment_status,
@@ -180,7 +180,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -220,7 +220,7 @@ export async function PUT(
       );
     }
 
-    const { id: classId } = params;
+    const { id: classId } = await params;
 
     // クラスの存在確認
     const { data: classData, error: classError } = await supabase
@@ -309,7 +309,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -349,7 +349,7 @@ export async function DELETE(
       );
     }
 
-    const { id: classId } = params;
+    const { id: classId } = await params;
 
     // クラスの存在確認
     const { data: classData, error: classError } = await supabase

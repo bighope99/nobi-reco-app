@@ -38,8 +38,14 @@ export async function GET(request: NextRequest) {
 
     // リクエストパラメータ取得
     const searchParams = request.nextUrl.searchParams;
-    const facilityId = searchParams.get('facility_id');
+    const facilityIdParam = searchParams.get('facility_id');
     const search = searchParams.get('search') || '';
+
+    // facility_idのバリデーション（nullまたは"undefined"を除外）
+    const facilityId =
+      facilityIdParam && facilityIdParam !== 'undefined'
+        ? facilityIdParam
+        : null;
 
     // クラス一覧取得クエリ
     let query = supabase
@@ -72,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 権限に応じたフィルタ
-    if (userData.role === 'company_admin') {
+    if (userData.role === 'company_admin' && userData.company_id) {
       query = query.eq('m_facilities.company_id', userData.company_id);
     } else if (
       userData.role === 'facility_admin' ||
@@ -145,7 +151,7 @@ export async function GET(request: NextRequest) {
           .from('_user_class')
           .select(
             `
-            is_main,
+            class_role,
             m_users!inner (
               name
             )
@@ -153,7 +159,7 @@ export async function GET(request: NextRequest) {
           )
           .eq('class_id', cls.id)
           .eq('is_current', true)
-          .order('is_main', { ascending: false });
+          .order('class_role', { ascending: true });
 
         const teacherNames =
           teachers?.map((t: any) => t.m_users.name) || [];
@@ -266,7 +272,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 必須パラメータチェック
-    if (!body.facility_id || !body.name || !body.capacity) {
+    if (
+      !body.facility_id ||
+      body.facility_id === 'undefined' ||
+      !body.name ||
+      !body.capacity
+    ) {
       return NextResponse.json(
         { success: false, error: 'Missing required parameters' },
         { status: 400 }
