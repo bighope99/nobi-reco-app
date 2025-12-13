@@ -109,7 +109,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         kana: apiChild.kana,
         gender: apiChild.gender,
         birthDate: apiChild.birth_date,
-        grade: apiChild.age_group || '',
+        age_group: apiChild.age_group || '',
         gradeOrder,
         className: apiChild.class_name,
         parentName: apiChild.parent_name || '',
@@ -258,9 +258,9 @@ export default function StudentList() {
                     break;
                 case 'grade':
                     // age_groupでソート（文字列比較、数値が含まれる場合は数値順）
-                    comparison = a.gradeOrder !== b.gradeOrder 
-                        ? a.gradeOrder - b.gradeOrder 
-                        : (a.grade || '').localeCompare(b.grade || '');
+                    comparison = a.gradeOrder !== b.gradeOrder
+                        ? a.gradeOrder - b.gradeOrder
+                        : (a.age_group || '').localeCompare(b.age_group || '');
                     break;
                 case 'className':
                     comparison = a.className.localeCompare(b.className);
@@ -412,196 +412,196 @@ export default function StudentList() {
                         ) : (
                             <div className="overflow-x-auto" >
                                 <table className="w-full text-left border-collapse lg:min-w-[1100px]" >
-                                <thead className="bg-gray-50 border-b border-gray-100" >
-                                    <tr>
-                                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12 text-center" >
-                                            状態
-                                        </th>
-                                        <th
-                                            className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                            onClick={() => handleSort('name')}
-                                        >
-                                            <div className="flex items-center gap-1" >
-                                                児童名
-                                                <SortIcon columnKey="name" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                            onClick={() => handleSort('grade')}
-                                        >
-                                            <div className="flex items-center gap-1" >
-                                                学年
-                                                <SortIcon columnKey="grade" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-36 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                            onClick={() => handleSort('className')}
-                                        >
-                                            <div className="flex items-center gap-1" >
-                                                クラス
-                                                <SortIcon columnKey="className" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-28 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                            onClick={() => handleSort('contractType')}
-                                        >
-                                            <div className="flex items-center gap-1" >
-                                                契約
-                                                <SortIcon columnKey="contractType" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                            onClick={() => handleSort('siblings')}
-                                        >
-                                            <div className="flex items-center gap-1" >
-                                                兄弟
-                                                <SortIcon columnKey="siblings" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                            onClick={() => handleSort('allergy')}
-                                        >
-                                            <div className="flex items-center gap-1" >
-                                                アレルギー
-                                                <SortIcon columnKey="allergy" />
-                                            </div>
-                                        </th>
-                                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48" > 保護者連絡先 </th>
-                                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12" > </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100" >
-                                    {
-                                        processedStudents.map((student) => (
-                                            <tr
-                                                key={student.id}
-                                                className={`group transition-colors cursor-pointer ${student.status === 'inactive' ? 'bg-slate-50/50' : 'hover:bg-indigo-50/30'}`}
-                                                onClick={() => window.location.href = `/children/${student.id}/edit`}
+                                    <thead className="bg-gray-50 border-b border-gray-100" >
+                                        <tr>
+                                            <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12 text-center" >
+                                                状態
+                                            </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('name')}
                                             >
-                                                {/* Status Toggle */}
-                                                <td className="px-6 py-4 text-center" >
-                                                    <button
-                                                        onClick={
-                                                            (e) => {
-                                                                e.stopPropagation();
-                                                                toggleStatus(student.id, student.status);
-                                                            }
-                                                        }
-                                                        className={`p-1.5 rounded-full border transition-all ${student.status === 'active'
-                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
-                                                            : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'
-                                                            }`}
-                                                        title={student.status === 'active' ? "退所にする" : "復帰させる"}
-                                                    >
-                                                        {student.status === 'active' ? <Power size={16} /> : <RotateCcw size={16} />}
-                                                    </button>
-                                                </td>
-
-                                                {/* Name */}
-                                                <td className="px-6 py-4" >
-                                                    <div>
-                                                        <div className="flex items-center gap-2" >
-                                                            <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
-                                                                {student.name}
-                                                            </span>
-                                                            {
-                                                                student.status === 'inactive' && (
-                                                                    <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
-                                                                )
-                                                            }
-                                                        </div>
-                                                        <div className="text-xs text-slate-400 mt-0.5 font-mono" >
-                                                            {student.kana}
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                {/* Grade */}
-                                                <td className="px-6 py-4" >
-                                                    <span className="text-sm font-medium text-slate-700" > {student.grade} </span>
-                                                </td>
-
-                                                {/* Class */}
-                                                <td className="px-6 py-4" >
-                                                    <span className="text-sm text-slate-600" > {student.className} </span>
-                                                </td>
-
-                                                {/* Contract Type */}
-                                                <td className="px-6 py-4" >
-                                                    {getContractBadge(student.contractType)}
-                                                </td>
-
-                                                {/* Siblings */}
-                                                <td className="px-6 py-4" >
-                                                    {
-                                                        student.siblings.length > 0 ? (
-                                                            <div className="flex items-center gap-1 text-sm text-slate-600" >
-                                                                <Users size={14} className="text-indigo-400" />
-                                                                <span className="truncate" title={student.siblings.join(', ')} >
-                                                                    {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-slate-300 text-sm" > -</span>
-                                                        )}
-                                                </td>
-
-                                                {/* Allergy (Max 2 lines) */}
-                                                <td className="px-6 py-4" >
-                                                    {
-                                                        student.hasAllergy ? (
-                                                            <div
-                                                                className="text-sm text-rose-600 font-medium leading-tight line-clamp-2"
-                                                                title={student.allergyDetail}
-                                                            >
-                                                                {student.allergyDetail || 'あり'}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-slate-300 text-sm" > -</span>
-                                                        )}
-                                                </td>
-
-                                                {/* Parent Contact */}
-                                                <td className="px-6 py-4" >
-                                                    <div className="flex items-center gap-3" >
+                                                <div className="flex items-center gap-1" >
+                                                    児童名
+                                                    <SortIcon columnKey="name" />
+                                                </div>
+                                            </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('grade')}
+                                            >
+                                                <div className="flex items-center gap-1" >
+                                                    学年
+                                                    <SortIcon columnKey="grade" />
+                                                </div>
+                                            </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-36 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('className')}
+                                            >
+                                                <div className="flex items-center gap-1" >
+                                                    クラス
+                                                    <SortIcon columnKey="className" />
+                                                </div>
+                                            </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-28 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('contractType')}
+                                            >
+                                                <div className="flex items-center gap-1" >
+                                                    契約
+                                                    <SortIcon columnKey="contractType" />
+                                                </div>
+                                            </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('siblings')}
+                                            >
+                                                <div className="flex items-center gap-1" >
+                                                    兄弟
+                                                    <SortIcon columnKey="siblings" />
+                                                </div>
+                                            </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('allergy')}
+                                            >
+                                                <div className="flex items-center gap-1" >
+                                                    アレルギー
+                                                    <SortIcon columnKey="allergy" />
+                                                </div>
+                                            </th>
+                                            <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48" > 保護者連絡先 </th>
+                                            <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12" > </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100" >
+                                        {
+                                            processedStudents.map((student) => (
+                                                <tr
+                                                    key={student.id}
+                                                    className={`group transition-colors cursor-pointer ${student.status === 'inactive' ? 'bg-slate-50/50' : 'hover:bg-indigo-50/30'}`}
+                                                    onClick={() => window.location.href = `/children/${student.id}/edit`}
+                                                >
+                                                    {/* Status Toggle */}
+                                                    <td className="px-6 py-4 text-center" >
                                                         <button
-                                                            className="p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                alert(`発信: ${student.parentPhone}`);
-                                                            }}
+                                                            onClick={
+                                                                (e) => {
+                                                                    e.stopPropagation();
+                                                                    toggleStatus(student.id, student.status);
+                                                                }
+                                                            }
+                                                            className={`p-1.5 rounded-full border transition-all ${student.status === 'active'
+                                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
+                                                                : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'
+                                                                }`}
+                                                            title={student.status === 'active' ? "退所にする" : "復帰させる"}
                                                         >
-                                                            <Phone size={14} />
+                                                            {student.status === 'active' ? <Power size={16} /> : <RotateCcw size={16} />}
                                                         </button>
-                                                        <div className="text-sm truncate" >
-                                                            <div className="font-medium text-slate-700" > {student.parentName} </div>
-                                                            <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
+                                                    </td>
+
+                                                    {/* Name */}
+                                                    <td className="px-6 py-4" >
+                                                        <div>
+                                                            <div className="flex items-center gap-2" >
+                                                                <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
+                                                                    {student.name}
+                                                                </span>
+                                                                {
+                                                                    student.status === 'inactive' && (
+                                                                        <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
+                                                                    )
+                                                                }
+                                                            </div>
+                                                            <div className="text-xs text-slate-400 mt-0.5 font-mono" >
+                                                                {student.kana}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </td>
+                                                    </td>
 
-                                                {/* Action */}
-                                                <td className="px-6 py-4 text-right" >
-                                                    <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
-                                                </td>
-                                            </tr>
-                                        ))}
-                                </tbody>
-                            </table>
+                                                    {/* Grade */}
+                                                    <td className="px-6 py-4" >
+                                                        <span className="text-sm font-medium text-slate-700" > {student.age_group} </span>
+                                                    </td>
 
-                            {
-                                processedStudents.length === 0 && !loading && (
-                                    <div className="p-12 text-center text-slate-400" >
-                                        <p>該当する児童は見つかりませんでした </p>
-                                    </div>
-                                )
-                            }
-                        </div>
+                                                    {/* Class */}
+                                                    <td className="px-6 py-4" >
+                                                        <span className="text-sm text-slate-600" > {student.className} </span>
+                                                    </td>
+
+                                                    {/* Contract Type */}
+                                                    <td className="px-6 py-4" >
+                                                        {getContractBadge(student.contractType)}
+                                                    </td>
+
+                                                    {/* Siblings */}
+                                                    <td className="px-6 py-4" >
+                                                        {
+                                                            student.siblings.length > 0 ? (
+                                                                <div className="flex items-center gap-1 text-sm text-slate-600" >
+                                                                    <Users size={14} className="text-indigo-400" />
+                                                                    <span className="truncate" title={student.siblings.join(', ')} >
+                                                                        {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-sm" > -</span>
+                                                            )}
+                                                    </td>
+
+                                                    {/* Allergy (Max 2 lines) */}
+                                                    <td className="px-6 py-4" >
+                                                        {
+                                                            student.hasAllergy ? (
+                                                                <div
+                                                                    className="text-sm text-rose-600 font-medium leading-tight line-clamp-2"
+                                                                    title={student.allergyDetail}
+                                                                >
+                                                                    {student.allergyDetail || 'あり'}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-sm" > -</span>
+                                                            )}
+                                                    </td>
+
+                                                    {/* Parent Contact */}
+                                                    <td className="px-6 py-4" >
+                                                        <div className="flex items-center gap-3" >
+                                                            <button
+                                                                className="p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    alert(`発信: ${student.parentPhone}`);
+                                                                }}
+                                                            >
+                                                                <Phone size={14} />
+                                                            </button>
+                                                            <div className="text-sm truncate" >
+                                                                <div className="font-medium text-slate-700" > {student.parentName} </div>
+                                                                <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Action */}
+                                                    <td className="px-6 py-4 text-right" >
+                                                        <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+
+                                {
+                                    processedStudents.length === 0 && !loading && (
+                                        <div className="p-12 text-center text-slate-400" >
+                                            <p>該当する児童は見つかりませんでした </p>
+                                        </div>
+                                    )
+                                }
+                            </div>
                         )}
                     </div>
 
