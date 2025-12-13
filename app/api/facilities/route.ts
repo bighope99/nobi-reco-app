@@ -64,12 +64,11 @@ export async function GET(request: NextRequest) {
       userData.role === 'facility_admin' ||
       userData.role === 'staff'
     ) {
-      // 自分が所属する施設のみ
+      // 自分が所属する全施設を取得（設定ページでは権限によるフィルタリングは後ほど実装）
       const { data: userFacilities } = await supabase
         .from('_user_facility')
         .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
+        .eq('user_id', user.id);
 
       if (userFacilities && userFacilities.length > 0) {
         const facilityIds = userFacilities.map((uf) => uf.facility_id);
