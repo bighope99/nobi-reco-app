@@ -133,9 +133,7 @@ export async function GET(
         phone: facility.phone,
         email: facility.email,
         company_id: facility.company_id,
-        company_name: Array.isArray(facility.m_companies)
-          ? facility.m_companies[0]?.name
-          : (facility.m_companies as any)?.name,
+        company_name: facility.m_companies?.name,
         current_children_count: childrenCount || 0,
         current_staff_count: staffCount || 0,
         current_classes_count: classesCount || 0,
