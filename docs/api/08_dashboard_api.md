@@ -18,6 +18,8 @@
 {
   date?: string;        // 対象日（省略時は本日）YYYY-MM-DD
   class_id?: string;    // クラスフィルター（省略時は全クラス）
+  school_id?: string;   // 学校フィルター（省略時は全学校）
+  grade?: string;       // 学年フィルター（'1'～'6'、省略時は全学年）
 }
 ```
 
@@ -51,7 +53,7 @@
           "name": "田中 陽翔",
           "kana": "たなか はると",
           "class_name": "ひまわり組",
-          "grade": "6年生",
+          "grade": 6,
           "scheduled_end_time": "09:00",
           "actual_in_time": "07:55",
           "minutes_overdue": 45,        // 超過分数
@@ -66,7 +68,7 @@
           "name": "中村 拓海",
           "kana": "なかむら たくみ",
           "class_name": "ひまわり組",
-          "grade": "5年生",
+          "grade": 5,
           "scheduled_start_time": "08:30",
           "minutes_late": 45,           // 遅延分数
           "guardian_phone": "090-9999-0000"
@@ -80,7 +82,7 @@
           "name": "鈴木 さくら",
           "kana": "すずき さくら",
           "class_name": "さくら組",
-          "grade": "4年生",
+          "grade": 4,
           "actual_in_time": "08:30"
         }
       ]
@@ -94,7 +96,8 @@
         "kana": "たなか はると",
         "class_id": "uuid-class-1",
         "class_name": "ひまわり組",
-        "grade": "6年生",
+        "school_id": "uuid-school-1",
+        "grade": 6,
         "photo_url": "https://...",
 
         // ステータス
@@ -144,7 +147,18 @@
           "class_id": "uuid-class-2",
           "class_name": "さくら組"
         }
-      ]
+      ],
+      "schools": [
+        {
+          "school_id": "uuid-school-1",
+          "school_name": "第一小学校"
+        },
+        {
+          "school_id": "uuid-school-2",
+          "school_name": "第二小学校"
+        }
+      ],
+      "grades": [1, 2, 3, 4, 5, 6]
     }
   }
 }
@@ -293,7 +307,47 @@
 
 ### 使用テーブル
 
-#### 1. r_daily_attendance（日次出席予定）
+#### 1. m_children（子どもマスタ）- 拡張が必要
+```sql
+-- 既存のテーブル構造に以下を追加
+ALTER TABLE m_children 
+ADD COLUMN school_id UUID REFERENCES m_schools(id),
+ADD COLUMN grade_add INTEGER DEFAULT 0; -- 学年調整値（±2年程度）
+
+-- 学年計算用PostgreSQL関数
+CREATE OR REPLACE FUNCTION calculate_grade(birth_date DATE, grade_add INTEGER DEFAULT 0)
+RETURNS INTEGER AS $$
+BEGIN
+  -- 4月1日基準で学年計算（小学校1年生を基準）
+  RETURN CASE
+    WHEN EXTRACT(MONTH FROM birth_date) >= 4 THEN
+      -- 4月以降生まれ：現在年 - 生年 - 6 + 1
+      EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birth_date) - 6 + 1
+    ELSE
+      -- 1-3月生まれ：現在年 - 生年 - 6
+      EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birth_date) - 6
+  END + COALESCE(grade_add, 0);
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**重要なカラム**:
+- `school_id`: 所属学校（フィルタリング用）
+- `birth_date`: 生年月日（学年計算用）
+- `grade_add`: 学年調整値（特殊事情での±1年以上の調整）
+- `parent_phone`: 保護者電話番号（アラート表示用）
+
+#### 2. m_schools（学校マスタ）
+```sql
+-- 既存のテーブル構造（03_database.mdを参照）
+-- 追加カラムは不要
+```
+
+**重要なカラム**:
+- `id`: 学校ID（子どもテーブルから参照）
+- `name`: 学校名（フィルター表示用）
+
+#### 3. r_daily_attendance（日次出席予定）
 ```sql
 -- 既存のテーブル構造（03_database.mdを参照）
 -- 追加カラムは不要
@@ -304,7 +358,7 @@
 - `status`: `scheduled` | `absent` | `irregular`
 - `note`: 欠席理由など
 
-#### 2. h_attendance（出欠実績ログ）
+#### 4. h_attendance（出欠実績ログ）
 ```sql
 -- 既存のテーブル構造（03_database.mdを参照）
 -- 追加カラムは不要
@@ -315,22 +369,13 @@
 - `checked_out_at`: チェックアウト日時
 - `check_in_method`: `qr` | `manual`
 
-#### 3. m_children（子どもマスタ）
-```sql
--- 既存のテーブル構造（03_database.mdを参照）
--- 追加カラムは不要
-```
-
-**重要なカラム**:
-- `parent_phone`: 保護者電話番号（アラート表示用）
-
-#### 4. r_observation（観察記録）
+#### 5. r_observation（観察記録）
 ```sql
 -- 既存のテーブル構造（03_database.mdを参照）
 -- 記録サポート候補の判定に使用
 ```
 
-#### 5. s_attendance_schedule（曜日通所設定）
+#### 6. s_attendance_schedule（曜日通所設定）
 ```sql
 -- 既存のテーブル構造（03_database.mdを参照）
 -- 出席予定の自動生成に使用
@@ -343,14 +388,16 @@
 ### ダッシュボードサマリー取得クエリ
 
 ```sql
--- 1. 出席リスト取得
+-- 1. 出席リスト取得（学校・学年フィルター対応）
 SELECT
   c.id as child_id,
   c.family_name || ' ' || c.given_name as name,
   c.family_name_kana || ' ' || c.given_name_kana as kana,
   cl.id as class_id,
   cl.name as class_name,
-  cl.grade,
+  c.school_id,
+  -- 学年計算（生年月日 + grade_add調整値から自動計算）
+  calculate_grade(c.birth_date, c.grade_add) as grade,
   c.photo_url,
   c.parent_phone as guardian_phone,
 
@@ -397,6 +444,12 @@ WHERE c.facility_id = $1  -- facility_id
   AND c.enrollment_status = 'enrolled'
   AND c.deleted_at IS NULL
   AND cl.deleted_at IS NULL
+  -- 学校フィルター
+  AND ($2::UUID IS NULL OR c.school_id = $2)
+  -- 学年フィルター（計算結果と比較）
+  AND ($3::INTEGER IS NULL OR calculate_grade(c.birth_date, c.grade_add) = $3)
+  -- クラスフィルター（既存）
+  AND ($4::UUID IS NULL OR cl.id = $4)
 
 ORDER BY
   -- アラート優先順位
@@ -429,7 +482,16 @@ ORDER BY
 ```sql
 -- 既存のインデックス（03_database.mdを参照）で十分対応可能
 
--- 追加推奨インデックス（パフォーマンス改善用）
+-- 追加推奨インデックス（学校・学年フィルター対応）
+CREATE INDEX idx_m_children_school_id
+  ON m_children(school_id)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX idx_m_children_birth_grade_add
+  ON m_children(birth_date, grade_add)
+  WHERE deleted_at IS NULL;
+
+-- 既存の追加推奨インデックス（パフォーマンス改善用）
 CREATE INDEX idx_r_observation_child_date
   ON r_observation(child_id, observation_date DESC)
   WHERE deleted_at IS NULL;
@@ -505,8 +567,45 @@ CREATE INDEX idx_h_attendance_child_date_in
 
 ---
 
+## 実装要件
+
+### データベーススキーマ拡張の前提条件
+
+**実装前に必要な作業**:
+1. `m_children`テーブルに`school_id`カラム追加
+2. `m_children`テーブルに`grade_add`カラム追加
+3. `calculate_grade()`PostgreSQL関数の作成
+4. 既存データの学校紐づけ作業
+5. 子ども登録画面での学校・学年調整値設定機能
+
+### 実装の優先順位
+
+**Phase 1**: データベース拡張
+- [x] スキーマ設計完了
+- [ ] マイグレーションスクリプト作成
+- [ ] `calculate_grade()`関数実装
+- [ ] インデックス追加
+
+**Phase 2**: API実装
+- [ ] ダッシュボードAPI拡張（学校・学年フィルター対応）
+- [ ] レスポンス構造変更（`school_name`削除、`grade`を数値化）
+- [ ] フィルター用データ提供（schools、grades配列）
+
+**Phase 3**: フロントエンド対応
+- [ ] フィルターUI追加（学校・学年選択）
+- [ ] 子ども登録・編集画面の拡張
+
+### 注意事項
+
+1. **後方互換性**: `grade`が文字列から数値に変更されるため、フロントエンドの修正が必要
+2. **データ移行**: 既存の子どもデータに学校情報を紐づける作業が必要
+3. **学年計算ロジック**: 4月1日基準の日本の学校制度に準拠
+4. **特殊ケース対応**: `grade_add`フィールドで留年・飛び級などに対応
+
+---
+
 **作成日**: 2025-01-09
-**最終更新**: 2025-01-09
+**最終更新**: 2025-12-13（学校・学年フィルター対応）
 **関連ドキュメント**:
 - `03_database.md` - データベース設計
 - `04_api.md` - API基本設計

@@ -59,6 +59,45 @@
     - 活動記録の写真
     - レポートPDF
 
+### 2.4 PostgreSQL関数
+
+#### 学年計算関数（`calculate_grade`）
+
+```sql
+CREATE OR REPLACE FUNCTION calculate_grade(birth_date DATE, grade_add INTEGER DEFAULT 0)
+RETURNS INTEGER AS $$
+BEGIN
+  -- 4月1日基準で学年計算（小学校1年生を基準）
+  RETURN CASE
+    WHEN EXTRACT(MONTH FROM birth_date) >= 4 THEN
+      -- 4月以降生まれ：現在年 - 生年 - 6 + 1
+      EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birth_date) - 6 + 1
+    ELSE
+      -- 1-3月生まれ：現在年 - 生年 - 6
+      EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birth_date) - 6
+  END + COALESCE(grade_add, 0);
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**説明**:
+- 生年月日から自動的に現在の学年（1-6年生）を計算
+- 日本の学校制度に準拠（4月1日基準）
+- `grade_add`で留年・飛び級などの特殊ケースに対応
+- ダッシュボードの学年フィルタリングで使用
+
+**使用例**:
+```sql
+-- 2015年5月生まれの子どもの学年を取得
+SELECT calculate_grade('2015-05-01'::DATE, 0);  -- 結果: 4（4年生）
+
+-- 2015年2月生まれの子どもの学年を取得
+SELECT calculate_grade('2015-02-01'::DATE, 0);  -- 結果: 5（5年生）
+
+-- 学年調整値を使用（+1年）
+SELECT calculate_grade('2015-05-01'::DATE, 1);  -- 結果: 5（5年生）
+```
+
 ---
 
 ## 3. ENUM型定義
@@ -239,7 +278,8 @@ CREATE INDEX idx_users_is_active ON m_users(is_active) WHERE deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS m_children (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   facility_id UUID NOT NULL REFERENCES m_facilities(id),  -- 所属施設
-  
+  school_id UUID REFERENCES m_schools(id),       -- 所属学校（フィルタリング用）
+
   -- 基本情報
   family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
   given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
@@ -248,6 +288,7 @@ CREATE TABLE IF NOT EXISTS m_children (
   nickname VARCHAR(50),                          -- 呼び名・略称
   gender gender_type,                            -- 性別
   birth_date DATE NOT NULL,                      -- 生年月日
+  grade_add INTEGER DEFAULT 0,                   -- 学年調整値（±2年程度、留年・飛び級対応）
   
   -- 写真・画像
   photo_url TEXT,                                -- 顔写真URL（Supabase Storage）
@@ -290,8 +331,12 @@ CREATE INDEX idx_children_enrollment_status ON m_children(enrollment_status) WHE
 CREATE INDEX idx_children_birth_date ON m_children(birth_date);
 CREATE INDEX idx_children_sibling_id ON m_children(sibling_id) WHERE sibling_id IS NOT NULL;
 
+-- 学校・学年フィルター用インデックス
+CREATE INDEX idx_children_school_id ON m_children(school_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_children_birth_grade_add ON m_children(birth_date, grade_add) WHERE deleted_at IS NULL;
+
 -- フルテキスト検索用インデックス（名前検索）
-CREATE INDEX idx_children_name_search ON m_children 
+CREATE INDEX idx_children_name_search ON m_children
   USING gin(to_tsvector('japanese', family_name || ' ' || given_name || ' ' || COALESCE(nickname, '')));
 ```
 
@@ -1035,8 +1080,29 @@ CREATE POLICY facility_access ON r_activity
 
 **詳細**: `docs/08_02_schema_updates.md` 参照
 
+### ダッシュボード機能拡張（2025年12月13日）
+
+#### `m_children`テーブルの変更
+- **追加**: `school_id UUID REFERENCES m_schools(id)` - 所属学校の紐づけ
+- **追加**: `grade_add INTEGER DEFAULT 0` - 学年調整値（留年・飛び級対応）
+- **理由**: ダッシュボードで学校・学年フィルタリング機能を実装するため
+
+#### PostgreSQL関数の追加
+- **追加**: `calculate_grade(birth_date, grade_add)` - 学年自動計算関数
+- **理由**:
+  - 生年月日から現在の学年を自動計算
+  - 日本の学校制度（4月1日基準）に準拠
+  - フィルタリング・ソート処理で使用
+
+#### インデックスの追加
+- **追加**: `idx_children_school_id` - 学校フィルター用
+- **追加**: `idx_children_birth_grade_add` - 学年計算・フィルター用
+- **理由**: ダッシュボードのフィルタリング性能を最適化
+
+**詳細**: `docs/api/08_dashboard_api.md` 参照
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2025年1月12日（Phase 2 スキーマ更新）
+**最終更新**: 2025年12月13日（ダッシュボード機能拡張）
 **管理者**: プロジェクトリーダー
