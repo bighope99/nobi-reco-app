@@ -125,20 +125,80 @@ export default function ChildcareDashboard() {
 
   // 登園処理
   const handleCheckIn = async (childId: string) => {
-    // TODO: API実装
-    alert(`登園処理: ${childId}`);
+    try {
+      const response = await fetch('/api/attendance/manual-checkin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ child_id: childId }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Refresh dashboard data to reflect changes
+        await fetchDashboardData();
+        alert(`✅ ${result.data.child_name}の登園を記録しました`);
+      } else {
+        alert(`❌ エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Check-in error:', error);
+      alert('登園処理でエラーが発生しました');
+    }
   };
 
   // 欠席処理
   const handleMarkAbsent = async (childId: string) => {
-    // TODO: API実装
-    alert(`欠席処理: ${childId}`);
+    try {
+      const response = await fetch('/api/attendance/absent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ child_id: childId }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Refresh dashboard data to reflect changes
+        await fetchDashboardData();
+        alert(`✅ ${result.data.child_name}を欠席として記録しました`);
+      } else {
+        alert(`❌ エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Mark absent error:', error);
+      alert('欠席処理でエラーが発生しました');
+    }
   };
 
   // 予定外登園の確認
   const handleConfirmUnexpected = async (childId: string) => {
-    // TODO: API実装
-    alert(`予定外登園確認: ${childId}`);
+    try {
+      const response = await fetch('/api/attendance/unexpected', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ child_id: childId }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Refresh dashboard data to reflect changes
+        await fetchDashboardData();
+        alert(`✅ ${result.data.child_name}の予定外登園を確認しました`);
+      } else {
+        alert(`❌ エラー: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Unexpected attendance error:', error);
+      alert('予定外登園確認でエラーが発生しました');
+    }
   };
 
   // --- Utility Functions ---
@@ -404,7 +464,7 @@ export default function ChildcareDashboard() {
                           </div>
                         </div>
                       </div>
-                      <button onClick={() => alert(`発信: ${child.guardian_phone}`)} className="bg-white text-rose-700 border border-rose-200 px-4 py-2 rounded-md font-bold text-sm hover:bg-rose-100 flex items-center gap-2">
+                      <button onClick={() => window.open(`tel:${child.guardian_phone}`)} className="bg-white text-rose-700 border border-rose-200 px-4 py-2 rounded-md font-bold text-sm hover:bg-rose-100 flex items-center gap-2">
                         <Phone size={16} /> 保護者へ連絡
                       </button>
                     </div>
@@ -429,7 +489,7 @@ export default function ChildcareDashboard() {
                         </div>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
-                        <button onClick={() => alert(`発信: ${child.guardian_phone}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
+                        <button onClick={() => window.open(`tel:${child.guardian_phone}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
                           <Phone size={14} /> 連絡
                         </button>
                         <button onClick={() => handleMarkAbsent(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-bold text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">
@@ -638,7 +698,7 @@ export default function ChildcareDashboard() {
                           </span>
                           <span className="text-xs text-slate-500 whitespace-nowrap">{child.class_name}</span>
                         </div>
-                        <button className="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition-all" onClick={() => console.log(`記録: ${child.name}`)}>
+                        <button className="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition-all" onClick={() => window.open(`/records/observation/${child.child_id}`, '_blank')}>
                           <ChevronRight size={18} />
                         </button>
                       </div>
