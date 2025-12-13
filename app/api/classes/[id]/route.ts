@@ -109,7 +109,7 @@ export async function GET(
 
     const staff =
       staffAssignments?.map((sa: any) => ({
-        user_id: sa.m_users.id,
+        id: sa.m_users.id,
         name: sa.m_users.name,
         role: sa.m_users.role,
         class_role: sa.class_role,
@@ -144,7 +144,7 @@ export async function GET(
         staff: staff,
         children:
           children?.map((child) => ({
-            child_id: child.id,
+            id: child.id,
             name: child.name,
             name_kana: child.name_kana,
             birth_date: child.birth_date,
