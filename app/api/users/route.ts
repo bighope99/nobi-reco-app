@@ -78,7 +78,6 @@ export async function GET(request: NextRequest) {
         phone,
         hire_date,
         is_active,
-        last_login_at,
         created_at,
         updated_at,
         _user_facility!inner (

@@ -209,6 +209,8 @@ CREATE TABLE IF NOT EXISTS m_users (
   name VARCHAR(100) NOT NULL,                  -- 氏名（漢字）
   name_kana VARCHAR(100),                      -- 氏名（カナ）
   email VARCHAR(255) NOT NULL UNIQUE,          -- メールアドレス（auth.usersと同期）
+  phone VARCHAR(20),                           -- 電話番号
+  hire_date DATE,                              -- 入社日
   role user_role NOT NULL DEFAULT 'staff',     -- 権限
   is_active BOOLEAN NOT NULL DEFAULT true,     -- 有効/無効
   is_retired BOOLEAN NOT NULL DEFAULT false,   -- 退職フラグ
