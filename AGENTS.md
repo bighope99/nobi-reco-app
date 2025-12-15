@@ -58,3 +58,20 @@ Use this repository in alignment with the specifications in the `docs/` folder. 
 - Favor Supabase client/parameterized queries over raw SQL. Do not weaken existing constraints or validation.
 - Plan automated coverage with Jest, Supertest, and Playwright; add meaningful unit/e2e coverage for new behavior and keep CI friendliness in mind.
 - Document operational hooks (logging, Sentry/Datadog APM, incident response) when adding production-facing changes to stay aligned with the reviewed nonfunctional requirements.
+
+## Next.js 15 Framework Rules
+- **Async Params in API Routes/Server Pages**: In Next.js 15, dynamic route parameters (`params`) and search parameters (`searchParams`) are asynchronous. You **MUST** await them before access.
+  ```typescript
+  // CORRECT
+  export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
+    const { id } = params;
+    // ...
+  }
+  
+  // INCORRECT
+  export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+    const { id } = params; // Error: params is a promise
+    // ...
+  }
+  ```
