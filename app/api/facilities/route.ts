@@ -57,34 +57,8 @@ export async function GET(request: NextRequest) {
       )
       .is('deleted_at', null);
 
-    // 権限に応じたフィルタ
-    if (userData.role === 'company_admin') {
-      query = query.eq('company_id', userData.company_id);
-    } else if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
-      // 自分が所属する施設のみ
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      if (userFacilities && userFacilities.length > 0) {
-        const facilityIds = userFacilities.map((uf) => uf.facility_id);
-        query = query.in('id', facilityIds);
-      } else {
-        // 所属施設がない場合は空配列
-        return NextResponse.json({
-          success: true,
-          data: {
-            facilities: [],
-            total: 0,
-          },
-        });
-      }
-    }
+    // 自分が所属している会社の全施設を取得（設定ページでは権限によるフィルタリングは後ほど実装）
+    query = query.eq('company_id', userData.company_id);
 
     // 検索フィルタ
     if (search) {
