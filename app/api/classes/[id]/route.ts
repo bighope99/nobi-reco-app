@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
+// 学年計算関数（日本の学校制度：4月1日基準）
+function calculateGrade(birthDate: string, gradeAdd: number = 0): number {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  const birthMonth = birth.getMonth() + 1; // 1-12
+  const birthYear = birth.getFullYear();
+  const currentYear = today.getFullYear();
+
+  let grade: number;
+  if (birthMonth >= 4) {
+    // 4月以降生まれ
+    grade = currentYear - birthYear - 6 + 1;
+  } else {
+    // 1-3月生まれ
+    grade = currentYear - birthYear - 6;
+  }
+
+  grade += gradeAdd;
+
+  // 1-6年生の範囲チェック
+  if (grade < 1 || grade > 6) {
+    return 0; // 範囲外の場合は0を返す
+  }
+
+  return grade;
+}
+
 /**
  * GET /api/classes/:id
  * クラス詳細取得
@@ -118,7 +145,7 @@ export async function GET(
     // 所属児童取得
     const { data: children } = await supabase
       .from('m_children')
-      .select('id, name, name_kana, birth_date, photo_url, enrollment_status')
+      .select('id, name, name_kana, birth_date, grade_add, photo_url, enrollment_status')
       .eq('class_id', classId)
       .eq('enrollment_status', 'enrolled')
       .is('deleted_at', null)
@@ -149,11 +176,8 @@ export async function GET(
             name_kana: child.name_kana,
             birth_date: child.birth_date,
             age: child.birth_date
-              ? Math.floor(
-                (new Date().getTime() - new Date(child.birth_date).getTime()) /
-                (365.25 * 24 * 60 * 60 * 1000)
-              )
-              : null,
+              ? calculateGrade(child.birth_date, child.grade_add || 0)
+              : 0,
             photo_url: child.photo_url,
             enrollment_status: child.enrollment_status,
           })) || [],

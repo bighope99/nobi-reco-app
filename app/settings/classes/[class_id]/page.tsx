@@ -621,7 +621,7 @@ export default function ClassDetailPage() {
                     className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors group"
                   >
                     <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-                      {child.age}歳
+                      {child.age > 0 ? `${child.age}年` : '-'}
                     </div>
                     <div
                       className="flex-1 cursor-pointer"
@@ -767,7 +767,7 @@ export default function ClassDetailPage() {
 
                       {/* Child Info */}
                       <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-                        {child.age}歳
+                        {child.age > 0 ? `${child.age}年` : '-'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-slate-800 text-sm">{child.name}</p>
