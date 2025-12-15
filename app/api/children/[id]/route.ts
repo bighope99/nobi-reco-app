@@ -82,9 +82,9 @@ export async function GET(
         },
         affiliation: {
           enrollment_status: childData.enrollment_status,
-          contract_type: childData.contract_type,
-          enrollment_date: childData.enrollment_date,
-          withdrawal_date: childData.withdrawal_date,
+          enrollment_type: childData.enrollment_type,
+          enrolled_at: childData.enrolled_at,
+          withdrawn_at: childData.withdrawn_at,
           class_id: classInfo?.id || null,
           class_name: classInfo?.name || '',
           age_group: classInfo?.age_group || '',
@@ -94,12 +94,13 @@ export async function GET(
           parent_email: childData.parent_email,
         },
         care_info: {
-          has_allergy: childData.has_allergy,
-          allergy_detail: childData.allergy_detail,
+          allergies: childData.allergies,
+          child_characteristics: childData.child_characteristics,
+          parent_characteristics: childData.parent_characteristics,
         },
         permissions: {
-          photo_allowed: childData.photo_allowed,
-          report_allowed: childData.report_allowed,
+          photo_permission_public: childData.photo_permission_public,
+          photo_permission_share: childData.photo_permission_share,
         },
         siblings: (siblingsData || []).map((s: any) => ({
           child_id: s.m_children.id,
@@ -172,9 +173,9 @@ export async function PUT(
 
     if (affiliation) {
       if (affiliation.enrollment_status !== undefined) updateData.enrollment_status = affiliation.enrollment_status;
-      if (affiliation.contract_type !== undefined) updateData.contract_type = affiliation.contract_type;
-      if (affiliation.enrollment_date !== undefined) updateData.enrollment_date = affiliation.enrollment_date;
-      if (affiliation.withdrawal_date !== undefined) updateData.withdrawal_date = affiliation.withdrawal_date;
+      if (affiliation.enrollment_type !== undefined) updateData.enrollment_type = affiliation.enrollment_type;
+      if (affiliation.enrolled_at !== undefined) updateData.enrolled_at = affiliation.enrolled_at;
+      if (affiliation.withdrawn_at !== undefined) updateData.withdrawn_at = affiliation.withdrawn_at;
     }
 
     if (contact) {
@@ -183,13 +184,14 @@ export async function PUT(
     }
 
     if (care_info) {
-      if (care_info.has_allergy !== undefined) updateData.has_allergy = care_info.has_allergy;
-      if (care_info.allergy_detail !== undefined) updateData.allergy_detail = care_info.allergy_detail;
+      if (care_info.allergies !== undefined) updateData.allergies = care_info.allergies;
+      if (care_info.child_characteristics !== undefined) updateData.child_characteristics = care_info.child_characteristics;
+      if (care_info.parent_characteristics !== undefined) updateData.parent_characteristics = care_info.parent_characteristics;
     }
 
     if (permissions) {
-      if (permissions.photo_allowed !== undefined) updateData.photo_allowed = permissions.photo_allowed;
-      if (permissions.report_allowed !== undefined) updateData.report_allowed = permissions.report_allowed;
+      if (permissions.photo_permission_public !== undefined) updateData.photo_permission_public = permissions.photo_permission_public;
+      if (permissions.photo_permission_share !== undefined) updateData.photo_permission_share = permissions.photo_permission_share;
     }
 
     // 子ども情報更新
