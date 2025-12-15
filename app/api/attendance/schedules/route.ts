@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 
+// 学年計算関数（日本の学校制度：4月1日基準）
+function calculateGrade(birthDate: string, gradeAdd: number = 0): string {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  const birthMonth = birth.getMonth() + 1; // 1-12
+  const birthYear = birth.getFullYear();
+  const currentYear = today.getFullYear();
+
+  let grade: number;
+  if (birthMonth >= 4) {
+    // 4月以降生まれ
+    grade = currentYear - birthYear - 6 + 1;
+  } else {
+    // 1-3月生まれ
+    grade = currentYear - birthYear - 6;
+  }
+
+  grade += gradeAdd;
+
+  // 1-6年生の範囲チェック
+  if (grade < 1 || grade > 6) {
+    return ''; // 範囲外の場合は空文字
+  }
+
+  return `${grade}年生`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -38,6 +65,8 @@ export async function GET(request: NextRequest) {
         given_name,
         family_name_kana,
         given_name_kana,
+        birth_date,
+        grade_add,
         photo_url,
         _child_class (
           class_id,
@@ -92,13 +121,16 @@ export async function GET(request: NextRequest) {
         ? child.s_attendance_schedule[0]
         : null;
 
+      // 学年計算
+      const grade = child.birth_date ? calculateGrade(child.birth_date, child.grade_add || 0) : '';
+
       return {
         child_id: child.id,
         name: `${child.family_name} ${child.given_name}`,
         kana: `${child.family_name_kana} ${child.given_name_kana}`,
         class_id: classData?.id || null,
         class_name: classData?.name || '',
-        age_group: classData?.age_group || '',
+        age_group: grade, // 学年計算結果を返す
         photo_url: child.photo_url,
         schedule: {
           monday: schedule?.monday || false,
