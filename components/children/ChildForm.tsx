@@ -138,7 +138,6 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
   const [siblingResult, setSiblingResult] = useState<any>(null);
-  const [hasAllergy, setHasAllergy] = useState(false);
   const [loading, setLoading] = useState(isEditMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,9 +161,9 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
 
     // 所属・契約
     enrollment_status: 'enrolled' as 'enrolled' | 'withdrawn' | 'suspended',
-    contract_type: 'regular' as 'regular' | 'temporary' | 'spot',
-    enrollment_date: '',
-    withdrawal_date: '',
+    enrollment_type: 'regular' as 'regular' | 'temporary' | 'spot',
+    enrolled_at: '',
+    withdrawn_at: '',
     class_id: '',
 
     // 連絡先
@@ -173,12 +172,13 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     parent_email: '',
 
     // ケア
-    has_allergy: false,
-    allergy_detail: '',
+    allergies: '',
+    child_characteristics: '',
+    parent_characteristics: '',
 
     // 権限
-    photo_allowed: true,
-    report_allowed: true,
+    photo_permission_public: true,
+    photo_permission_share: true,
   });
 
   const [emergencyContacts, setEmergencyContacts] = useState([
@@ -253,19 +253,19 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             birth_date: birthDate,
             school_id: data.basic_info?.school_id || '',
             enrollment_status: data.affiliation?.enrollment_status || 'enrolled',
-            contract_type: data.affiliation?.contract_type || 'regular',
-            enrollment_date: data.affiliation?.enrollment_date || '',
-            withdrawal_date: data.affiliation?.withdrawal_date || '',
+            enrollment_type: data.affiliation?.enrollment_type || 'regular',
+            enrolled_at: data.affiliation?.enrolled_at ? data.affiliation.enrolled_at.split('T')[0] : '',
+            withdrawn_at: data.affiliation?.withdrawn_at ? data.affiliation.withdrawn_at.split('T')[0] : '',
             class_id: data.affiliation?.class_id || '',
             parent_name: '',
             parent_phone: data.contact?.parent_phone || '',
             parent_email: data.contact?.parent_email || '',
-            has_allergy: data.care_info?.has_allergy || false,
-            allergy_detail: data.care_info?.allergy_detail || '',
-            photo_allowed: data.permissions?.photo_allowed ?? true,
-            report_allowed: data.permissions?.report_allowed ?? true,
+            allergies: data.care_info?.allergies || '',
+            child_characteristics: data.care_info?.child_characteristics || '',
+            parent_characteristics: data.care_info?.parent_characteristics || '',
+            photo_permission_public: data.permissions?.photo_permission_public ?? true,
+            photo_permission_share: data.permissions?.photo_permission_share ?? true,
           });
-          setHasAllergy(data.care_info?.has_allergy || false);
         }
       } catch (err) {
         console.error('Failed to fetch child data:', err);
@@ -362,6 +362,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       : (isEditMode ? formData.birth_date : '');
 
     // Validation
+    if (!formData.family_name || !formData.given_name || !birthDate || !formData.enrolled_at) {
+      setError('必須項目を入力してください（氏名、生年月日、入所開始日は必須です）');
     if (!formData.family_name || !formData.given_name || !birthDate || !formData.school_id || !formData.enrollment_date) {
       setError('必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）');
       return;
@@ -384,9 +386,9 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
         },
         affiliation: {
           enrollment_status: formData.enrollment_status,
-          contract_type: formData.contract_type,
-          enrollment_date: formData.enrollment_date,
-          withdrawal_date: formData.withdrawal_date || null,
+          enrollment_type: formData.enrollment_type,
+          enrolled_at: formData.enrolled_at,
+          withdrawn_at: formData.withdrawn_at || null,
           class_id: formData.class_id || null,
         },
         contact: {
@@ -394,12 +396,13 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
           parent_email: formData.parent_email,
         },
         care_info: {
-          has_allergy: formData.has_allergy,
-          allergy_detail: formData.allergy_detail,
+          allergies: formData.allergies,
+          child_characteristics: formData.child_characteristics,
+          parent_characteristics: formData.parent_characteristics,
         },
         permissions: {
-          photo_allowed: formData.photo_allowed,
-          report_allowed: formData.report_allowed,
+          photo_permission_public: formData.photo_permission_public,
+          photo_permission_share: formData.photo_permission_share,
         },
       };
 
@@ -434,10 +437,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     }
   };
 
-  // Sync hasAllergy state with formData
-  useEffect(() => {
-    setFormData(prev => ({ ...prev, has_allergy: hasAllergy }));
-  }, [hasAllergy]);
+  // Sync hasAllergy state with formData - Removed as has_allergy is no longer in formData
 
   if (loading) {
     return (
@@ -465,8 +465,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                 key={item.id}
                 href={`#${item.id}`}
                 className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${activeSection === item.id
-                    ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
                 <item.icon size={18} className={activeSection === item.id ? 'text-indigo-600' : 'text-slate-400'} />
@@ -656,8 +656,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
 
                   <FieldGroup label="契約形態" required>
                     <Select
-                      value={formData.contract_type}
-                      onChange={(e: any) => setFormData({ ...formData, contract_type: e.target.value as any })}
+                      value={formData.enrollment_type}
+                      onChange={(e: any) => setFormData({ ...formData, enrollment_type: e.target.value as any })}
                     >
                       <option value="regular">通年契約（月極）</option>
                       <option value="temporary">一時保育</option>
@@ -668,8 +668,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                   <FieldGroup label="入所開始日" required>
                     <Input
                       type="date"
-                      value={formData.enrollment_date}
-                      onChange={(e: any) => setFormData({ ...formData, enrollment_date: e.target.value })}
+                      value={formData.enrolled_at}
+                      onChange={(e: any) => setFormData({ ...formData, enrolled_at: e.target.value })}
                     />
                   </FieldGroup>
 
@@ -677,8 +677,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                     <Input
                       type="date"
                       placeholder="未定"
-                      value={formData.withdrawal_date}
-                      onChange={(e: any) => setFormData({ ...formData, withdrawal_date: e.target.value })}
+                      value={formData.withdrawn_at}
+                      onChange={(e: any) => setFormData({ ...formData, withdrawn_at: e.target.value })}
                     />
                   </FieldGroup>
 
@@ -814,52 +814,51 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                 isActive={activeSection === 'care'}
               >
                 {/* アレルギー設定 */}
-                <div className={`border rounded-lg p-5 transition-colors duration-300 ${hasAllergy ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${hasAllergy ? 'bg-orange-100 text-orange-600' : 'bg-slate-200 text-slate-500'}`}>
-                        <AlertTriangle size={20} />
-                      </div>
-                      <div>
-                        <h3 className={`text-sm font-bold ${hasAllergy ? 'text-orange-900' : 'text-slate-700'}`}>アレルギー有無</h3>
-                        <p className={`text-xs ${hasAllergy ? 'text-orange-700' : 'text-slate-500'}`}>
-                          {hasAllergy ? '除去食の対応が必要な項目を入力してください。' : 'アレルギー対応が必要な場合は有効にしてください。'}
-                        </p>
-                      </div>
+                <div className="border border-slate-200 rounded-lg p-5 bg-slate-50">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-full bg-orange-100 text-orange-600">
+                      <AlertTriangle size={20} />
                     </div>
-                    <Switch
-                      checked={hasAllergy}
-                      onChange={setHasAllergy}
-                      label={hasAllergy ? "あり" : "なし"}
-                    />
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-700">アレルギー情報</h3>
+                      <p className="text-xs text-slate-500">
+                        除去食の対応が必要な項目を入力してください。
+                      </p>
+                    </div>
                   </div>
 
-                  {hasAllergy && (
-                    <div className="mt-4 pl-0 sm:pl-14 animate-in fade-in zoom-in-95 duration-200">
-                      <FieldGroup label="詳細・除去品目" required className="mb-2">
-                        <Textarea
-                          className="border-orange-200 focus:ring-orange-500 focus:border-orange-500"
-                          placeholder="例: 卵、そば、キウイフルーツ。完全除去か微量なら可かなど詳細に記載。"
-                          value={formData.allergy_detail}
-                          onChange={(e: any) => setFormData({ ...formData, allergy_detail: e.target.value })}
-                        />
-                      </FieldGroup>
-                      <div className="flex items-start gap-2 text-orange-800 bg-orange-100/50 p-3 rounded text-xs leading-relaxed">
-                        <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                        <span>この情報は調理室および担任タブレットでハイライト表示されます。医師の診断書の提出も別途必要です。</span>
-                      </div>
+                  <div className="pl-0 sm:pl-14">
+                    <FieldGroup label="詳細・除去品目" className="mb-2">
+                      <Textarea
+                        className="border-orange-200 focus:ring-orange-500 focus:border-orange-500"
+                        placeholder="例: 卵、そば、キウイフルーツ。完全除去か微量なら可かなど詳細に記載。"
+                        value={formData.allergies}
+                        onChange={(e: any) => setFormData({ ...formData, allergies: e.target.value })}
+                      />
+                    </FieldGroup>
+                    <div className="flex items-start gap-2 text-orange-800 bg-orange-100/50 p-3 rounded text-xs leading-relaxed">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <span>この情報は調理室および担任タブレットでハイライト表示されます。医師の診断書の提出も別途必要です。</span>
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
                   <div className="space-y-4">
                     <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Heart size={16} className="text-pink-500" /> 特性・配慮事項</h4>
                     <FieldGroup label="子どもの特性">
-                      <Textarea placeholder="例: 大きな音が苦手、特定の布製品にこだわりがある等" />
+                      <Textarea
+                        placeholder="例: 大きな音が苦手、特定の布製品にこだわりがある等"
+                        value={formData.child_characteristics}
+                        onChange={(e: any) => setFormData({ ...formData, child_characteristics: e.target.value })}
+                      />
                     </FieldGroup>
                     <FieldGroup label="保護者の状況・要望">
-                      <Textarea placeholder="例: 日本語があまり得意ではないため、ゆっくり話す必要がある等" />
+                      <Textarea
+                        placeholder="例: 日本語があまり得意ではないため、ゆっくり話す必要がある等"
+                        value={formData.parent_characteristics}
+                        onChange={(e: any) => setFormData({ ...formData, parent_characteristics: e.target.value })}
+                      />
                     </FieldGroup>
                   </div>
 
@@ -870,16 +869,16 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         <Switch
                           label="HP/SNSへの写真掲載"
                           description="園だより等への顔写真掲載許可"
-                          checked={formData.photo_allowed}
-                          onChange={(checked: boolean) => setFormData({ ...formData, photo_allowed: checked })}
+                          checked={formData.photo_permission_public}
+                          onChange={(checked: boolean) => setFormData({ ...formData, photo_permission_public: checked })}
                         />
                       </div>
                       <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
                         <Switch
                           label="レポートへの記名"
                           description="クラス内共有物への名前記載"
-                          checked={formData.report_allowed}
-                          onChange={(checked: boolean) => setFormData({ ...formData, report_allowed: checked })}
+                          checked={formData.photo_permission_share}
+                          onChange={(checked: boolean) => setFormData({ ...formData, photo_permission_share: checked })}
                         />
                       </div>
                     </div>
