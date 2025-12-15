@@ -318,6 +318,7 @@ export async function POST(request: NextRequest) {
       .from('m_children')
       .insert({
         facility_id,
+        school_id: basic_info.school_id || null,
         family_name: basic_info.family_name,
         given_name: basic_info.given_name,
         family_name_kana: basic_info.family_name_kana || '',

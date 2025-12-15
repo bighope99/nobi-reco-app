@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Save,
   Building2,
+  School,
 } from 'lucide-react';
 
 /**
@@ -142,6 +143,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [classes, setClasses] = useState<Array<{ class_id: string; class_name: string }>>([]);
+  const [schools, setSchools] = useState<Array<{ school_id: string; name: string }>>([]);
 
   // フォームの状態
   const [formData, setFormData] = useState({
@@ -156,6 +158,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     birth_month: '',
     birth_day: '',
     birth_date: '', // 編集モード用
+    school_id: '',
 
     // 所属・契約
     enrollment_status: 'enrolled' as 'enrolled' | 'withdrawn' | 'suspended',
@@ -182,7 +185,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     { id: 1, name: '', relation: '', phone: '' }
   ]);
 
-  // Fetch classes on mount
+  // Fetch classes and schools on mount
   useEffect(() => {
     const fetchClasses = async () => {
       try {
@@ -195,7 +198,24 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
         console.error('Failed to fetch classes:', err);
       }
     };
+
+    const fetchSchools = async () => {
+      try {
+        const response = await fetch('/api/schools');
+        const result = await response.json();
+        if (result.success && result.data.schools) {
+          setSchools(result.data.schools.map((school: any) => ({
+            school_id: school.school_id,
+            name: school.name
+          })));
+        }
+      } catch (err) {
+        console.error('Failed to fetch schools:', err);
+      }
+    };
+
     fetchClasses();
+    fetchSchools();
   }, []);
 
   // Fetch child data in edit mode
@@ -231,6 +251,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             birth_month: month,
             birth_day: day,
             birth_date: birthDate,
+            school_id: data.basic_info?.school_id || '',
             enrollment_status: data.affiliation?.enrollment_status || 'enrolled',
             contract_type: data.affiliation?.contract_type || 'regular',
             enrollment_date: data.affiliation?.enrollment_date || '',
@@ -341,8 +362,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       : (isEditMode ? formData.birth_date : '');
 
     // Validation
-    if (!formData.family_name || !formData.given_name || !birthDate || !formData.enrollment_date) {
-      setError('必須項目を入力してください（氏名、生年月日、入所開始日は必須です）');
+    if (!formData.family_name || !formData.given_name || !birthDate || !formData.school_id || !formData.enrollment_date) {
+      setError('必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）');
       return;
     }
 
@@ -359,6 +380,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
           nickname: formData.nickname,
           gender: formData.gender,
           birth_date: birthDate,
+          school_id: formData.school_id || null,
         },
         affiliation: {
           enrollment_status: formData.enrollment_status,
@@ -592,6 +614,21 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         />
                         <span className="text-slate-500">日</span>
                       </div>
+                    </FieldGroup>
+
+                    <FieldGroup label="通学している学校" required className="sm:col-span-2">
+                      <Select
+                        value={formData.school_id}
+                        onChange={(e: any) => setFormData({ ...formData, school_id: e.target.value })}
+                      >
+                        <option value="">学校を選択してください</option>
+                        {schools.map((school) => (
+                          <option key={school.school_id} value={school.school_id}>
+                            {school.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-slate-400 mt-1">※学校が登録されていない場合は、先に学校マスタから登録してください</p>
                     </FieldGroup>
                   </div>
                 </div>
