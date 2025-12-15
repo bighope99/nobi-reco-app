@@ -7,8 +7,9 @@ import { createClient } from '@/utils/supabase/server';
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { school_id: string } }
+  props: { params: Promise<{ school_id: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient();
 
@@ -52,7 +53,7 @@ export async function PUT(
     // 学校の存在確認と権限チェック
     const { data: school, error: schoolError } = await supabase
       .from('m_schools')
-      .select('id, name, facility_id')
+      .select('id, name, facility_id, address, phone')
       .eq('id', school_id)
       .is('deleted_at', null)
       .single();
@@ -94,6 +95,7 @@ export async function PUT(
         address: body.address !== undefined ? body.address : school.address,
         phone: body.phone !== undefined ? body.phone : school.phone,
         updated_at: new Date().toISOString(),
+        // 必要に応じて他のフィールドも追加
       })
       .eq('id', school_id)
       .select()
@@ -131,8 +133,9 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { school_id: string } }
+  props: { params: Promise<{ school_id: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient();
 

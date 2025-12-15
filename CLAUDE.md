@@ -50,6 +50,7 @@ Strictly adhere to the following table prefixes:
 - **Styling**: Use Tailwind CSS utility classes.
 - **File Structure**: Follow the existing Next.js App Router structure.
 - **Supabase Import Path**: ALWAYS use `@/utils/supabase/server` for server-side Supabase client imports in API routes. DO NOT use `@/lib/supabase/server` as it does not exist in this project.
+- **Next.js 15 Async Params**: dynamic route `params` are now asynchronous. Always define them as `props: { params: Promise<T> }` and `await props.params` before using.
 # Authentication & Session Management
 - **Authentication**: Use Supabase Auth for email/password authentication
 - **Session Storage**: Store UserSession data in sessionStorage after successful login
