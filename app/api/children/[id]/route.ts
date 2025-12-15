@@ -79,6 +79,7 @@ export async function GET(
           gender: childData.gender,
           birth_date: childData.birth_date,
           photo_url: childData.photo_url,
+          school_id: childData.school_id,
         },
         affiliation: {
           enrollment_status: childData.enrollment_status,
@@ -168,6 +169,7 @@ export async function PUT(
       if (basic_info.nickname !== undefined) updateData.nickname = basic_info.nickname;
       if (basic_info.gender !== undefined) updateData.gender = basic_info.gender;
       if (basic_info.birth_date !== undefined) updateData.birth_date = basic_info.birth_date;
+      if (basic_info.school_id !== undefined) updateData.school_id = basic_info.school_id;
     }
 
     if (affiliation) {
