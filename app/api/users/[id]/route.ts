@@ -7,8 +7,9 @@ import { createClient } from '@/utils/supabase/server';
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient();
 
@@ -167,8 +168,9 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient();
 
