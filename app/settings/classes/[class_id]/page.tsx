@@ -23,7 +23,7 @@ interface Teacher {
   id: string;
   name: string;
   role?: string;
-  is_main?: boolean;
+  class_role?: string; // 'main' | 'sub' | 'assistant'
 }
 
 interface Child {
@@ -110,7 +110,7 @@ export default function ClassDetailPage() {
   const [saving, setSaving] = useState(false);
   const [showAddTeacher, setShowAddTeacher] = useState(false);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
-  const [selectedTeacherIsMain, setSelectedTeacherIsMain] = useState(false);
+  const [selectedTeacherRole, setSelectedTeacherRole] = useState<string>('main');
 
   // Child management
   const [showAddChildModal, setShowAddChildModal] = useState(false);
@@ -224,37 +224,57 @@ export default function ClassDetailPage() {
     }
   };
 
-  const handleAddTeacher = () => {
+  const handleAddTeacher = async () => {
     if (!classData || !selectedTeacherId) return;
 
-    const teacher = allTeachers.find(t => t.id === selectedTeacherId);
-    if (teacher) {
-      setClassData({
-        ...classData,
-        staff: [
-          ...classData.staff,
-          {
-            id: teacher.id,
-            name: teacher.name,
-            role: teacher.role,
-            is_main: selectedTeacherIsMain
-          }
-        ]
+    try {
+      const response = await fetch(`/api/classes/${classId}/teachers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: selectedTeacherId,
+          class_role: selectedTeacherRole
+        })
       });
-      setShowAddTeacher(false);
-      setSelectedTeacherId('');
-      setSelectedTeacherIsMain(false);
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refresh class data to get updated staff list
+        await fetchClassData();
+        setShowAddTeacher(false);
+        setSelectedTeacherId('');
+        setSelectedTeacherRole('main');
+      } else {
+        alert(result.error || '担任の追加に失敗しました');
+      }
+    } catch (error) {
+      console.error('Error adding teacher:', error);
+      alert('担任の追加中にエラーが発生しました');
     }
   };
 
-  const handleRemoveTeacher = (teacherId: string) => {
+  const handleRemoveTeacher = async (teacherId: string) => {
     if (!classData) return;
 
     if (confirm('この担任を解除しますか？')) {
-      setClassData({
-        ...classData,
-        staff: classData.staff.filter(t => t.id !== teacherId)
-      });
+      try {
+        const response = await fetch(`/api/classes/${classId}/teachers/${teacherId}`, {
+          method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Refresh class data to get updated staff list
+          await fetchClassData();
+        } else {
+          alert(result.error || '担任の解除に失敗しました');
+        }
+      } catch (error) {
+        console.error('Error removing teacher:', error);
+        alert('担任の解除中にエラーが発生しました');
+      }
     }
   };
 
@@ -455,39 +475,47 @@ export default function ClassDetailPage() {
               {showAddTeacher && (
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4 animate-in fade-in slide-in-from-top-2">
                   <div className="flex items-end gap-3">
-                    <FieldGroup label="職員を選択" required>
-                      <Select
-                        value={selectedTeacherId}
-                        onChange={(e: any) => setSelectedTeacherId(e.target.value)}
-                      >
-                        <option value="">選択してください</option>
-                        {availableTeachers.map(teacher => (
-                          <option key={teacher.id} value={teacher.id}>
-                            {teacher.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </FieldGroup>
-                    <FieldGroup label="主担任">
-                      <div className="flex items-center gap-2 h-[42px]">
-                        <input
-                          type="checkbox"
-                          checked={selectedTeacherIsMain}
-                          onChange={(e) => setSelectedTeacherIsMain(e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                        />
-                        <span className="text-sm text-slate-700">主担任として設定</span>
-                      </div>
-                    </FieldGroup>
+                    <div className="flex-1">
+                      <FieldGroup label="職員を選択" required>
+                        <Select
+                          value={selectedTeacherId}
+                          onChange={(e: any) => setSelectedTeacherId(e.target.value)}
+                        >
+                          <option value="">選択してください</option>
+                          {availableTeachers.map(teacher => (
+                            <option key={teacher.id} value={teacher.id}>
+                              {teacher.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </FieldGroup>
+                    </div>
+                    <div className="flex-1">
+                      <FieldGroup label="役割" required>
+                        <Select
+                          value={selectedTeacherRole}
+                          onChange={(e: any) => setSelectedTeacherRole(e.target.value)}
+                        >
+                          <option value="main">主担任</option>
+                          <option value="sub">副担任</option>
+                          <option value="assistant">補助</option>
+                        </Select>
+                      </FieldGroup>
+                    </div>
                     <button
                       onClick={handleAddTeacher}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors"
+                      disabled={!selectedTeacherId}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus size={16} />
                       追加
                     </button>
                     <button
-                      onClick={() => setShowAddTeacher(false)}
+                      onClick={() => {
+                        setShowAddTeacher(false);
+                        setSelectedTeacherId('');
+                        setSelectedTeacherRole('main');
+                      }}
                       className="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 px-4 py-2.5 rounded-lg font-medium text-sm transition-colors"
                     >
                       キャンセル
@@ -510,13 +538,19 @@ export default function ClassDetailPage() {
                       <div>
                         <h3 className="font-bold text-slate-800">{teacher.name}</h3>
                         <div className="flex gap-2 mt-1">
-                          {teacher.is_main && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              主担任
+                          {teacher.class_role && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              teacher.class_role === 'main'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                : teacher.class_role === 'sub'
+                                ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                                : 'bg-amber-50 text-amber-700 border border-amber-100'
+                            }`}>
+                              {teacher.class_role === 'main' ? '主担任' : teacher.class_role === 'sub' ? '副担任' : '補助'}
                             </span>
                           )}
                           {teacher.role && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
                               {teacher.role}
                             </span>
                           )}
