@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 
+// 学年計算関数（日本の学校制度：4月1日基準）
+function calculateGrade(birthDate: string, gradeAdd: number = 0): string {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  const birthMonth = birth.getMonth() + 1; // 1-12
+  const birthYear = birth.getFullYear();
+  const currentYear = today.getFullYear();
+
+  let grade: number;
+  if (birthMonth >= 4) {
+    // 4月以降生まれ
+    grade = currentYear - birthYear - 6 + 1;
+  } else {
+    // 1-3月生まれ
+    grade = currentYear - birthYear - 6;
+  }
+
+  grade += gradeAdd;
+
+  // 1-6年生の範囲チェック
+  if (grade < 1 || grade > 6) {
+    return ''; // 範囲外の場合は空文字
+  }
+
+  return `${grade}年生`;
+}
+
 // GET /api/children - 子ども一覧取得
 export async function GET(request: NextRequest) {
   try {
@@ -45,6 +72,7 @@ export async function GET(request: NextRequest) {
         given_name_kana,
         gender,
         birth_date,
+        grade_add,
         photo_url,
         enrollment_status,
         enrollment_type,
@@ -159,6 +187,9 @@ export async function GET(request: NextRequest) {
       const today = new Date();
       const age = Math.floor((today.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 
+      // 学年計算
+      const grade = child.birth_date ? calculateGrade(child.birth_date, child.grade_add || 0) : '';
+
       // 兄弟情報
       const childSiblings = (siblingsData || [])
         .filter((s: any) => s.child_id === child.id)
@@ -181,7 +212,7 @@ export async function GET(request: NextRequest) {
         gender: child.gender,
         birth_date: child.birth_date,
         age,
-        age_group: classInfo?.age_group || '',
+        age_group: grade, // 学年計算結果を返す
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         photo_url: child.photo_url,
