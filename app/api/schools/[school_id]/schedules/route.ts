@@ -7,8 +7,9 @@ import { createClient } from '@/utils/supabase/server';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { school_id: string } }
+  props: { params: Promise<{ school_id: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient();
 
