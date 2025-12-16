@@ -44,9 +44,7 @@ export async function POST(request: NextRequest) {
 
     const { data: childrenData, error: childrenError } = await supabase
       .from('m_children')
-      .select(
-        `id, family_name, given_name, facility_id, _child_class!left(class_id, is_current, m_classes(name))`
-      )
+      .select('id, family_name, given_name, facility_id')
       .in('id', childIds)
       .eq('facility_id', facilityId)
       .is('deleted_at', null)
@@ -62,16 +60,12 @@ export async function POST(request: NextRequest) {
 
     const generatedAt = new Date()
     const entries = childrenData.map((child: any) => {
-      const currentClass = child._child_class?.find((cls: any) => cls.is_current)
-      const className = currentClass?.m_classes?.name || 'クラス未設定'
       const childName = `${child.family_name} ${child.given_name}`.trim()
       const { payload } = createQrPayload(child.id, facilityId)
       const pdfBuffer = createQrPdf({
         childName,
-        className,
         facilityName: facilityData.name,
         payload,
-        generatedAt,
       })
 
       const filename = `${formatFileSegment(childName)}_${child.id}.pdf`

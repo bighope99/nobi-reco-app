@@ -11,10 +11,8 @@ interface QrPayload {
 
 interface PdfOptions {
   childName: string
-  className: string
   facilityName: string
   payload: string
-  generatedAt: Date
 }
 
 interface ZipEntry {
@@ -55,15 +53,6 @@ export function createQrPayload(childId: string, facilityId: string): QrPayload 
   return { payload, signature }
 }
 
-function formatDateTime(date: Date): string {
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const min = String(date.getMinutes()).padStart(2, '0')
-  return `${yyyy}/${mm}/${dd} ${hh}:${min}`
-}
-
 function buildQrDrawing(payload: string) {
   const qr = QRCode.create(payload, { errorCorrectionLevel: 'M' })
   const moduleCount = qr.modules.size
@@ -93,7 +82,7 @@ function buildQrDrawing(payload: string) {
 }
 
 function buildContentStream(options: PdfOptions): Buffer {
-  const { childName, className, facilityName, payload, generatedAt } = options
+  const { childName, facilityName, payload } = options
   const lines: string[] = []
 
   lines.push('BT')
@@ -101,9 +90,7 @@ function buildContentStream(options: PdfOptions): Buffer {
   lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 80} Tm (${escapePdfText(childName)}) Tj`)
 
   lines.push('/F1 14 Tf')
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 105} Tm (${escapePdfText(className || 'クラス未設定')}) Tj`)
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 125} Tm (${escapePdfText(facilityName)}) Tj`)
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 145} Tm (${escapePdfText('生成日時: ' + formatDateTime(generatedAt))}) Tj`)
+  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 105} Tm (${escapePdfText(facilityName)}) Tj`)
   lines.push('ET')
 
   lines.push(buildQrDrawing(payload))

@@ -40,9 +40,7 @@ export async function GET(
 
     const { data: childData, error: childError } = await supabase
       .from('m_children')
-      .select(
-        `id, family_name, given_name, facility_id, _child_class!left(class_id, is_current, m_classes(name))`
-      )
+      .select('id, family_name, given_name, facility_id')
       .eq('id', childId)
       .eq('facility_id', facilityId)
       .is('deleted_at', null)
@@ -52,17 +50,13 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Child not found' }, { status: 404 })
     }
 
-    const currentClass = childData._child_class?.find((cls: any) => cls.is_current)
-    const className = currentClass?.m_classes?.name || 'クラス未設定'
     const childName = `${childData.family_name} ${childData.given_name}`.trim()
 
     const { payload } = createQrPayload(childData.id, facilityId)
     const pdfBuffer = createQrPdf({
       childName,
-      className,
       facilityName: facilityData.name,
       payload,
-      generatedAt: new Date(),
     })
 
     const filename = `${formatFileSegment(childName)}_${childData.id}.pdf`
