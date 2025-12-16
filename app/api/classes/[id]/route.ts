@@ -121,8 +121,10 @@ export async function GET(
       .from('m_children')
       .select(`
         id,
-        name,
-        name_kana,
+        family_name,
+        given_name,
+        family_name_kana,
+        given_name_kana,
         birth_date,
         grade_add,
         photo_url,
@@ -136,7 +138,8 @@ export async function GET(
       .eq('_child_class.is_current', true)
       .eq('enrollment_status', 'enrolled')
       .is('deleted_at', null)
-      .order('name_kana');
+      .order('family_name_kana', { ascending: true })
+      .order('given_name_kana', { ascending: true });
 
     if (childrenError) {
       throw childrenError;
@@ -163,12 +166,12 @@ export async function GET(
         children:
           children?.map((child) => {
             const grade = calculateGrade(child.birth_date, child.grade_add);
-            const gradeLabel = formatGradeLabel(grade);
+              const gradeLabel = formatGradeLabel(grade);
 
             return {
               id: child.id,
-              name: child.name,
-              name_kana: child.name_kana,
+              name: `${child.family_name} ${child.given_name}`,
+              name_kana: `${child.family_name_kana} ${child.given_name_kana}`,
               birth_date: child.birth_date,
               grade,
               grade_label: gradeLabel,
