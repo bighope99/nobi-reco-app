@@ -169,7 +169,7 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                             href={child.href}
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
-                              pathname === child.href && "bg-sidebar-accent font-medium",
+                              isActive(child.href) && "bg-sidebar-accent font-medium",
                             )}
                           >
                             {child.label}
@@ -184,7 +184,7 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                   href={item.href}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
-                    pathname === item.href && "bg-sidebar-accent font-medium",
+                    isActive(item.href) && "bg-sidebar-accent font-medium",
                   )}
                 >
                   {item.icon}
