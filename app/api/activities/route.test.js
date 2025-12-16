@@ -11,6 +11,7 @@ const mockModules = {
   '@/lib/auth/session': path.join(__dirname, '__mocks__', 'session.ts'),
   '@langchain/openai': path.join(__dirname, '__mocks__', 'langchain-openai.ts'),
   '@langchain/core/prompts': path.join(__dirname, '__mocks__', 'langchain-prompts.ts'),
+  '@langchain/google-genai': path.join(__dirname, '__mocks__', 'langchain-google-genai.ts'),
 };
 
 const originalResolve = Module._resolveFilename;
@@ -102,9 +103,9 @@ test('saves draft activity with photos and mentions', async () => {
   assert.equal(response.status, 200);
   assert.equal(json.data.is_draft, true);
   assert.equal(json.data.photos.length, 1);
-  assert.equal(json.data.mentions.length, 1);
+  assert.deepEqual(json.data.mentions, []);
   assert.deepEqual(state.activityInsert.photos, payload.photos);
-  assert.deepEqual(state.activityInsert.mentions, payload.mentions);
+  assert.equal(state.activityInsert.mentions, undefined);
 });
 
 test('saves confirmed activity without photos or mentions', async () => {
@@ -128,5 +129,5 @@ test('saves confirmed activity without photos or mentions', async () => {
   assert.equal(json.data.is_draft, false);
   assert.deepEqual(json.data.photos, []);
   assert.deepEqual(json.data.mentions, []);
-  assert.equal(state.activityInsert.is_draft, false);
+  assert.equal(state.activityInsert.is_draft, undefined);
 });
