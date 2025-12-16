@@ -924,5 +924,4 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     </div>
   );
 }
-}
 
