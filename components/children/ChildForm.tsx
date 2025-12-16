@@ -158,6 +158,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     birth_day: '',
     birth_date: '', // 編集モード用
     school_id: '',
+    grade_add: 0,
 
     // 所属・契約
     enrollment_status: 'enrolled' as 'enrolled' | 'withdrawn' | 'suspended',
@@ -252,6 +253,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             birth_day: day,
             birth_date: birthDate,
             school_id: data.basic_info?.school_id || '',
+            grade_add: data.basic_info?.grade_add || 0,
             enrollment_status: data.affiliation?.enrollment_status || 'enrolled',
             enrollment_type: data.affiliation?.enrollment_type || 'regular',
             enrolled_at: data.affiliation?.enrolled_at ? data.affiliation.enrolled_at.split('T')[0] : '',
@@ -382,6 +384,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
           gender: formData.gender,
           birth_date: birthDate,
           school_id: formData.school_id || null,
+          grade_add: formData.grade_add,
         },
         affiliation: {
           enrollment_status: formData.enrollment_status,
@@ -625,6 +628,23 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         ))}
                       </Select>
                       <p className="text-xs text-slate-400 mt-1">※学校が登録されていない場合は、先に学校マスタから登録してください</p>
+                    </FieldGroup>
+
+                    <FieldGroup label="学年調整" className="sm:col-span-2">
+                      <div className="flex items-center gap-4">
+                        <Select
+                          value={formData.grade_add.toString()}
+                          onChange={(e: any) => setFormData({ ...formData, grade_add: parseInt(e.target.value) })}
+                          className="w-48"
+                        >
+                          <option value="-2">-2年（2学年下）</option>
+                          <option value="-1">-1年（1学年下）</option>
+                          <option value="0">調整なし（標準）</option>
+                          <option value="1">+1年（1学年上）</option>
+                          <option value="2">+2年（2学年上）</option>
+                        </Select>
+                        <p className="text-xs text-slate-500">留年・飛び級などで学年を調整する場合に設定します</p>
+                      </div>
                     </FieldGroup>
                   </div>
                 </div>
