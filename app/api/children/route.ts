@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { handleChildSave } from './save/route';
 
 // GET /api/children - 子ども一覧取得
 export async function GET(request: NextRequest) {
@@ -281,102 +282,5 @@ export async function GET(request: NextRequest) {
 
 // POST /api/children - 新規登録
 export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
-      return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
-    }
-
-    const facility_id = userSession.current_facility_id;
-
-    // リクエストボディ取得
-    const body = await request.json();
-    const { basic_info, affiliation, care_info, permissions } = body;
-
-    // バリデーション
-    if (!basic_info?.family_name || !basic_info?.given_name || !basic_info?.birth_date || !affiliation?.enrolled_at) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
-
-    // 子ども情報作成
-    const { data: childData, error: childError } = await supabase
-      .from('m_children')
-      .insert({
-        facility_id,
-        school_id: basic_info.school_id || null,
-        family_name: basic_info.family_name,
-        given_name: basic_info.given_name,
-        family_name_kana: basic_info.family_name_kana || '',
-        given_name_kana: basic_info.given_name_kana || '',
-        nickname: basic_info.nickname || null,
-        gender: basic_info.gender || 'other',
-        birth_date: basic_info.birth_date,
-        enrollment_status: affiliation.enrollment_status || 'enrolled',
-        enrollment_type: affiliation.enrollment_type || 'regular',
-        enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
-        withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
-        parent_phone: body.contact?.parent_phone || '',
-        parent_email: body.contact?.parent_email || '',
-        allergies: care_info?.allergies || null,
-        child_characteristics: care_info?.child_characteristics || null,
-        parent_characteristics: care_info?.parent_characteristics || null,
-        photo_permission_public: permissions?.photo_permission_public !== false,
-        photo_permission_share: permissions?.photo_permission_share !== false,
-      })
-      .select()
-      .single();
-
-    if (childError || !childData) {
-      console.error('Child creation error:', childError);
-      return NextResponse.json({ error: 'Failed to create child' }, { status: 500 });
-    }
-
-    // クラス所属を記録（class_idがある場合のみ）
-    if (affiliation.class_id) {
-      const currentYear = new Date().getFullYear();
-      const enrollmentDate = affiliation.enrolled_at || new Date().toISOString().split('T')[0];
-
-      const { error: classError } = await supabase
-        .from('_child_class')
-        .insert({
-          child_id: childData.id,
-          class_id: affiliation.class_id,
-          school_year: currentYear,
-          started_at: enrollmentDate,
-          is_current: true,
-        });
-
-      if (classError) {
-        console.error('Class assignment error:', classError);
-        // クラス紐付けエラーは警告のみ（子ども登録は成功）
-      }
-    }
-
-    // レスポンス構築
-    const response = {
-      success: true,
-      data: {
-        child_id: childData.id,
-        name: `${childData.family_name} ${childData.given_name}`,
-        kana: `${childData.family_name_kana} ${childData.given_name_kana}`,
-        enrollment_date: childData.enrollment_date,
-        created_at: childData.created_at,
-      },
-      message: '児童を登録しました',
-    };
-
-    return NextResponse.json(response, { status: 201 });
-  } catch (error) {
-    console.error('Children POST API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
+  return handleChildSave(request);
 }
