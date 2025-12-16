@@ -71,36 +71,15 @@ export async function GET(
       );
     }
 
-    // 権限チェック
+    // 権限チェック（設定ページでは会社が同じであればアクセス可能）
     if (
       userData.role !== 'site_admin' &&
-      userData.role === 'company_admin' &&
       facility.company_id !== userData.company_id
     ) {
       return NextResponse.json(
         { success: false, error: 'Access denied' },
         { status: 404 }
       );
-    }
-
-    if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
-      const { data: userFacility } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('facility_id', facilityId)
-        .eq('is_current', true)
-        .single();
-
-      if (!userFacility) {
-        return NextResponse.json(
-          { success: false, error: 'Access denied' },
-          { status: 404 }
-        );
-      }
     }
 
     // 統計情報取得
@@ -208,9 +187,9 @@ export async function PUT(
       );
     }
 
-    // 権限チェック
+    // 権限チェック（設定ページでは会社が同じであればアクセス可能）
     if (
-      userData.role === 'company_admin' &&
+      userData.role !== 'site_admin' &&
       facility.company_id !== userData.company_id
     ) {
       return NextResponse.json(
@@ -219,23 +198,7 @@ export async function PUT(
       );
     }
 
-    if (userData.role === 'facility_admin') {
-      const { data: userFacility } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('facility_id', facilityId)
-        .eq('is_current', true)
-        .single();
-
-      if (!userFacility) {
-        return NextResponse.json(
-          { success: false, error: 'Access denied' },
-          { status: 404 }
-        );
-      }
-    }
-
+    // staff は編集不可
     if (userData.role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
