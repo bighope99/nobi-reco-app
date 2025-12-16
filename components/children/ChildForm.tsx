@@ -364,6 +364,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     // Validation
     if (!formData.family_name || !formData.given_name || !birthDate || !formData.enrolled_at) {
       setError('必須項目を入力してください（氏名、生年月日、入所開始日は必須です）');
+    }
     if (!formData.family_name || !formData.given_name || !birthDate || !formData.school_id || !formData.enrollment_date) {
       setError('必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）');
       return;
@@ -926,5 +927,3 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     </div>
   );
 }
-}
-
