@@ -28,6 +28,8 @@ interface APIChild {
     kana: string;
     gender: 'male' | 'female';
     birth_date: string;
+    grade: number | null;
+    grade_label: string;
     age_group: string;
     class_id: string | null;
     class_name: string;
@@ -73,7 +75,8 @@ interface Student {
     kana: string;
     gender: 'male' | 'female';
     birthDate: string;
-    age_group: string;
+    grade: number | null;
+    gradeLabel: string;
     gradeOrder: number;
     className: string;
     parentName: string;
@@ -93,9 +96,8 @@ type SortOrder = 'asc' | 'desc';
 // --- Helper Functions ---
 
 const convertAPIChildToStudent = (apiChild: APIChild): Student => {
-    // age_groupは文字列なので、ソート用に数値化を試みる（例: "1-2歳" -> 1）
-    const ageGroupMatch = apiChild.age_group?.match(/(\d+)/);
-    const gradeOrder = ageGroupMatch ? parseInt(ageGroupMatch[1]) : 0;
+    const gradeValue = apiChild.grade ?? null;
+    const gradeOrder = gradeValue ?? 0;
 
     // Map enrollment_status to status
     const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
@@ -109,7 +111,8 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         kana: apiChild.kana,
         gender: apiChild.gender,
         birthDate: apiChild.birth_date,
-        age_group: apiChild.age_group || '',
+        grade: gradeValue,
+        gradeLabel: apiChild.grade_label || '',
         gradeOrder,
         className: apiChild.class_name,
         parentName: apiChild.parent_name || '',
@@ -257,10 +260,9 @@ export default function StudentList() {
                     comparison = a.kana.localeCompare(b.kana);
                     break;
                 case 'grade':
-                    // age_groupでソート（文字列比較、数値が含まれる場合は数値順）
                     comparison = a.gradeOrder !== b.gradeOrder
                         ? a.gradeOrder - b.gradeOrder
-                        : (a.age_group || '').localeCompare(b.age_group || '');
+                        : a.kana.localeCompare(b.kana);
                     break;
                 case 'className':
                     comparison = a.className.localeCompare(b.className);
@@ -523,7 +525,7 @@ export default function StudentList() {
 
                                                     {/* Grade */}
                                                     <td className="px-6 py-4" >
-                                                        <span className="text-sm font-medium text-slate-700" > {student.age_group} </span>
+                                                        <span className="text-sm font-medium text-slate-700" > {student.gradeLabel || '-'} </span>
                                                     </td>
 
                                                     {/* Class */}

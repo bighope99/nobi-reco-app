@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
         given_name,
         family_name_kana,
         given_name_kana,
+        birth_date,
+        grade_add,
         photo_url,
         parent_phone,
         _child_class (
@@ -102,6 +105,8 @@ export async function GET(request: NextRequest) {
       class_id: string | null;
       class_name: string;
       age_group: string;
+      grade: number | null;
+      grade_label: string;
       photo_url: string | null;
       status: 'checked_in' | 'checked_out' | 'absent';
       is_scheduled_today: boolean;
@@ -120,6 +125,9 @@ export async function GET(request: NextRequest) {
       const classInfo = currentClass?.m_classes;
       const dailyAttendance = (dailyAttendanceData || []).find((da: any) => da.child_id === child.id);
       const attendanceLog = (attendanceLogsData || []).find((log: any) => log.child_id === child.id && !log.checked_out_at);
+
+      const grade = calculateGrade(child.birth_date, child.grade_add);
+      const gradeLabel = formatGradeLabel(grade);
 
       // 記録情報
       const childObservations = (observationsData || []).filter((obs: any) => obs.child_id === child.id);
@@ -141,6 +149,8 @@ export async function GET(request: NextRequest) {
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
+        grade,
+        grade_label: gradeLabel,
         photo_url: child.photo_url,
         status,
         is_scheduled_today: !!dailyAttendance,

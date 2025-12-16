@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 
 /**
  * GET /api/classes/:id
@@ -118,7 +119,7 @@ export async function GET(
     // 所属児童取得
     const { data: children } = await supabase
       .from('m_children')
-      .select('id, name, name_kana, birth_date, photo_url, enrollment_status')
+      .select('id, name, name_kana, birth_date, grade_add, photo_url, enrollment_status')
       .eq('class_id', classId)
       .eq('enrollment_status', 'enrolled')
       .is('deleted_at', null)
@@ -143,20 +144,27 @@ export async function GET(
         facility_name: (classData.m_facilities as any).name,
         staff: staff,
         children:
-          children?.map((child) => ({
-            id: child.id,
-            name: child.name,
-            name_kana: child.name_kana,
-            birth_date: child.birth_date,
-            age: child.birth_date
-              ? Math.floor(
-                (new Date().getTime() - new Date(child.birth_date).getTime()) /
-                (365.25 * 24 * 60 * 60 * 1000)
-              )
-              : null,
-            photo_url: child.photo_url,
-            enrollment_status: child.enrollment_status,
-          })) || [],
+          children?.map((child) => {
+            const grade = calculateGrade(child.birth_date, child.grade_add);
+            const gradeLabel = formatGradeLabel(grade);
+
+            return {
+              id: child.id,
+              name: child.name,
+              name_kana: child.name_kana,
+              birth_date: child.birth_date,
+              grade,
+              grade_label: gradeLabel,
+              age: child.birth_date
+                ? Math.floor(
+                  (new Date().getTime() - new Date(child.birth_date).getTime()) /
+                  (365.25 * 24 * 60 * 60 * 1000)
+                )
+                : null,
+              photo_url: child.photo_url,
+              enrollment_status: child.enrollment_status,
+            };
+          }) || [],
         created_at: classData.created_at,
         updated_at: classData.updated_at,
       },

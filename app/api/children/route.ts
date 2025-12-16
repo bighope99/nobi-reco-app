@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { handleChildSave } from './save/route';
 
 // GET /api/children - 子ども一覧取得
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
         given_name_kana,
         gender,
         birth_date,
+        grade_add,
         photo_url,
         enrollment_status,
         enrollment_type,
@@ -160,6 +162,9 @@ export async function GET(request: NextRequest) {
       const today = new Date();
       const age = Math.floor((today.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 
+      const grade = calculateGrade(child.birth_date, child.grade_add);
+      const gradeLabel = formatGradeLabel(grade);
+
       // 兄弟情報
       const childSiblings = (siblingsData || [])
         .filter((s: any) => s.child_id === child.id)
@@ -182,6 +187,8 @@ export async function GET(request: NextRequest) {
         gender: child.gender,
         birth_date: child.birth_date,
         age,
+        grade,
+        grade_label: gradeLabel,
         age_group: classInfo?.age_group || '',
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',

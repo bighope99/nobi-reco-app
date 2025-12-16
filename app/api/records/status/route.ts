@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,6 +54,8 @@ export async function GET(request: NextRequest) {
         given_name,
         family_name_kana,
         given_name_kana,
+        birth_date,
+        grade_add,
         photo_url,
         _child_class (
           class_id,
@@ -149,6 +152,9 @@ export async function GET(request: NextRequest) {
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
 
+      const grade = calculateGrade(child.birth_date, child.grade_add);
+      const gradeLabel = formatGradeLabel(grade);
+
       // 月間統計
       const monthlyAttendances = (monthlyAttendanceData || []).filter((a: any) => a.child_id === child.id);
       const monthlyAttendanceDates = new Set(
@@ -211,6 +217,8 @@ export async function GET(request: NextRequest) {
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
+        grade,
+        grade_label: gradeLabel,
         photo_url: child.photo_url,
         last_record_date: lastRecordDate,
         is_recorded_today: isRecordedToday,
