@@ -79,7 +79,7 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 
 ### 2. AI解析実行（個別記録案の生成）
 
-**エンドポイント**: `POST /api/ai/extract`
+**エンドポイント**: `POST /api/activities/analyze`（旧 `/api/ai/extract` 相当）
 
 **説明**: 活動記録のテキストからメンションされた児童ごとのエピソードを抽出し、個別記録案を生成します。
 
@@ -190,6 +190,42 @@ AI解析による個別記録の自動抽出（メンション機能 + AI解析 
 - `429 Too Many Requests`: AI APIレート制限
 - `500 Internal Server Error`: AI APIエラー
 - `503 Service Unavailable`: AI APIダウン
+
+---
+
+### 2-補足. 音声入力下書き生成
+
+**エンドポイント**: `POST /api/activities/voice-draft`
+
+**説明**: 録音データから活動記録の下書きテキストを生成します（音声文字起こし + 文章整形のモック実装）。
+
+**リクエストボディ**:
+```typescript
+{
+  "audio_url": "https://example.com/audio.wav", // もしくは audio_base64
+  "audio_format": "wav",                       // 任意
+  "language": "ja"                             // 任意、デフォルトja
+}
+```
+
+**レスポンス** (成功):
+```typescript
+{
+  "success": true,
+  "data": {
+    "transcript": "今日は室内で新聞紙遊びをしました...", // 文字起こし結果
+    "draft": "transcriptに基づく下書き文面",
+    "model": "gpt-4o-mini",
+    "language": "ja"
+  }
+}
+```
+
+**エラーレスポンス**:
+- `400 Bad Request`: 音声ソースが存在しない場合
+- `401 Unauthorized`: 認証エラー
+- `429 Too Many Requests`: レート制限超過
+- `500 Internal Server Error`: サーバーエラー
 
 ---
 
