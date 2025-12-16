@@ -4,10 +4,6 @@ import { getUserSession } from '@/lib/auth/session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { z } from 'zod';
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
-import { PromptTemplate } from '@langchain/core/prompts';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 
 export async function GET(request: NextRequest) {
