@@ -248,16 +248,12 @@ export async function DELETE(
       }
     }
 
-    const deletedAt = new Date().toISOString();
-
-    // スケジュール削除（ソフトデリート）
+    // スケジュール削除（物理削除）
     const { error: deleteError } = await supabase
       .from('s_school_schedules')
-      .update({
-        deleted_at: deletedAt,
-        updated_at: deletedAt,
-      })
-      .eq('id', schedule_id);
+      .delete()
+      .eq('id', schedule_id)
+      .eq('school_id', school_id);
 
     if (deleteError) {
       throw deleteError;
@@ -267,7 +263,6 @@ export async function DELETE(
       success: true,
       data: {
         schedule_id: schedule_id,
-        deleted_at: deletedAt,
       },
       message: 'スケジュールを削除しました',
     });
