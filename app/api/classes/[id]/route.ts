@@ -115,17 +115,49 @@ export async function GET(
         class_role: sa.class_role,
       })) || [];
 
-    // 所属児童取得
-    const { data: children } = await supabase
-      .from('m_children')
-      .select('id, name, name_kana, birth_date, photo_url, enrollment_status')
+    // 在籍児童取得（現在所属のみ）
+    const { data: childAssignments } = await supabase
+      .from('_child_class')
+      .select(
+        `
+        child_id,
+        m_children!inner (
+          id,
+          family_name,
+          given_name,
+          family_name_kana,
+          given_name_kana,
+          birth_date,
+          photo_url,
+          enrollment_status
+        )
+      `
+      )
       .eq('class_id', classId)
-      .eq('enrollment_status', 'enrolled')
-      .is('deleted_at', null)
-      .order('name_kana');
+      .eq('is_current', true)
+      .order('started_at');
+
+    const children =
+      childAssignments?.map((assignment: any) => {
+        const child = assignment.m_children;
+        return {
+          id: child.id,
+          name: `${child.family_name} ${child.given_name}`,
+          name_kana: `${child.family_name_kana || ''} ${child.given_name_kana || ''}`.trim(),
+          birth_date: child.birth_date,
+          age: child.birth_date
+            ? Math.floor(
+                (new Date().getTime() - new Date(child.birth_date).getTime()) /
+                  (365.25 * 24 * 60 * 60 * 1000)
+              )
+            : null,
+          photo_url: child.photo_url,
+          enrollment_status: child.enrollment_status,
+        };
+      }) || [];
 
     // 在籍児童数カウント
-    const currentCount = children?.length || 0;
+    const currentCount = children.length;
 
     return NextResponse.json({
       success: true,
@@ -142,21 +174,7 @@ export async function GET(
         facility_id: classData.facility_id,
         facility_name: (classData.m_facilities as any).name,
         staff: staff,
-        children:
-          children?.map((child) => ({
-            id: child.id,
-            name: child.name,
-            name_kana: child.name_kana,
-            birth_date: child.birth_date,
-            age: child.birth_date
-              ? Math.floor(
-                (new Date().getTime() - new Date(child.birth_date).getTime()) /
-                (365.25 * 24 * 60 * 60 * 1000)
-              )
-              : null,
-            photo_url: child.photo_url,
-            enrollment_status: child.enrollment_status,
-          })) || [],
+        children,
         created_at: classData.created_at,
         updated_at: classData.updated_at,
       },

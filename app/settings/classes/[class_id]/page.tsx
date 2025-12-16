@@ -108,6 +108,7 @@ export default function ClassDetailPage() {
   const [allChildren, setAllChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [childSaving, setChildSaving] = useState(false);
   const [showAddTeacher, setShowAddTeacher] = useState(false);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [selectedTeacherRole, setSelectedTeacherRole] = useState<string>('main');
@@ -182,7 +183,16 @@ export default function ClassDetailPage() {
       const result = await response.json();
 
       if (result.success) {
-        setAllChildren(result.data.children || []);
+        setAllChildren(
+          (result.data.children || []).map((child: any) => ({
+            id: child.child_id || child.id,
+            name: child.name,
+            name_kana: child.kana || child.name_kana || '',
+            age: child.age,
+            birth_date: child.birth_date,
+            enrollment_status: child.enrollment_status,
+          }))
+        );
       }
     } catch (error) {
       console.error('Error fetching children:', error);
@@ -287,29 +297,58 @@ export default function ClassDetailPage() {
     }
   };
 
-  const handleAddChildren = () => {
-    if (!classData) return;
+  const handleAddChildren = async () => {
+    if (!classData || selectedChildIds.length === 0) return;
 
-    const childrenToAdd = allChildren.filter(child =>
-      selectedChildIds.includes(child.id)
-    );
-    setClassData({
-      ...classData,
-      children: [...classData.children, ...childrenToAdd]
-    });
-    setSelectedChildIds([]);
-    setShowAddChildModal(false);
-    setChildSearchTerm('');
+    try {
+      setChildSaving(true);
+      const response = await fetch(`/api/classes/${classId}/children`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ child_ids: selectedChildIds })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await fetchClassData();
+        setSelectedChildIds([]);
+        setShowAddChildModal(false);
+        setChildSearchTerm('');
+      } else {
+        alert(result.error || '児童の追加に失敗しました');
+      }
+    } catch (error) {
+      console.error('Error adding children:', error);
+      alert('児童の追加中にエラーが発生しました');
+    } finally {
+      setChildSaving(false);
+    }
   };
 
-  const handleRemoveChild = (childId: string) => {
+  const handleRemoveChild = async (childId: string) => {
     if (!classData) return;
 
     if (confirm('このクラスから児童を除外しますか？')) {
-      setClassData({
-        ...classData,
-        children: classData.children.filter(c => c.id !== childId)
-      });
+      try {
+        setChildSaving(true);
+        const response = await fetch(`/api/classes/${classId}/children/${childId}`, {
+          method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          await fetchClassData();
+        } else {
+          alert(result.error || '児童の除外に失敗しました');
+        }
+      } catch (error) {
+        console.error('Error removing child:', error);
+        alert('児童の除外中にエラーが発生しました');
+      } finally {
+        setChildSaving(false);
+      }
     }
   };
 
@@ -810,11 +849,15 @@ export default function ClassDetailPage() {
                   </button>
                   <button
                     onClick={handleAddChildren}
-                    disabled={selectedChildIds.length === 0}
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={selectedChildIds.length === 0 || childSaving}
                   >
                     <Plus size={16} />
-                    {selectedChildIds.length > 0 ? `${selectedChildIds.length}名を追加` : '追加'}
+                    {childSaving
+                      ? '追加中...'
+                      : selectedChildIds.length > 0
+                        ? `${selectedChildIds.length}名を追加`
+                        : '追加'}
                   </button>
                 </div>
               </div>
