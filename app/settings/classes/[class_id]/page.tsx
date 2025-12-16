@@ -97,6 +97,16 @@ const FieldGroup = ({ label, required, children }: any) => (
   </div>
 );
 
+const ageGroupOptions = [
+  { value: '0歳児', label: '0歳児' },
+  { value: '1歳児', label: '1歳児' },
+  { value: '2歳児', label: '2歳児' },
+  { value: '3歳児', label: '3歳児' },
+  { value: '4歳児', label: '4歳児' },
+  { value: '5歳児', label: '5歳児' },
+  { value: '混合', label: '混合' }
+];
+
 export default function ClassDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -398,12 +408,18 @@ export default function ClassDetailPage() {
                   />
                 </FieldGroup>
 
-                <FieldGroup label="対象年齢" required>
-                  <Input
-                    value={classData.age_group}
+                <FieldGroup label="対象年齢">
+                  <Select
+                    value={classData.age_group || ''}
                     onChange={(e: any) => setClassData({ ...classData, age_group: e.target.value })}
-                    placeholder="例: 0-1歳"
-                  />
+                  >
+                    <option value="">未選択</option>
+                    {ageGroupOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
                 </FieldGroup>
 
                 <FieldGroup label="定員" required>
