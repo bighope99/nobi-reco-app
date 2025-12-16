@@ -81,6 +81,7 @@ export async function GET(
           birth_date: childData.birth_date,
           photo_url: childData.photo_url,
           school_id: childData.school_id,
+          grade_add: childData.grade_add || 0,
         },
         affiliation: {
           enrollment_status: childData.enrollment_status,

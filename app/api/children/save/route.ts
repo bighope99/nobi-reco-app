@@ -13,6 +13,7 @@ interface ChildPayload {
     gender?: string;
     birth_date?: string;
     school_id?: string | null;
+    grade_add?: number;
   };
   affiliation?: {
     enrollment_status?: string;
@@ -75,6 +76,7 @@ async function saveChild(
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,
+    grade_add: basic_info.grade_add !== undefined ? basic_info.grade_add : 0,
     enrollment_status: affiliation.enrollment_status || 'enrolled',
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
