@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 
 import {
@@ -94,51 +94,81 @@ export default function ChildcareDashboard() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   // データ取得
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/dashboard/summary');
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/dashboard/summary');
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch dashboard data');
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          setDashboardData(result.data);
-        } else {
-          throw new Error(result.error || 'Unknown error');
-        }
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard data');
       }
-    };
 
-    fetchDashboardData();
+      const result = await response.json();
+      if (result.success) {
+        setDashboardData(result.data);
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
   // --- Actions ---
+  const postAttendanceAction = async (action: string, childId: string) => {
+    try {
+      setError(null);
+      const response = await fetch('/api/dashboard/attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action, child_id: childId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '出欠処理に失敗しました');
+      }
+
+      await fetchDashboardData();
+    } catch (err) {
+      console.error('Attendance action error:', err);
+      setError(err instanceof Error ? err.message : '出欠処理に失敗しました');
+    }
+  };
 
   // 登園処理
   const handleCheckIn = async (childId: string) => {
-    // TODO: API実装
-    alert(`登園処理: ${childId}`);
+    await postAttendanceAction('check_in', childId);
+  };
+
+  // 退室処理
+  const handleCheckOut = async (childId: string) => {
+    await postAttendanceAction('check_out', childId);
   };
 
   // 欠席処理
   const handleMarkAbsent = async (childId: string) => {
-    // TODO: API実装
-    alert(`欠席処理: ${childId}`);
+    await postAttendanceAction('mark_absent', childId);
+  };
+
+  // 予定追加
+  const handleAddSchedule = async (childId: string) => {
+    await postAttendanceAction('add_schedule', childId);
   };
 
   // 予定外登園の確認
   const handleConfirmUnexpected = async (childId: string) => {
-    // TODO: API実装
-    alert(`予定外登園確認: ${childId}`);
+    await postAttendanceAction('confirm_unexpected', childId);
   };
 
   // --- Utility Functions ---
@@ -279,7 +309,7 @@ export default function ChildcareDashboard() {
           <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
             <LogIn size={14} /> 登園
           </button>
-          <button className={absentButtonClass}>
+          <button onClick={() => handleAddSchedule(child.child_id)} className={absentButtonClass}>
             <CalendarPlus size={14} /> 予定追加
           </button>
         </div>
@@ -287,7 +317,11 @@ export default function ChildcareDashboard() {
     }
 
     if (child.status === 'checked_in') {
-      return <button className="text-xs text-slate-400 hover:text-slate-600 underline">ステータス変更</button>;
+      return (
+        <button onClick={() => handleCheckOut(child.child_id)} className="text-xs text-slate-400 hover:text-slate-600 underline">
+          退室登録
+        </button>
+      );
     }
 
     return <span className="text-xs text-slate-300">-</span>;
