@@ -116,14 +116,31 @@ export async function GET(
         class_role: sa.class_role,
       })) || [];
 
-    // 所属児童取得
-    const { data: children } = await supabase
+    // 所属児童取得（_child_classで現在のクラス紐付けを判定）
+    const { data: children, error: childrenError } = await supabase
       .from('m_children')
-      .select('id, name, name_kana, birth_date, grade_add, photo_url, enrollment_status')
-      .eq('class_id', classId)
+      .select(`
+        id,
+        name,
+        name_kana,
+        birth_date,
+        grade_add,
+        photo_url,
+        enrollment_status,
+        _child_class!inner (
+          class_id,
+          is_current
+        )
+      `)
+      .eq('_child_class.class_id', classId)
+      .eq('_child_class.is_current', true)
       .eq('enrollment_status', 'enrolled')
       .is('deleted_at', null)
       .order('name_kana');
+
+    if (childrenError) {
+      throw childrenError;
+    }
 
     // 在籍児童数カウント
     const currentCount = children?.length || 0;
