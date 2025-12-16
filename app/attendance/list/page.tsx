@@ -29,6 +29,8 @@ interface ChildAttendance {
   class_id: string | null
   class_name: string
   age_group: string
+  grade: number | null
+  grade_label: string
   photo_url: string | null
   status: 'present' | 'absent' | 'late' | 'not_arrived'
   is_expected: boolean
@@ -348,7 +350,7 @@ export default function AttendanceListPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="text-slate-700">{child.class_name}</div>
-                        <div className="text-xs text-slate-500">{child.age_group || '-'}</div>
+                        <div className="text-xs text-slate-500">{child.grade_label || '-'}</div>
                       </td>
                       <td className="px-5 py-3"><StatusBadge child={child} /></td>
                       <td className="px-5 py-3 text-slate-600">
@@ -387,7 +389,7 @@ export default function AttendanceListPage() {
                         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                           <span>{child.class_name}</span>
                           <span>•</span>
-                          <span>{child.age_group || '-'}</span>
+                          <span>{child.grade_label || '-'}</span>
                         </div>
                       </div>
                       <StatusBadge child={child} />

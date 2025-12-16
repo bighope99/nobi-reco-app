@@ -12,6 +12,8 @@ interface Child {
   class_id: string | null;
   class_name: string;
   age_group: string;
+  grade: number | null;
+  grade_label: string;
   photo_url: string | null;
   last_record_date: string | null;
   is_recorded_today: boolean;
@@ -186,8 +188,8 @@ export default function StatusPage() {
                 aValue = a.kana
                 bValue = b.kana
             } else if (sortConfig.key === 'grade') {
-                aValue = a.age_group || ''
-                bValue = b.age_group || ''
+                aValue = a.grade ?? 0
+                bValue = b.grade ?? 0
             } else if (sortConfig.key === 'last_record_date') {
                 aValue = a.last_record_date || ''
                 bValue = b.last_record_date || ''
@@ -407,7 +409,7 @@ export default function StatusPage() {
 
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-medium text-slate-900">{child.age_group || '-'}</span>
+                                                    <span className="text-sm font-medium text-slate-900">{child.grade_label || '-'}</span>
                                                     <span className="text-xs text-slate-500">{child.class_name}</span>
                                                 </div>
                                             </td>

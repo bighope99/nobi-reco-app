@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
         family_name_kana,
         given_name_kana,
         photo_url,
+        birth_date,
+        grade_add,
         _child_class (
           class_id,
           is_current,
@@ -92,6 +95,9 @@ export async function GET(request: NextRequest) {
         ? child.s_attendance_schedule[0]
         : null;
 
+      const grade = calculateGrade(child.birth_date, child.grade_add);
+      const gradeLabel = formatGradeLabel(grade);
+
       return {
         child_id: child.id,
         name: `${child.family_name} ${child.given_name}`,
@@ -99,6 +105,8 @@ export async function GET(request: NextRequest) {
         class_id: classData?.id || null,
         class_name: classData?.name || '',
         age_group: classData?.age_group || '',
+        grade,
+        grade_label: gradeLabel,
         photo_url: child.photo_url,
         schedule: {
           monday: schedule?.monday || false,

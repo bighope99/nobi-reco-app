@@ -33,6 +33,8 @@ interface Child {
   class_id: string | null;
   class_name: string;
   age_group: string;
+  grade: number | null;
+  grade_label: string;
   photo_url: string | null;
   status: ChildStatus;
   is_scheduled_today: boolean;
@@ -231,8 +233,12 @@ export default function ChildcareDashboard() {
       let comparison = 0;
 
       if (sortKey === 'grade') {
-        // age_groupでソート（文字列比較）
-        comparison = (a.age_group || '').localeCompare(b.age_group || '');
+        const gradeA = a.grade ?? 0;
+        const gradeB = b.grade ?? 0;
+        comparison = gradeA - gradeB;
+        if (comparison === 0) {
+          comparison = a.kana.localeCompare(b.kana);
+        }
       } else if (sortKey === 'schedule') {
         comparison = (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
       } else {
@@ -558,7 +564,7 @@ export default function ChildcareDashboard() {
                             <div className="font-bold text-slate-800">{child.name}</div>
                             <div className="text-xs text-slate-500">{child.class_name}</div>
                           </td>
-                          <td className="px-5 py-3 text-slate-600 text-xs">{child.age_group || '-'}</td>
+                          <td className="px-5 py-3 text-slate-600 text-xs">{child.grade_label || '-'}</td>
                           <td className="px-5 py-3"><StatusBadge child={child} /></td>
                           <td className="px-5 py-3 text-slate-600">
                             <div className="flex flex-col text-xs">
@@ -592,7 +598,7 @@ export default function ChildcareDashboard() {
                           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                             <span>{child.class_name}</span>
                             <span>•</span>
-                            <span>{child.age_group || '-'}</span>
+                            <span>{child.grade_label || '-'}</span>
                           </div>
                         </div>
                         <StatusBadge child={child} />
