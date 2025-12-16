@@ -4,6 +4,11 @@ import { getUserSession } from '@/lib/auth/session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { z } from 'zod';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/utils/supabase/server';
+import { getUserSession } from '@/lib/auth/session';
+import { PromptTemplate } from '@langchain/core/prompts';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 
 export async function GET(request: NextRequest) {
   try {
@@ -230,20 +235,21 @@ export async function POST(request: NextRequest) {
 
     // LangChainで個別記録を生成（簡素化版：入力をそのまま返す）
     const observations = [];
+    const aiErrors: { child_id: string; message: string }[] = [];
     if (child_ids && child_ids.length > 0) {
       // Initialize LangChain
-      const model = new ChatOpenAI({
-        modelName: 'gpt-4o-mini',
-        temperature: 0.7,
-        openAIApiKey: process.env.OPENAI_API_KEY,
+      const model = new ChatGoogleGenerativeAI({
+        model: 'gemini-1.5-flash',
+        temperature: 0,
+        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
       });
 
       // Simple prompt that returns the input as-is
-      const template = `以下の活動内容から、児童の様子を記録してください。
+      const template = `次のテキストを一切加工せずにそのまま返してください。挨拶や説明を付け加えないでください。
 
-活動内容: {content}
+テキスト: {content}
 
-記録:`;
+返却:`;
 
       const prompt = PromptTemplate.fromTemplate(template);
       const chain = prompt.pipe(model);
@@ -252,7 +258,13 @@ export async function POST(request: NextRequest) {
         try {
           // Call LangChain (minimal implementation)
           const result = await chain.invoke({ content });
-          const observationContent = result.content || content;
+          const resultContent = Array.isArray(result.content)
+            ? result.content.join('')
+            : result.content;
+          const observationContent =
+            typeof resultContent === 'string' && resultContent.trim().length > 0
+              ? resultContent
+              : content;
 
           // Insert observation record
           const { error: obsError } = await supabase
@@ -268,9 +280,27 @@ export async function POST(request: NextRequest) {
 
           if (!obsError) {
             observations.push({ child_id, content: observationContent });
+          } else {
+            aiErrors.push({ child_id, message: 'Failed to insert observation' });
           }
         } catch (error) {
           console.error('LangChain error for child:', child_id, error);
+          aiErrors.push({ child_id, message: 'AI generation failed, used fallback text' });
+
+          const { error: obsError } = await supabase
+            .from('r_observation')
+            .insert({
+              child_id,
+              facility_id,
+              activity_id: activity.id,
+              recorded_at: new Date().toISOString(),
+              content,
+              created_by: session.user.id,
+            });
+
+          if (!obsError) {
+            observations.push({ child_id, content });
+          }
           // Continue with next child even if one fails
         }
       }

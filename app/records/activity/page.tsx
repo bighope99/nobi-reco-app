@@ -130,7 +130,7 @@ export default function ActivityRecordPage() {
               <div className="flex items-center gap-2">
                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-100 font-bold flex items-center gap-1">
                   <Sparkles className="w-3 h-3" />
-                  Gemini Pro 搭載
+                  Gemini 1.5 Flash 搭載
                 </span>
                 <Button variant="ghost" size="sm" className="text-sm font-bold">
                   下書き保存
@@ -181,7 +181,7 @@ export default function ActivityRecordPage() {
                 <Textarea
                   value={activityContent}
                   onChange={(e) => setActivityContent(e.target.value)}
-                  placeholder="手入力するか、上の「AI音声で下書き」ボタンを押して喋ってください。&#10;Geminiが綺麗な文章に整えます。"
+                  placeholder="手入力するか、上の「AI音声で下書き」ボタンを押して喋ってください。&#10;Gemini 1.5 Flash が綺麗な文章に整えます。"
                   className="min-h-64 text-base leading-relaxed resize-none"
                 />
                 
@@ -191,7 +191,7 @@ export default function ActivityRecordPage() {
                     <div className="text-center">
                       <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-2"></div>
                       <p className="text-xs font-bold text-indigo-600 animate-pulse">
-                        Geminiが文章を整えています...
+                        Gemini 1.5 Flash が文章を整えています...
                       </p>
                     </div>
                   </div>
@@ -237,7 +237,7 @@ export default function ActivityRecordPage() {
               <div className="bg-indigo-50 border-b border-indigo-100 p-4 flex justify-between items-center">
                 <h2 className="font-bold text-gray-800 flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-indigo-600" />
-                  AI解析結果 (Gemini)
+                  AI解析結果 (Gemini 1.5 Flash)
                 </h2>
                 <Button
                   variant="ghost"
