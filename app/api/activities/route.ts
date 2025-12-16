@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { z } from 'zod';
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,8 +45,10 @@ export async function GET(request: NextRequest) {
         activity_date,
         title,
         content,
+        is_draft,
         snack,
         photos,
+        mentions,
         created_at,
         updated_at,
         m_classes!inner (
@@ -107,8 +110,10 @@ export async function GET(request: NextRequest) {
       activity_date: activity.activity_date,
       title: activity.title || '無題',
       content: activity.content,
+      is_draft: activity.is_draft,
       snack: activity.snack,
       photos: activity.photos || [],
+      mentions: activity.mentions || [],
       class_name: activity.m_classes?.name || '',
       created_by: activity.m_users?.name || '',
       created_at: activity.created_at,
@@ -157,14 +162,45 @@ export async function POST(request: NextRequest) {
 
     const facility_id = userSession.current_facility_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, child_ids } = body;
 
-    if (!activity_date || !class_id || !content) {
+    const photoSchema = z.object({
+      url: z.string().url(),
+      caption: z.string().max(200).optional().default(''),
+    });
+
+    const mentionSchema = z.object({
+      child_id: z.string().min(1),
+      name: z.string().min(1),
+      position: z.object({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+      }).refine(({ start, end }) => start <= end, {
+        message: 'position.start must be less than or equal to position.end',
+      }),
+    });
+
+    const bodySchema = z.object({
+      activity_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      class_id: z.string().min(1),
+      title: z.string().max(200).optional(),
+      content: z.string().min(1).max(10000),
+      snack: z.string().optional(),
+      photos: z.array(photoSchema).max(6).optional().default([]),
+      mentions: z.array(mentionSchema).max(50).optional().default([]),
+      is_draft: z.boolean().optional().default(false),
+      child_ids: z.array(z.string()).optional().default([]),
+    });
+
+    const parsedBody = bodySchema.safeParse(body);
+
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { success: false, error: 'activity_date, class_id, and content are required' },
+        { success: false, error: 'Bad Request: invalid activity payload', details: parsedBody.error.flatten() },
         { status: 400 }
       );
     }
+
+    const { activity_date, class_id, title, content, snack, photos, mentions, is_draft, child_ids } = parsedBody.data;
 
     // 活動記録を作成
     const { data: activity, error: activityError } = await supabase
@@ -175,7 +211,10 @@ export async function POST(request: NextRequest) {
         activity_date,
         title: title || '活動記録',
         content,
+        is_draft,
         snack,
+        photos,
+        mentions,
         created_by: session.user.id,
       })
       .select()
@@ -244,6 +283,9 @@ export async function POST(request: NextRequest) {
         activity_date: activity.activity_date,
         title: activity.title,
         content: activity.content,
+        is_draft: activity.is_draft,
+        photos: activity.photos || [],
+        mentions: activity.mentions || [],
         observations_created: observations.length,
         observations,
       },
