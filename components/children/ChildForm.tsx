@@ -372,6 +372,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       setError(null);
 
       const requestBody = {
+        child_id: isEditMode ? childId : undefined,
         basic_info: {
           family_name: formData.family_name,
           given_name: formData.given_name,
@@ -404,11 +405,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
         },
       };
 
-      const url = isEditMode ? `/api/children/${childId}` : '/api/children';
-      const method = isEditMode ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch('/api/children/save', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
