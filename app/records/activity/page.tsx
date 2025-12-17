@@ -1,6 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react"
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -53,7 +60,7 @@ export default function ActivityRecordPage() {
   const [error, setError] = useState<string | null>(null)
 
   // 記録入力フォームの状態
-  const [selectedClass, setSelectedClass] = useState("tanpopo")
+  const [selectedClass, setSelectedClass] = useState("")
   const [activityDate, setActivityDate] = useState(new Date().toISOString().split('T')[0])
   const [activityContent, setActivityContent] = useState("")
   const [isAiLoading, setIsAiLoading] = useState(false)
@@ -90,8 +97,8 @@ export default function ActivityRecordPage() {
         const classes = result.data?.classes || []
         setClassOptions(classes)
 
-        if (classes.length > 0 && !selectedClass) {
-          setSelectedClass(classes[0].class_id)
+        if (classes.length > 0) {
+          setSelectedClass((prev) => prev || classes[0].class_id)
         }
       } catch (err) {
         console.error('Failed to fetch classes:', err)
@@ -127,6 +134,16 @@ export default function ActivityRecordPage() {
     fetchClasses()
     fetchActivities()
   }, [])
+
+  useEffect(() => {
+    setMentionSuggestions([])
+    setSelectedMentions([])
+    setIsMentionOpen(false)
+
+    if (mentionQuery) {
+      fetchMentionSuggestions(mentionQuery)
+    }
+  }, [selectedClass, mentionQuery, fetchMentionSuggestions])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -198,40 +215,43 @@ export default function ActivityRecordPage() {
     })
   }, [mentionSuggestions, isMentionOpen])
 
-  const fetchMentionSuggestions = async (query: string) => {
-    if (!selectedClass) return
+  const fetchMentionSuggestions = useCallback(
+    async (query: string) => {
+      if (!selectedClass) return
 
-    try {
-      setMentionLoading(true)
-      setMentionError(null)
+      try {
+        setMentionLoading(true)
+        setMentionError(null)
 
-      const params = new URLSearchParams({
-        class_id: selectedClass,
-      })
+        const params = new URLSearchParams({
+          class_id: selectedClass,
+        })
 
-      if (query) {
-        params.append("query", query)
+        if (query) {
+          params.append("query", query)
+        }
+
+        const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.error || "メンション候補の取得に失敗しました")
+        }
+
+        if (result.success) {
+          setMentionSuggestions(result.data.suggestions)
+          setActiveMentionIndex(0)
+          setIsMentionOpen(true)
+        }
+      } catch (err) {
+        setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
+        setIsMentionOpen(false)
+      } finally {
+        setMentionLoading(false)
       }
-
-      const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || "メンション候補の取得に失敗しました")
-      }
-
-      if (result.success) {
-        setMentionSuggestions(result.data.suggestions)
-        setActiveMentionIndex(0)
-        setIsMentionOpen(true)
-      }
-    } catch (err) {
-      setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
-      setIsMentionOpen(false)
-    } finally {
-      setMentionLoading(false)
-    }
-  }
+    },
+    [selectedClass],
+  )
 
   const detectMention = (value: string, cursorPosition: number | null) => {
     const cursor = cursorPosition ?? value.length

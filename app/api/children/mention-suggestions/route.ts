@@ -1,56 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-interface MentionSuggestion {
-  child_id: string
-  name: string
-  kana: string
-  nickname?: string
-  grade?: string
-  class_id?: string
-  class_name?: string
-  photo_url?: string | null
-  display_name: string
-  unique_key: string
-}
-
-const mockMentionSuggestions: MentionSuggestion[] = [
-  {
-    child_id: 'uuid-child-1',
-    name: 'りゅうくん',
-    kana: 'りゅう くん',
-    nickname: 'リュー',
-    grade: '年長',
-    class_id: 'tanpopo',
-    class_name: 'たんぽぽ組',
-    photo_url: null,
-    display_name: 'りゅうくん（たんぽぽ組）',
-    unique_key: 'child-1-ryu-tanpopo',
-  },
-  {
-    child_id: 'uuid-child-2',
-    name: 'ひなちゃん',
-    kana: 'ひな ちゃん',
-    nickname: 'ひな',
-    grade: '年少',
-    class_id: 'tanpopo',
-    class_name: 'たんぽぽ組',
-    photo_url: null,
-    display_name: 'ひなちゃん（たんぽぽ組）',
-    unique_key: 'child-2-hina-tanpopo',
-  },
-  {
-    child_id: 'uuid-child-3',
-    name: '田中 陽翔',
-    kana: 'たなか はると',
-    nickname: 'はるくん',
-    grade: '4年生',
-    class_id: 'tanpopo',
-    class_name: 'さくら組',
-    photo_url: null,
-    display_name: '田中 陽翔（4年生・さくら組）',
-    unique_key: 'child-3-tanaka-haruto',
-  },
-]
+import { getUserSession } from '@/lib/auth/session'
+import { calculateGrade, formatGradeLabel } from '@/utils/grade'
+import { createClient } from '@/utils/supabase/server'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -58,30 +10,101 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get('query')?.trim() || ''
   const limit = Number(searchParams.get('limit')) || 20
 
-  const normalizeText = (text: string) => text.toLocaleLowerCase('ja-JP').normalize('NFKC')
-
   if (!classId) {
     return NextResponse.json({ success: false, error: 'class_id is required' }, { status: 400 })
   }
 
-  const filtered = mockMentionSuggestions.filter((child) => {
-    const matchesClass = child.class_id ? child.class_id === classId : true
-    if (!query) return matchesClass
+  try {
+    const supabase = await createClient()
+    const {
+      data: { session },
+      error: authError,
+    } = await supabase.auth.getSession()
 
-    const normalizedQuery = normalizeText(query)
-    const fieldsToSearch = [child.name, child.kana, child.nickname, child.display_name].filter(
-      Boolean,
-    ) as string[]
-    return (
-      matchesClass &&
-      fieldsToSearch.some((field) => normalizeText(field).includes(normalizedQuery))
-    )
-  })
+    if (authError || !session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      suggestions: filtered.slice(0, limit),
-    },
-  })
+    const userSession = await getUserSession(session.user.id)
+    if (!userSession || !userSession.current_facility_id) {
+      return NextResponse.json({ error: 'Facility not found' }, { status: 404 })
+    }
+
+    const facility_id = userSession.current_facility_id
+
+    let childrenQuery = supabase
+      .from('m_children')
+      .select(`
+        id,
+        family_name,
+        given_name,
+        family_name_kana,
+        given_name_kana,
+        nickname,
+        birth_date,
+        grade_add,
+        photo_url,
+        _child_class!inner (
+          class_id,
+          is_current,
+          m_classes (
+            name
+          )
+        )
+      `)
+      .eq('facility_id', facility_id)
+      .eq('_child_class.class_id', classId)
+      .eq('_child_class.is_current', true)
+      .eq('enrollment_status', 'enrolled')
+      .is('deleted_at', null)
+      .limit(limit)
+      .order('family_name_kana', { ascending: true })
+
+    if (query) {
+      childrenQuery = childrenQuery.or(
+        `family_name.ilike.%${query}%,given_name.ilike.%${query}%,family_name_kana.ilike.%${query}%,given_name_kana.ilike.%${query}%,nickname.ilike.%${query}%`,
+      )
+    }
+
+    const { data: children, error: childrenError } = await childrenQuery
+
+    if (childrenError) {
+      console.error('Mention suggestions children fetch error:', childrenError)
+      return NextResponse.json(
+        { success: false, error: 'メンション候補の取得に失敗しました' },
+        { status: 500 },
+      )
+    }
+
+    const suggestions = (children || []).map((child) => {
+      const name = `${child.family_name} ${child.given_name}`
+      const kana = `${child.family_name_kana} ${child.given_name_kana}`
+      const grade = calculateGrade(child.birth_date, child.grade_add)
+      const gradeLabel = formatGradeLabel(grade)
+      const className = child._child_class?.[0]?.m_classes?.name || ''
+
+      return {
+        child_id: child.id,
+        name,
+        kana,
+        nickname: child.nickname,
+        grade: gradeLabel,
+        class_id: child._child_class?.[0]?.class_id,
+        class_name: className,
+        photo_url: child.photo_url,
+        display_name: gradeLabel ? `${name}（${gradeLabel}・${className}）` : `${name}（${className}）`,
+        unique_key: `${child.id}-${child._child_class?.[0]?.class_id ?? ''}`,
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        suggestions,
+      },
+    })
+  } catch (error) {
+    console.error('Mention suggestions API Error:', error)
+    return NextResponse.json({ success: false, error: 'メンション候補の取得に失敗しました' }, { status: 500 })
+  }
 }
