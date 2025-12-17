@@ -65,6 +65,7 @@ export default function ActivityRecordPage() {
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -147,6 +148,18 @@ export default function ActivityRecordPage() {
     )
   }, [activityContent])
 
+  useEffect(() => {
+    if (!isMentionOpen) {
+      setActiveMentionIndex(0)
+      return
+    }
+
+    setActiveMentionIndex((prev) => {
+      if (mentionSuggestions.length === 0) return 0
+      return Math.min(prev, mentionSuggestions.length - 1)
+    })
+  }, [mentionSuggestions, isMentionOpen])
+
   const fetchMentionSuggestions = async (query: string) => {
     if (!selectedClass) return
 
@@ -171,6 +184,7 @@ export default function ActivityRecordPage() {
 
       if (result.success) {
         setMentionSuggestions(result.data.suggestions)
+        setActiveMentionIndex(0)
         setIsMentionOpen(true)
       }
     } catch (err) {
@@ -201,6 +215,28 @@ export default function ActivityRecordPage() {
     const { value, selectionStart } = e.target
     setActivityContent(value)
     detectMention(value, selectionStart)
+  }
+
+  const handleMentionNavigation = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!isMentionOpen || mentionSuggestions.length === 0) return
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault()
+      setActiveMentionIndex((prev) => (prev + 1) % mentionSuggestions.length)
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault()
+      setActiveMentionIndex((prev) =>
+        prev === 0 ? mentionSuggestions.length - 1 : prev - 1,
+      )
+    } else if (event.key === "Enter") {
+      event.preventDefault()
+      const activeSuggestion = mentionSuggestions[activeMentionIndex]
+      if (activeSuggestion) {
+        handleSelectMention(activeSuggestion)
+      }
+    } else if (event.key === "Escape") {
+      setIsMentionOpen(false)
+    }
   }
 
   const handleSelectMention = (suggestion: MentionSuggestion) => {
@@ -288,12 +324,13 @@ export default function ActivityRecordPage() {
                 <Textarea
                   value={activityContent}
                   onChange={handleContentChange}
+                  onKeyDown={handleMentionNavigation}
                   placeholder="手入力するか、上の「AI音声で下書き」ボタンを押して喋ってください。&#10;Geminiが綺麗な文章に整えます。"
                   className="min-h-64 text-base leading-relaxed resize-none"
                 />
 
                 {isMentionOpen && (
-                  <div className="absolute left-0 right-0 mt-2 max-h-56 overflow-y-auto rounded-lg border bg-white shadow-lg z-20">
+                  <div className="absolute left-0 right-0 top-full mt-2 max-h-56 overflow-y-auto rounded-lg border bg-white shadow-lg z-20">
                     <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50 text-xs text-gray-500">
                       <span className="font-bold">メンション候補</span>
                       <span>{mentionQuery ? `"${mentionQuery}"` : "全候補"}</span>
@@ -305,13 +342,17 @@ export default function ActivityRecordPage() {
                     ) : mentionSuggestions.length === 0 ? (
                       <div className="px-4 py-3 text-sm text-gray-500">候補が見つかりません</div>
                     ) : (
-                      <ul className="divide-y">
-                        {mentionSuggestions.map((suggestion) => (
+                      <ul className="divide-y" role="listbox">
+                        {mentionSuggestions.map((suggestion, index) => (
                           <li key={suggestion.unique_key}>
                             <button
                               type="button"
                               onClick={() => handleSelectMention(suggestion)}
-                              className="w-full px-4 py-3 text-left hover:bg-indigo-50 transition flex items-center justify-between"
+                              className={`w-full px-4 py-3 text-left transition flex items-center justify-between ${
+                                index === activeMentionIndex ? "bg-indigo-50" : "hover:bg-indigo-50"
+                              }`}
+                              role="option"
+                              aria-selected={index === activeMentionIndex}
                             >
                               <div>
                                 <p className="font-bold text-gray-800">@{suggestion.display_name}</p>
