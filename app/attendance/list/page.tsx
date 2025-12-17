@@ -29,7 +29,7 @@ interface ChildAttendance {
   is_expected: boolean
   checked_in_at: string | null
   checked_out_at: string | null
-  scan_method: string | null
+  check_in_method: string | null
   is_unexpected: boolean
 }
 

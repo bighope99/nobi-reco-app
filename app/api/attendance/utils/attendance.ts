@@ -19,10 +19,17 @@ export const weekdayJpMap: Record<string, string> = {
   saturday: '土',
 };
 
-const getNextDate = (date: string) => {
-  const d = new Date(`${date}T00:00:00`);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+const getDateRange = (date: string) => {
+  const start = `${date}T00:00:00`;
+  const end = `${date}T23:59:59.999`;
+  const nextDate = new Date(`${date}T00:00:00`);
+  nextDate.setDate(nextDate.getDate() + 1);
+
+  return {
+    start,
+    end,
+    nextDateString: nextDate.toISOString().split('T')[0],
+  };
 };
 
 export const getDayOfWeekKey = (date: string) => weekdayKeys[new Date(`${date}T00:00:00`).getDay()];
@@ -54,14 +61,15 @@ export async function fetchAttendanceContext(
     .eq('attendance_date', date)
     .in('child_id', childIds);
 
+  const { start, end } = getDateRange(date);
+
   const { data: attendanceLogsDataRaw } = await supabase
     .from('h_attendance')
-    .select('*')
+    .select('child_id, checked_in_at, checked_out_at, check_in_method, check_out_method')
     .eq('facility_id', facilityId)
-    .gte('attendance_date', date)
-    .lt('attendance_date', getNextDate(date))
-    .in('child_id', childIds)
-    .is('deleted_at', null);
+    .gte('checked_in_at', start)
+    .lte('checked_in_at', end)
+    .in('child_id', childIds);
 
   const schedulePatterns = schedulePatternsRaw ?? [];
   const dailyAttendanceData = dailyAttendanceDataRaw ?? [];

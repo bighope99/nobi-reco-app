@@ -68,13 +68,18 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
+    const startOfDay = `${today}T00:00:00`;
+    const endOfDay = `${today}T23:59:59.999`;
 
     // Check if already checked in today
     const { data: existing } = await supabase
       .from('h_attendance')
       .select('id, checked_in_at')
       .eq('child_id', child_id)
-      .eq('attendance_date', today)
+      .eq('facility_id', session.facility_id)
+      .gte('checked_in_at', startOfDay)
+      .lte('checked_in_at', endOfDay)
+      .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
     if (existing) {
@@ -98,9 +103,8 @@ export async function POST(request: NextRequest) {
       .insert({
         child_id,
         facility_id: session.facility_id,
-        attendance_date: today,
-        status: 'present',
         checked_in_at: now.toISOString(),
+        check_in_method: 'qr',
       })
       .select()
       .single();
@@ -119,8 +123,7 @@ export async function POST(request: NextRequest) {
         child_id,
         child_name: `${child.family_name} ${child.given_name}`,
         checked_in_at: attendance.checked_in_at,
-        attendance_date: attendance.attendance_date,
-        status: attendance.status,
+        attendance_date: today,
       },
     });
   } catch (error) {

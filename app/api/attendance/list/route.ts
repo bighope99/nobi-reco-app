@@ -95,7 +95,26 @@ export async function GET(request: NextRequest) {
 
     const attendanceMap = new Map();
     attendanceLogsData.forEach((record: any) => {
-      attendanceMap.set(record.child_id, record);
+      const existing = attendanceMap.get(record.child_id);
+      if (!existing) {
+        attendanceMap.set(record.child_id, record);
+        return;
+      }
+
+      if (existing.checked_in_at && record.checked_in_at) {
+        const existingTime = new Date(existing.checked_in_at).getTime();
+        const currentTime = new Date(record.checked_in_at).getTime();
+
+        if (currentTime < existingTime) {
+          attendanceMap.set(record.child_id, record);
+        }
+
+        return;
+      }
+
+      if (!existing.checked_in_at && record.checked_in_at) {
+        attendanceMap.set(record.child_id, record);
+      }
     });
 
     const formattedChildren = children.map((child: any) => {
@@ -150,7 +169,7 @@ export async function GET(request: NextRequest) {
         is_expected: isExpected,
         checked_in_at: attendance?.checked_in_at || null,
         checked_out_at: attendance?.checked_out_at || null,
-        scan_method: attendance?.scan_method || null,
+        check_in_method: attendance?.check_in_method || null,
         is_unexpected: isUnexpected,
       };
     });

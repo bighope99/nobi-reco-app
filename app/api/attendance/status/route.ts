@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
 
-const VALID_STATUSES = ['absent', 'present'] as const
+const VALID_STATUSES = ['absent', 'present', 'cancel'] as const
 
 const buildDateRange = (date: string) => ({
   start: `${date}T00:00:00`,
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       .eq('facility_id', facilityId)
       .gte('checked_in_at', dateRange.start)
       .lte('checked_in_at', dateRange.end)
-      .is('deleted_at', null)
+      .order('checked_in_at', { ascending: true })
       .maybeSingle()
 
     if (fetchError) {
@@ -114,6 +114,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (status === 'cancel') {
+      const { error: dailyDeleteError } = await supabase
+        .from('r_daily_attendance')
+        .delete()
+        .eq('facility_id', facilityId)
+        .eq('child_id', child_id)
+        .eq('attendance_date', date)
+
+      if (dailyDeleteError) {
+        console.error('Daily attendance delete error:', dailyDeleteError)
+        return NextResponse.json({ success: false, error: 'Failed to cancel daily attendance' }, { status: 500 })
+      }
+
+      const { error: attendanceDeleteError } = await supabase
+        .from('h_attendance')
+        .delete()
+        .eq('facility_id', facilityId)
+        .eq('child_id', child_id)
+        .gte('checked_in_at', dateRange.start)
+        .lte('checked_in_at', dateRange.end)
+
+      if (attendanceDeleteError) {
+        console.error('Attendance delete error:', attendanceDeleteError)
+        return NextResponse.json({ success: false, error: 'Failed to cancel attendance log' }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true, data: { status: 'canceled', attendance_date: date } })
+    }
+
     if (status === 'absent') {
       if (existingRecord?.checked_in_at) {
         return NextResponse.json({ success: false, error: 'Already checked in for this date' }, { status: 409 })
@@ -133,7 +162,7 @@ export async function POST(request: NextRequest) {
       if (!existingRecord.checked_in_at) {
         const { error: updateError } = await supabase
           .from('h_attendance')
-          .update({ checked_in_at: checkInTimestamp })
+          .update({ checked_in_at: checkInTimestamp, check_in_method: 'manual', checked_in_by: session.user.id })
           .eq('id', existingRecord.id)
 
         if (updateError) {
@@ -147,8 +176,8 @@ export async function POST(request: NextRequest) {
         .insert({
           child_id,
           facility_id: facilityId,
-          attendance_date: date,
           checked_in_at: checkInTimestamp,
+          check_in_method: 'manual',
           checked_in_by: session.user.id,
         })
 
