@@ -136,18 +136,27 @@ export default function ActivityRecordPage() {
     fetchActivities()
   }, [])
 
+  const toHiragana = (text: string) =>
+    text.replace(/[ァ-ン]/g, (char) =>
+      String.fromCharCode(char.charCodeAt(0) - 0x60),
+    )
+
+  const normalizeForSearch = (text: string) => toHiragana(text.trim().toLowerCase())
+
   const filterMentionSuggestions = useCallback(
     (query: string) => {
-      const normalizedQuery = query.trim().toLowerCase()
+      const normalizedQuery = normalizeForSearch(query)
 
       const filteredSuggestions = classChildren.filter((child) => {
         if (!normalizedQuery) return true
 
         const searchTargets = [
-          child.display_name.toLowerCase(),
-          child.kana?.toLowerCase(),
-          child.nickname?.toLowerCase(),
-        ].filter(Boolean) as string[]
+          child.display_name,
+          child.kana,
+          child.nickname,
+        ]
+          .filter(Boolean)
+          .map((target) => normalizeForSearch(target as string))
 
         return searchTargets.some((target) => target.includes(normalizedQuery))
       })
