@@ -64,12 +64,14 @@ export async function GET(request: NextRequest) {
       attendanceQuery = attendanceQuery.eq('_child_class.class_id', class_id);
     }
 
-    const { data: childrenData, error: childrenError } = await attendanceQuery;
+    const { data: childrenDataRaw, error: childrenError } = await attendanceQuery;
 
     if (childrenError) {
       console.error('Children fetch error:', childrenError);
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
+
+    const childrenData = childrenDataRaw ?? [];
 
     // 2-4. 通所予定・当日設定・実績を共通ロジックで取得
     const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = await fetchAttendanceContext(

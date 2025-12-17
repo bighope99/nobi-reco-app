@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.or(`family_name.ilike.%${search}%,given_name.ilike.%${search}%,family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
     }
 
-    const { data: children, error: childrenError } = await childrenQuery;
+    const { data: childrenRaw, error: childrenError } = await childrenQuery;
 
     if (childrenError) {
       console.error('Database error:', childrenError);
@@ -81,12 +81,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const children = childrenRaw ?? [];
+
     // スケジュール・当日設定・出席実績を共通ロジックで取得
     const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = await fetchAttendanceContext(
       supabase,
       facility_id,
       targetDate,
-      (children || []).map((c: any) => c.id)
+      children.map((c: any) => c.id)
     );
 
     const weekday = dayOfWeekKey;

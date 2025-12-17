@@ -39,7 +39,7 @@ export async function fetchAttendanceContext(
     return { dayOfWeekKey, schedulePatterns: [], dailyAttendanceData: [], attendanceLogsData: [] };
   }
 
-  const { data: schedulePatterns = [] } = await supabase
+  const { data: schedulePatternsRaw } = await supabase
     .from('s_attendance_schedule')
     .select('child_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, valid_from, valid_to, is_active')
     .eq('is_active', true)
@@ -47,14 +47,14 @@ export async function fetchAttendanceContext(
     .or(`valid_to.is.null,valid_to.gte.${date}`)
     .in('child_id', childIds);
 
-  const { data: dailyAttendanceData = [] } = await supabase
+  const { data: dailyAttendanceDataRaw } = await supabase
     .from('r_daily_attendance')
     .select('child_id, status')
     .eq('facility_id', facilityId)
     .eq('attendance_date', date)
     .in('child_id', childIds);
 
-  const { data: attendanceLogsData = [] } = await supabase
+  const { data: attendanceLogsDataRaw } = await supabase
     .from('h_attendance')
     .select('*')
     .eq('facility_id', facilityId)
@@ -62,6 +62,10 @@ export async function fetchAttendanceContext(
     .lt('attendance_date', getNextDate(date))
     .in('child_id', childIds)
     .is('deleted_at', null);
+
+  const schedulePatterns = schedulePatternsRaw ?? [];
+  const dailyAttendanceData = dailyAttendanceDataRaw ?? [];
+  const attendanceLogsData = attendanceLogsDataRaw ?? [];
 
   return { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData };
 }
