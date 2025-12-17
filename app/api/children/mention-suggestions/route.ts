@@ -44,7 +44,7 @@ const mockMentionSuggestions: MentionSuggestion[] = [
     kana: 'たなか はると',
     nickname: 'はるくん',
     grade: '4年生',
-    class_id: 'sakura',
+    class_id: 'tanpopo',
     class_name: 'さくら組',
     photo_url: null,
     display_name: '田中 陽翔（4年生・さくら組）',
