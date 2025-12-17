@@ -76,7 +76,11 @@ export default function ActivityRecordPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingError, setRecordingError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<BlobPart[]>([])
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -217,33 +221,97 @@ export default function ActivityRecordPage() {
     return `${date.getMonth() + 1}/${date.getDate()}`
   }
 
-  // AI音声で下書き作成（モック）
-  const handleVoiceDraft = async () => {
-    setIsAiLoading(true)
-    
-    // モック: 1.5秒後にAI生成テキストを挿入
-    setTimeout(() => {
-      const draft = `今日は雨のため室内で過ごしました。新聞紙遊びを取り入れたところ、子どもたちは大喜びでした。
-
-@りゅうくん は、最初は破るのをためらっていましたが、保育者が手本を見せると真似をして、ビリビリという音を楽しんでいました。細長くちぎった新聞紙を「ヘビさんだよ！」と見立てて嬉しそうに見せてくれました。
-
-@ひなちゃん は、丸めた新聞紙をボールにして「えいっ！」と投げる遊びに夢中でした。お友達に当たらないよう、周りを見て投げる姿に成長を感じました。`
-      
-      // タイピングエフェクト
-      let i = 0
-      setActivityContent("")
-      const typeWriter = setInterval(() => {
-        if (i < draft.length) {
-          setActivityContent(prev => prev + draft.charAt(i))
-          i++
+  const blobToBase64 = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = reader.result
+        if (typeof result === 'string') {
+          const base64Data = result.split(',')[1] || ''
+          resolve(base64Data)
         } else {
-          clearInterval(typeWriter)
-          setChildCount(2)
+          reject(new Error('音声データの読み込みに失敗しました'))
         }
-      }, 10)
-      
-      setIsAiLoading(false)
-    }, 1500)
+      }
+      reader.onerror = () => reject(new Error('音声データの読み込みに失敗しました'))
+      reader.readAsDataURL(blob)
+    })
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    const audioBase64 = await blobToBase64(audioBlob)
+
+    const response = await fetch('/api/ai/transcribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio: audioBase64,
+        mimeType: audioBlob.type,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || !result.success || !result.text) {
+      throw new Error(result.error || '音声の文字起こしに失敗しました')
+    }
+
+    return result.text as string
+  }
+
+  const handleVoiceDraft = async () => {
+    if (isRecording && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop()
+      return
+    }
+
+    setRecordingError(null)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioChunksRef.current = []
+
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        setIsRecording(false)
+        setIsAiLoading(true)
+
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+          stream.getTracks().forEach((track) => track.stop())
+
+          const transcript = await transcribeAudio(audioBlob)
+          setActivityContent((prev) =>
+            prev.trim() ? `${prev.trim()}\n${transcript}` : transcript,
+          )
+        } catch (error) {
+          console.error('Voice draft error:', error)
+          setRecordingError(
+            error instanceof Error
+              ? error.message
+              : '音声の処理中にエラーが発生しました',
+          )
+        } finally {
+          setIsAiLoading(false)
+        }
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+    } catch (err) {
+      console.error('Microphone error:', err)
+      setRecordingError('マイクの起動に失敗しました。ブラウザの権限をご確認ください。')
+      setIsRecording(false)
+    }
   }
 
   const updateMentionMetrics = (content: string) => {
@@ -517,11 +585,11 @@ export default function ActivityRecordPage() {
                     className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:shadow-md hover:scale-105 transition flex items-center gap-1"
                   >
                     <Mic className="w-3 h-3" />
-                    ✨ AI音声で下書き作成
+                    {isRecording ? '録音停止' : '✨ AI音声で下書き作成'}
                   </Button>
                 </div>
               </div>
-              
+
               <div className="relative">
                 <Textarea
                   ref={textareaRef}
@@ -602,7 +670,17 @@ export default function ActivityRecordPage() {
                   </div>
                 )}
               </div>
-              
+
+              {recordingError && (
+                <p className="text-xs text-red-600 mt-2">{recordingError}</p>
+              )}
+
+              {isRecording && !isAiLoading && (
+                <p className="text-xs text-indigo-700 mt-2 font-bold">
+                  録音中... もう一度ボタンを押して停止・文字起こし
+                </p>
+              )}
+
               <p className="text-xs text-gray-400 mt-2 text-right">
                 「今日は雨で室内遊び。りゅうくんは新聞紙破いて楽しそうだった」のように箇条書きでもOK！
               </p>
