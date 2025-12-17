@@ -163,7 +163,7 @@ export default function ActivityRecordPage() {
                   Gemini Pro 搭載
                 </span>
                 <Button variant="ghost" size="sm" className="text-sm font-bold">
-                  下書き保存
+                  保存
                 </Button>
               </div>
             </div>
