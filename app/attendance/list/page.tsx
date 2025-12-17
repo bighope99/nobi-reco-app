@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import {
   Calendar,
@@ -68,33 +68,35 @@ export default function AttendanceListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filterClass, setFilterClass] = useState<string>('all')
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const fetchAttendance = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch(`/api/attendance/list?date=${selectedDate}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch attendance')
+      }
+
+      if (result.success) {
+        setAttendanceData(result.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch attendance:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch attendance')
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedDate])
 
   useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        const response = await fetch(`/api/attendance/list?date=${selectedDate}`)
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to fetch attendance')
-        }
-
-        if (result.success) {
-          setAttendanceData(result.data)
-        }
-      } catch (err) {
-        console.error('Failed to fetch attendance:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch attendance')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchAttendance()
-  }, [selectedDate])
+  }, [fetchAttendance])
 
   const isPastDate = (dateString: string) => {
     const today = new Date()
@@ -203,28 +205,76 @@ export default function AttendanceListPage() {
     return <span className={presentation.className}>{presentation.label}</span>
   }
 
-  const StatusActionButton = ({ child }: { child: ChildAttendance }) => {
+  const StatusActionButton = ({
+    child,
+    onMarkStatus,
+    isLoading,
+  }: {
+    child: ChildAttendance
+    onMarkStatus: (childId: string, status: 'absent' | 'present') => void
+    isLoading: boolean
+  }) => {
     const presentation = getStatusPresentation(child)
 
     if (!presentation) return null
 
     if (presentation.label === '出席予定') {
       return (
-        <button className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-md transition-colors shadow-sm">
-          欠席にする
+        <button
+          onClick={() => onMarkStatus(child.child_id, 'absent')}
+          disabled={isLoading}
+          className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
+        >
+          {isLoading ? '処理中...' : '欠席にする'}
         </button>
       )
     }
 
     if (presentation.label === '欠席予定') {
       return (
-        <button className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-md transition-colors shadow-sm">
-          出席にする
+        <button
+          onClick={() => onMarkStatus(child.child_id, 'present')}
+          disabled={isLoading}
+          className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
+        >
+          {isLoading ? '処理中...' : '出席にする'}
         </button>
       )
     }
 
     return null
+  }
+
+  const handleStatusChange = async (childId: string, nextStatus: 'absent' | 'present') => {
+    setActionError(null)
+    setActionLoading(prev => ({ ...prev, [childId]: true }))
+
+    try {
+      const response = await fetch('/api/attendance/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          status: nextStatus,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '出席ステータスの更新に失敗しました')
+      }
+
+      await fetchAttendance()
+    } catch (err) {
+      console.error('Failed to update attendance status:', err)
+      setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [childId]: false }))
+    }
   }
 
   if (loading) {
@@ -261,6 +311,12 @@ export default function AttendanceListPage() {
         </style>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+
+          {actionError && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {actionError}
+            </div>
+          )}
 
           {/* Header with Date Selector */}
           <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 pb-6">
@@ -418,7 +474,11 @@ export default function AttendanceListPage() {
                       </td>
                       <td className="px-5 py-3"><StatusBadge child={child} /></td>
                       <td className="px-5 py-3 text-center">
-                        <StatusActionButton child={child} />
+                        <StatusActionButton
+                          child={child}
+                          onMarkStatus={handleStatusChange}
+                          isLoading={Boolean(actionLoading[child.child_id])}
+                        />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
                         {child.checked_in_at ? (
@@ -463,7 +523,11 @@ export default function AttendanceListPage() {
                     </div>
 
                     <div className="mb-3">
-                      <StatusActionButton child={child} />
+                      <StatusActionButton
+                        child={child}
+                        onMarkStatus={handleStatusChange}
+                        isLoading={Boolean(actionLoading[child.child_id])}
+                      />
                     </div>
 
                     {(child.checked_in_at || child.checked_out_at) && (
