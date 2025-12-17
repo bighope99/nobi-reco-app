@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,18 @@ interface Activity {
   individual_record_count: number
 }
 
+interface MentionSuggestion {
+  child_id: string
+  name: string
+  kana: string
+  nickname?: string
+  grade?: string
+  class_name?: string
+  photo_url?: string | null
+  display_name: string
+  unique_key: string
+}
+
 interface ActivitiesData {
   activities: Activity[]
   total: number
@@ -39,17 +51,23 @@ export default function ActivityRecordPage() {
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [classOptions, setClassOptions] = useState<Array<{ class_id: string; class_name: string }>>([])
-  const [classError, setClassError] = useState<string | null>(null)
-  const [isLoadingClasses, setIsLoadingClasses] = useState(true)
 
   // 記録入力フォームの状態
-  const [selectedClass, setSelectedClass] = useState("")
+  const [selectedClass, setSelectedClass] = useState("tanpopo")
   const [activityDate, setActivityDate] = useState(new Date().toISOString().split('T')[0])
   const [activityContent, setActivityContent] = useState("")
   const [isAiLoading, setIsAiLoading] = useState(false)
   const [childCount, setChildCount] = useState(0)
   const [showAnalysisModal, setShowAnalysisModal] = useState(false)
+  const [mentionSuggestions, setMentionSuggestions] = useState<MentionSuggestion[]>([])
+  const [isMentionOpen, setIsMentionOpen] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState("")
+  const [mentionStart, setMentionStart] = useState<number | null>(null)
+  const [mentionLoading, setMentionLoading] = useState(false)
+  const [mentionError, setMentionError] = useState<string | null>(null)
+  const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -132,7 +150,6 @@ export default function ActivityRecordPage() {
         } else {
           clearInterval(typeWriter)
           setChildCount(2)
-          highlightMentions()
         }
       }, 10)
       
@@ -140,9 +157,163 @@ export default function ActivityRecordPage() {
     }, 1500)
   }
 
-  const highlightMentions = () => {
-    // メンションハイライトのロジック（後で実装）
-    console.log('Highlighting mentions...')
+  const updateMentionMetrics = (content: string) => {
+    const mentionTokens = new Set<string>()
+    const mentionRegex = /[@＠]([^\s@＠]+)/g
+    let match
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      mentionTokens.add(match[1])
+    }
+
+    setChildCount(mentionTokens.size)
+  }
+
+  useEffect(() => {
+    updateMentionMetrics(activityContent)
+
+    setSelectedMentions((prev) =>
+      prev.filter(
+        (mention) =>
+          activityContent.includes(`@${mention.display_name}`) ||
+          activityContent.includes(`＠${mention.display_name}`),
+      ),
+    )
+  }, [activityContent])
+
+  useEffect(() => {
+    if (!isMentionOpen) {
+      setActiveMentionIndex(0)
+      return
+    }
+
+    setActiveMentionIndex((prev) => {
+      if (mentionSuggestions.length === 0) return 0
+      return Math.min(prev, mentionSuggestions.length - 1)
+    })
+  }, [mentionSuggestions, isMentionOpen])
+
+  const fetchMentionSuggestions = async (query: string) => {
+    if (!selectedClass) return
+
+    try {
+      setMentionLoading(true)
+      setMentionError(null)
+
+      const params = new URLSearchParams({
+        class_id: selectedClass,
+      })
+
+      if (query) {
+        params.append("query", query)
+      }
+
+      const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "メンション候補の取得に失敗しました")
+      }
+
+      if (result.success) {
+        setMentionSuggestions(result.data.suggestions)
+        setActiveMentionIndex(0)
+        setIsMentionOpen(true)
+      }
+    } catch (err) {
+      setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
+      setIsMentionOpen(false)
+    } finally {
+      setMentionLoading(false)
+    }
+  }
+
+  const detectMention = (value: string, cursorPosition: number | null) => {
+    const cursor = cursorPosition ?? value.length
+    const textBeforeCursor = value.slice(0, cursor)
+    const mentionMatch = textBeforeCursor.match(/[@＠]([^\s@＠]*)$/)
+
+    if (mentionMatch) {
+      const latestMentionStart = Math.max(textBeforeCursor.lastIndexOf("@"), textBeforeCursor.lastIndexOf("＠"))
+
+      if (latestMentionStart === -1) return
+
+      setMentionQuery(mentionMatch[1])
+      setMentionStart(latestMentionStart)
+      fetchMentionSuggestions(mentionMatch[1])
+    } else {
+      setMentionQuery("")
+      setMentionStart(null)
+      setIsMentionOpen(false)
+    }
+  }
+
+  const handleContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const { value, selectionStart } = e.target
+    setActivityContent(value)
+    detectMention(value, selectionStart)
+  }
+
+  const handleMentionNavigation = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!isMentionOpen || mentionSuggestions.length === 0) return
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault()
+      setActiveMentionIndex((prev) => (prev + 1) % mentionSuggestions.length)
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault()
+      setActiveMentionIndex((prev) =>
+        prev === 0 ? mentionSuggestions.length - 1 : prev - 1,
+      )
+    } else if (event.key === "Enter") {
+      event.preventDefault()
+      const activeSuggestion = mentionSuggestions[activeMentionIndex]
+      if (activeSuggestion) {
+        handleSelectMention(activeSuggestion)
+      }
+    } else if (event.key === "Escape") {
+      setIsMentionOpen(false)
+    }
+  }
+
+  const handleSelectMention = (suggestion: MentionSuggestion) => {
+    if (mentionStart === null) return
+
+    const mentionEnd = mentionStart + 1 + mentionQuery.length
+    const before = activityContent.slice(0, mentionStart)
+    const after = activityContent.slice(mentionEnd)
+    const newContent = `${before}@${suggestion.display_name} ${after}`
+
+    setActivityContent(newContent)
+    setIsMentionOpen(false)
+
+    setSelectedMentions((prev) => {
+      if (prev.some((item) => item.unique_key === suggestion.unique_key)) {
+        return prev
+      }
+      return [...prev, suggestion]
+    })
+  }
+
+  const insertMentionAtCursor = () => {
+    const textarea = textareaRef.current
+    const triggerChar = "@"
+
+    if (!textarea) return
+
+    const start = textarea.selectionStart ?? activityContent.length
+    const end = textarea.selectionEnd ?? start
+
+    const newContent = `${activityContent.slice(0, start)}${triggerChar}${activityContent.slice(end)}`
+    const nextCursor = start + triggerChar.length
+
+    setActivityContent(newContent)
+    detectMention(newContent, nextCursor)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(nextCursor, nextCursor)
+    })
   }
 
   const toggleAnalysisModal = () => {
@@ -212,23 +383,93 @@ export default function ActivityRecordPage() {
             <div className="relative">
               <div className="flex justify-between items-center mb-2">
                 <Label className="text-sm font-bold text-gray-700">活動内容</Label>
-                <Button
-                  onClick={handleVoiceDraft}
-                  disabled={isAiLoading}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:shadow-md hover:scale-105 transition flex items-center gap-1"
-                >
-                  <Mic className="w-3 h-3" />
-                  ✨ AI音声で下書き作成
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={insertMentionAtCursor}
+                    className="text-xs font-bold"
+                  >
+                    @ メンション挿入
+                  </Button>
+                  <Button
+                    onClick={handleVoiceDraft}
+                    disabled={isAiLoading}
+                    className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:shadow-md hover:scale-105 transition flex items-center gap-1"
+                  >
+                    <Mic className="w-3 h-3" />
+                    ✨ AI音声で下書き作成
+                  </Button>
+                </div>
               </div>
               
               <div className="relative">
                 <Textarea
+                  ref={textareaRef}
                   value={activityContent}
-                  onChange={(e) => setActivityContent(e.target.value)}
+                  onChange={handleContentChange}
+                  onKeyDown={handleMentionNavigation}
                   placeholder="手入力するか、上の「AI音声で下書き」ボタンを押して喋ってください。&#10;Geminiが綺麗な文章に整えます。"
                   className="min-h-64 text-base leading-relaxed resize-none"
                 />
+
+                {isMentionOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-2 max-h-56 overflow-y-auto rounded-lg border bg-white shadow-lg z-20">
+                    <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50 text-xs text-gray-500">
+                      <span className="font-bold">メンション候補</span>
+                      <span>{mentionQuery ? `"${mentionQuery}"` : "全候補"}</span>
+                    </div>
+                    {mentionLoading ? (
+                      <div className="px-4 py-3 text-sm text-gray-500">読み込み中...</div>
+                    ) : mentionError ? (
+                      <div className="px-4 py-3 text-sm text-red-600">{mentionError}</div>
+                    ) : mentionSuggestions.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-500">候補が見つかりません</div>
+                    ) : (
+                      <ul className="divide-y" role="listbox">
+                        {mentionSuggestions.map((suggestion, index) => (
+                          <li key={suggestion.unique_key}>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectMention(suggestion)}
+                              className={`w-full px-4 py-3 text-left transition flex items-center justify-between ${
+                                index === activeMentionIndex ? "bg-indigo-50" : "hover:bg-indigo-50"
+                              }`}
+                              role="option"
+                              aria-selected={index === activeMentionIndex}
+                            >
+                              <div>
+                                <p className="font-bold text-gray-800">@{suggestion.display_name}</p>
+                                <p className="text-xs text-gray-500">{suggestion.kana}</p>
+                                {suggestion.nickname && (
+                                  <p className="text-[11px] text-gray-500">あだ名: {suggestion.nickname}</p>
+                                )}
+                              </div>
+                              {suggestion.class_name && (
+                                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full border border-indigo-100 font-bold">
+                                  {suggestion.class_name}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {selectedMentions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {selectedMentions.map((mention) => (
+                      <span
+                        key={mention.unique_key}
+                        className="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full border border-indigo-100 font-bold"
+                      >
+                        @{mention.display_name}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 
                 {/* AI生成中のローディング */}
                 {isAiLoading && (
