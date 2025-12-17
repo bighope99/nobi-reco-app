@@ -79,6 +79,7 @@ export default function ActivityRecordPage() {
     { class_id: string; class_name: string }[]
   >([])
   const [classError, setClassError] = useState<string | null>(null)
+  const [classChildren, setClassChildren] = useState<MentionSuggestion[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -135,21 +136,41 @@ export default function ActivityRecordPage() {
     fetchActivities()
   }, [])
 
-  const fetchMentionSuggestions = useCallback(
-    async (query: string) => {
+  const filterMentionSuggestions = useCallback(
+    (query: string) => {
+      const normalizedQuery = query.trim().toLowerCase()
+
+      const filteredSuggestions = classChildren.filter((child) => {
+        if (!normalizedQuery) return true
+
+        const searchTargets = [
+          child.display_name.toLowerCase(),
+          child.kana?.toLowerCase(),
+          child.nickname?.toLowerCase(),
+        ].filter(Boolean) as string[]
+
+        return searchTargets.some((target) => target.includes(normalizedQuery))
+      })
+
+      setMentionSuggestions(filteredSuggestions)
+      setActiveMentionIndex(0)
+      setIsMentionOpen(filteredSuggestions.length > 0)
+    },
+    [classChildren],
+  )
+
+  useEffect(() => {
+    const fetchClassChildren = async () => {
       if (!selectedClass) return
 
       try {
         setMentionLoading(true)
         setMentionError(null)
+        setClassChildren([])
 
         const params = new URLSearchParams({
           class_id: selectedClass,
         })
-
-        if (query) {
-          params.append("query", query)
-        }
 
         const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
         const result = await response.json()
@@ -159,29 +180,29 @@ export default function ActivityRecordPage() {
         }
 
         if (result.success) {
-          setMentionSuggestions(result.data.suggestions)
-          setActiveMentionIndex(0)
-          setIsMentionOpen(true)
+          setClassChildren(result.data.suggestions)
         }
       } catch (err) {
         setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
-        setIsMentionOpen(false)
       } finally {
         setMentionLoading(false)
       }
-    },
-    [selectedClass],
-  )
+    }
 
-  useEffect(() => {
     setMentionSuggestions([])
     setSelectedMentions([])
     setIsMentionOpen(false)
+    setMentionQuery("")
+    setMentionStart(null)
 
-    if (mentionQuery) {
-      fetchMentionSuggestions(mentionQuery)
-    }
-  }, [selectedClass, mentionQuery, fetchMentionSuggestions])
+    fetchClassChildren()
+  }, [selectedClass])
+
+  useEffect(() => {
+    if (mentionStart === null) return
+
+    filterMentionSuggestions(mentionQuery)
+  }, [mentionQuery, filterMentionSuggestions, mentionStart, classChildren])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -265,7 +286,7 @@ export default function ActivityRecordPage() {
 
       setMentionQuery(mentionMatch[1])
       setMentionStart(latestMentionStart)
-      fetchMentionSuggestions(mentionMatch[1])
+      filterMentionSuggestions(mentionMatch[1])
     } else {
       setMentionQuery("")
       setMentionStart(null)
