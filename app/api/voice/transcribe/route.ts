@@ -27,7 +27,7 @@ const buildTranscriptionPayload = ({
   ],
 })
 
-const geminiTranscriptionChain = new RunnableLambda<
+const geminiTranscriptionChain = RunnableLambda.from<
   { audioBase64: string; mimeType: string },
   string
 >(async ({ audioBase64, mimeType }) => {
