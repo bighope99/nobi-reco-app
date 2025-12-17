@@ -95,7 +95,26 @@ export async function GET(request: NextRequest) {
 
     const attendanceMap = new Map();
     attendanceLogsData.forEach((record: any) => {
-      attendanceMap.set(record.child_id, record);
+      const existing = attendanceMap.get(record.child_id);
+      if (!existing) {
+        attendanceMap.set(record.child_id, record);
+        return;
+      }
+
+      if (existing.checked_in_at && record.checked_in_at) {
+        const existingTime = new Date(existing.checked_in_at).getTime();
+        const currentTime = new Date(record.checked_in_at).getTime();
+
+        if (currentTime < existingTime) {
+          attendanceMap.set(record.child_id, record);
+        }
+
+        return;
+      }
+
+      if (!existing.checked_in_at && record.checked_in_at) {
+        attendanceMap.set(record.child_id, record);
+      }
     });
 
     const formattedChildren = children.map((child: any) => {
@@ -105,6 +124,7 @@ export async function GET(request: NextRequest) {
       const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
       const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
       const isExpected = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
+      const isMarkedAbsent = dailyRecord?.status === 'absent';
       const attendance = attendanceMap.get(child.id);
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
@@ -114,27 +134,25 @@ export async function GET(request: NextRequest) {
       let status = 'not_arrived';
       let isUnexpected = false;
 
-      if (attendance) {
-        if (attendance.checked_in_at) {
-          const checkedInTime = new Date(attendance.checked_in_at);
-          const hour = checkedInTime.getHours();
-          const minute = checkedInTime.getMinutes();
+      if (attendance?.checked_in_at) {
+        const checkedInTime = new Date(attendance.checked_in_at);
+        const hour = checkedInTime.getHours();
+        const minute = checkedInTime.getMinutes();
 
-          // 9:30以降をチェックイン遅刻とみなす
-          if (hour > 9 || (hour === 9 && minute >= 30)) {
-            status = 'late';
-          } else {
-            status = 'present';
-          }
-
-          // 予定外チェック
-          if (!isExpected) {
-            isUnexpected = true;
-          }
-        } else if (attendance.status === 'absent') {
-          status = 'absent';
+        // 9:30以降をチェックイン遅刻とみなす
+        if (hour > 9 || (hour === 9 && minute >= 30)) {
+          status = 'late';
+        } else {
+          status = 'present';
         }
-      } else if (isExpected || dailyRecord?.status === 'absent') {
+
+        // 予定外チェック
+        if (!isExpected) {
+          isUnexpected = true;
+        }
+      } else if (isExpected) {
+        status = 'absent';
+      } else if (isMarkedAbsent) {
         status = 'absent';
       }
 
@@ -152,7 +170,7 @@ export async function GET(request: NextRequest) {
         is_expected: isExpected,
         checked_in_at: attendance?.checked_in_at || null,
         checked_out_at: attendance?.checked_out_at || null,
-        scan_method: attendance?.scan_method || null,
+        check_in_method: attendance?.check_in_method || null,
         is_unexpected: isUnexpected,
       };
     });
