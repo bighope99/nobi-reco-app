@@ -96,14 +96,14 @@ export default function AttendanceListPage() {
     fetchAttendance()
   }, [selectedDate])
 
-  const isPastOrToday = (dateString: string) => {
+  const isPastDate = (dateString: string) => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
     const target = new Date(dateString)
     target.setHours(0, 0, 0, 0)
 
-    return target <= today
+    return target < today
   }
 
   // 日付操作関数
@@ -167,7 +167,7 @@ export default function AttendanceListPage() {
     }
 
     if (child.status === 'absent') {
-      const isPast = isPastOrToday(attendanceData?.date || selectedDate)
+      const isPast = isPastDate(attendanceData?.date || selectedDate)
 
       return {
         label: isPast ? '欠席' : '出席予定',
