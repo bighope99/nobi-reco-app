@@ -70,6 +70,32 @@ export default function ActivityRecordPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        setIsLoadingClasses(true)
+        setClassError(null)
+
+        const response = await fetch('/api/children/classes')
+        const result = await response.json()
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'クラスの取得に失敗しました')
+        }
+
+        const classes = result.data?.classes || []
+        setClassOptions(classes)
+
+        if (classes.length > 0 && !selectedClass) {
+          setSelectedClass(classes[0].class_id)
+        }
+      } catch (err) {
+        console.error('Failed to fetch classes:', err)
+        setClassError(err instanceof Error ? err.message : 'クラスの取得に失敗しました')
+      } finally {
+        setIsLoadingClasses(false)
+      }
+    }
+
     const fetchActivities = async () => {
       try {
         setLoading(true)
@@ -93,6 +119,7 @@ export default function ActivityRecordPage() {
       }
     }
 
+    fetchClasses()
     fetchActivities()
   }, [])
 
@@ -307,7 +334,7 @@ export default function ActivityRecordPage() {
                   Gemini Pro 搭載
                 </span>
                 <Button variant="ghost" size="sm" className="text-sm font-bold">
-                  下書き保存
+                  保存
                 </Button>
               </div>
             </div>
@@ -317,14 +344,29 @@ export default function ActivityRecordPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-xs font-bold text-gray-500 mb-1">クラス</Label>
-                <Select value={selectedClass} onValueChange={setSelectedClass}>
+                <Select
+                  value={selectedClass}
+                  onValueChange={setSelectedClass}
+                  disabled={isLoadingClasses || classOptions.length === 0}
+                >
                   <SelectTrigger className="w-full bg-gray-50 font-bold">
-                    <SelectValue placeholder="クラスを選択" />
+                    <SelectValue
+                      placeholder={
+                        isLoadingClasses ? 'クラスを取得中...' : 'クラスを選択'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="tanpopo">2歳児 (たんぽぽ組)</SelectItem>
+                    {classOptions.map((cls) => (
+                      <SelectItem key={cls.class_id} value={cls.class_id}>
+                        {cls.class_name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {classError && (
+                  <p className="mt-2 text-xs text-red-600">{classError}</p>
+                )}
               </div>
               <div>
                 <Label className="text-xs font-bold text-gray-500 mb-1">日付</Label>
