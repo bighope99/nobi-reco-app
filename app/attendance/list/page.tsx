@@ -15,13 +15,6 @@ import {
   CheckCircle2
 } from "lucide-react"
 
-const statusLabels: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  present: { label: "出席", variant: "default" },
-  absent: { label: "欠席", variant: "secondary" },
-  late: { label: "遅刻", variant: "destructive" },
-  not_arrived: { label: "未到着", variant: "outline" },
-}
-
 interface ChildAttendance {
   child_id: string
   name: string
@@ -103,6 +96,16 @@ export default function AttendanceListPage() {
     fetchAttendance()
   }, [selectedDate])
 
+  const isPastDate = (dateString: string) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const target = new Date(dateString)
+    target.setHours(0, 0, 0, 0)
+
+    return target < today
+  }
+
   // 日付操作関数
   const changeDate = (days: number) => {
     const currentDate = new Date(selectedDate)
@@ -141,27 +144,87 @@ export default function AttendanceListPage() {
       : attendanceData.children.filter(c => c.class_id === filterClass)
     : []
 
-  // ステータスバッジコンポーネント
-  const StatusBadge = ({ child }: { child: ChildAttendance }) => {
+  const getStatusPresentation = (child: ChildAttendance) => {
     if (child.is_unexpected) {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">予定外登園</span>
+      return {
+        label: '予定外登園',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200',
+      }
     }
 
-    switch (child.status) {
-      case 'present':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">出席</span>
-      case 'late':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">遅刻</span>
-      case 'absent':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">欠席</span>
-      case 'not_arrived':
-        if (child.is_expected) {
-          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">未到着</span>
-        }
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400 border border-gray-200">予定なし</span>
-      default:
-        return null
+    if (child.status === 'present') {
+      return {
+        label: '出席',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200',
+      }
     }
+
+    if (child.status === 'late') {
+      return {
+        label: '遅刻',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200',
+      }
+    }
+
+    if (child.status === 'absent') {
+      const isPast = isPastDate(attendanceData?.date || selectedDate)
+
+      return {
+        label: isPast ? '欠席' : '出席予定',
+        className: isPast
+          ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
+          : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+      }
+    }
+
+    if (child.status === 'not_arrived') {
+      if (child.is_expected) {
+        return {
+          label: '未到着',
+          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+        }
+      }
+
+      return {
+        label: '欠席予定',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
+      }
+    }
+
+    return null
+  }
+
+  // ステータスバッジコンポーネント
+  const StatusBadge = ({ child }: { child: ChildAttendance }) => {
+    const presentation = getStatusPresentation(child)
+
+    if (!presentation) return null
+
+    return <span className={presentation.className}>{presentation.label}</span>
+  }
+
+  const StatusActionButton = ({ child }: { child: ChildAttendance }) => {
+    const presentation = getStatusPresentation(child)
+
+    if (!presentation) return null
+
+    if (presentation.label === '出席予定') {
+      return (
+        <button className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-md transition-colors shadow-sm">
+          欠席にする
+        </button>
+      )
+    }
+
+    if (presentation.label === '欠席予定') {
+      return (
+        <button className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 rounded-md transition-colors shadow-sm">
+          出席にする
+        </button>
+      )
+    }
+
+    return null
   }
 
   if (loading) {
@@ -337,6 +400,7 @@ export default function AttendanceListPage() {
                     <th className="px-5 py-3 font-medium">児童名</th>
                     <th className="px-5 py-3 font-medium">クラス / 学年</th>
                     <th className="px-5 py-3 font-medium">ステータス</th>
+                    <th className="px-5 py-3 font-medium text-center">操作</th>
                     <th className="px-5 py-3 font-medium">チェックイン時刻</th>
                     <th className="px-5 py-3 font-medium">チェックアウト時刻</th>
                   </tr>
@@ -353,6 +417,9 @@ export default function AttendanceListPage() {
                         <div className="text-xs text-slate-500">{child.grade_label || '-'}</div>
                       </td>
                       <td className="px-5 py-3"><StatusBadge child={child} /></td>
+                      <td className="px-5 py-3 text-center">
+                        <StatusActionButton child={child} />
+                      </td>
                       <td className="px-5 py-3 text-slate-600">
                         {child.checked_in_at ? (
                           <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
@@ -393,6 +460,10 @@ export default function AttendanceListPage() {
                         </div>
                       </div>
                       <StatusBadge child={child} />
+                    </div>
+
+                    <div className="mb-3">
+                      <StatusActionButton child={child} />
                     </div>
 
                     {(child.checked_in_at || child.checked_out_at) && (
