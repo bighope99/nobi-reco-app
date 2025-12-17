@@ -134,6 +134,49 @@ export default function AttendanceListPage() {
     return `${month}月${day}日 (${weekday})`
   }
 
+  // 未来の日付かどうかを判定（今日より後）
+  const isFutureDate = (dateString: string) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const targetDate = new Date(dateString)
+    targetDate.setHours(0, 0, 0, 0)
+    return targetDate > today
+  }
+
+  // 出席ステータスを更新
+  const updateAttendanceStatus = async (childId: string, status: 'scheduled' | 'absent') => {
+    try {
+      const response = await fetch('/api/attendance/daily', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          status,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update attendance')
+      }
+
+      // データを再取得
+      const fetchResponse = await fetch(`/api/attendance/list?date=${selectedDate}`)
+      const fetchResult = await fetchResponse.json()
+
+      if (fetchResponse.ok && fetchResult.success) {
+        setAttendanceData(fetchResult.data)
+      }
+    } catch (err) {
+      console.error('Failed to update attendance:', err)
+      alert('出席状況の更新に失敗しました')
+    }
+  }
+
   // クラスフィルター適用
   const filteredChildren = attendanceData
     ? filterClass === 'all'
@@ -143,6 +186,8 @@ export default function AttendanceListPage() {
 
   // ステータスバッジコンポーネント
   const StatusBadge = ({ child }: { child: ChildAttendance }) => {
+    const isFuture = isFutureDate(selectedDate)
+
     if (child.is_unexpected) {
       return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">予定外登園</span>
     }
@@ -153,15 +198,63 @@ export default function AttendanceListPage() {
       case 'late':
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">遅刻</span>
       case 'absent':
+        // 未来の日付の場合は「欠席予定」、過去/今日は「欠席」
+        if (isFuture) {
+          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">欠席予定</span>
+        }
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">欠席</span>
       case 'not_arrived':
         if (child.is_expected) {
+          // 未来の日付の場合は「出席予定」、過去/今日は「未到着」
+          if (isFuture) {
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">出席予定</span>
+          }
           return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">未到着</span>
+        }
+        // 未来の日付の場合は「欠席予定」、過去/今日は「予定なし」
+        if (isFuture) {
+          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400 border border-gray-200">欠席予定</span>
         }
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400 border border-gray-200">予定なし</span>
       default:
         return null
     }
+  }
+
+  // アクションボタンコンポーネント
+  const ActionButton = ({ child }: { child: ChildAttendance }) => {
+    const isFuture = isFutureDate(selectedDate)
+
+    // 未来の日付でない場合はボタンを表示しない
+    if (!isFuture) {
+      return null
+    }
+
+    // 出席予定の人には欠席ボタン
+    if (child.status === 'not_arrived' && child.is_expected) {
+      return (
+        <button
+          onClick={() => updateAttendanceStatus(child.child_id, 'absent')}
+          className="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded transition-colors"
+        >
+          欠席
+        </button>
+      )
+    }
+
+    // 欠席予定の人には出席ボタン
+    if ((child.status === 'not_arrived' && !child.is_expected) || child.status === 'absent') {
+      return (
+        <button
+          onClick={() => updateAttendanceStatus(child.child_id, 'scheduled')}
+          className="px-3 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded transition-colors"
+        >
+          出席
+        </button>
+      )
+    }
+
+    return null
   }
 
   if (loading) {
@@ -339,6 +432,7 @@ export default function AttendanceListPage() {
                     <th className="px-5 py-3 font-medium">ステータス</th>
                     <th className="px-5 py-3 font-medium">チェックイン時刻</th>
                     <th className="px-5 py-3 font-medium">チェックアウト時刻</th>
+                    <th className="px-5 py-3 font-medium">アクション</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -367,6 +461,9 @@ export default function AttendanceListPage() {
                           <span className="text-slate-400">-</span>
                         )}
                       </td>
+                      <td className="px-5 py-3">
+                        <ActionButton child={child} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -392,7 +489,10 @@ export default function AttendanceListPage() {
                           <span>{child.grade_label || '-'}</span>
                         </div>
                       </div>
-                      <StatusBadge child={child} />
+                      <div className="flex flex-col items-end gap-2">
+                        <StatusBadge child={child} />
+                        <ActionButton child={child} />
+                      </div>
                     </div>
 
                     {(child.checked_in_at || child.checked_out_at) && (
