@@ -1,13 +1,6 @@
 "use client"
 
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  type ChangeEvent,
-  type KeyboardEvent,
-} from "react"
+import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -79,109 +72,64 @@ export default function ActivityRecordPage() {
     { class_id: string; class_name: string }[]
   >([])
   const [classError, setClassError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
-    const fetchClasses = async () => {
-      try {
-        setIsLoadingClasses(true)
-        setClassError(null)
+  const fetchClasses = useCallback(async () => {
+    try {
+      setIsLoadingClasses(true)
+      setClassError(null)
 
-        const response = await fetch('/api/children/classes')
-        const result = await response.json()
+      const response = await fetch('/api/children/classes')
+      const result = await response.json()
 
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || 'クラスの取得に失敗しました')
-        }
-
-        const classes = result.data?.classes || []
-        setClassOptions(classes)
-
-        if (classes.length > 0) {
-          setSelectedClass((prev) => prev || classes[0].class_id)
-        }
-      } catch (err) {
-        console.error('Failed to fetch classes:', err)
-        setClassError(err instanceof Error ? err.message : 'クラスの取得に失敗しました')
-      } finally {
-        setIsLoadingClasses(false)
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'クラスの取得に失敗しました')
       }
-    }
 
-    const fetchActivities = async () => {
-      try {
-        setLoading(true)
-        setError(null)
+      const classes = result.data?.classes || []
+      setClassOptions(classes)
 
-        const response = await fetch('/api/activities?limit=10')
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to fetch activities')
-        }
-
-        if (result.success) {
-          setActivitiesData(result.data)
-        }
-      } catch (err) {
-        console.error('Failed to fetch activities:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch activities')
-      } finally {
-        setLoading(false)
+      if (classes.length > 0 && !selectedClass) {
+        setSelectedClass(classes[0].class_id)
       }
+    } catch (err) {
+      console.error('Failed to fetch classes:', err)
+      setClassError(err instanceof Error ? err.message : 'クラスの取得に失敗しました')
+    } finally {
+      setIsLoadingClasses(false)
     }
+  }, [selectedClass])
 
-    fetchClasses()
-    fetchActivities()
+  const fetchActivities = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch('/api/activities?limit=10')
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch activities')
+      }
+
+      if (result.success) {
+        setActivitiesData(result.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch activities:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch activities')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const fetchMentionSuggestions = useCallback(
-    async (query: string) => {
-      if (!selectedClass) return
-
-      try {
-        setMentionLoading(true)
-        setMentionError(null)
-
-        const params = new URLSearchParams({
-          class_id: selectedClass,
-        })
-
-        if (query) {
-          params.append("query", query)
-        }
-
-        const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(result.error || "メンション候補の取得に失敗しました")
-        }
-
-        if (result.success) {
-          setMentionSuggestions(result.data.suggestions)
-          setActiveMentionIndex(0)
-          setIsMentionOpen(true)
-        }
-      } catch (err) {
-        setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
-        setIsMentionOpen(false)
-      } finally {
-        setMentionLoading(false)
-      }
-    },
-    [selectedClass],
-  )
-
   useEffect(() => {
-    setMentionSuggestions([])
-    setSelectedMentions([])
-    setIsMentionOpen(false)
-
-    if (mentionQuery) {
-      fetchMentionSuggestions(mentionQuery)
-    }
-  }, [selectedClass, mentionQuery, fetchMentionSuggestions])
+    fetchClasses()
+    fetchActivities()
+  }, [fetchActivities, fetchClasses])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -345,6 +293,59 @@ export default function ActivityRecordPage() {
     setShowAnalysisModal(!showAnalysisModal)
   }
 
+  const handleSaveActivity = async () => {
+    if (!selectedClass) {
+      setSaveError('クラスを選択してください')
+      return
+    }
+
+    if (!activityDate) {
+      setSaveError('日付を入力してください')
+      return
+    }
+
+    if (!activityContent.trim()) {
+      setSaveError('活動内容を入力してください')
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      setSaveError(null)
+      setSaveMessage(null)
+
+      const response = await fetch('/api/activities', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activity_date: activityDate,
+          class_id: selectedClass,
+          content: activityContent.trim(),
+          child_ids: selectedMentions.map((mention) => mention.child_id),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '活動記録の保存に失敗しました')
+      }
+
+      setSaveMessage('活動記録を保存しました')
+      setActivityContent('')
+      setSelectedMentions([])
+      setIsMentionOpen(false)
+      await fetchActivities()
+    } catch (err) {
+      console.error('Failed to save activity:', err)
+      setSaveError(err instanceof Error ? err.message : '活動記録の保存に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <StaffLayout title="活動記録" subtitle="クラスの活動記録一覧">
       <div className="space-y-6">
@@ -358,13 +359,25 @@ export default function ActivityRecordPage() {
                   <Sparkles className="w-3 h-3" />
                   Gemini Pro 搭載
                 </span>
-                <Button variant="ghost" size="sm" className="text-sm font-bold">
-                  保存
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-sm font-bold"
+                  onClick={handleSaveActivity}
+                  disabled={isSaving}
+                >
+                  {isSaving ? '保存中...' : '保存'}
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            {(saveError || saveMessage) && (
+              <div className="text-sm font-bold">
+                {saveError && <p className="text-red-600">{saveError}</p>}
+                {saveMessage && <p className="text-green-600">{saveMessage}</p>}
+              </div>
+            )}
             {/* 基本情報 */}
             <div className="grid grid-cols-2 gap-4">
               <div>
