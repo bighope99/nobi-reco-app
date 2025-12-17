@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,34 +71,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    // 2. 曜日通所設定を取得（/attendance/scheduleで登録した出席日）
-    const dayOfWeekKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
-      new Date(`${date}T00:00:00`).getDay()
-    ];
-
-    const { data: schedulePatterns } = await supabase
-      .from('s_attendance_schedule')
-      .select('child_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, valid_from, valid_to, is_active')
-      .eq('is_active', true)
-      .lte('valid_from', date)
-      .or(`valid_to.is.null,valid_to.gte.${date}`)
-      .in('child_id', childrenData.map((c: any) => c.id));
-
-    // 3. 本日の予定（r_daily_attendance）
-    const { data: dailyAttendanceData } = await supabase
-      .from('r_daily_attendance')
-      .select('child_id, status')
-      .eq('facility_id', facility_id)
-      .eq('attendance_date', date)
-      .in('child_id', childrenData.map((c: any) => c.id));
-
-    // 4. 本日の実績を取得（h_attendance）
-    const { data: attendanceLogsData } = await supabase
-      .from('h_attendance')
-      .select('*')
-      .gte('checked_in_at', `${date}T00:00:00`)
-      .lte('checked_in_at', `${date}T23:59:59`)
-      .in('child_id', childrenData.map((c: any) => c.id));
+    // 2-4. 通所予定・当日設定・実績を共通ロジックで取得
+    const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = await fetchAttendanceContext(
+      supabase,
+      facility_id,
+      date,
+      childrenData.map((c: any) => c.id)
+    );
 
     // 5. 記録情報取得（最終記録日、週間記録数）
     const oneWeekAgo = new Date(date);
@@ -139,16 +119,7 @@ export async function GET(request: NextRequest) {
       const classInfo = currentClass?.m_classes;
       const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
       const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
-      const scheduledByPattern = schedulePattern ? Boolean(schedulePattern[dayOfWeekKey]) : false;
-      let isScheduledToday = scheduledByPattern;
-
-      if (dailyRecord) {
-        if (dailyRecord.status === 'scheduled' || dailyRecord.status === 'absent') {
-          isScheduledToday = true;
-        } else if (dailyRecord.status === 'irregular') {
-          isScheduledToday = false;
-        }
-      }
+      const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
 
       const attendanceLog = (attendanceLogsData || []).find((log: any) => log.child_id === child.id && !log.checked_out_at);
 
