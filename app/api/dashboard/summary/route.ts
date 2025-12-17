@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,29 +64,24 @@ export async function GET(request: NextRequest) {
       attendanceQuery = attendanceQuery.eq('_child_class.class_id', class_id);
     }
 
-    const { data: childrenData, error: childrenError } = await attendanceQuery;
+    const { data: childrenDataRaw, error: childrenError } = await attendanceQuery;
 
     if (childrenError) {
       console.error('Children fetch error:', childrenError);
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    // 2. 本日の出席予定を取得（r_daily_attendance）
-    const { data: dailyAttendanceData } = await supabase
-      .from('r_daily_attendance')
-      .select('*')
-      .eq('attendance_date', date)
-      .in('child_id', childrenData.map((c: any) => c.id));
+    const childrenData = childrenDataRaw ?? [];
 
-    // 3. 本日の実績を取得（h_attendance）
-    const { data: attendanceLogsData } = await supabase
-      .from('h_attendance')
-      .select('*')
-      .gte('checked_in_at', `${date}T00:00:00`)
-      .lte('checked_in_at', `${date}T23:59:59`)
-      .in('child_id', childrenData.map((c: any) => c.id));
+    // 2-4. 通所予定・当日設定・実績を共通ロジックで取得
+    const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = await fetchAttendanceContext(
+      supabase,
+      facility_id,
+      date,
+      childrenData.map((c: any) => c.id)
+    );
 
-    // 4. 記録情報取得（最終記録日、週間記録数）
+    // 5. 記録情報取得（最終記録日、週間記録数）
     const oneWeekAgo = new Date(date);
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
@@ -123,7 +119,10 @@ export async function GET(request: NextRequest) {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
-      const dailyAttendance = (dailyAttendanceData || []).find((da: any) => da.child_id === child.id);
+      const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
+      const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
+      const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
+
       const attendanceLog = (attendanceLogsData || []).find((log: any) => log.child_id === child.id && !log.checked_out_at);
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
@@ -142,6 +141,10 @@ export async function GET(request: NextRequest) {
         status = attendanceLog.checked_out_at ? 'checked_out' : 'checked_in';
       }
 
+      if (!attendanceLog && dailyRecord?.status === 'absent') {
+        status = 'absent';
+      }
+
       return {
         child_id: child.id,
         name: `${child.family_name} ${child.given_name}`,
@@ -153,9 +156,9 @@ export async function GET(request: NextRequest) {
         grade_label: gradeLabel,
         photo_url: child.photo_url,
         status,
-        is_scheduled_today: !!dailyAttendance,
-        scheduled_start_time: dailyAttendance?.scheduled_start_time || null,
-        scheduled_end_time: dailyAttendance?.scheduled_end_time || null,
+        is_scheduled_today: isScheduledToday,
+        scheduled_start_time: null,
+        scheduled_end_time: null,
         actual_in_time: attendanceLog?.checked_in_at ? new Date(attendanceLog.checked_in_at).toTimeString().slice(0, 5) : null,
         actual_out_time: attendanceLog?.checked_out_at ? new Date(attendanceLog.checked_out_at).toTimeString().slice(0, 5) : null,
         guardian_phone: child.parent_phone,
