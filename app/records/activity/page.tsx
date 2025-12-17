@@ -135,6 +135,44 @@ export default function ActivityRecordPage() {
     fetchActivities()
   }, [])
 
+  const fetchMentionSuggestions = useCallback(
+    async (query: string) => {
+      if (!selectedClass) return
+
+      try {
+        setMentionLoading(true)
+        setMentionError(null)
+
+        const params = new URLSearchParams({
+          class_id: selectedClass,
+        })
+
+        if (query) {
+          params.append("query", query)
+        }
+
+        const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.error || "メンション候補の取得に失敗しました")
+        }
+
+        if (result.success) {
+          setMentionSuggestions(result.data.suggestions)
+          setActiveMentionIndex(0)
+          setIsMentionOpen(true)
+        }
+      } catch (err) {
+        setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
+        setIsMentionOpen(false)
+      } finally {
+        setMentionLoading(false)
+      }
+    },
+    [selectedClass],
+  )
+
   useEffect(() => {
     setMentionSuggestions([])
     setSelectedMentions([])
@@ -214,44 +252,6 @@ export default function ActivityRecordPage() {
       return Math.min(prev, mentionSuggestions.length - 1)
     })
   }, [mentionSuggestions, isMentionOpen])
-
-  const fetchMentionSuggestions = useCallback(
-    async (query: string) => {
-      if (!selectedClass) return
-
-      try {
-        setMentionLoading(true)
-        setMentionError(null)
-
-        const params = new URLSearchParams({
-          class_id: selectedClass,
-        })
-
-        if (query) {
-          params.append("query", query)
-        }
-
-        const response = await fetch(`/api/children/mention-suggestions?${params.toString()}`)
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(result.error || "メンション候補の取得に失敗しました")
-        }
-
-        if (result.success) {
-          setMentionSuggestions(result.data.suggestions)
-          setActiveMentionIndex(0)
-          setIsMentionOpen(true)
-        }
-      } catch (err) {
-        setMentionError(err instanceof Error ? err.message : "メンション候補の取得に失敗しました")
-        setIsMentionOpen(false)
-      } finally {
-        setMentionLoading(false)
-      }
-    },
-    [selectedClass],
-  )
 
   const detectMention = (value: string, cursorPosition: number | null) => {
     const cursor = cursorPosition ?? value.length
