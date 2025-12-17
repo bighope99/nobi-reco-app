@@ -87,9 +87,9 @@ export const isScheduledForDate = (
   let isScheduled = scheduledByPattern;
 
   if (dailyRecord) {
-    if (dailyRecord.status === 'scheduled' || dailyRecord.status === 'absent') {
+    if (dailyRecord.status === 'scheduled') {
       isScheduled = true;
-    } else if (dailyRecord.status === 'irregular') {
+    } else if (dailyRecord.status === 'absent' || dailyRecord.status === 'irregular') {
       isScheduled = false;
     }
   }

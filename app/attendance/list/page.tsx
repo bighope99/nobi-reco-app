@@ -171,6 +171,13 @@ export default function AttendanceListPage() {
     if (child.status === 'absent') {
       const isPast = isPastDate(attendanceData?.date || selectedDate)
 
+      if (!child.is_expected) {
+        return {
+          label: '欠席予定',
+          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
+        }
+      }
+
       return {
         label: isPast ? '欠席' : '出席予定',
         className: isPast

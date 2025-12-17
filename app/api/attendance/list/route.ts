@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
       const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
       const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
       const isExpected = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
+      const isMarkedAbsent = dailyRecord?.status === 'absent';
       const attendance = attendanceMap.get(child.id);
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
@@ -149,9 +150,9 @@ export async function GET(request: NextRequest) {
         if (!isExpected) {
           isUnexpected = true;
         }
-      } else if (dailyRecord?.status === 'absent') {
-        status = 'absent';
       } else if (isExpected) {
+        status = 'absent';
+      } else if (isMarkedAbsent) {
         status = 'absent';
       }
 
