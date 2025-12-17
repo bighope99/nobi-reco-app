@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, type ChangeEvent } from "react"
+import { useState, useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,7 @@ interface MentionSuggestion {
   child_id: string
   name: string
   kana: string
+  nickname?: string
   grade?: string
   class_name?: string
   photo_url?: string | null
@@ -66,6 +67,7 @@ export default function ActivityRecordPage() {
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -130,7 +132,7 @@ export default function ActivityRecordPage() {
 
   const updateMentionMetrics = (content: string) => {
     const mentionTokens = new Set<string>()
-    const mentionRegex = /@([^\s@]+)/g
+    const mentionRegex = /[@＠]([^\s@＠]+)/g
     let match
 
     while ((match = mentionRegex.exec(content)) !== null) {
@@ -144,7 +146,11 @@ export default function ActivityRecordPage() {
     updateMentionMetrics(activityContent)
 
     setSelectedMentions((prev) =>
-      prev.filter((mention) => activityContent.includes(`@${mention.display_name}`)),
+      prev.filter(
+        (mention) =>
+          activityContent.includes(`@${mention.display_name}`) ||
+          activityContent.includes(`＠${mention.display_name}`),
+      ),
     )
   }, [activityContent])
 
@@ -198,11 +204,15 @@ export default function ActivityRecordPage() {
   const detectMention = (value: string, cursorPosition: number | null) => {
     const cursor = cursorPosition ?? value.length
     const textBeforeCursor = value.slice(0, cursor)
-    const mentionMatch = textBeforeCursor.match(/@([^\s@]*)$/)
+    const mentionMatch = textBeforeCursor.match(/[@＠]([^\s@＠]*)$/)
 
     if (mentionMatch) {
+      const latestMentionStart = Math.max(textBeforeCursor.lastIndexOf("@"), textBeforeCursor.lastIndexOf("＠"))
+
+      if (latestMentionStart === -1) return
+
       setMentionQuery(mentionMatch[1])
-      setMentionStart(textBeforeCursor.lastIndexOf("@"))
+      setMentionStart(latestMentionStart)
       fetchMentionSuggestions(mentionMatch[1])
     } else {
       setMentionQuery("")
@@ -217,7 +227,7 @@ export default function ActivityRecordPage() {
     detectMention(value, selectionStart)
   }
 
-  const handleMentionNavigation = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleMentionNavigation = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!isMentionOpen || mentionSuggestions.length === 0) return
 
     if (event.key === "ArrowDown") {
@@ -255,6 +265,27 @@ export default function ActivityRecordPage() {
         return prev
       }
       return [...prev, suggestion]
+    })
+  }
+
+  const insertMentionAtCursor = () => {
+    const textarea = textareaRef.current
+    const triggerChar = "@"
+
+    if (!textarea) return
+
+    const start = textarea.selectionStart ?? activityContent.length
+    const end = textarea.selectionEnd ?? start
+
+    const newContent = `${activityContent.slice(0, start)}${triggerChar}${activityContent.slice(end)}`
+    const nextCursor = start + triggerChar.length
+
+    setActivityContent(newContent)
+    detectMention(newContent, nextCursor)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(nextCursor, nextCursor)
     })
   }
 
@@ -310,18 +341,29 @@ export default function ActivityRecordPage() {
             <div className="relative">
               <div className="flex justify-between items-center mb-2">
                 <Label className="text-sm font-bold text-gray-700">活動内容</Label>
-                <Button
-                  onClick={handleVoiceDraft}
-                  disabled={isAiLoading}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:shadow-md hover:scale-105 transition flex items-center gap-1"
-                >
-                  <Mic className="w-3 h-3" />
-                  ✨ AI音声で下書き作成
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={insertMentionAtCursor}
+                    className="text-xs font-bold"
+                  >
+                    @ メンション挿入
+                  </Button>
+                  <Button
+                    onClick={handleVoiceDraft}
+                    disabled={isAiLoading}
+                    className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:shadow-md hover:scale-105 transition flex items-center gap-1"
+                  >
+                    <Mic className="w-3 h-3" />
+                    ✨ AI音声で下書き作成
+                  </Button>
+                </div>
               </div>
               
               <div className="relative">
                 <Textarea
+                  ref={textareaRef}
                   value={activityContent}
                   onChange={handleContentChange}
                   onKeyDown={handleMentionNavigation}
@@ -357,6 +399,9 @@ export default function ActivityRecordPage() {
                               <div>
                                 <p className="font-bold text-gray-800">@{suggestion.display_name}</p>
                                 <p className="text-xs text-gray-500">{suggestion.kana}</p>
+                                {suggestion.nickname && (
+                                  <p className="text-[11px] text-gray-500">あだ名: {suggestion.nickname}</p>
+                                )}
                               </div>
                               {suggestion.class_name && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full border border-indigo-100 font-bold">

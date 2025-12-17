@@ -4,6 +4,7 @@ interface MentionSuggestion {
   child_id: string
   name: string
   kana: string
+  nickname?: string
   grade?: string
   class_id?: string
   class_name?: string
@@ -17,6 +18,7 @@ const mockMentionSuggestions: MentionSuggestion[] = [
     child_id: 'uuid-child-1',
     name: 'りゅうくん',
     kana: 'りゅう くん',
+    nickname: 'リュー',
     grade: '年長',
     class_id: 'tanpopo',
     class_name: 'たんぽぽ組',
@@ -28,6 +30,7 @@ const mockMentionSuggestions: MentionSuggestion[] = [
     child_id: 'uuid-child-2',
     name: 'ひなちゃん',
     kana: 'ひな ちゃん',
+    nickname: 'ひな',
     grade: '年少',
     class_id: 'tanpopo',
     class_name: 'たんぽぽ組',
@@ -39,6 +42,7 @@ const mockMentionSuggestions: MentionSuggestion[] = [
     child_id: 'uuid-child-3',
     name: '田中 陽翔',
     kana: 'たなか はると',
+    nickname: 'はるくん',
     grade: '4年生',
     class_id: 'sakura',
     class_name: 'さくら組',
@@ -54,6 +58,8 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get('query')?.trim() || ''
   const limit = Number(searchParams.get('limit')) || 20
 
+  const normalizeText = (text: string) => text.toLocaleLowerCase('ja-JP').normalize('NFKC')
+
   if (!classId) {
     return NextResponse.json({ success: false, error: 'class_id is required' }, { status: 400 })
   }
@@ -62,10 +68,13 @@ export async function GET(request: NextRequest) {
     const matchesClass = child.class_id ? child.class_id === classId : true
     if (!query) return matchesClass
 
-    const normalizedQuery = query.toLowerCase()
+    const normalizedQuery = normalizeText(query)
+    const fieldsToSearch = [child.name, child.kana, child.nickname, child.display_name].filter(
+      Boolean,
+    ) as string[]
     return (
       matchesClass &&
-      (child.name.toLowerCase().includes(normalizedQuery) || child.kana.toLowerCase().includes(normalizedQuery))
+      fieldsToSearch.some((field) => normalizeText(field).includes(normalizedQuery))
     )
   })
 
