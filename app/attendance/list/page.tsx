@@ -76,6 +76,19 @@ export default function AttendanceListPage() {
   const [error, setError] = useState<string | null>(null)
   const [filterClass, setFilterClass] = useState<string>('all')
 
+  const getDateAtMidnight = (dateString: string) => {
+    const date = new Date(`${dateString}T00:00:00`)
+    date.setHours(0, 0, 0, 0)
+    return date
+  }
+
+  const isFutureDate = (() => {
+    const selected = getDateAtMidnight(selectedDate)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return selected.getTime() > today.getTime()
+  })()
+
   useEffect(() => {
     const fetchAttendance = async () => {
       try {
@@ -141,6 +154,58 @@ export default function AttendanceListPage() {
       : attendanceData.children.filter(c => c.class_id === filterClass)
     : []
 
+  const buildSummary = (children: ChildAttendance[]) => ({
+    total_children: children.length,
+    present_count: children.filter(c => c.status === 'present').length,
+    absent_count: children.filter(c => c.status === 'absent').length,
+    late_count: children.filter(c => c.status === 'late').length,
+    not_checked_in_count: children.filter(c => c.status === 'not_arrived' && c.is_expected).length,
+  })
+
+  const handleToggleAttendancePlan = (childId: string, nextExpected: boolean) => {
+    setAttendanceData((prev) => {
+      if (!prev) return prev
+
+      const updatedChildren = prev.children.map((child) => {
+        if (child.child_id !== childId) return child
+
+        return {
+          ...child,
+          is_expected: nextExpected,
+          status: nextExpected ? 'absent' : 'not_arrived',
+        }
+      })
+
+      return {
+        ...prev,
+        children: updatedChildren,
+        summary: buildSummary(updatedChildren),
+      }
+    })
+  }
+
+  const renderPlanToggleButton = (child: ChildAttendance) => {
+    if (!isFutureDate || child.checked_in_at || child.checked_out_at || child.status === 'present' || child.status === 'late') {
+      return null
+    }
+
+    const isPlannedAttendance = child.is_expected
+    const buttonLabel = isPlannedAttendance ? '欠席' : '出席'
+    const buttonClasses = isPlannedAttendance
+      ? 'px-3 py-1.5 text-xs font-semibold text-red-600 border border-red-200 rounded-md bg-white hover:bg-red-50 transition-colors'
+      : 'px-3 py-1.5 text-xs font-semibold text-indigo-700 border border-indigo-200 rounded-md bg-indigo-50 hover:bg-indigo-100 transition-colors'
+
+    return (
+      <button
+        type="button"
+        onClick={() => handleToggleAttendancePlan(child.child_id, !isPlannedAttendance)}
+        className={buttonClasses}
+      >
+        {buttonLabel}
+      </button>
+    )
+  }
+
   // ステータスバッジコンポーネント
   const StatusBadge = ({ child }: { child: ChildAttendance }) => {
     if (child.is_unexpected) {
@@ -153,12 +218,15 @@ export default function AttendanceListPage() {
       case 'late':
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">遅刻</span>
       case 'absent':
+        if (isFutureDate && child.is_expected) {
+          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">出席予定</span>
+        }
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">欠席</span>
       case 'not_arrived':
         if (child.is_expected) {
           return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">未到着</span>
         }
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400 border border-gray-200">予定なし</span>
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200">欠席予定</span>
       default:
         return null
     }
@@ -339,6 +407,7 @@ export default function AttendanceListPage() {
                     <th className="px-5 py-3 font-medium">ステータス</th>
                     <th className="px-5 py-3 font-medium">チェックイン時刻</th>
                     <th className="px-5 py-3 font-medium">チェックアウト時刻</th>
+                    {isFutureDate && <th className="px-5 py-3 font-medium text-right">予定変更</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -367,6 +436,9 @@ export default function AttendanceListPage() {
                           <span className="text-slate-400">-</span>
                         )}
                       </td>
+                      {isFutureDate && (
+                        <td className="px-5 py-3 text-right align-middle">{renderPlanToggleButton(child)}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -383,6 +455,11 @@ export default function AttendanceListPage() {
               ) : (
                 filteredChildren.map(child => (
                   <div key={child.child_id} className="p-4 hover:bg-slate-50 transition-colors">
+                    {isFutureDate && (
+                      <div className="flex justify-end mb-2">
+                        {renderPlanToggleButton(child)}
+                      </div>
+                    )}
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex-1">
                         <div className="font-bold text-slate-800 mb-1">{child.name}</div>
