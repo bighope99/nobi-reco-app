@@ -114,27 +114,25 @@ export async function GET(request: NextRequest) {
       let status = 'not_arrived';
       let isUnexpected = false;
 
-      if (attendance) {
-        if (attendance.checked_in_at) {
-          const checkedInTime = new Date(attendance.checked_in_at);
-          const hour = checkedInTime.getHours();
-          const minute = checkedInTime.getMinutes();
+      if (attendance?.checked_in_at) {
+        const checkedInTime = new Date(attendance.checked_in_at);
+        const hour = checkedInTime.getHours();
+        const minute = checkedInTime.getMinutes();
 
-          // 9:30以降をチェックイン遅刻とみなす
-          if (hour > 9 || (hour === 9 && minute >= 30)) {
-            status = 'late';
-          } else {
-            status = 'present';
-          }
-
-          // 予定外チェック
-          if (!isExpected) {
-            isUnexpected = true;
-          }
-        } else if (attendance.status === 'absent') {
-          status = 'absent';
+        // 9:30以降をチェックイン遅刻とみなす
+        if (hour > 9 || (hour === 9 && minute >= 30)) {
+          status = 'late';
+        } else {
+          status = 'present';
         }
-      } else if (isExpected || dailyRecord?.status === 'absent') {
+
+        // 予定外チェック
+        if (!isExpected) {
+          isUnexpected = true;
+        }
+      } else if (dailyRecord?.status === 'absent') {
+        status = 'absent';
+      } else if (isExpected) {
         status = 'absent';
       }
 

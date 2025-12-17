@@ -4,6 +4,11 @@ import { getUserSession } from '@/lib/auth/session'
 
 const VALID_STATUSES = ['absent', 'present'] as const
 
+const buildDateRange = (date: string) => ({
+  start: `${date}T00:00:00`,
+  end: `${date}T23:59:59`,
+})
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -47,12 +52,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Child not found for facility' }, { status: 404 })
     }
 
+    const dateRange = buildDateRange(date)
+
+    const { data: dailyRecord, error: dailyError } = await supabase
+      .from('r_daily_attendance')
+      .select('*')
+      .eq('facility_id', facilityId)
+      .eq('child_id', child_id)
+      .eq('attendance_date', date)
+      .maybeSingle()
+
+    if (dailyError) {
+      console.error('Daily attendance fetch error:', dailyError)
+      return NextResponse.json({ success: false, error: 'Failed to fetch daily attendance' }, { status: 500 })
+    }
+
     const { data: existingRecord, error: fetchError } = await supabase
       .from('h_attendance')
-      .select('id, status, checked_in_at, checked_out_at')
+      .select('id, checked_in_at, checked_out_at')
       .eq('child_id', child_id)
       .eq('facility_id', facilityId)
-      .eq('attendance_date', date)
+      .gte('checked_in_at', dateRange.start)
+      .lte('checked_in_at', dateRange.end)
       .is('deleted_at', null)
       .maybeSingle()
 
@@ -61,38 +82,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to fetch attendance' }, { status: 500 })
     }
 
+    const upsertDailyAttendance = async (status: 'scheduled' | 'absent' | 'irregular') => {
+      if (dailyRecord) {
+        const { error: updateError } = await supabase
+          .from('r_daily_attendance')
+          .update({ status, updated_by: session.user.id })
+          .eq('id', dailyRecord.id)
+
+        if (updateError) {
+          console.error('Daily attendance update error:', updateError)
+          return NextResponse.json({ success: false, error: 'Failed to update daily attendance' }, { status: 500 })
+        }
+
+        return
+      }
+
+      const { error: insertError } = await supabase
+        .from('r_daily_attendance')
+        .insert({
+          child_id,
+          facility_id: facilityId,
+          attendance_date: date,
+          status,
+          created_by: session.user.id,
+          updated_by: session.user.id,
+        })
+
+      if (insertError) {
+        console.error('Daily attendance insert error:', insertError)
+        return NextResponse.json({ success: false, error: 'Failed to save daily attendance' }, { status: 500 })
+      }
+    }
+
     if (status === 'absent') {
       if (existingRecord?.checked_in_at) {
         return NextResponse.json({ success: false, error: 'Already checked in for this date' }, { status: 409 })
       }
 
-      if (existingRecord) {
-        const { error: updateError } = await supabase
-          .from('h_attendance')
-          .update({ status: 'absent', checked_in_at: null, checked_out_at: null })
-          .eq('id', existingRecord.id)
-
-        if (updateError) {
-          console.error('Attendance update error:', updateError)
-          return NextResponse.json({ success: false, error: 'Failed to update attendance' }, { status: 500 })
-        }
-      } else {
-        const { error: insertError } = await supabase
-          .from('h_attendance')
-          .insert({
-            child_id,
-            facility_id: facilityId,
-            attendance_date: date,
-            status: 'absent',
-            checked_in_at: null,
-            checked_out_at: null,
-          })
-
-        if (insertError) {
-          console.error('Attendance insert error:', insertError)
-          return NextResponse.json({ success: false, error: 'Failed to save attendance' }, { status: 500 })
-        }
-      }
+      const upsertResult = await upsertDailyAttendance('absent')
+      if (upsertResult) return upsertResult
 
       return NextResponse.json({ success: true, data: { status: 'absent', attendance_date: date } })
     }
@@ -102,17 +130,16 @@ export async function POST(request: NextRequest) {
     const checkInTimestamp = new Date(`${date}T${timePortion}`).toISOString()
 
     if (existingRecord) {
-      const { error: updateError } = await supabase
-        .from('h_attendance')
-        .update({
-          status: 'present',
-          checked_in_at: existingRecord.checked_in_at || checkInTimestamp,
-        })
-        .eq('id', existingRecord.id)
+      if (!existingRecord.checked_in_at) {
+        const { error: updateError } = await supabase
+          .from('h_attendance')
+          .update({ checked_in_at: checkInTimestamp })
+          .eq('id', existingRecord.id)
 
-      if (updateError) {
-        console.error('Attendance update error:', updateError)
-        return NextResponse.json({ success: false, error: 'Failed to update attendance' }, { status: 500 })
+        if (updateError) {
+          console.error('Attendance update error:', updateError)
+          return NextResponse.json({ success: false, error: 'Failed to update attendance' }, { status: 500 })
+        }
       }
     } else {
       const { error: insertError } = await supabase
@@ -121,9 +148,8 @@ export async function POST(request: NextRequest) {
           child_id,
           facility_id: facilityId,
           attendance_date: date,
-          status: 'present',
           checked_in_at: checkInTimestamp,
-          check_in_method: 'manual',
+          checked_in_by: session.user.id,
         })
 
       if (insertError) {
@@ -131,6 +157,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Failed to save attendance' }, { status: 500 })
       }
     }
+
+    const dailyStatus: 'scheduled' | 'irregular' = dailyRecord ? 'scheduled' : 'irregular'
+    const upsertResult = await upsertDailyAttendance(dailyStatus)
+    if (upsertResult) return upsertResult
 
     return NextResponse.json({ success: true, data: { status: 'present', attendance_date: date } })
   } catch (error) {
