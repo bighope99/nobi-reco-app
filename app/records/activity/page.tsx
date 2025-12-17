@@ -73,6 +73,9 @@ export default function ActivityRecordPage() {
   >([])
   const [classError, setClassError] = useState<string | null>(null)
   const [classChildren, setClassChildren] = useState<MentionSuggestion[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -88,19 +91,22 @@ export default function ActivityRecordPage() {
           throw new Error(result.error || 'クラスの取得に失敗しました')
         }
 
-      const classes = result.data?.classes || []
-      setClassOptions(classes)
+        const classes = result.data?.classes || []
+        setClassOptions(classes)
 
-      if (classes.length > 0 && !selectedClass) {
-        setSelectedClass(classes[0].class_id)
+        if (classes.length > 0) {
+          setSelectedClass((prev) => prev || classes[0].class_id)
+        }
+      } catch (err) {
+        console.error('Failed to fetch classes:', err)
+        setClassError(err instanceof Error ? err.message : 'クラスの取得に失敗しました')
+      } finally {
+        setIsLoadingClasses(false)
       }
-    } catch (err) {
-      console.error('Failed to fetch classes:', err)
-      setClassError(err instanceof Error ? err.message : 'クラスの取得に失敗しました')
-    } finally {
-      setIsLoadingClasses(false)
     }
-  }, [selectedClass])
+
+    fetchClasses()
+  }, [])
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -123,10 +129,11 @@ export default function ActivityRecordPage() {
     } finally {
       setLoading(false)
     }
-
-    fetchClasses()
-    fetchActivities()
   }, [])
+
+  useEffect(() => {
+    fetchActivities()
+  }, [fetchActivities])
 
   const toHiragana = (text: string) =>
     text.replace(/[ァ-ン]/g, (char) =>
