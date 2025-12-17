@@ -67,6 +67,11 @@ export default function ActivityRecordPage() {
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
+  const [isLoadingClasses, setIsLoadingClasses] = useState(false)
+  const [classOptions, setClassOptions] = useState<
+    { class_id: string; class_name: string }[]
+  >([])
+  const [classError, setClassError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
