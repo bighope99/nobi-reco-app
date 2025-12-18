@@ -13,7 +13,10 @@ import {
     Baby,
     Power,
     RotateCcw,
-    Users
+    Users,
+    QrCode,
+    Download,
+    Loader2
 } from 'lucide-react';
 
 // --- Types ---
@@ -139,6 +142,8 @@ export default function StudentList() {
     const [activeTab, setActiveTab] = useState<StatusType>('active');
     const [classOptions, setClassOptions] = useState<Array<{ class_id: string; class_name: string }>>([]);
     const [totalCount, setTotalCount] = useState(0);
+    const [qrGeneratingId, setQrGeneratingId] = useState<string | null>(null);
+    const [batchGenerating, setBatchGenerating] = useState(false);
 
     // Sort State
     const [sortKey, setSortKey] = useState<SortKey>('grade');
@@ -284,6 +289,84 @@ export default function StudentList() {
         return result;
     }, [students, searchTerm, filterClass, activeTab, sortKey, sortOrder]);
 
+    const parseFilename = (contentDisposition: string | null, fallback: string) => {
+        if (!contentDisposition) return fallback;
+        const match = contentDisposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+        if (match) {
+            return decodeURIComponent(match[1] || match[2]);
+        }
+        return fallback;
+    };
+
+    const downloadResponseBlob = async (response: Response, fallbackName: string) => {
+        const blob = await response.blob();
+        const filename = parseFilename(response.headers.get('content-disposition'), fallbackName);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
+    const handleDownloadQr = async (student: Student) => {
+        setQrGeneratingId(student.id);
+        try {
+            const response = await fetch(`/api/children/${student.id}/qr`);
+            if (!response.ok) {
+                let message = 'QRコードの生成に失敗しました';
+                try {
+                    const data = await response.json();
+                    message = data?.error || message;
+                } catch (err) {
+                    console.error('Failed to parse QR error:', err);
+                }
+                throw new Error(message);
+            }
+
+            await downloadResponseBlob(response, `${student.name}_qr.pdf`);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'QRコードのダウンロードに失敗しました');
+        } finally {
+            setQrGeneratingId(null);
+        }
+    };
+
+    const handleBatchDownload = async () => {
+        if (processedStudents.length === 0) {
+            alert('出力対象の児童がいません');
+            return;
+        }
+
+        setBatchGenerating(true);
+        try {
+            const response = await fetch('/api/children/qr', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ child_ids: processedStudents.map((child) => child.id) })
+            });
+
+            if (!response.ok) {
+                let message = 'QRコード一括出力に失敗しました';
+                try {
+                    const data = await response.json();
+                    message = data?.error || message;
+                } catch (err) {
+                    console.error('Failed to parse batch QR error:', err);
+                }
+                throw new Error(message);
+            }
+
+            await downloadResponseBlob(response, 'qr_codes.zip');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'QRコードのダウンロードに失敗しました');
+        } finally {
+            setBatchGenerating(false);
+        }
+    };
+
     // Helper: Contract Badge
     const getContractBadge = (type: ContractType) => {
         switch (type) {
@@ -390,8 +473,19 @@ export default function StudentList() {
                             </div>
                         </div>
 
-                        {/* Right: Menu */}
-                        <div className="flex items-center gap-4 w-full md:w-auto justify-end" >
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-3 w-full md:w-auto justify-end" >
+                            <button
+                                className={`flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm ${batchGenerating || processedStudents.length === 0
+                                    ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
+                                    }`}
+                                onClick={handleBatchDownload}
+                                disabled={batchGenerating || processedStudents.length === 0}
+                            >
+                                {batchGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                                QR一括出力
+                            </button>
                             <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" >
                                 <MoreHorizontal size={20} />
                             </button>
@@ -474,6 +568,7 @@ export default function StudentList() {
                                                 </div>
                                             </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48" > 保護者連絡先 </th>
+                                            <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32 text-center" > QRコード </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12" > </th>
                                         </tr>
                                     </thead>
@@ -585,6 +680,29 @@ export default function StudentList() {
                                                                 <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
                                                             </div>
                                                         </div>
+                                                    </td>
+
+                                                    {/* QR Download */}
+                                                    <td className="px-6 py-4 text-center" >
+                                                        <button
+                                                            className={`inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${qrGeneratingId === student.id || batchGenerating
+                                                                ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
+                                                                : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'
+                                                                }`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDownloadQr(student);
+                                                            }}
+                                                            disabled={qrGeneratingId === student.id || batchGenerating}
+                                                            title="児童のQRコードをPDFで出力"
+                                                        >
+                                                            {qrGeneratingId === student.id ? (
+                                                                <Loader2 size={14} className="animate-spin" />
+                                                            ) : (
+                                                                <QrCode size={14} />
+                                                            )}
+                                                            PDF出力
+                                                        </button>
                                                     </td>
 
                                                     {/* Action */}
