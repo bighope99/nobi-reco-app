@@ -152,6 +152,12 @@ export async function GET(request: NextRequest) {
       return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
     };
 
+    const formatTimeToMinutes = (time: string | null) => {
+      if (!time) return null;
+      const [hours, minutes] = time.split(':');
+      return `${hours}:${minutes}`;
+    };
+
     const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
@@ -203,8 +209,8 @@ export async function GET(request: NextRequest) {
         photo_url: child.photo_url,
         status,
         is_scheduled_today: isScheduledToday,
-        scheduled_start_time: scheduledStartTime,
-        scheduled_end_time: null,
+        scheduled_start_time: formatTimeToMinutes(scheduledStartTime),
+        scheduled_end_time: formatTimeToMinutes(null),
         actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
         actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
         guardian_phone: child.parent_phone,
