@@ -35,6 +35,8 @@ interface Child {
   age_group: string;
   grade: number | null;
   grade_label: string;
+  school_id: string | null;
+  school_name: string | null;
   photo_url: string | null;
   status: ChildStatus;
   is_scheduled_today: boolean;
@@ -42,7 +44,7 @@ interface Child {
   scheduled_end_time: string | null;
   actual_in_time: string | null;
   actual_out_time: string | null;
-  guardian_phone: string;
+  guardian_phone: string | null;
   last_record_date: string | null;
   weekly_record_count: number;
 }
@@ -458,17 +460,27 @@ export default function ChildcareDashboard() {
                     </div>
                   ))}
 
-                  {/* Late Alerts */}
+                  {/* Late Alerts - 30分以上遅刻の児童をアラート表示 */}
                   {dashboardData.alerts.late.map(child => (
                     <div key={child.child_id} className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                       <div className="flex items-start gap-3 w-full">
                         <div className="bg-red-100 p-2 rounded-full text-red-600 shrink-0">
                           <UserMinus size={20} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-red-900">{child.name}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 font-bold">未登園・遅刻</span>
+                          </div>
+                          {/* 学校名と学年を表示 */}
+                          <div className="text-xs text-red-700 mt-1 flex flex-wrap items-center gap-x-2">
+                            {child.school_name && (
+                              <span className="bg-red-100/50 px-1.5 py-0.5 rounded">{child.school_name}</span>
+                            )}
+                            {child.grade_label && (
+                              <span className="bg-red-100/50 px-1.5 py-0.5 rounded">{child.grade_label}</span>
+                            )}
+                            <span className="text-red-600">{child.class_name}</span>
                           </div>
                           <div className="text-sm text-red-800 mt-1 flex flex-wrap gap-x-4">
                             <span className="flex items-center gap-1"><Clock size={14} /> 予定: {child.scheduled_start_time}</span>
@@ -477,7 +489,7 @@ export default function ChildcareDashboard() {
                         </div>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
-                        <button onClick={() => alert(`発信: ${child.guardian_phone}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
+                        <button onClick={() => alert(`発信: ${child.guardian_phone || '電話番号未登録'}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
                           <Phone size={14} /> 連絡
                         </button>
                         <button onClick={() => handleMarkAbsent(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-bold text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">

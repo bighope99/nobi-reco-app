@@ -3,6 +3,14 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
+import {
+  LATE_ARRIVAL_THRESHOLD_MINUTES,
+  OVERDUE_DEPARTURE_THRESHOLD_MINUTES,
+} from '@/lib/constants/attendance';
+import {
+  type LateArrivalAlert,
+  getMinutesDiff,
+} from '@/lib/alerts/late-arrival';
 
 export async function GET(request: NextRequest) {
   try {
@@ -89,6 +97,7 @@ export async function GET(request: NextRequest) {
     const [
       attendanceContext,
       schoolScheduleResult,
+      schoolsResult,
       observationsResult,
       classesResult
     ] = await Promise.all([
@@ -104,7 +113,16 @@ export async function GET(request: NextRequest) {
             .is('deleted_at', null)
         : Promise.resolve({ data: [], error: null }),
 
-      // 3. 記録情報を取得（最終記録日、週間記録数）
+      // 3. 学校マスタを取得（学校名表示用）
+      schoolIds.length > 0
+        ? supabase
+            .from('m_schools')
+            .select('id, name')
+            .in('id', schoolIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 4. 記録情報を取得（最終記録日、週間記録数）
       childIds.length > 0
         ? supabase
             .from('r_observation')
@@ -114,7 +132,7 @@ export async function GET(request: NextRequest) {
             .is('deleted_at', null)
         : Promise.resolve({ data: [], error: null }),
 
-      // 4. クラス一覧を取得（フィルター用）
+      // 5. クラス一覧を取得（フィルター用）
       supabase
         .from('m_classes')
         .select('id, name')
@@ -166,6 +184,11 @@ export async function GET(request: NextRequest) {
       schoolSchedules[schedule.school_id].push(schedule);
     }
 
+    // 学校名マップを作成（O(1)アクセス用）
+    const schoolNameMap = new Map<string, string>(
+      (schoolsResult.data || []).map((s: any) => [s.id, s.name])
+    );
+
     // データ整形
     type AttendanceListItem = {
       child_id: string;
@@ -176,6 +199,8 @@ export async function GET(request: NextRequest) {
       age_group: string;
       grade: number | null;
       grade_label: string;
+      school_id: string | null;
+      school_name: string | null;
       photo_url: string | null;
       status: 'checked_in' | 'checked_out' | 'absent';
       is_scheduled_today: boolean;
@@ -183,7 +208,7 @@ export async function GET(request: NextRequest) {
       scheduled_end_time: string | null;
       actual_in_time: string | null;
       actual_out_time: string | null;
-      guardian_phone: string;
+      guardian_phone: string | null;
       last_record_date: string | null;
       weekly_record_count: number;
     };
@@ -255,6 +280,8 @@ export async function GET(request: NextRequest) {
         age_group: classInfo?.age_group || '',
         grade,
         grade_label: gradeLabel,
+        school_id: child.school_id || null,
+        school_name: child.school_id ? schoolNameMap.get(child.school_id) || null : null,
         photo_url: child.photo_url,
         status,
         is_scheduled_today: isScheduledToday,
@@ -262,7 +289,7 @@ export async function GET(request: NextRequest) {
         scheduled_end_time: formatTimeToMinutes(null),
         actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
         actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
-        guardian_phone: child.parent_phone,
+        guardian_phone: child.parent_phone || null,
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
       };
@@ -275,17 +302,11 @@ export async function GET(request: NextRequest) {
     const checkedOut = attendanceList.filter(c => c.status === 'checked_out').length;
 
     // アラート判定
-    const getMinutesDiff = (current: string, target: string) => {
-      if (!target) return 0;
-      const [h1, m1] = current.split(':').map(Number);
-      const [h2, m2] = target.split(':').map(Number);
-      return (h1 * 60 + m1) - (h2 * 60 + m2);
-    };
-
+    // 未帰所アラート（予定終了時刻から30分以上超過）
     const overdue = attendanceList
       .filter(c => {
         if (c.status !== 'checked_in' || !c.is_scheduled_today || !c.scheduled_end_time) return false;
-        return getMinutesDiff(currentTime, c.scheduled_end_time) >= 30;
+        return getMinutesDiff(currentTime, c.scheduled_end_time) >= OVERDUE_DEPARTURE_THRESHOLD_MINUTES;
       })
       .map(c => ({
         child_id: c.child_id,
@@ -293,16 +314,23 @@ export async function GET(request: NextRequest) {
         kana: c.kana,
         class_name: c.class_name,
         age_group: c.age_group,
+        grade: c.grade,
+        grade_label: c.grade_label,
+        school_id: c.school_id,
+        school_name: c.school_name,
         scheduled_end_time: c.scheduled_end_time,
         actual_in_time: c.actual_in_time,
         minutes_overdue: getMinutesDiff(currentTime, c.scheduled_end_time || ''),
         guardian_phone: c.guardian_phone,
       }));
 
-    const late = attendanceList
+    // 遅刻アラート（予定到着時刻から30分以上遅れ）
+    // 学校と学年情報を含めて、将来の外部通知機能に対応
+    const late: LateArrivalAlert[] = attendanceList
       .filter(c => {
         if (c.status !== 'absent' || !c.is_scheduled_today || !c.scheduled_start_time) return false;
-        return getMinutesDiff(currentTime, c.scheduled_start_time) > 0;
+        // 30分閾値を使用
+        return getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES;
       })
       .map(c => ({
         child_id: c.child_id,
@@ -310,11 +338,17 @@ export async function GET(request: NextRequest) {
         kana: c.kana,
         class_name: c.class_name,
         age_group: c.age_group,
-        scheduled_start_time: c.scheduled_start_time,
+        grade: c.grade,
+        grade_label: c.grade_label,
+        school_id: c.school_id,
+        school_name: c.school_name,
+        scheduled_start_time: c.scheduled_start_time!,
         minutes_late: getMinutesDiff(currentTime, c.scheduled_start_time || ''),
         guardian_phone: c.guardian_phone,
+        alert_triggered_at: new Date().toISOString(),
       }));
 
+    // 予定外登園アラート
     const unexpected = attendanceList
       .filter(c => c.status === 'checked_in' && !c.is_scheduled_today)
       .map(c => ({
