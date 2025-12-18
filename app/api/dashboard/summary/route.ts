@@ -73,52 +73,98 @@ export async function GET(request: NextRequest) {
     }
 
     const childrenData = childrenDataRaw ?? [];
+    const childIds = childrenData.map((c: any) => c.id);
 
-    // 2-4. 通所予定・当日設定・実績を共通ロジックで取得
-    const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = await fetchAttendanceContext(
-      supabase,
-      facility_id,
-      date,
-      childrenData.map((c: any) => c.id)
-    );
-
-    // 4. 学校別登校時刻の取得
+    // 事前計算: 学校ID一覧
     const schoolIds = Array.from(new Set(childrenData
       .map((c: any) => c.school_id)
-      .filter((id: string | null) => Boolean(id))));
+      .filter((id: string | null) => Boolean(id)))) as string[];
 
-    let schoolSchedules: Record<string, any[]> = {};
-
-    if (schoolIds.length > 0) {
-      const { data: schoolScheduleData, error: schoolScheduleError } = await supabase
-        .from('s_school_schedules')
-        .select('school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time')
-        .in('school_id', schoolIds)
-        .is('deleted_at', null);
-
-      if (schoolScheduleError) {
-        console.error('School schedule fetch error:', schoolScheduleError);
-        return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
-      }
-
-      schoolSchedules = (schoolScheduleData || []).reduce((acc: Record<string, any[]>, schedule: any) => {
-        if (!acc[schedule.school_id]) acc[schedule.school_id] = [];
-        acc[schedule.school_id].push(schedule);
-        return acc;
-      }, {});
-    }
-
-    // 5. 記録情報取得（最終記録日、週間記録数）
+    // 週間記録数計算用の日付
     const oneWeekAgo = new Date(date);
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
 
-    const { data: observationsData } = await supabase
-      .from('r_observation')
-      .select('child_id, observation_date')
-      .in('child_id', childrenData.map((c: any) => c.id))
-      .gte('observation_date', oneWeekAgoStr)
-      .is('deleted_at', null);
+    // 並列でデータ取得（パフォーマンス最適化）
+    const [
+      attendanceContext,
+      schoolScheduleResult,
+      observationsResult,
+      classesResult
+    ] = await Promise.all([
+      // 1. 通所予定・当日設定・実績を取得
+      fetchAttendanceContext(supabase, facility_id, date, childIds),
+
+      // 2. 学校別登校時刻を取得
+      schoolIds.length > 0
+        ? supabase
+            .from('s_school_schedules')
+            .select('school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time')
+            .in('school_id', schoolIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 3. 記録情報を取得（最終記録日、週間記録数）
+      childIds.length > 0
+        ? supabase
+            .from('r_observation')
+            .select('child_id, observation_date')
+            .in('child_id', childIds)
+            .gte('observation_date', oneWeekAgoStr)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 4. クラス一覧を取得（フィルター用）
+      supabase
+        .from('m_classes')
+        .select('id, name')
+        .eq('facility_id', facility_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('name'),
+    ]);
+
+    const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = attendanceContext;
+
+    // エラーチェック
+    if (schoolScheduleResult.error) {
+      console.error('School schedule fetch error:', schoolScheduleResult.error);
+      return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
+    }
+
+    // データ構造最適化: O(n)検索をO(1)に変換するためMapを使用
+    const schedulePatternMap = new Map(
+      (schedulePatterns || []).map((s: any) => [s.child_id, s])
+    );
+
+    const dailyAttendanceMap = new Map(
+      (dailyAttendanceData || []).map((r: any) => [r.child_id, r])
+    );
+
+    // attendanceLogsは1子どもに対して複数ログがあるためグループ化
+    const attendanceLogsMap = new Map<string, any[]>();
+    for (const log of attendanceLogsData || []) {
+      const existing = attendanceLogsMap.get(log.child_id) || [];
+      existing.push(log);
+      attendanceLogsMap.set(log.child_id, existing);
+    }
+
+    // observationsも1子どもに対して複数あるためグループ化
+    const observationsMap = new Map<string, any[]>();
+    for (const obs of observationsResult.data || []) {
+      const existing = observationsMap.get(obs.child_id) || [];
+      existing.push(obs);
+      observationsMap.set(obs.child_id, existing);
+    }
+
+    // 学校スケジュールをschool_idでグループ化
+    const schoolSchedules: Record<string, any[]> = {};
+    for (const schedule of schoolScheduleResult.data || []) {
+      if (!schoolSchedules[schedule.school_id]) {
+        schoolSchedules[schedule.school_id] = [];
+      }
+      schoolSchedules[schedule.school_id].push(schedule);
+    }
 
     // データ整形
     type AttendanceListItem = {
@@ -162,11 +208,14 @@ export async function GET(request: NextRequest) {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
-      const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
-      const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
+
+      // Mapから O(1) でデータ取得（パフォーマンス最適化）
+      const schedulePattern = schedulePatternMap.get(child.id);
+      const dailyRecord = dailyAttendanceMap.get(child.id);
       const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
 
-      const todaysLogs = (attendanceLogsData || []).filter((log: any) => log.child_id === child.id);
+      // 出席ログも O(1) で取得
+      const todaysLogs = attendanceLogsMap.get(child.id) || [];
       const activeLog = todaysLogs.find((log: any) => !log.checked_out_at);
       const latestClosedLog = todaysLogs
         .filter((log: any) => log.checked_out_at)
@@ -178,8 +227,8 @@ export async function GET(request: NextRequest) {
 
       const scheduledStartTime = isScheduledToday ? getSchoolStartTime(child.school_id, grade) : null;
 
-      // 記録情報
-      const childObservations = (observationsData || []).filter((obs: any) => obs.child_id === child.id);
+      // 記録情報も O(1) で取得
+      const childObservations = observationsMap.get(child.id) || [];
       const lastRecordDate = childObservations.length > 0
         ? childObservations.sort((a: any, b: any) => b.observation_date.localeCompare(a.observation_date))[0].observation_date
         : null;
@@ -307,17 +356,9 @@ export async function GET(request: NextRequest) {
         };
       });
 
-    // クラス一覧（フィルター用）
-    const { data: classesData } = await supabase
-      .from('m_classes')
-      .select('id, name')
-      .eq('facility_id', facility_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .order('name');
-
+    // クラス一覧（フィルター用）- 並列取得済みのclassesResultを使用
     const filters = {
-      classes: (classesData || []).map((cls: any) => ({
+      classes: (classesResult.data || []).map((cls: any) => ({
         class_id: cls.id,
         class_name: cls.name,
       })),

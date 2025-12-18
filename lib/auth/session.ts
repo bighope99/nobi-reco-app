@@ -26,60 +26,67 @@ export async function getUserSession(userId: string): Promise<UserSession | null
     const supabase = await createClient();
 
     try {
-        // 1. Fetch User Basic Info
-        const { data: userData, error: userError } = await supabase
-            .from('m_users')
-            .select(`
-        id,
-        email,
-        name,
-        role,
-        company_id,
-        m_companies (
-          name
-        )
-      `)
-            .eq('id', userId)
-            .eq('is_active', true)
-            .is('deleted_at', null)
-            .single();
+        // 並列でユーザー情報、施設、クラスを取得（パフォーマンス最適化）
+        const [userResult, facilitiesResult, classesResult] = await Promise.all([
+            // 1. Fetch User Basic Info
+            supabase
+                .from('m_users')
+                .select(`
+                    id,
+                    email,
+                    name,
+                    role,
+                    company_id,
+                    m_companies (
+                      name
+                    )
+                `)
+                .eq('id', userId)
+                .eq('is_active', true)
+                .is('deleted_at', null)
+                .single(),
+
+            // 2. Fetch Facilities (現在所属中の施設のみ)
+            supabase
+                .from('_user_facility')
+                .select(`
+                    is_primary,
+                    m_facilities (
+                      id,
+                      name
+                    )
+                `)
+                .eq('user_id', userId)
+                .eq('is_current', true),
+
+            // 3. Fetch Classes (現在担当中のクラスのみ)
+            supabase
+                .from('_user_class')
+                .select(`
+                    class_role,
+                    m_classes (
+                      id,
+                      name,
+                      facility_id
+                    )
+                `)
+                .eq('user_id', userId)
+                .eq('is_current', true),
+        ]);
+
+        const { data: userData, error: userError } = userResult;
+        const { data: facilitiesData, error: facilitiesError } = facilitiesResult;
+        const { data: classesData, error: classesError } = classesResult;
 
         if (userError || !userData) {
             console.error('Error fetching user data:', userError);
             return null;
         }
 
-        // 2. Fetch Facilities (現在所属中の施設のみ)
-        const { data: facilitiesData, error: facilitiesError } = await supabase
-            .from('_user_facility')
-            .select(`
-        is_primary,
-        m_facilities (
-          id,
-          name
-        )
-      `)
-            .eq('user_id', userId)
-            .eq('is_current', true);
-
         if (facilitiesError) {
             console.error('Error fetching facilities:', facilitiesError);
             return null;
         }
-
-        // 3. Fetch Classes (現在担当中のクラスのみ)
-        const { data: classesData, error: classesError } = await supabase
-            .from('_user_class')
-            .select(`
-        class_role,
-        m_classes (
-          id,
-          name,
-          facility_id
-        )
-      `)
-            .eq('user_id', userId)
-            .eq('is_current', true);
 
         if (classesError) {
             console.error('Error fetching classes:', classesError);
