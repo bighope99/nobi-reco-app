@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { LATE_ARRIVAL_THRESHOLD_MINUTES, OVERDUE_DEPARTURE_THRESHOLD_MINUTES } from '@/lib/constants/attendance';
 
 import {
   AlertTriangle,
@@ -54,10 +55,58 @@ interface KPI {
   checked_out: number;
 }
 
+// 遅刻アラート（外部通知用のデータ構造）
+interface LateAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  grade: number | null;
+  grade_label: string;
+  school_id: string | null;
+  school_name: string | null;
+  scheduled_start_time: string | null;
+  minutes_late: number;
+  guardian_phone: string;
+  alert_timestamp: string;
+}
+
+// 未帰所アラート（外部通知用のデータ構造）
+interface OverdueAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  grade: number | null;
+  grade_label: string;
+  school_id: string | null;
+  school_name: string | null;
+  scheduled_end_time: string | null;
+  actual_in_time: string | null;
+  minutes_overdue: number;
+  guardian_phone: string;
+  alert_timestamp: string;
+}
+
+// 予定外登園アラート
+interface UnexpectedAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  grade: number | null;
+  grade_label: string;
+  actual_in_time: string | null;
+  alert_timestamp: string;
+}
+
 interface Alert {
-  overdue: any[];
-  late: any[];
-  unexpected: any[];
+  overdue: OverdueAlert[];
+  late: LateAlert[];
+  unexpected: UnexpectedAlert[];
 }
 
 interface RecordSupport {
@@ -222,10 +271,13 @@ export default function ChildcareDashboard() {
     result.sort((a, b) => {
       // Priority 0: Safety Alerts are ALWAYS Top
       const getAlertPriority = (c: Child) => {
+        // 未帰所アラート（閾値超過）
         if (c.status === 'checked_in' && c.is_scheduled_today && c.scheduled_end_time &&
-            getMinutesDiff(dashboardData.current_time, c.scheduled_end_time) >= 30) return 1;
+            getMinutesDiff(dashboardData.current_time, c.scheduled_end_time) >= OVERDUE_DEPARTURE_THRESHOLD_MINUTES) return 1;
+        // 遅刻アラート（閾値超過）
         if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time &&
-            getMinutesDiff(dashboardData.current_time, c.scheduled_start_time) > 0) return 2;
+            getMinutesDiff(dashboardData.current_time, c.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES) return 2;
+        // 予定外登園
         if (c.status === 'checked_in' && !c.is_scheduled_today) return 3;
         return 99;
       };
@@ -276,7 +328,7 @@ export default function ChildcareDashboard() {
     }
 
     const overdue = child.status === 'checked_in' && child.is_scheduled_today && child.scheduled_end_time &&
-      getMinutesDiff(dashboardData.current_time, child.scheduled_end_time) >= 30;
+      getMinutesDiff(dashboardData.current_time, child.scheduled_end_time) >= OVERDUE_DEPARTURE_THRESHOLD_MINUTES;
     if (overdue) {
       return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">未帰所・遅延</span>;
     }
@@ -434,17 +486,23 @@ export default function ChildcareDashboard() {
               {/* Alert Section */}
               {(dashboardData.alerts.overdue.length > 0 || dashboardData.alerts.late.length > 0 || dashboardData.alerts.unexpected.length > 0) && (
                 <div className="space-y-3">
-                  {/* Overdue Alerts */}
+                  {/* Overdue Alerts - 未帰所アラート（30分以上超過） */}
                   {dashboardData.alerts.overdue.map(child => (
                     <div key={child.child_id} className="bg-rose-50 border border-rose-200 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                       <div className="flex items-start gap-3 w-full">
                         <div className="bg-rose-100 p-2 rounded-full text-rose-600 shrink-0">
                           <AlertTriangle size={20} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-rose-900">{child.name}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded border border-rose-200 font-bold">未帰所アラート</span>
+                          </div>
+                          {/* 学校・学年情報 */}
+                          <div className="text-xs text-rose-600 mt-1 flex flex-wrap gap-x-2">
+                            {child.school_name && <span>{child.school_name}</span>}
+                            {child.grade_label && <span>• {child.grade_label}</span>}
+                            {child.class_name && <span>• {child.class_name}</span>}
                           </div>
                           <div className="text-sm text-rose-800 mt-1 flex flex-wrap gap-x-4">
                             <span className="flex items-center gap-1"><Clock size={14} /> 予定: {child.scheduled_end_time}</span>
@@ -458,17 +516,23 @@ export default function ChildcareDashboard() {
                     </div>
                   ))}
 
-                  {/* Late Alerts */}
+                  {/* Late Alerts - 遅刻アラート（30分以上遅れ） */}
                   {dashboardData.alerts.late.map(child => (
                     <div key={child.child_id} className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                       <div className="flex items-start gap-3 w-full">
                         <div className="bg-red-100 p-2 rounded-full text-red-600 shrink-0">
                           <UserMinus size={20} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-red-900">{child.name}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 font-bold">未登園・遅刻</span>
+                          </div>
+                          {/* 学校・学年情報 */}
+                          <div className="text-xs text-red-600 mt-1 flex flex-wrap gap-x-2">
+                            {child.school_name && <span>{child.school_name}</span>}
+                            {child.grade_label && <span>• {child.grade_label}</span>}
+                            {child.class_name && <span>• {child.class_name}</span>}
                           </div>
                           <div className="text-sm text-red-800 mt-1 flex flex-wrap gap-x-4">
                             <span className="flex items-center gap-1"><Clock size={14} /> 予定: {child.scheduled_start_time}</span>
