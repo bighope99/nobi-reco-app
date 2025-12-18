@@ -76,6 +76,10 @@ export default function QRAttendanceScannerPage() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
 
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+
     setScanStatus("stopped")
   }, [])
 
@@ -129,6 +133,14 @@ export default function QRAttendanceScannerPage() {
       return
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrorMessage("この端末ではカメラを利用できません。別の端末またはブラウザでお試しください。")
+      setScanStatus("idle")
+      return
+    }
+
+    stopScanner()
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -136,13 +148,19 @@ export default function QRAttendanceScannerPage() {
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
+        audio: false,
       })
 
       streamRef.current = stream
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        await videoRef.current.play()
+        try {
+          await videoRef.current.play()
+        } catch (playError) {
+          console.error("Video play error", playError)
+          throw new Error("カメラ映像の再生に失敗しました。ブラウザの権限設定を確認してください。")
+        }
       }
 
       if (!detectorRef.current) {
@@ -158,10 +176,17 @@ export default function QRAttendanceScannerPage() {
       animationRef.current = requestAnimationFrame(scanLoop)
     } catch (error) {
       console.error("Camera start error", error)
-      setErrorMessage("カメラの起動に失敗しました。ブラウザの権限設定を確認してください。")
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        setErrorMessage("カメラへのアクセスが拒否されました。ブラウザの許可設定を確認してください。")
+      } else if (error instanceof DOMException && error.name === "NotFoundError") {
+        setErrorMessage("カメラデバイスが検出できませんでした。接続を確認して再度お試しください。")
+      } else {
+        setErrorMessage("カメラの起動に失敗しました。ブラウザの権限設定を確認してください。")
+      }
+      stopScanner()
       setScanStatus("idle")
     }
-  }, [scanLoop, supportState])
+  }, [scanLoop, stopScanner, supportState])
 
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
