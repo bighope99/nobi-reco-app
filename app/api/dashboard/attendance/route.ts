@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { action, child_id } = await request.json();
+    const { action, child_id, action_timestamp } = await request.json();
 
     if (!child_id || !action) {
       return NextResponse.json({ success: false, error: 'child_id and action are required' }, { status: 400 });
@@ -98,19 +98,27 @@ export async function POST(request: NextRequest) {
     };
 
     const actionType = action as AttendanceAction;
+    const resolvedTimestamp = (() => {
+      if (action_timestamp) {
+        const parsed = new Date(action_timestamp);
+        if (!Number.isNaN(parsed.getTime())) {
+          return parsed.toISOString();
+        }
+      }
+      return new Date().toISOString();
+    })();
 
     if (actionType === 'check_in') {
       if (openAttendance) {
         return NextResponse.json({ success: false, error: 'Already checked in today' }, { status: 409 });
       }
 
-      const now = new Date().toISOString();
       const { error: insertError } = await supabase
         .from('h_attendance')
         .insert({
           child_id,
           facility_id: facilityId,
-          checked_in_at: now,
+          checked_in_at: resolvedTimestamp,
           check_in_method: 'manual',
           checked_in_by: session.user.id,
         });
@@ -131,11 +139,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'No active attendance to check out' }, { status: 404 });
       }
 
-      const now = new Date().toISOString();
       const { error: updateError } = await supabase
         .from('h_attendance')
         .update({
-          checked_out_at: now,
+          checked_out_at: resolvedTimestamp,
           check_out_method: 'manual',
           checked_out_by: session.user.id,
         })

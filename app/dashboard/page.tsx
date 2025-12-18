@@ -99,7 +99,7 @@ export default function ChildcareDashboard() {
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/dashboard/summary');
+      const response = await fetch('/api/dashboard/summary', { cache: 'no-store' });
 
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard data');
@@ -124,7 +124,7 @@ export default function ChildcareDashboard() {
   }, [fetchDashboardData]);
 
   // --- Actions ---
-  const postAttendanceAction = async (action: string, childId: string) => {
+  const postAttendanceAction = async (action: string, childId: string, actionTimestamp?: string) => {
     try {
       setError(null);
       const response = await fetch('/api/dashboard/attendance', {
@@ -132,7 +132,7 @@ export default function ChildcareDashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action, child_id: childId }),
+        body: JSON.stringify({ action, child_id: childId, action_timestamp: actionTimestamp }),
       });
 
       const result = await response.json();
@@ -150,12 +150,14 @@ export default function ChildcareDashboard() {
 
   // 登園処理
   const handleCheckIn = async (childId: string) => {
-    await postAttendanceAction('check_in', childId);
+    const clickedAt = new Date().toISOString();
+    await postAttendanceAction('check_in', childId, clickedAt);
   };
 
   // 退室処理
   const handleCheckOut = async (childId: string) => {
-    await postAttendanceAction('check_out', childId);
+    const clickedAt = new Date().toISOString();
+    await postAttendanceAction('check_out', childId, clickedAt);
   };
 
   // 欠席処理
@@ -325,7 +327,7 @@ export default function ChildcareDashboard() {
     if (child.status === 'checked_in') {
       return (
         <button onClick={() => handleCheckOut(child.child_id)} className="text-xs text-slate-400 hover:text-slate-600 underline">
-          退室登録
+          帰宅
         </button>
       );
     }

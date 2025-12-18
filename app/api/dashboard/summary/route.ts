@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
         grade_add,
         photo_url,
         parent_phone,
+        school_id,
         _child_class (
           class_id,
           is_current,
@@ -81,6 +82,32 @@ export async function GET(request: NextRequest) {
       childrenData.map((c: any) => c.id)
     );
 
+    // 4. 学校別登校時刻の取得
+    const schoolIds = Array.from(new Set(childrenData
+      .map((c: any) => c.school_id)
+      .filter((id: string | null) => Boolean(id))));
+
+    let schoolSchedules: Record<string, any[]> = {};
+
+    if (schoolIds.length > 0) {
+      const { data: schoolScheduleData, error: schoolScheduleError } = await supabase
+        .from('s_school_schedules')
+        .select('school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time')
+        .in('school_id', schoolIds)
+        .is('deleted_at', null);
+
+      if (schoolScheduleError) {
+        console.error('School schedule fetch error:', schoolScheduleError);
+        return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
+      }
+
+      schoolSchedules = (schoolScheduleData || []).reduce((acc: Record<string, any[]>, schedule: any) => {
+        if (!acc[schedule.school_id]) acc[schedule.school_id] = [];
+        acc[schedule.school_id].push(schedule);
+        return acc;
+      }, {});
+    }
+
     // 5. 記録情報取得（最終記録日、週間記録数）
     const oneWeekAgo = new Date(date);
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -115,6 +142,16 @@ export async function GET(request: NextRequest) {
       weekly_record_count: number;
     };
 
+    const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {
+      if (!schoolId || grade === null || grade === undefined) return null;
+      const schedules = schoolSchedules[schoolId] || [];
+      const gradeKey = String(grade);
+      const matchedSchedule = schedules.find((schedule: any) => (schedule.grades || []).includes(gradeKey));
+      if (!matchedSchedule) return null;
+      const weekdayKey = `${dayOfWeekKey}_time`;
+      return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
+    };
+
     const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
@@ -123,10 +160,17 @@ export async function GET(request: NextRequest) {
       const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
       const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
 
-      const attendanceLog = (attendanceLogsData || []).find((log: any) => log.child_id === child.id && !log.checked_out_at);
+      const todaysLogs = (attendanceLogsData || []).filter((log: any) => log.child_id === child.id);
+      const activeLog = todaysLogs.find((log: any) => !log.checked_out_at);
+      const latestClosedLog = todaysLogs
+        .filter((log: any) => log.checked_out_at)
+        .sort((a: any, b: any) => new Date(b.checked_in_at).getTime() - new Date(a.checked_in_at).getTime())[0];
+      const displayLog = activeLog || latestClosedLog;
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
+
+      const scheduledStartTime = isScheduledToday ? getSchoolStartTime(child.school_id, grade) : null;
 
       // 記録情報
       const childObservations = (observationsData || []).filter((obs: any) => obs.child_id === child.id);
@@ -137,11 +181,13 @@ export async function GET(request: NextRequest) {
 
       // ステータス判定
       let status: 'checked_in' | 'checked_out' | 'absent' = 'absent';
-      if (attendanceLog) {
-        status = attendanceLog.checked_out_at ? 'checked_out' : 'checked_in';
+      if (activeLog) {
+        status = 'checked_in';
+      } else if (latestClosedLog) {
+        status = 'checked_out';
       }
 
-      if (!attendanceLog && dailyRecord?.status === 'absent') {
+      if (!activeLog && !latestClosedLog && dailyRecord?.status === 'absent') {
         status = 'absent';
       }
 
@@ -157,10 +203,10 @@ export async function GET(request: NextRequest) {
         photo_url: child.photo_url,
         status,
         is_scheduled_today: isScheduledToday,
-        scheduled_start_time: null,
+        scheduled_start_time: scheduledStartTime,
         scheduled_end_time: null,
-        actual_in_time: attendanceLog?.checked_in_at ? new Date(attendanceLog.checked_in_at).toTimeString().slice(0, 5) : null,
-        actual_out_time: attendanceLog?.checked_out_at ? new Date(attendanceLog.checked_out_at).toTimeString().slice(0, 5) : null,
+        actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
+        actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
         guardian_phone: child.parent_phone,
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
