@@ -1,113 +1,244 @@
-'use client';
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Camera, Check, Loader2, TriangleAlert, VideoOff } from "lucide-react"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
 
-interface QRData {
-  token: string
-  qr_code_svg: string
+interface AttendanceQrPayload {
+  type: string
+  child_id: string
   facility_id: string
-  issued_at: string
-  expires_at: string
-  expires_in_minutes: number
+  signature: string
 }
 
-export default function QRAttendancePage() {
-  const [qrData, setQrData] = useState<QRData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [timeRemaining, setTimeRemaining] = useState<string>('')
+type BarcodeDetectorInstance = {
+  detect: (source: HTMLVideoElement | HTMLCanvasElement | ImageBitmapSource) => Promise<Array<{ rawValue: string }>>
+}
 
-  const generateQR = async () => {
-    setLoading(true)
+type BarcodeDetectorConstructor = {
+  new (options?: { formats?: string[] }): BarcodeDetectorInstance
+  getSupportedFormats?: () => Promise<string[]>
+}
+
+type ScanStatus = "idle" | "starting" | "scanning" | "stopped"
+
+export default function QRAttendanceScannerPage() {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const animationRef = useRef<number | null>(null)
+  const detectorRef = useRef<BarcodeDetectorInstance | null>(null)
+
+  const [scanStatus, setScanStatus] = useState<ScanStatus>("idle")
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [lastRawValue, setLastRawValue] = useState<string | null>(null)
+  const [lastPayload, setLastPayload] = useState<AttendanceQrPayload | null>(null)
+
+  const stopScanner = useCallback(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
+    }
+
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+
+    setScanStatus("stopped")
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      stopScanner()
+    }
+  }, [stopScanner])
+
+  const parsePayload = (raw: string): AttendanceQrPayload | null => {
     try {
-      const response = await fetch('/api/attendance/qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expires_in_minutes: 30 }),
-      })
-      const result = await response.json()
-      if (result.success) {
-        setQrData(result.data)
-      } else {
-        alert('QRコード生成に失敗しました')
-      }
+      const parsed = JSON.parse(raw) as AttendanceQrPayload
+      if (parsed.type !== "attendance") return null
+      if (!parsed.child_id || !parsed.facility_id || !parsed.signature) return null
+      return parsed
     } catch (error) {
-      console.error('QR generation error:', error)
-      alert('エラーが発生しました')
-    } finally {
-      setLoading(false)
+      console.error("QR parse error", error)
+      return null
     }
   }
 
-  // Calculate time remaining
-  useEffect(() => {
-    if (!qrData) return
+  const processDetection = (rawValue: string) => {
+    setLastRawValue(rawValue)
+    const payload = parsePayload(rawValue)
+    setLastPayload(payload)
+  }
 
-    const interval = setInterval(() => {
-      const now = new Date()
-      const expiresAt = new Date(qrData.expires_at)
-      const diff = expiresAt.getTime() - now.getTime()
+  const scanLoop = useCallback(async () => {
+    if (!detectorRef.current || !videoRef.current) return
 
-      if (diff <= 0) {
-        setTimeRemaining('期限切れ')
-        clearInterval(interval)
-        return
+    try {
+      const barcodes = await detectorRef.current.detect(videoRef.current)
+      if (barcodes.length > 0) {
+        processDetection(barcodes[0].rawValue)
       }
+    } catch (error) {
+      console.error("Barcode detection error", error)
+      setErrorMessage("QRコードの読み取りに失敗しました。カメラ位置を調整してください。")
+    }
 
-      const minutes = Math.floor(diff / 60000)
-      const seconds = Math.floor((diff % 60000) / 1000)
-      setTimeRemaining(`${minutes}分${seconds}秒`)
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [qrData])
-
-  // Auto-generate on mount
-  useEffect(() => {
-    generateQR()
+    animationRef.current = requestAnimationFrame(scanLoop)
   }, [])
 
+  const startScanner = useCallback(async () => {
+    setErrorMessage(null)
+    setScanStatus("starting")
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrorMessage("この端末ではカメラを利用できません。別の端末またはブラウザでお試しください。")
+      setScanStatus("idle")
+      return
+    }
+
+    stopScanner()
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      })
+
+      streamRef.current = stream
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        try {
+          await videoRef.current.play()
+        } catch (playError) {
+          console.error("Video play error", playError)
+          throw new Error("カメラ映像の再生に失敗しました。ブラウザの権限設定を確認してください。")
+        }
+      }
+
+      if (!detectorRef.current) {
+        const barcodeDetectorCtor = (window as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
+        if (!barcodeDetectorCtor) {
+          throw new Error("BarcodeDetector is not supported")
+        }
+
+        detectorRef.current = new barcodeDetectorCtor({ formats: ["qr_code"] })
+      }
+
+      setScanStatus("scanning")
+      animationRef.current = requestAnimationFrame(scanLoop)
+    } catch (error) {
+      console.error("Camera start error", error)
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        setErrorMessage("カメラへのアクセスが拒否されました。ブラウザの許可設定を確認してください。")
+      } else if (error instanceof DOMException && error.name === "NotFoundError") {
+        setErrorMessage("カメラデバイスが検出できませんでした。接続を確認して再度お試しください。")
+      } else {
+        setErrorMessage("カメラの起動に失敗しました。ブラウザの権限設定を確認してください。")
+      }
+      stopScanner()
+      setScanStatus("idle")
+    }
+  }, [scanLoop, stopScanner])
+
+  const isScanning = scanStatus === "scanning" || scanStatus === "starting"
+
   return (
-    <StaffLayout title="QR出欠" subtitle="QRコードで出席確認">
-      <div className="mx-auto max-w-md">
+    <StaffLayout title="QR出欠" subtitle="タブレットのカメラで児童のQRコードを読み取り">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">出席確認QRコード</CardTitle>
+            <CardTitle>QRコード読み取り</CardTitle>
+            <CardDescription>タブレットの背面カメラを使ってQRコードをスキャンします</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col items-center gap-4">
-            {qrData ? (
-              <>
-                <div
-                  className="flex items-center justify-center rounded-lg border-2 border-border bg-white p-4"
-                  dangerouslySetInnerHTML={{ __html: qrData.qr_code_svg }}
-                />
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">このQRコードをスキャンして出席を記録します</p>
-                  <p className="mt-2 text-lg font-semibold text-primary">
-                    残り時間: {timeRemaining}
-                  </p>
+          <CardContent className="space-y-4">
+            <div className="relative overflow-hidden rounded-xl border bg-black">
+              {!isScanning && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/70 text-center text-white">
+                  <Camera className="h-10 w-10" />
+                  <p className="text-sm font-medium">カメラを起動してQRコードを読み取ります</p>
                 </div>
-                <Button
-                  onClick={generateQR}
-                  disabled={loading}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  QRコードを再生成
-                </Button>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-4 py-8">
-                <p className="text-muted-foreground">読み込み中...</p>
-                <Button onClick={generateQR} disabled={loading}>
-                  QRコードを生成
-                </Button>
+              )}
+              <video
+                ref={videoRef}
+                className="aspect-video h-full w-full bg-black object-cover"
+                playsInline
+                muted
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="h-40 w-40 border-2 border-white/60" />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={startScanner} disabled={isScanning}>
+                {scanStatus === "starting" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 起動中...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="mr-2 h-4 w-4" /> カメラを起動
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={stopScanner}
+                disabled={scanStatus === "idle" || scanStatus === "stopped"}
+              >
+                <VideoOff className="mr-2 h-4 w-4" /> 停止
+              </Button>
+            </div>
+            {errorMessage && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <TriangleAlert className="mt-0.5 h-4 w-4" />
+                <p>{errorMessage}</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>読み取り結果</CardTitle>
+            <CardDescription>児童のQRコードをスキャンするとここに表示されます</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {lastRawValue ? (
+              <div className="space-y-2 rounded-lg border p-3">
+                <Label className="text-xs text-muted-foreground">QRデータ</Label>
+                <p className="break-all font-mono text-sm leading-relaxed">{lastRawValue}</p>
+                {lastPayload ? (
+                  <div className="mt-2 space-y-1 rounded-md bg-muted/60 p-2 text-sm">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <Check className="h-4 w-4 text-green-600" />
+                      attendance QR として認識しました
+                    </div>
+                    <p>児童ID: {lastPayload.child_id}</p>
+                    <p>施設ID: {lastPayload.facility_id}</p>
+                    <p className="text-xs text-muted-foreground">署名: {lastPayload.signature}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-destructive">attendance用QRではないか、形式が正しくありません。</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">まだQRコードは読み取られていません。</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              読み取ったデータは出欠チェックインAPIに連携する想定です。署名検証・打刻処理はAPI側で実装してください。
+            </p>
           </CardContent>
         </Card>
       </div>
