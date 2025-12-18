@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Camera, Check, Loader2, TriangleAlert, VideoOff } from "lucide-react"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -25,8 +24,6 @@ type BarcodeDetectorConstructor = {
   getSupportedFormats?: () => Promise<string[]>
 }
 
-type SupportState = "checking" | "supported" | "unsupported"
-
 type ScanStatus = "idle" | "starting" | "scanning" | "stopped"
 
 export default function QRAttendanceScannerPage() {
@@ -35,37 +32,10 @@ export default function QRAttendanceScannerPage() {
   const animationRef = useRef<number | null>(null)
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null)
 
-  const [supportState, setSupportState] = useState<SupportState>("checking")
   const [scanStatus, setScanStatus] = useState<ScanStatus>("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [lastRawValue, setLastRawValue] = useState<string | null>(null)
   const [lastPayload, setLastPayload] = useState<AttendanceQrPayload | null>(null)
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const barcodeDetectorCtor = (window as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
-
-    if (!barcodeDetectorCtor) {
-      setSupportState("unsupported")
-      return
-    }
-
-    if (barcodeDetectorCtor.getSupportedFormats) {
-      barcodeDetectorCtor
-        .getSupportedFormats()
-        .then((formats) => {
-          if (formats.includes("qr_code")) {
-            setSupportState("supported")
-          } else {
-            setSupportState("unsupported")
-          }
-        })
-        .catch(() => setSupportState("unsupported"))
-    } else {
-      setSupportState("supported")
-    }
-  }, [])
 
   const stopScanner = useCallback(() => {
     if (animationRef.current) {
@@ -127,12 +97,6 @@ export default function QRAttendanceScannerPage() {
     setErrorMessage(null)
     setScanStatus("starting")
 
-    if (supportState !== "supported") {
-      setErrorMessage("このブラウザではQRコードの読み取りに対応していません。ChromeやEdgeでお試しください。")
-      setScanStatus("idle")
-      return
-    }
-
     if (!navigator.mediaDevices?.getUserMedia) {
       setErrorMessage("この端末ではカメラを利用できません。別の端末またはブラウザでお試しください。")
       setScanStatus("idle")
@@ -186,7 +150,7 @@ export default function QRAttendanceScannerPage() {
       stopScanner()
       setScanStatus("idle")
     }
-  }, [scanLoop, stopScanner, supportState])
+  }, [scanLoop, stopScanner])
 
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
@@ -217,7 +181,7 @@ export default function QRAttendanceScannerPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button onClick={startScanner} disabled={isScanning || supportState === "checking"}>
+              <Button onClick={startScanner} disabled={isScanning}>
                 {scanStatus === "starting" ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 起動中...
@@ -235,11 +199,6 @@ export default function QRAttendanceScannerPage() {
               >
                 <VideoOff className="mr-2 h-4 w-4" /> 停止
               </Button>
-              {supportState === "unsupported" && (
-                <Badge variant="destructive" className="flex items-center gap-1">
-                  <TriangleAlert className="h-3 w-3" /> QR読み取り非対応ブラウザ
-                </Badge>
-              )}
             </div>
             {errorMessage && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
