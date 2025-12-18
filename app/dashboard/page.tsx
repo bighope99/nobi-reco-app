@@ -94,6 +94,7 @@ export default function ChildcareDashboard() {
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(false);
   const [sortKey, setSortKey] = useState<SortKey>('status');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
 
   // データ取得
   const fetchDashboardData = useCallback(async () => {
@@ -122,6 +123,11 @@ export default function ChildcareDashboard() {
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  useEffect(() => {
+    const now = new Date();
+    setCurrentTimeDisplay(now.toTimeString().slice(0, 5));
+  }, []);
 
   // --- Actions ---
   const postAttendanceAction = async (action: string, childId: string, actionTimestamp?: string) => {
@@ -207,9 +213,9 @@ export default function ChildcareDashboard() {
 
     // 2. Filter: Show/Hide Unscheduled
     if (showUnscheduled) {
-      result = result.filter(c => c.status === 'absent' && !c.is_scheduled_today);
+      result = result.filter(c => !c.is_scheduled_today);
     } else {
-      result = result.filter(c => c.status === 'checked_in' || c.is_scheduled_today);
+      result = result.filter(c => c.is_scheduled_today || c.status === 'checked_in' || c.status === 'checked_out');
     }
 
     // 3. Sort
@@ -383,7 +389,7 @@ export default function ChildcareDashboard() {
                 <h1 className="text-lg sm:text-xl font-bold text-slate-800">安全管理ダッシュボード</h1>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 pl-6 sm:pl-7">
-                {dashboardData.current_date.replace(/-/g, '/')} <span className="mx-1 sm:mx-2">|</span> 現在時刻 <span className="font-mono font-bold text-slate-700">{dashboardData.current_time}</span>
+                {dashboardData.current_date.replace(/-/g, '/')} <span className="mx-1 sm:mx-2">|</span> 現在時刻 <span className="font-mono font-bold text-slate-700">{currentTimeDisplay || dashboardData.current_time}</span>
               </p>
             </div>
             <div className="flex items-center gap-2">
