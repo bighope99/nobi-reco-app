@@ -46,30 +46,34 @@ export async function fetchAttendanceContext(
     return { dayOfWeekKey, schedulePatterns: [], dailyAttendanceData: [], attendanceLogsData: [] };
   }
 
-  const { data: schedulePatternsRaw } = await supabase
-    .from('s_attendance_schedule')
-    .select('child_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, valid_from, valid_to, is_active')
-    .eq('is_active', true)
-    .lte('valid_from', date)
-    .or(`valid_to.is.null,valid_to.gte.${date}`)
-    .in('child_id', childIds);
-
-  const { data: dailyAttendanceDataRaw } = await supabase
-    .from('r_daily_attendance')
-    .select('child_id, status')
-    .eq('facility_id', facilityId)
-    .eq('attendance_date', date)
-    .in('child_id', childIds);
-
   const { start, end } = getDateRange(date);
 
-  const { data: attendanceLogsDataRaw } = await supabase
-    .from('h_attendance')
-    .select('child_id, checked_in_at, checked_out_at, check_in_method, check_out_method')
-    .eq('facility_id', facilityId)
-    .gte('checked_in_at', start)
-    .lte('checked_in_at', end)
-    .in('child_id', childIds);
+  const [
+    { data: schedulePatternsRaw },
+    { data: dailyAttendanceDataRaw },
+    { data: attendanceLogsDataRaw },
+  ] = await Promise.all([
+    supabase
+      .from('s_attendance_schedule')
+      .select('child_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, valid_from, valid_to, is_active')
+      .eq('is_active', true)
+      .lte('valid_from', date)
+      .or(`valid_to.is.null,valid_to.gte.${date}`)
+      .in('child_id', childIds),
+    supabase
+      .from('r_daily_attendance')
+      .select('child_id, status')
+      .eq('facility_id', facilityId)
+      .eq('attendance_date', date)
+      .in('child_id', childIds),
+    supabase
+      .from('h_attendance')
+      .select('child_id, checked_in_at, checked_out_at, check_in_method, check_out_method')
+      .eq('facility_id', facilityId)
+      .gte('checked_in_at', start)
+      .lte('checked_in_at', end)
+      .in('child_id', childIds),
+  ]);
 
   const schedulePatterns = schedulePatternsRaw ?? [];
   const dailyAttendanceData = dailyAttendanceDataRaw ?? [];
