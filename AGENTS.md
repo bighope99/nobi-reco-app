@@ -75,3 +75,68 @@ Use this repository in alignment with the specifications in the `docs/` folder. 
     // ...
   }
   ```
+
+## API Performance Optimization Rules
+
+### 1. Supabaseクエリの並列化
+依存関係がない複数のSupabaseクエリは、必ず`Promise.all`で並列実行する。
+
+```typescript
+// ❌ BAD: 順次実行（遅い）
+const { data: users } = await supabase.from('m_users').select('*');
+const { data: facilities } = await supabase.from('m_facilities').select('*');
+const { data: classes } = await supabase.from('m_classes').select('*');
+
+// ✅ GOOD: 並列実行（速い）
+const [usersResult, facilitiesResult, classesResult] = await Promise.all([
+  supabase.from('m_users').select('*'),
+  supabase.from('m_facilities').select('*'),
+  supabase.from('m_classes').select('*'),
+]);
+```
+
+**適用例**:
+- `lib/auth/session.ts`: getUserSession内の3クエリ
+- `app/api/attendance/utils/attendance.ts`: fetchAttendanceContext内の3クエリ
+- `app/api/dashboard/summary/route.ts`: 後半の4クエリ
+
+### 2. ループ内検索のMap変換（O(n²)→O(n)最適化）
+ループ内で`find()`や`filter()`を使う場合、事前にMapに変換してO(1)でアクセスする。
+
+```typescript
+// ❌ BAD: O(n²) - 児童100人 × 全配列検索
+children.map(child => {
+  const schedule = schedules.find(s => s.child_id === child.id);  // O(n)
+  const attendance = attendances.find(a => a.child_id === child.id);  // O(n)
+  // ...
+});
+
+// ✅ GOOD: O(n) - 事前にMapに変換
+const scheduleMap = new Map(schedules.map(s => [s.child_id, s]));
+const attendanceMap = new Map(attendances.map(a => [a.child_id, a]));
+
+children.map(child => {
+  const schedule = scheduleMap.get(child.id);  // O(1)
+  const attendance = attendanceMap.get(child.id);  // O(1)
+  // ...
+});
+```
+
+**1対多の場合のグループ化**:
+```typescript
+// 1つのchild_idに複数レコードがある場合
+const logsMap = new Map<string, Log[]>();
+for (const log of logs) {
+  const existing = logsMap.get(log.child_id) || [];
+  existing.push(log);
+  logsMap.set(log.child_id, existing);
+}
+```
+
+### 3. パフォーマンス問題の診断チェックリスト
+APIが遅い場合、以下を確認する：
+
+1. **SQLクエリ回数**: 順次実行されているクエリを並列化できないか？
+2. **O(n²)ループ**: ループ内で`find/filter`を使っていないか？Mapに変換できないか？
+3. **不要なデータ取得**: `select('*')`ではなく必要なカラムのみ取得しているか？
+4. **N+1問題**: ループ内でクエリを発行していないか？JOINやINで一括取得できないか？
