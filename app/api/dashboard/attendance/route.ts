@@ -40,27 +40,32 @@ export async function POST(request: NextRequest) {
     const attendanceDate = today.toISOString().split('T')[0];
     const { start, end } = buildDateRange(attendanceDate);
 
-    const { data: dailyRecord, error: dailyError } = await supabase
-      .from('r_daily_attendance')
-      .select('*')
-      .eq('child_id', child_id)
-      .eq('attendance_date', attendanceDate)
-      .maybeSingle();
+    // 並列実行：日次出席情報と現在のアクティブな出席ログを取得
+    const [dailyRecordResult, openAttendanceResult] = await Promise.all([
+      supabase
+        .from('r_daily_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('attendance_date', attendanceDate)
+        .maybeSingle(),
+      supabase
+        .from('h_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('facility_id', facilityId)
+        .gte('checked_in_at', start)
+        .lte('checked_in_at', end)
+        .is('checked_out_at', null)
+        .maybeSingle()
+    ]);
+
+    const { data: dailyRecord, error: dailyError } = dailyRecordResult;
+    const { data: openAttendance, error: attendanceFetchError } = openAttendanceResult;
 
     if (dailyError) {
       console.error('Daily attendance fetch error:', dailyError);
       return NextResponse.json({ success: false, error: 'Failed to fetch daily attendance' }, { status: 500 });
     }
-
-    const { data: openAttendance, error: attendanceFetchError } = await supabase
-      .from('h_attendance')
-      .select('*')
-      .eq('child_id', child_id)
-      .eq('facility_id', facilityId)
-      .gte('checked_in_at', start)
-      .lte('checked_in_at', end)
-      .is('checked_out_at', null)
-      .maybeSingle();
 
     if (attendanceFetchError) {
       console.error('Attendance fetch error:', attendanceFetchError);
@@ -113,23 +118,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Already checked in today' }, { status: 409 });
       }
 
-      const { error: insertError } = await supabase
-        .from('h_attendance')
-        .insert({
-          child_id,
-          facility_id: facilityId,
-          checked_in_at: resolvedTimestamp,
-          check_in_method: 'manual',
-          checked_in_by: session.user.id,
-        });
+      const status: 'scheduled' | 'irregular' = dailyRecord ? 'scheduled' : 'irregular';
 
+      // 並列実行：ログ挿入と日次ステータス更新
+      const [insertResult, upsertResult] = await Promise.allSettled([
+        supabase
+          .from('h_attendance')
+          .insert({
+            child_id,
+            facility_id: facilityId,
+            checked_in_at: resolvedTimestamp,
+            check_in_method: 'manual',
+            checked_in_by: session.user.id,
+          }),
+        upsertDailyAttendance(status)
+      ]);
+
+      const insertError = insertResult.status === 'fulfilled' ? insertResult.value.error : insertResult.reason;
+      
       if (insertError) {
         console.error('Check-in insert error:', insertError);
         return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
       }
 
-      const status: 'scheduled' | 'irregular' = dailyRecord ? 'scheduled' : 'irregular';
-      await upsertDailyAttendance(status);
+      if (upsertResult.status === 'rejected') {
+         // ログ挿入が成功しているが、日次更新が失敗した場合のハンドリングが必要ならここに記述
+         // 現状はエラーログのみとする
+         console.error('Daily attendance upsert failed during check-in:', upsertResult.reason);
+      }
 
       return NextResponse.json({ success: true });
     }
