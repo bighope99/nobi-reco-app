@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { LATE_ALERT_THRESHOLD_MINUTES } from "@/lib/constants/dashboard";
 
 import {
   AlertTriangle,
@@ -32,6 +33,8 @@ interface Child {
   kana: string;
   class_id: string | null;
   class_name: string;
+  school_id: string | null;
+  school_name: string | null;
   age_group: string;
   grade: number | null;
   grade_label: string;
@@ -225,7 +228,7 @@ export default function ChildcareDashboard() {
         if (c.status === 'checked_in' && c.is_scheduled_today && c.scheduled_end_time &&
             getMinutesDiff(dashboardData.current_time, c.scheduled_end_time) >= 30) return 1;
         if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time &&
-            getMinutesDiff(dashboardData.current_time, c.scheduled_start_time) > 0) return 2;
+            getMinutesDiff(dashboardData.current_time, c.scheduled_start_time) >= LATE_ALERT_THRESHOLD_MINUTES) return 2;
         if (c.status === 'checked_in' && !c.is_scheduled_today) return 3;
         return 99;
       };
@@ -287,7 +290,7 @@ export default function ChildcareDashboard() {
       case 'absent':
         if (child.is_scheduled_today) {
           const isLate = child.scheduled_start_time &&
-            getMinutesDiff(dashboardData.current_time, child.scheduled_start_time) > 0;
+            getMinutesDiff(dashboardData.current_time, child.scheduled_start_time) >= LATE_ALERT_THRESHOLD_MINUTES;
           if (isLate) {
             return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">未登園(遅れ)</span>;
           }
@@ -473,6 +476,19 @@ export default function ChildcareDashboard() {
                           <div className="text-sm text-red-800 mt-1 flex flex-wrap gap-x-4">
                             <span className="flex items-center gap-1"><Clock size={14} /> 予定: {child.scheduled_start_time}</span>
                             <span className="font-bold">+{child.minutes_late}分 遅れ</span>
+                          </div>
+                          <div className="text-xs text-red-700 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                            <span className="flex items-center gap-1">
+                              <span className="font-semibold">学校:</span>
+                              <span>{child.school_name || '未登録'}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="font-semibold">学年:</span>
+                              <span>{child.grade_label || '-'}</span>
+                            </span>
+                            <span className="flex items-center gap-1 text-red-600">
+                              <Clock size={12} /> {LATE_ALERT_THRESHOLD_MINUTES}分経過でアラート
+                            </span>
                           </div>
                         </div>
                       </div>

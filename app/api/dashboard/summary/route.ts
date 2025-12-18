@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
+import { LATE_ALERT_THRESHOLD_MINUTES } from '@/lib/constants/dashboard';
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,6 +47,10 @@ export async function GET(request: NextRequest) {
         photo_url,
         parent_phone,
         school_id,
+        school:m_schools (
+          id,
+          name
+        ),
         _child_class (
           class_id,
           is_current,
@@ -128,6 +133,8 @@ export async function GET(request: NextRequest) {
       class_id: string | null;
       class_name: string;
       age_group: string;
+      school_id: string | null;
+      school_name: string | null;
       grade: number | null;
       grade_label: string;
       photo_url: string | null;
@@ -159,6 +166,8 @@ export async function GET(request: NextRequest) {
     };
 
     const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
+      const schoolInfo = Array.isArray(child.school) ? child.school[0] : child.school;
+
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
@@ -204,6 +213,8 @@ export async function GET(request: NextRequest) {
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
+        school_id: schoolInfo?.id || child.school_id || null,
+        school_name: schoolInfo?.name || null,
         grade,
         grade_label: gradeLabel,
         photo_url: child.photo_url,
@@ -253,7 +264,7 @@ export async function GET(request: NextRequest) {
     const late = attendanceList
       .filter(c => {
         if (c.status !== 'absent' || !c.is_scheduled_today || !c.scheduled_start_time) return false;
-        return getMinutesDiff(currentTime, c.scheduled_start_time) > 0;
+        return getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ALERT_THRESHOLD_MINUTES;
       })
       .map(c => ({
         child_id: c.child_id,
@@ -263,6 +274,10 @@ export async function GET(request: NextRequest) {
         age_group: c.age_group,
         scheduled_start_time: c.scheduled_start_time,
         minutes_late: getMinutesDiff(currentTime, c.scheduled_start_time || ''),
+        school_id: c.school_id,
+        school_name: c.school_name,
+        grade: c.grade,
+        grade_label: c.grade_label,
         guardian_phone: c.guardian_phone,
       }));
 

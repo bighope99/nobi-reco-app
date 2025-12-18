@@ -1,0 +1,1 @@
+export const LATE_ALERT_THRESHOLD_MINUTES = 30;
