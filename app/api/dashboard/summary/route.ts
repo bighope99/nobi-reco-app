@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { LATE_ALERT_THRESHOLD_MINUTES } from '@/lib/constants/alerts';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
 
 export async function GET(request: NextRequest) {
@@ -45,6 +46,10 @@ export async function GET(request: NextRequest) {
         grade_add,
         photo_url,
         parent_phone,
+        m_schools (
+          id,
+          name
+        ),
         school_id,
         _child_class (
           class_id,
@@ -125,6 +130,8 @@ export async function GET(request: NextRequest) {
       child_id: string;
       name: string;
       kana: string;
+      school_id: string | null;
+      school_name: string | null;
       class_id: string | null;
       class_name: string;
       age_group: string;
@@ -201,6 +208,8 @@ export async function GET(request: NextRequest) {
         child_id: child.id,
         name: `${child.family_name} ${child.given_name}`,
         kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        school_id: child.school_id,
+        school_name: child.m_schools?.name || null,
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
@@ -253,7 +262,7 @@ export async function GET(request: NextRequest) {
     const late = attendanceList
       .filter(c => {
         if (c.status !== 'absent' || !c.is_scheduled_today || !c.scheduled_start_time) return false;
-        return getMinutesDiff(currentTime, c.scheduled_start_time) > 0;
+        return getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ALERT_THRESHOLD_MINUTES;
       })
       .map(c => ({
         child_id: c.child_id,
@@ -261,9 +270,14 @@ export async function GET(request: NextRequest) {
         kana: c.kana,
         class_name: c.class_name,
         age_group: c.age_group,
+        school_id: c.school_id,
+        school_name: c.school_name,
+        grade: c.grade,
+        grade_label: c.grade_label,
         scheduled_start_time: c.scheduled_start_time,
         minutes_late: getMinutesDiff(currentTime, c.scheduled_start_time || ''),
         guardian_phone: c.guardian_phone,
+        late_threshold_minutes: LATE_ALERT_THRESHOLD_MINUTES,
       }));
 
     const unexpected = attendanceList
@@ -329,6 +343,9 @@ export async function GET(request: NextRequest) {
       data: {
         current_time: currentTime,
         current_date: currentDate,
+        alert_config: {
+          late_threshold_minutes: LATE_ALERT_THRESHOLD_MINUTES,
+        },
         kpi: {
           scheduled_today: scheduledToday,
           present_now: presentNow,

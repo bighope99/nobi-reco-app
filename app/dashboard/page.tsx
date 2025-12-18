@@ -54,10 +54,47 @@ interface KPI {
   checked_out: number;
 }
 
+interface OverdueAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  scheduled_end_time: string | null;
+  actual_in_time: string | null;
+  minutes_overdue: number;
+  guardian_phone: string;
+}
+
+interface LateAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  school_id: string | null;
+  school_name: string | null;
+  grade: number | null;
+  grade_label: string;
+  scheduled_start_time: string | null;
+  minutes_late: number;
+  guardian_phone: string;
+  late_threshold_minutes: number;
+}
+
+interface UnexpectedAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  actual_in_time: string | null;
+}
+
 interface Alert {
-  overdue: any[];
-  late: any[];
-  unexpected: any[];
+  overdue: OverdueAlert[];
+  late: LateAlert[];
+  unexpected: UnexpectedAlert[];
 }
 
 interface RecordSupport {
@@ -74,6 +111,9 @@ interface RecordSupport {
 interface DashboardData {
   current_time: string;
   current_date: string;
+  alert_config: {
+    late_threshold_minutes: number;
+  };
   kpi: KPI;
   alerts: Alert;
   attendance_list: Child[];
@@ -470,9 +510,15 @@ export default function ChildcareDashboard() {
                             <span className="font-bold text-red-900">{child.name}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 font-bold">未登園・遅刻</span>
                           </div>
+                          <div className="text-xs text-red-700 mt-1 flex flex-wrap gap-2">
+                            {child.school_name && <span className="font-medium">{child.school_name}</span>}
+                            {child.grade_label && <span className="text-red-600">{child.grade_label}</span>}
+                            <span className="text-red-500">{child.class_name}</span>
+                          </div>
                           <div className="text-sm text-red-800 mt-1 flex flex-wrap gap-x-4">
                             <span className="flex items-center gap-1"><Clock size={14} /> 予定: {child.scheduled_start_time}</span>
                             <span className="font-bold">+{child.minutes_late}分 遅れ</span>
+                            <span className="text-xs font-semibold text-red-600 bg-white border border-red-200 px-2 py-0.5 rounded">閾値 {child.late_threshold_minutes}分</span>
                           </div>
                         </div>
                       </div>
