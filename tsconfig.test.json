@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": ".tmp-tests"
+  },
+  "include": [
+    "tests/**/*.ts",
+    "app/api/dashboard/summary/route.ts"
+  ]
+}

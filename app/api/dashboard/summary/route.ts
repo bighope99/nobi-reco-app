@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
+import { AttendanceListItem, buildAttendanceLogsIndex, buildObservationSummary, calculateKpis, determineStatus } from './utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -120,28 +121,6 @@ export async function GET(request: NextRequest) {
       .gte('observation_date', oneWeekAgoStr)
       .is('deleted_at', null);
 
-    // データ整形
-    type AttendanceListItem = {
-      child_id: string;
-      name: string;
-      kana: string;
-      class_id: string | null;
-      class_name: string;
-      age_group: string;
-      grade: number | null;
-      grade_label: string;
-      photo_url: string | null;
-      status: 'checked_in' | 'checked_out' | 'absent';
-      is_scheduled_today: boolean;
-      scheduled_start_time: string | null;
-      scheduled_end_time: string | null;
-      actual_in_time: string | null;
-      actual_out_time: string | null;
-      guardian_phone: string;
-      last_record_date: string | null;
-      weekly_record_count: number;
-    };
-
     const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {
       if (!schoolId || grade === null || grade === undefined) return null;
       const schedules = schoolSchedules[schoolId] || [];
@@ -158,19 +137,28 @@ export async function GET(request: NextRequest) {
       return `${hours}:${minutes}`;
     };
 
+    const schedulePatternsByChild = (schedulePatterns || []).reduce((acc: Record<string, any>, pattern: any) => {
+      acc[pattern.child_id] = pattern;
+      return acc;
+    }, {});
+
+    const dailyAttendanceByChild = (dailyAttendanceData || []).reduce((acc: Record<string, any>, record: any) => {
+      acc[record.child_id] = record;
+      return acc;
+    }, {});
+
+    const attendanceLogsIndex = buildAttendanceLogsIndex(attendanceLogsData || []);
+    const observationSummary = buildObservationSummary(observationsData || []);
+
     const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
-      const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
-      const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
+      const schedulePattern = schedulePatternsByChild[child.id];
+      const dailyRecord = dailyAttendanceByChild[child.id];
       const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
 
-      const todaysLogs = (attendanceLogsData || []).filter((log: any) => log.child_id === child.id);
-      const activeLog = todaysLogs.find((log: any) => !log.checked_out_at);
-      const latestClosedLog = todaysLogs
-        .filter((log: any) => log.checked_out_at)
-        .sort((a: any, b: any) => new Date(b.checked_in_at).getTime() - new Date(a.checked_in_at).getTime())[0];
+      const { activeLog, latestClosedLog } = attendanceLogsIndex[child.id] || { activeLog: null, latestClosedLog: null };
       const displayLog = activeLog || latestClosedLog;
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
@@ -179,23 +167,13 @@ export async function GET(request: NextRequest) {
       const scheduledStartTime = isScheduledToday ? getSchoolStartTime(child.school_id, grade) : null;
 
       // 記録情報
-      const childObservations = (observationsData || []).filter((obs: any) => obs.child_id === child.id);
-      const lastRecordDate = childObservations.length > 0
-        ? childObservations.sort((a: any, b: any) => b.observation_date.localeCompare(a.observation_date))[0].observation_date
-        : null;
-      const weeklyRecordCount = childObservations.length;
+      const { lastRecordDate, weeklyCount: weeklyRecordCount } = observationSummary[child.id] || {
+        lastRecordDate: null,
+        weeklyCount: 0,
+      };
 
       // ステータス判定
-      let status: 'checked_in' | 'checked_out' | 'absent' = 'absent';
-      if (activeLog) {
-        status = 'checked_in';
-      } else if (latestClosedLog) {
-        status = 'checked_out';
-      }
-
-      if (!activeLog && !latestClosedLog && dailyRecord?.status === 'absent') {
-        status = 'absent';
-      }
+      const status = determineStatus(activeLog, latestClosedLog, dailyRecord?.status);
 
       return {
         child_id: child.id,
@@ -220,10 +198,7 @@ export async function GET(request: NextRequest) {
     });
 
     // KPI計算
-    const scheduledToday = attendanceList.filter(c => c.is_scheduled_today).length;
-    const presentNow = attendanceList.filter(c => c.status === 'checked_in').length;
-    const notArrived = attendanceList.filter(c => c.is_scheduled_today && c.status === 'absent').length;
-    const checkedOut = attendanceList.filter(c => c.status === 'checked_out').length;
+    const { scheduledToday, presentNow, notArrived, checkedOut } = calculateKpis(attendanceList);
 
     // アラート判定
     const getMinutesDiff = (current: string, target: string) => {
