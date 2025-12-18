@@ -64,3 +64,39 @@ Strictly adhere to the following table prefixes:
 - **Aesthetics**: Prioritize premium, modern, and dynamic designs. Use micro-animations and smooth transitions.
 - **Performance**: Ensure fast load times and responsive interactions.
 - **Security**: Implement RLS in Supabase and proper validation in API routes.
+
+# Performance Optimization Rules
+
+## Supabaseクエリの並列化
+依存関係がない複数のSupabaseクエリは `Promise.all` で並列実行する。
+
+```typescript
+// ✅ GOOD: 並列実行
+const [usersResult, facilitiesResult, classesResult] = await Promise.all([
+  supabase.from('m_users').select('id, name'),
+  supabase.from('m_facilities').select('id, name'),
+  supabase.from('m_classes').select('id, name'),
+]);
+```
+
+## ループ内検索のMap変換
+ループ内で `find()` や `filter()` を使う場合、事前にMapに変換してO(1)でアクセスする。
+
+```typescript
+// ❌ BAD: O(n²)
+children.map(child => {
+  const schedule = schedules.find(s => s.child_id === child.id);
+});
+
+// ✅ GOOD: O(n)
+const scheduleMap = new Map(schedules.map(s => [s.child_id, s]));
+children.map(child => {
+  const schedule = scheduleMap.get(child.id);
+});
+```
+
+## パフォーマンス診断チェックリスト
+1. **SQLクエリ回数**: 順次実行 → 並列化
+2. **O(n²)ループ**: find/filter → Map変換
+3. **不要なデータ**: select('*') → 必要カラムのみ
+4. **N+1問題**: ループ内クエリ → JOIN/IN一括取得
