@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
+import { getServerSession } from '@/lib/auth/server-session'
 import { createQrPayload, createQrPdf, createZip, formatFileSegment } from '@/lib/qr/card-generator'
 
 interface BatchRequestBody {
@@ -9,15 +9,12 @@ interface BatchRequestBody {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { session },
-      error: authError,
-    } = await supabase.auth.getSession()
-
-    if (authError || !session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const sessionResult = await getServerSession()
+    if ('errorResponse' in sessionResult) {
+      return sessionResult.errorResponse
     }
+
+    const { supabase, session } = sessionResult
 
     const userSession = await getUserSession(session.user.id)
     const facilityId = userSession?.current_facility_id
@@ -92,4 +89,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Failed to generate QR bundle' }, { status: 500 })
   }
 }
-

@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server';
 import { getUserSession } from '@/lib/auth/session';
-import { createClient } from '@/utils/supabase/server';
+import { forbiddenResponse, getServerSession } from '@/lib/auth/server-session';
 
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
-
         // セッションチェック（セキュリティのため）
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const sessionResult = await getServerSession();
+        if ('errorResponse' in sessionResult) {
+            return sessionResult.errorResponse;
         }
 
+        const { session } = sessionResult;
         const { user_id } = await request.json();
 
         // リクエストされたIDとトークンのIDが一致するか確認
         if (user_id !== session.user.id) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            return forbiddenResponse();
         }
 
         const sessionData = await getUserSession(user_id);

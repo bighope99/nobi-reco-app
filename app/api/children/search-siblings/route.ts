@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { getServerSession } from '@/lib/auth/server-session';
 
 // POST /api/children/search-siblings - 兄弟検索（電話番号ベース）
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const sessionResult = await getServerSession();
+    if ('errorResponse' in sessionResult) {
+      return sessionResult.errorResponse;
     }
+
+    const { supabase, session } = sessionResult;
 
     // セッション情報取得
     const userSession = await getUserSession(session.user.id);

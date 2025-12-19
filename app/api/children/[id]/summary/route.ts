@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { getServerSession } from '@/lib/auth/server-session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
@@ -9,17 +9,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { id: child_id } = await params;
-
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const sessionResult = await getServerSession();
+    if ('errorResponse' in sessionResult) {
+      return sessionResult.errorResponse;
     }
+
+    const { supabase, session } = sessionResult;
+    const { id: child_id } = await params;
 
     // セッションからfacility_idを取得
     const userSession = await getUserSession(session.user.id);
