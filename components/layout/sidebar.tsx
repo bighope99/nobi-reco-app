@@ -66,6 +66,7 @@ const staffNavItems: NavItem[] = [
       { label: "クラス管理", href: "/settings/classes" },
       { label: "通所設定", href: "/settings/schedules" },
       { label: "職員管理", href: "/settings/users" },
+      { label: "メール送信テスト", href: "/settings/email" },
     ],
   },
   { label: "データ管理", href: "/data/export", icon: <Database className="h-5 w-5" /> },
