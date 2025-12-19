@@ -187,25 +187,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 施設作成
+    // 施設作成（現行スキーマに合わせて不要カラムは送信しない）
     const { data: newFacility, error: createError } = await supabase
       .from('m_facilities')
       .insert({
         company_id: userData.company_id,
         name: body.name,
+        name_kana: body.name_kana ?? null,
+        postal_code: body.postal_code ?? null,
         address: body.address,
         phone: body.phone,
-        email: body.email,
-        postal_code: body.postal_code,
-        fax: body.fax,
-        website: body.website,
-        director_name: body.director_name,
-        capacity: body.capacity,
-        established_date: body.established_date,
-        license_number: body.license_number,
-        opening_time: body.opening_time,
-        closing_time: body.closing_time,
-        business_days: body.business_days,
+        email: body.email ?? null,
+        capacity: body.capacity ?? null,
         is_active: true,
       })
       .select()
