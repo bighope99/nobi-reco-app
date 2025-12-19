@@ -23,7 +23,7 @@ type NavItem = {
   label: string
   href: string
   icon: React.ReactNode
-  children?: { label: string; href: string }[]
+  children?: { label: string; href: string; hidden?: boolean }[]
 }
 
 const staffNavItems: NavItem[] = [
@@ -66,7 +66,7 @@ const staffNavItems: NavItem[] = [
       { label: "クラス管理", href: "/settings/classes" },
       { label: "通所設定", href: "/settings/schedules" },
       { label: "職員管理", href: "/settings/users" },
-      { label: "メール送信テスト", href: "/settings/email" },
+      { label: "メール送信テスト", href: "/settings/email", hidden: true },
     ],
   },
   { label: "データ管理", href: "/data/export", icon: <Database className="h-5 w-5" /> },
@@ -171,6 +171,7 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
                               isActive(child.href) && "bg-sidebar-accent font-medium",
+                              child.hidden && "hidden",
                             )}
                           >
                             {child.label}

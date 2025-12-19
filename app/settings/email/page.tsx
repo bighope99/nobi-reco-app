@@ -22,6 +22,8 @@ type SendResult = {
 
 export default function EmailTestPage() {
   const [email, setEmail] = useState("")
+  const [senderName, setSenderName] = useState("")
+  const [text, setText] = useState("")
   const [status, setStatus] = useState<SendResult | null>(null)
   const [isSending, setIsSending] = useState(false)
 
@@ -34,7 +36,7 @@ export default function EmailTestPage() {
       const response = await fetch("/api/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, senderName, text }),
       })
 
       const result = await response.json()
@@ -97,7 +99,35 @@ export default function EmailTestPage() {
                   />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  受信できるアドレスを入力してテスト送信してください。メールが届かない場合は、送信元ドメインと環境変数を再確認してください。
+                  受信できるアドレスを入力してテスト送信してください。メールが届かない場合は送信元ドメインと環境変数を再確認してください。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="senderName">送信者名（任意）</Label>
+                <Input
+                  id="senderName"
+                  type="text"
+                  value={senderName}
+                  onChange={(event) => setSenderName(event.target.value)}
+                  placeholder="のびレコ運営"
+                />
+                <p className="text-sm text-muted-foreground">
+                  指定すると「送信者名 &lt;[email protected]&gt;」の形式で送信されます。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="text">本文（任意）</Label>
+                <textarea
+                  id="text"
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  placeholder="未入力の場合はテスト用の文面で送信します。"
+                  className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                <p className="text-sm text-muted-foreground">
+                  未入力のときは接続確認用の定型文を送信します。
                 </p>
               </div>
 
@@ -112,6 +142,8 @@ export default function EmailTestPage() {
                   disabled={isSending && !status}
                   onClick={() => {
                     setEmail("")
+                    setSenderName("")
+                    setText("")
                     setStatus(null)
                   }}
                 >

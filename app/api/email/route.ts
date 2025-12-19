@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => null)
     const email = typeof body?.email === "string" ? body.email.trim() : ""
+    const senderName = typeof body?.senderName === "string" ? body.senderName.trim() : ""
+    const customText = typeof body?.text === "string" ? body.text.trim() : ""
 
     if (!email || !EMAIL_REGEX.test(email)) {
       return NextResponse.json(
@@ -39,6 +41,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const fromAddress = senderName ? `${senderName} <${RESEND_FROM_EMAIL}>` : RESEND_FROM_EMAIL
+    const messageBody =
+      customText ||
+      [
+        "このメールはResendの接続確認用に送信されています。",
+        "受信できたらメール配信機能の準備は完了です。",
+      ].join("\n")
+
     const resendResponse = await fetch(RESEND_ENDPOINT, {
       method: "POST",
       headers: {
@@ -46,13 +56,10 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: RESEND_FROM_EMAIL,
+        from: fromAddress,
         to: [email],
         subject: "のびレコ メール送信テスト",
-        text: [
-          "このメールはResendの接続確認用に送信されています。",
-          "受信できたらメール配信機能の準備は完了です。",
-        ].join("\n"),
+        text: messageBody,
       }),
     })
 
