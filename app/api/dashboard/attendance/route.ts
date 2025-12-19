@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { getServerSession } from '@/lib/auth/server-session';
 
 type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out';
 
@@ -13,12 +13,12 @@ const buildDateRange = (date: string) => {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-
-    if (authError || !session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    const sessionResult = await getServerSession();
+    if ('errorResponse' in sessionResult) {
+      return sessionResult.errorResponse;
     }
+
+    const { supabase, session } = sessionResult;
 
     const { action, child_id, action_timestamp } = await request.json();
 
