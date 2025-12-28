@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
 
 /**
  * GET /api/users
@@ -275,28 +275,40 @@ export async function POST(request: NextRequest) {
     // 初期パスワード生成（または使用）
     const initialPassword = body.initial_password || generatePassword();
 
-    // ユーザー作成
+    // Admin クライアントを作成（サービスロールキー使用）
+    const supabaseAdmin = await createAdminClient();
+
+    // Supabase Auth にユーザーを作成
+    const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
+      email: body.email,
+      password: initialPassword,
+      email_confirm: true,
+    });
+
+    if (authCreateError || !authData.user) {
+      throw authCreateError || new Error('Failed to create auth user');
+    }
+
+    // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
     const { data: newUser, error: createError } = await supabase
       .from('m_users')
       .insert({
+        id: authData.user.id,
         company_id: userData.company_id,
         email: body.email,
         name: body.name,
         name_kana: body.name_kana || null,
         phone: body.phone || null,
-        birth_date: body.birth_date || null,
         role: body.role,
         hire_date: body.hire_date || new Date().toISOString().split('T')[0],
-        position: body.position || null,
-        employment_type: body.employment_type || 'full_time',
-        qualifications: body.qualifications || [],
         is_active: true,
-        password_reset_required: true,
       })
       .select()
       .single();
 
     if (createError) {
+      // m_users作成失敗時はauth.userも削除（ロールバック）
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw createError;
     }
 
