@@ -19,7 +19,10 @@
       "mcp__supabase__get_logs",
       "Bash(done)",
       "Bash(grep:*)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr view:*)",
+      "Bash(rmdir:*)"
     ],
     "deny": [],
     "ask": []
