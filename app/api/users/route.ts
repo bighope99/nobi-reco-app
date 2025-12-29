@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * GET /api/users
@@ -9,35 +10,20 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData, error: userError } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id, current_facility_id } = metadata;
 
     // 権限チェック（staffは閲覧不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -49,21 +35,6 @@ export async function GET(request: NextRequest) {
     const roleFilter = searchParams.get('role');
     const isActiveFilter = searchParams.get('is_active');
     const search = searchParams.get('search') || '';
-
-    // セッションから現在の施設IDを取得
-    const { data: userFacility } = await supabase
-      .from('_user_facility')
-      .select('facility_id')
-      .eq('user_id', user.id)
-      .eq('is_current', true)
-      .single();
-
-    if (!userFacility) {
-      return NextResponse.json(
-        { success: false, error: 'Facility not found' },
-        { status: 404 }
-      );
-    }
 
     // ユーザー一覧取得クエリ
     let query = supabase
@@ -85,11 +56,14 @@ export async function GET(request: NextRequest) {
         )
       `
       )
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .eq('company_id', company_id); // 会社でフィルター
 
-    // 施設フィルター
-    query = query.eq('_user_facility.facility_id', userFacility.facility_id);
-    query = query.eq('_user_facility.is_current', true);
+    // 施設フィルター（site_admin以外の場合のみ適用）
+    if (role !== 'site_admin' && current_facility_id) {
+      query = query.eq('_user_facility.facility_id', current_facility_id);
+      query = query.eq('_user_facility.is_current', true);
+    }
 
     // ロールフィルター
     if (roleFilter) {
@@ -197,53 +171,23 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id, current_facility_id } = metadata;
 
     // 権限チェック（staffは作成不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
-      );
-    }
-
-    // セッションから現在の施設IDを取得
-    const { data: userFacility } = await supabase
-      .from('_user_facility')
-      .select('facility_id')
-      .eq('user_id', user.id)
-      .eq('is_current', true)
-      .single();
-
-    if (!userFacility) {
-      return NextResponse.json(
-        { success: false, error: 'Facility not found' },
-        { status: 404 }
       );
     }
 
@@ -275,38 +219,63 @@ export async function POST(request: NextRequest) {
     // 初期パスワード生成（または使用）
     const initialPassword = body.initial_password || generatePassword();
 
-    // ユーザー作成
+    // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
+    const targetFacilityId = role === 'site_admin'
+      ? (body.facility_id || current_facility_id)
+      : current_facility_id;
+
+    // Admin クライアントを作成（サービスロールキー使用）
+    const supabaseAdmin = await createAdminClient();
+
+    // Supabase Auth にユーザーを作成
+    const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
+      email: body.email,
+      password: initialPassword,
+      email_confirm: true,
+      app_metadata: {
+        role: body.role,
+        company_id: company_id,
+        current_facility_id: targetFacilityId || null,
+      },
+    });
+
+    if (authCreateError || !authData.user) {
+      throw authCreateError || new Error('Failed to create auth user');
+    }
+
+    // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
     const { data: newUser, error: createError } = await supabase
       .from('m_users')
       .insert({
-        company_id: userData.company_id,
+        id: authData.user.id,
+        company_id: company_id,
         email: body.email,
         name: body.name,
         name_kana: body.name_kana || null,
         phone: body.phone || null,
-        birth_date: body.birth_date || null,
         role: body.role,
         hire_date: body.hire_date || new Date().toISOString().split('T')[0],
-        position: body.position || null,
-        employment_type: body.employment_type || 'full_time',
-        qualifications: body.qualifications || [],
         is_active: true,
-        password_reset_required: true,
       })
       .select()
       .single();
 
     if (createError) {
+      // m_users作成失敗時はauth.userも削除（ロールバック）
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw createError;
     }
 
     // 施設との紐付け
-    await supabase.from('_user_facility').insert({
-      user_id: newUser.id,
-      facility_id: userFacility.facility_id,
-      start_date: newUser.hire_date,
-      is_current: true,
-    });
+    if (targetFacilityId) {
+      await supabase.from('_user_facility').insert({
+        user_id: newUser.id,
+        facility_id: targetFacilityId,
+        start_date: newUser.hire_date,
+        is_current: true,
+        is_primary: true,
+      });
+    }
 
     // クラス担当設定（任意）
     if (body.assigned_classes && body.assigned_classes.length > 0) {
