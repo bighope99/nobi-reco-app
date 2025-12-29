@@ -36,13 +36,25 @@ export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null
   }
 
   // app_metadataからカスタムクレームを取得
-  const role = claims.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
-  const company_id = claims.app_metadata?.company_id as string;
-  const current_facility_id = claims.app_metadata?.current_facility_id as string | null;
+  const role = claims.app_metadata?.role;
+  const company_id = claims.app_metadata?.company_id;
+  const current_facility_id = claims.app_metadata?.current_facility_id;
+
+  // 型の検証
+  const validRoles = ['site_admin', 'company_admin', 'facility_admin', 'staff'] as const;
+  if (!role || typeof role !== 'string' || !validRoles.includes(role as any)) {
+    console.error('Invalid or missing role in JWT claims');
+    return null;
+  }
 
   // 必須フィールドの検証
-  if (!role || !company_id) {
+  if (typeof company_id !== 'string' || !company_id) {
     console.error('Missing required JWT claims: role or company_id');
+    return null;
+  }
+
+  if (current_facility_id !== null && typeof current_facility_id !== 'string') {
+    console.error('Invalid type for current_facility_id in JWT claims');
     return null;
   }
 
