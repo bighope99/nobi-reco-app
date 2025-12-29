@@ -12,52 +12,43 @@ export interface JWTMetadata {
 /**
  * 認証済みユーザーのJWTメタデータを取得
  *
- * 重要: session.user.app_metadataではなく、JWTトークンを直接デコードして取得します。
- * Custom Access Token Hookで追加したカスタムクレームは、session.userには反映されません。
+ * 重要: Supabase Auth APIのgetClaims()を使用して、署名検証済みのJWTクレームを取得します。
+ * これにより、トークンの改ざんを防ぎ、セキュアな認証を実現します。
  *
  * @returns JWTメタデータまたはnull（認証エラー時）
  */
 export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null> {
   const supabase = await createClient();
 
+  // getClaimsで署名検証済みのカスタムクレームを取得
   const {
-    data: { session },
-    error: authError,
-  } = await supabase.auth.getSession();
+    data: claims,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (authError || !session) {
+  if (claimsError) {
+    console.error('Failed to get JWT claims:', claimsError.message);
     return null;
   }
 
-  // JWTトークンをデコードしてapp_metadataを取得
-  // session.user.app_metadataではカスタムクレームが取得できないため、
-  // access_tokenを直接デコードする必要があります
-  const accessToken = session.access_token;
-  const tokenParts = accessToken.split('.');
-
-  if (tokenParts.length < 2) {
+  if (!claims) {
     return null;
   }
 
-  let payload: any;
-  try {
-    payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-  } catch (error) {
-    return null;
-  }
-
-  // payloadのapp_metadataからカスタムクレームを取得
-  const role = payload.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
-  const company_id = payload.app_metadata?.company_id as string;
-  const current_facility_id = payload.app_metadata?.current_facility_id as string | null;
+  // app_metadataからカスタムクレームを取得
+  const role = claims.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
+  const company_id = claims.app_metadata?.company_id as string;
+  const current_facility_id = claims.app_metadata?.current_facility_id as string | null;
 
   // 必須フィールドの検証
   if (!role || !company_id) {
+    console.error('Missing required JWT claims: role or company_id');
     return null;
   }
 
   // site_admin以外は施設IDが必須
   if (role !== 'site_admin' && !current_facility_id) {
+    console.error('Missing required JWT claim: current_facility_id for non-site_admin user');
     return null;
   }
 

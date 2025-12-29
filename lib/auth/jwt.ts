@@ -11,48 +11,45 @@ export interface JWTMetadata {
 
 /**
  * 認証済みユーザーのJWTメタデータを取得
+ *
+ * Supabase Auth APIのgetClaims()を使用して、署名検証済みのJWTクレームを取得します。
+ * これにより、トークンの改ざんを防ぎ、セキュアな認証を実現します。
+ *
  * @returns JWTメタデータまたはnull（認証エラー時）
  */
 export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null> {
   const supabase = await createClient();
 
+  // getClaimsで署名検証済みのカスタムクレームを取得
   const {
-    data: { session },
-    error: authError,
-  } = await supabase.auth.getSession();
+    data: claims,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (authError || !session) {
+  if (claimsError) {
+    console.error('Failed to get JWT claims:', claimsError.message);
     return null;
   }
 
-  // JWTトークンをデコードしてapp_metadataを取得
-  const accessToken = session.access_token;
-  const tokenParts = accessToken.split('.');
-
-  if (tokenParts.length < 2) {
-    return null;
-  }
-
-  let payload: any;
-  try {
-    payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-  } catch (error) {
+  if (!claims) {
     return null;
   }
 
   // app_metadataからカスタムクレームを取得
-  const role = payload.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
-  const company_id = payload.app_metadata?.company_id as string;
-  const current_facility_id = payload.app_metadata?.current_facility_id as string | null;
+  const role = claims.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
+  const company_id = claims.app_metadata?.company_id as string;
+  const current_facility_id = claims.app_metadata?.current_facility_id as string | null;
 
   // 必須フィールドの検証
   // site_adminの場合はcurrent_facility_idがnullでも許可
   if (!role || !company_id) {
+    console.error('Missing required JWT claims: role or company_id');
     return null;
   }
 
   if (role !== 'site_admin' && !current_facility_id) {
     // site_admin以外は施設IDが必須
+    console.error('Missing required JWT claim: current_facility_id for non-site_admin user');
     return null;
   }
 

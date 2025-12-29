@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/server';
 export interface JWTMetadata {
   role: 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
   company_id: string;
-  current_facility_id: string;
+  current_facility_id: string | null;
   // 必要に応じて追加のフィールドを定義
 }
 
