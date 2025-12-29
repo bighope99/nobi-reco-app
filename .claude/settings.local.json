@@ -4,7 +4,19 @@
       "Bash(rm:*)",
       "Bash(npm install:*)",
       "mcp__supabase__execute_sql",
-      "Bash(npx create-skills:*)"
+      "Bash(npx create-skills:*)",
+      "Bash(supabase --version:*)",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__list_migrations",
+      "Skill(example-skills:skill-creator)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(py:*)",
+      "Bash(winget install:*)",
+      "Bash(export PYTHONIOENCODING=utf-8)",
+      "Bash(chcp:*)",
+      "mcp__supabase__get_advisors",
+      "mcp__supabase__get_logs"
     ],
     "deny": [],
     "ask": []
