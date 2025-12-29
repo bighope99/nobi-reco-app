@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * GET /api/schools
@@ -9,52 +10,24 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData, error: userError } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, current_facility_id } = metadata;
 
     // リクエストパラメータ取得
     const searchParams = request.nextUrl.searchParams;
     const facilityId = searchParams.get('facility_id');
 
-    // 施設IDの決定（パラメータがない場合はセッションから取得）
-    let targetFacilityId = facilityId;
-    if (!targetFacilityId) {
-      // セッションから現在の施設IDを取得（_user_facilityから）
-      const { data: userFacility } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true)
-        .single();
-
-      if (userFacility) {
-        targetFacilityId = userFacility.facility_id;
-      }
-    }
+    // 施設IDの決定（パラメータがない場合はJWTから取得）
+    const targetFacilityId = facilityId || current_facility_id;
 
     if (!targetFacilityId) {
       return NextResponse.json(
@@ -65,22 +38,13 @@ export async function GET(request: NextRequest) {
 
     // 権限チェック（facility_adminとstaffは自施設のみ）
     if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
+      (role === 'facility_admin' || role === 'staff') &&
+      targetFacilityId !== current_facility_id
     ) {
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
-      if (!facilityIds.includes(targetFacilityId)) {
-        return NextResponse.json(
-          { success: false, error: 'Permission denied' },
-          { status: 403 }
-        );
-      }
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
     }
 
     // 学校一覧取得
@@ -159,50 +123,27 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, current_facility_id } = metadata;
 
     // 権限チェック（staffは作成不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
       );
     }
 
-    // セッションから現在の施設IDを取得
-    const { data: userFacility } = await supabase
-      .from('_user_facility')
-      .select('facility_id')
-      .eq('user_id', user.id)
-      .eq('is_current', true)
-      .single();
-
-    if (!userFacility) {
+    if (!current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Facility not found' },
         { status: 404 }
@@ -223,7 +164,7 @@ export async function POST(request: NextRequest) {
     const { data: newSchool, error: createError } = await supabase
       .from('m_schools')
       .insert({
-        facility_id: userFacility.facility_id,
+        facility_id: current_facility_id,
         name: body.name,
         address: body.address || null,
         phone: body.phone || null,
