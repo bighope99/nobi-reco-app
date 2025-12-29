@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 
 /**
@@ -13,18 +14,17 @@ export async function GET(
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const { role, current_facility_id } = metadata;
 
     const { id: classId } = await params;
 
@@ -61,35 +61,15 @@ export async function GET(
       );
     }
 
-    // 権限チェック
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
+    // 施設アクセス権限チェック
+    if (
+      (role === 'facility_admin' || role === 'staff') &&
+      current_facility_id !== classData.facility_id
+    ) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
+        { success: false, error: 'Class not found' },
         { status: 404 }
       );
-    }
-
-    // 施設アクセス権限チェック
-    if (userData.role === 'facility_admin' || userData.role === 'staff') {
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
-      if (!facilityIds.includes(classData.facility_id)) {
-        return NextResponse.json(
-          { success: false, error: 'Class not found' },
-          { status: 404 }
-        );
-      }
     }
 
     // 担当職員取得

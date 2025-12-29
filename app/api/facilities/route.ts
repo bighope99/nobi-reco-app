@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * GET /api/facilities
@@ -9,32 +10,17 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData, error: userError } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { company_id } = metadata;
 
     // 検索パラメータ取得
     const searchParams = request.nextUrl.searchParams;
@@ -58,7 +44,7 @@ export async function GET(request: NextRequest) {
       .is('deleted_at', null);
 
     // 自分が所属している会社の全施設を取得（設定ページでは権限によるフィルタリングは後ほど実装）
-    query = query.eq('company_id', userData.company_id);
+    query = query.eq('company_id', company_id);
 
     // 検索フィルタ
     if (search) {
@@ -142,35 +128,20 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData, error: userError } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id } = metadata;
 
     // 権限チェック（company_adminのみ作成可能）
-    if (userData.role !== 'company_admin') {
+    if (role !== 'company_admin') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -191,7 +162,7 @@ export async function POST(request: NextRequest) {
     const { data: newFacility, error: createError } = await supabase
       .from('m_facilities')
       .insert({
-        company_id: userData.company_id,
+        company_id: company_id,
         name: body.name,
         address: body.address,
         phone: body.phone,

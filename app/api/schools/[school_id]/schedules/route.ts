@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * POST /api/schools/:school_id/schedules
@@ -13,35 +14,20 @@ export async function POST(
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id, current_facility_id } = metadata;
 
     // 権限チェック（staffは作成不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -66,18 +52,8 @@ export async function POST(
     }
 
     // 施設アクセス権限チェック
-    if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
-      if (!facilityIds.includes(school.facility_id)) {
+    if (role === 'facility_admin' || role === 'staff') {
+      if (current_facility_id !== school.facility_id) {
         return NextResponse.json(
           { success: false, error: 'School not found' },
           { status: 404 }

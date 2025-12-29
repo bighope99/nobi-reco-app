@@ -16,7 +16,13 @@
       "Bash(export PYTHONIOENCODING=utf-8)",
       "Bash(chcp:*)",
       "mcp__supabase__get_advisors",
-      "mcp__supabase__get_logs"
+      "mcp__supabase__get_logs",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(git diff:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr view:*)",
+      "Bash(rmdir:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * GET /api/classes
@@ -9,32 +10,17 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData, error: userError } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id, current_facility_id } = metadata;
 
     // リクエストパラメータ取得
     const searchParams = request.nextUrl.searchParams;
@@ -78,24 +64,14 @@ export async function GET(request: NextRequest) {
     }
 
     // 権限に応じたフィルタ
-    if (userData.role === 'company_admin' && userData.company_id) {
-      query = query.eq('m_facilities.company_id', userData.company_id);
-    } else if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
+    if (role === 'company_admin' && company_id) {
+      query = query.eq('m_facilities.company_id', company_id);
+    } else if (role === 'facility_admin' || role === 'staff') {
       // 自分が所属する施設のクラスのみ
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      if (userFacilities && userFacilities.length > 0) {
-        const facilityIds = userFacilities.map((uf) => uf.facility_id);
+      if (current_facility_id) {
         if (!facilityId) {
-          query = query.in('facility_id', facilityIds);
-        } else if (!facilityIds.includes(facilityId)) {
+          query = query.eq('facility_id', current_facility_id);
+        } else if (facilityId !== current_facility_id) {
           // 指定された施設IDに権限がない場合
           return NextResponse.json({
             success: true,
@@ -234,35 +210,20 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role } = metadata;
 
     // 権限チェック（staffは作成不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * GET /api/facilities/:facility_id
@@ -13,18 +14,17 @@ export async function GET(
     const supabase = await createClient();
     const { facility_id: facilityId } = await params;
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const { role, company_id } = metadata;
 
     // 施設情報取得
     const { data: facility, error: facilityError } = await supabase
@@ -57,25 +57,8 @@ export async function GET(
       );
     }
 
-    // アクセス権限チェック
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // 権限チェック（設定ページでは会社が同じであればアクセス可能）
-    if (
-      userData.role !== 'site_admin' &&
-      facility.company_id !== userData.company_id
-    ) {
+    if (role !== 'site_admin' && facility.company_id !== company_id) {
       return NextResponse.json(
         { success: false, error: 'Access denied' },
         { status: 404 }
