@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS m_users (
   company_id UUID REFERENCES m_companies(id),  -- 所属会社（site_adminはNULL）
   name VARCHAR(100) NOT NULL,                  -- 氏名（漢字）
   name_kana VARCHAR(100),                      -- 氏名（カナ）
-  email VARCHAR(255) NOT NULL UNIQUE,          -- メールアドレス（auth.usersと同期）
+  email VARCHAR(255) NOT NULL,                 -- メールアドレス（auth.usersと同期、一意制約なし）
   phone VARCHAR(20),                           -- 電話番号
   hire_date DATE,                              -- 入社日
   role user_role NOT NULL DEFAULT 'staff',     -- 権限
@@ -1178,8 +1178,19 @@ CREATE POLICY facility_access ON r_activity
 
 **詳細**: `docs/api/08_dashboard_api.md` 参照
 
+### メールアドレス制約の削除（2025年12月31日）
+
+#### `m_users`テーブルの変更
+- **削除**: `email`カラムの`UNIQUE`制約
+- **理由**: 削除されたユーザー（`deleted_at IS NOT NULL`）が同じメールアドレスで再登録できるようにするため
+- **影響**:
+  - アクティブなユーザーのメールアドレス重複はアプリケーション層で制御
+  - 論理削除されたユーザーのメールアドレスは再利用可能
+
+**マイグレーション**: `remove_unique_email_constraint`
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2025年12月13日（ダッシュボード機能拡張）
+**最終更新**: 2025年12月31日（メールアドレス制約削除）
 **管理者**: プロジェクトリーダー

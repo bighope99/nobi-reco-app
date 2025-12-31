@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createAdminClient, createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
@@ -254,6 +254,15 @@ export async function DELETE(
       })
       .eq('user_id', targetUserId)
       .eq('is_current', true);
+
+    const supabaseAdmin = await createAdminClient();
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
+      targetUserId
+    );
+
+    if (authDeleteError) {
+      throw authDeleteError;
+    }
 
     return NextResponse.json({
       success: true,
