@@ -22,7 +22,9 @@
       "Bash(git diff:*)",
       "Bash(git push:*)",
       "Bash(gh pr view:*)",
-      "Bash(rmdir:*)"
+      "Bash(rmdir:*)",
+      "Bash(npm test:*)",
+      "Bash(npm audit:*)"
     ],
     "deny": [],
     "ask": []

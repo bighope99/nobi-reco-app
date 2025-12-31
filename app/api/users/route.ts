@@ -216,9 +216,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 初期パスワード生成（または使用）
-    const initialPassword = body.initial_password || generatePassword();
-
     // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
     const targetFacilityId = role === 'site_admin'
       ? (body.facility_id || current_facility_id)
@@ -227,20 +224,36 @@ export async function POST(request: NextRequest) {
     // Admin クライアントを作成（サービスロールキー使用）
     const supabaseAdmin = await createAdminClient();
 
-    // Supabase Auth にユーザーを作成
-    const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
-      email: body.email,
-      password: initialPassword,
-      email_confirm: true,
-      app_metadata: {
-        role: body.role,
-        company_id: company_id,
-        current_facility_id: targetFacilityId || null,
-      },
-    });
+    // Supabase Auth にメール招待を送信
+    const { data: authData, error: authInviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      body.email,
+      {
+        data: {
+          role: body.role,
+          company_id: company_id,
+          current_facility_id: targetFacilityId || null,
+        },
+      }
+    );
 
-    if (authCreateError || !authData.user) {
-      throw authCreateError || new Error('Failed to create auth user');
+    if (authInviteError || !authData.user) {
+      throw authInviteError || new Error('Failed to invite user');
+    }
+
+    // app_metadataを更新（inviteUserByEmailではdataに設定されるため、app_metadataに移動）
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      authData.user.id,
+      {
+        app_metadata: {
+          role: body.role,
+          company_id: company_id,
+          current_facility_id: targetFacilityId || null,
+        },
+      }
+    );
+
+    if (updateError) {
+      throw updateError;
     }
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
@@ -297,11 +310,9 @@ export async function POST(request: NextRequest) {
         email: newUser.email,
         name: newUser.name,
         role: newUser.role,
-        initial_password: initialPassword,
-        password_reset_required: true,
         created_at: newUser.created_at,
       },
-      message: '職員アカウントを作成しました。初回ログイン時にパスワード変更が必要です。',
+      message: '職員アカウントを作成し、招待メールを送信しました。',
     });
   } catch (error) {
     console.error('Error creating user:', error);
@@ -314,15 +325,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// パスワード生成ヘルパー
-function generatePassword(): string {
-  const length = 12;
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += charset.charAt(Math.floor(Math.random() * charset.length));
-  }
-  return password;
 }
