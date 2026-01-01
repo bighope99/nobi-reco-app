@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/client";
 
+// 動的レンダリングを強制（useSearchParams使用のため）
+export const dynamic = 'force-dynamic';
+
 type AuthStatus = "verifying" | "ready" | "error";
 
 const isPasswordAlnumMixed = (value: string) => /[A-Za-z]/.test(value) && /\d/.test(value);
 
-export default function PasswordSetupPage() {
+function PasswordSetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<AuthStatus>("verifying");
@@ -229,5 +232,24 @@ export default function PasswordSetupPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function PasswordSetupPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              読み込み中...
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <PasswordSetupContent />
+    </Suspense>
   );
 }
