@@ -253,7 +253,15 @@ export async function POST(request: NextRequest) {
       throw linkError || new Error('Failed to generate invite link');
     }
 
-    const inviteUrl = linkData.properties.action_link;
+    // Supabaseが生成したURLからトークンハッシュを抽出
+    const supabaseUrl = linkData.properties.action_link;
+    const urlObj = new URL(supabaseUrl);
+    const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
+    const type = urlObj.searchParams.get('type') || 'invite';
+
+    // 独自のパスワード設定ページURLを構築
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
     const { data: newUser, error: createError } = await supabase
