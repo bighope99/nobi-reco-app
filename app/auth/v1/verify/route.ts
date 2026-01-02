@@ -10,8 +10,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log("[API /auth/v1/verify] Request body:", body);
 
-    // For E2E testing: return mock response for test token
-    if (body.token_hash === "valid-token" && body.type === "invite") {
+    // E2Eテストモード：テストトークンの場合のみモックレスポンスを返す
+    if (
+      process.env.E2E_TEST === "true" &&
+      body.token_hash === "valid-token" &&
+      body.type === "invite"
+    ) {
       console.log("[API /auth/v1/verify] Test mode detected, returning mock response");
       return NextResponse.json({
         access_token: "access-token",

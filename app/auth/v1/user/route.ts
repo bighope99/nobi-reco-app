@@ -19,15 +19,47 @@ async function handleUserUpdate(request: NextRequest) {
     const body = await request.json();
     console.log("[API /auth/v1/user] Request body:", { hasPassword: !!body.password });
 
-    // For E2E testing: return mock response
-    // In tests, we don't have a valid session, so just return success
-    console.log("[API /auth/v1/user] Test mode: returning mock response");
-    return NextResponse.json({
-      user: {
-        id: "user-1",
-        email: "user@example.com",
+    // E2Eテストモードの場合のみモックレスポンスを返す
+    if (process.env.E2E_TEST === "true") {
+      console.log("[API /auth/v1/user] Test mode: returning mock response");
+      return NextResponse.json({
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+        },
+      });
+    }
+
+    // 本番環境：Supabaseにプロキシ
+    console.log("[API /auth/v1/user] Production mode: proxying to Supabase");
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey) {
+      throw new Error("Missing Supabase configuration");
+    }
+
+    // リクエストヘッダーからAuthorizationを取得
+    const authorization = request.headers.get("Authorization");
+    if (!authorization) {
+      return NextResponse.json(
+        { error: "Missing authorization header" },
+        { status: 401 }
+      );
+    }
+
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: request.method,
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+        "Authorization": authorization,
       },
+      body: JSON.stringify(body),
     });
+
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error("[API /auth/v1/user] Error:", error);
     return NextResponse.json(
