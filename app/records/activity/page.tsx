@@ -217,33 +217,110 @@ export default function ActivityRecordPage() {
     return `${date.getMonth() + 1}/${date.getDate()}`
   }
 
-  // AI音声で下書き作成（モック）
-  const handleVoiceDraft = async () => {
-    setIsAiLoading(true)
-    
-    // モック: 1.5秒後にAI生成テキストを挿入
-    setTimeout(() => {
-      const draft = `今日は雨のため室内で過ごしました。新聞紙遊びを取り入れたところ、子どもたちは大喜びでした。
+  const [isRecording, setIsRecording] = useState(false)
+  const [voiceError, setVoiceError] = useState<string | null>(null)
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<BlobPart[]>([])
 
-@りゅうくん は、最初は破るのをためらっていましたが、保育者が手本を見せると真似をして、ビリビリという音を楽しんでいました。細長くちぎった新聞紙を「ヘビさんだよ！」と見立てて嬉しそうに見せてくれました。
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setIsAiLoading(true)
+      setVoiceStatus('Geminiが文字起こし中です...')
 
-@ひなちゃん は、丸めた新聞紙をボールにして「えいっ！」と投げる遊びに夢中でした。お友達に当たらないよう、周りを見て投げる姿に成長を感じました。`
-      
-      // タイピングエフェクト
-      let i = 0
-      setActivityContent("")
-      const typeWriter = setInterval(() => {
-        if (i < draft.length) {
-          setActivityContent(prev => prev + draft.charAt(i))
-          i++
-        } else {
-          clearInterval(typeWriter)
-          setChildCount(2)
-        }
-      }, 10)
-      
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.webm')
+
+      const response = await fetch('/api/voice/transcribe', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '音声の文字起こしに失敗しました')
+      }
+
+      const transcript = (result.text as string).trim()
+      if (!transcript) {
+        throw new Error('文字起こしの結果が空でした')
+      }
+
+      setActivityContent((prev) => {
+        const prefix = prev.trim() ? `${prev}\n` : ''
+        return `${prefix}${transcript}`
+      })
+      setVoiceStatus('文字起こしが完了しました')
+    } catch (err) {
+      console.error('Voice draft failed:', err)
+      setVoiceError(err instanceof Error ? err.message : '音声の処理に失敗しました')
+      setVoiceStatus(null)
+    } finally {
       setIsAiLoading(false)
-    }, 1500)
+    }
+  }
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop()
+    }
+    setIsRecording(false)
+  }
+
+  const startRecording = async () => {
+    try {
+      setVoiceError(null)
+      setVoiceStatus('録音しています... もう一度押すと停止します。')
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop())
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+
+        if (audioBlob.size === 0) {
+          setVoiceError('音声データが取得できませんでした。もう一度お試しください。')
+          setVoiceStatus(null)
+          return
+        }
+
+        await transcribeAudio(audioBlob)
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setIsRecording(true)
+    } catch (err) {
+      console.error('Failed to start recording:', err)
+      setVoiceError('マイクの利用が許可されているか確認してください。')
+      setVoiceStatus(null)
+      setIsRecording(false)
+    }
+  }
+
+  const handleVoiceDraft = async () => {
+    if (isRecording) {
+      stopRecording()
+      return
+    }
+
+    if (!('MediaRecorder' in window) || !navigator.mediaDevices) {
+      setVoiceError('このブラウザでは音声録音を利用できません。')
+      return
+    }
+
+    await startRecording()
   }
 
   const updateMentionMetrics = (content: string) => {
@@ -514,10 +591,14 @@ export default function ActivityRecordPage() {
                   <Button
                     onClick={handleVoiceDraft}
                     disabled={isAiLoading}
-                    className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:shadow-md hover:scale-105 transition flex items-center gap-1"
+                    className={`text-white text-xs px-3 py-1.5 rounded-full font-bold shadow transition flex items-center gap-1 ${
+                      isRecording
+                        ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                        : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:shadow-md hover:scale-105'
+                    }`}
                   >
                     <Mic className="w-3 h-3" />
-                    ✨ AI音声で下書き作成
+                    {isRecording ? '録音停止' : 'AI音声で下書き作成'}
                   </Button>
                 </div>
               </div>
@@ -531,6 +612,20 @@ export default function ActivityRecordPage() {
                   placeholder="手入力するか、上の「AI音声で下書き」ボタンを押して喋ってください。&#10;Geminiが綺麗な文章に整えます。"
                   className="min-h-64 text-base leading-relaxed resize-none"
                 />
+
+                {(voiceStatus || voiceError) && (
+                  <div className="mt-2 space-y-1">
+                    {voiceStatus && (
+                      <p className="text-[11px] text-indigo-700 font-bold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                        {voiceStatus}
+                      </p>
+                    )}
+                    {voiceError && (
+                      <p className="text-[11px] text-red-600 font-bold">{voiceError}</p>
+                    )}
+                  </div>
+                )}
 
                 {isMentionOpen && (
                   <div className="absolute left-0 right-0 top-full mt-2 max-h-56 overflow-y-auto rounded-lg border bg-white shadow-lg z-20">
