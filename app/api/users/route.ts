@@ -259,6 +259,21 @@ export async function POST(request: NextRequest) {
     const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
     const type = urlObj.searchParams.get('type') || 'invite';
 
+    // トークンハッシュの検証
+    if (!tokenHash) {
+      console.error('Failed to extract token from invite link:', supabaseUrl);
+      // Authユーザーをロールバック
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to generate valid invite link',
+          message: 'Token hash is missing from the generated link',
+        },
+        { status: 500 }
+      );
+    }
+
     // 独自のパスワード設定ページURLを構築
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
