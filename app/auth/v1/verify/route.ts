@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
     }
 
     // テスト環境の検証（本番環境では決して実行されない）
+    // セキュリティ: モック機能は明示的な環境変数フラグでのみ有効化
     const isTestEnvironment =
       process.env.NODE_ENV === "test" ||
-      process.env.E2E_TEST === "true" ||
       process.env.ENABLE_TEST_MOCKS === "true";
 
     // テスト環境でのみモックレスポンスを許可
@@ -31,9 +31,14 @@ export async function POST(request: NextRequest) {
       body.token_hash === "valid-token" &&
       body.type === "invite"
     ) {
-      console.log("[API /auth/v1/verify] TEST MODE: Returning mock response for test token");
+      console.log("[API /auth/v1/verify] ⚠️  TEST MODE: Mock authentication path activated");
+      console.log("[API /auth/v1/verify] Environment check:", {
+        NODE_ENV: process.env.NODE_ENV,
+        ENABLE_TEST_MOCKS: process.env.ENABLE_TEST_MOCKS,
+        isTestEnvironment,
+      });
       console.warn(
-        "[Security] Mock authentication is enabled - this should only run in test environments"
+        "[Security] ⚠️  Mock authentication is enabled - this should only run in test environments"
       );
       return NextResponse.json({
         access_token: "access-token",
