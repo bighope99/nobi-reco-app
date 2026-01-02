@@ -1,76 +1,16 @@
 import { NextResponse } from "next/server"
-import { RunnableLambda } from "@langchain/core/runnables"
-
-const buildTranscriptionPayload = ({
-  audioBase64,
-  mimeType,
-}: {
-  audioBase64: string
-  mimeType: string
-}) => ({
-  contents: [
-    {
-      role: "user",
-      parts: [
-        {
-          text:
-            "次の音声メモを日本語で文字起こししてください。児童や保護者など個人を特定する名前は一般的な仮名（例: 児童A、児童B）に置き換えてください。",
-        },
-        {
-          inlineData: {
-            data: audioBase64,
-            mimeType,
-          },
-        },
-      ],
-    },
-  ],
-})
-
-const geminiTranscriptionChain = RunnableLambda.from<
-  { audioBase64: string; mimeType: string },
-  string
->(async ({ audioBase64, mimeType }) => {
-  const apiKey =
-    process.env.GOOGLE_GENAI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GEMINI_API_KEY
-
-  if (!apiKey) {
-    throw new Error("GeminiのAPIキーが設定されていません")
-  }
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(buildTranscriptionPayload({ audioBase64, mimeType })),
-      next: { revalidate: 0 },
-      cache: "no-store",
-      signal: AbortSignal.timeout(60000),
-    },
-  )
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Gemini API error: ${response.status} ${errorText}`)
-  }
-
-  const data = await response.json()
-  const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-
-  if (!transcript) {
-    throw new Error("Geminiから文字起こし結果を取得できませんでした")
-  }
-
-  return transcript
-})
 
 export async function POST(req: Request) {
   try {
+    const apiKey = process.env.GOOGLE_GENAI_API_KEY
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, error: "GeminiのAPIキーが設定されていません" },
+        { status: 500 },
+      )
+    }
+
     const formData = await req.formData()
     const audioFile = formData.get("audio")
 
@@ -85,10 +25,65 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await audioFile.arrayBuffer())
     const audioBase64 = buffer.toString("base64")
 
-    const transcript = await geminiTranscriptionChain.invoke({
-      audioBase64,
-      mimeType,
+    // Gemini APIを直接呼び出し（LangChainJSは音声ファイルを直接サポートしていないため）
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`
+
+    const payload = {
+      contents: [
+        {
+          parts: [
+            {
+              text:
+                "次の音声メモを日本語で文字起こししてください。児童や保護者など個人を特定する名前は一般的な仮名（例: 児童A、児童B）に置き換えてください。文字起こしのみを出力。",
+            },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: audioBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        maxOutputTokens: 2048,
+      },
+    }
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(
+        errorData.error?.message ||
+          `Gemini APIエラー: ${response.status} ${response.statusText}`,
+      )
+    }
+
+    const data = await response.json()
+
+    if (
+      !data.candidates ||
+      !data.candidates[0] ||
+      !data.candidates[0].content ||
+      !data.candidates[0].content.parts ||
+      !data.candidates[0].content.parts[0] ||
+      !data.candidates[0].content.parts[0].text
+    ) {
+      throw new Error("Geminiから文字起こし結果を取得できませんでした")
+    }
+
+    const transcript = data.candidates[0].content.parts[0].text.trim()
+
+    if (!transcript) {
+      throw new Error("文字起こし結果が空でした")
+    }
 
     return NextResponse.json({ success: true, text: transcript })
   } catch (error) {
