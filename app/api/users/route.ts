@@ -284,32 +284,52 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    const generateInviteLink = supabaseAdmin.auth.admin.generateLink;
-    const linkResult =
-      typeof generateInviteLink === 'function'
-        ? await generateInviteLink({ type: 'invite', email: body.email })
-        : null;
-    const linkData = linkResult?.data;
-    const linkError = linkResult?.error;
+    const linkResult = await supabaseAdmin.auth.admin.generateLink({
+      type: 'invite',
+      email: body.email,
+    });
 
-    if (linkError) {
+    if (linkResult.error) {
       await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
-      throw linkError;
+      throw linkResult.error;
     }
+
+    const linkData = linkResult.data;
 
     // Supabaseが生成したURLからトークンハッシュを抽出
     const supabaseUrl = linkData?.properties?.action_link;
-    const inviteUrl = supabaseUrl
-      ? (() => {
-          const urlObj = new URL(supabaseUrl);
-          const tokenHash =
-            urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
-          const type = urlObj.searchParams.get('type') || 'invite';
+    let inviteUrl: string | null = null;
+
+    if (supabaseUrl) {
+      try {
+        const urlObj = new URL(supabaseUrl);
+        const tokenHash =
+          urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
+        const type = urlObj.searchParams.get('type') || 'invite';
+
+        // トークンハッシュの存在を検証
+        if (!tokenHash) {
+          console.error(
+            'Failed to extract token_hash from Supabase invite link:',
+            supabaseUrl
+          );
+          // tokenHashがない場合はinviteUrlをnullのままにする
+        } else {
+          // トークンを安全にエンコードしてURLを構築
           const baseUrl =
-            process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-          return `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
-        })()
-      : null;
+            process.env.NEXT_PUBLIC_SITE_URL ||
+            `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+          const params = new URLSearchParams({
+            token_hash: tokenHash,
+            type: type,
+          });
+          inviteUrl = `${baseUrl}/password/setup?${params.toString()}`;
+        }
+      } catch (urlError) {
+        console.error('Failed to parse Supabase invite URL:', urlError, supabaseUrl);
+        // URL解析エラーの場合もinviteUrlはnullのまま
+      }
+    }
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
     const { data: newUser, error: createError } = await supabase
