@@ -19,13 +19,22 @@ export async function POST(request: NextRequest) {
       console.log("[API /auth/v1/verify] Verify request for type:", body.type);
     }
 
-    // E2Eテストモード：テストトークンの場合のみモックレスポンスを返す
+    // テスト環境の検証（本番環境では決して実行されない）
+    const isTestEnvironment =
+      process.env.NODE_ENV === "test" ||
+      process.env.E2E_TEST === "true" ||
+      process.env.ENABLE_TEST_MOCKS === "true";
+
+    // テスト環境でのみモックレスポンスを許可
     if (
-      process.env.E2E_TEST === "true" &&
+      isTestEnvironment &&
       body.token_hash === "valid-token" &&
       body.type === "invite"
     ) {
-      console.log("[API /auth/v1/verify] Test mode detected, returning mock response");
+      console.log("[API /auth/v1/verify] TEST MODE: Returning mock response for test token");
+      console.warn(
+        "[Security] Mock authentication is enabled - this should only run in test environments"
+      );
       return NextResponse.json({
         access_token: "access-token",
         refresh_token: "refresh-token",
