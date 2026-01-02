@@ -7,16 +7,18 @@ export default defineConfig({
     timeout: 5_000,
   },
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3001",
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    command: "npm run dev -- -p 3001",
+    url: "http://localhost:3001",
+    reuseExistingServer: false,
     timeout: 120_000,
     env: {
       E2E_TEST: "true",
+      NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
     },
   },
 });
