@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createAdminClient, createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
@@ -231,6 +231,25 @@ export async function DELETE(
 
     const deletedAt = new Date().toISOString();
 
+    // STEP 1: Auth削除を先に実行（データの不整合を防ぐため）
+    const supabaseAdmin = await createAdminClient();
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
+      targetUserId
+    );
+
+    if (authDeleteError) {
+      console.error('Failed to delete auth user:', authDeleteError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to delete authentication user',
+          message: authDeleteError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    // STEP 2: Auth削除が成功した場合のみDB更新を実行
     // ユーザー無効化（ソフトデリート）
     const { error: deleteError } = await supabase
       .from('m_users')
@@ -242,11 +261,19 @@ export async function DELETE(
       .eq('id', targetUserId);
 
     if (deleteError) {
-      throw deleteError;
+      console.error('Failed to soft delete user in m_users:', deleteError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to update user status',
+          message: deleteError.message,
+        },
+        { status: 500 }
+      );
     }
 
-    // クラス担当を終了
-    await supabase
+    // STEP 3: クラス担当を終了
+    const { error: classUpdateError } = await supabase
       .from('_user_class')
       .update({
         is_current: false,
@@ -254,6 +281,18 @@ export async function DELETE(
       })
       .eq('user_id', targetUserId)
       .eq('is_current', true);
+
+    if (classUpdateError) {
+      console.error('Failed to update _user_class:', classUpdateError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to update class assignments',
+          message: classUpdateError.message,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

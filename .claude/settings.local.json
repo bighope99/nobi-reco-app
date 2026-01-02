@@ -22,7 +22,18 @@
       "Bash(git diff:*)",
       "Bash(git push:*)",
       "Bash(gh pr view:*)",
-      "Bash(rmdir:*)"
+      "Bash(rmdir:*)",
+      "Bash(npm test:*)",
+      "Bash(npm audit:*)",
+      "Bash(cat:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(npx playwright install chromium)",
+      "WebSearch",
+      "WebFetch(domain:playwright.dev)",
+      "Bash(curl:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
