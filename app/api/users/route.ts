@@ -227,47 +227,68 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = await createAdminClient();
 
     // Supabase Auth にユーザーを作成（メール送信なし）
-    const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
-      email: body.email,
-      email_confirm: false, // メール確認は招待リンクで行う
-      app_metadata: {
-        role: body.role,
-        company_id: company_id,
-        current_facility_id: targetFacilityId || null,
-      },
-    });
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      body.email,
+      {
+        data: {
+          role: body.role,
+          company_id: company_id,
+          current_facility_id: targetFacilityId || null,
+        },
+      }
+    );
 
-    if (authCreateError || !authData.user) {
-      throw authCreateError || new Error('Failed to create user');
+    if (inviteError || !inviteData?.user) {
+      throw inviteError || new Error('Failed to invite user');
     }
 
-    // マジックリンク（招待リンク）を生成
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'invite',
-      email: body.email,
-    });
+    const { error: updateMetadataError } = await supabaseAdmin.auth.admin.updateUserById(
+      inviteData.user.id,
+      {
+        app_metadata: {
+          role: body.role,
+          company_id: company_id,
+          current_facility_id: targetFacilityId || null,
+        },
+      }
+    );
 
-    if (linkError || !linkData) {
-      // ユーザー作成に失敗した場合はロールバック
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw linkError || new Error('Failed to generate invite link');
+    if (updateMetadataError) {
+      throw updateMetadataError;
+    }
+
+    const generateInviteLink = supabaseAdmin.auth.admin.generateLink;
+    const linkResult =
+      typeof generateInviteLink === 'function'
+        ? await generateInviteLink({ type: 'invite', email: body.email })
+        : null;
+    const linkData = linkResult?.data;
+    const linkError = linkResult?.error;
+
+    if (linkError) {
+      await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
+      throw linkError;
     }
 
     // Supabaseが生成したURLからトークンハッシュを抽出
-    const supabaseUrl = linkData.properties.action_link;
-    const urlObj = new URL(supabaseUrl);
-    const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
-    const type = urlObj.searchParams.get('type') || 'invite';
-
-    // 独自のパスワード設定ページURLを構築
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
+    const supabaseUrl = linkData?.properties?.action_link;
+    const inviteUrl = supabaseUrl
+      ? (() => {
+          const urlObj = new URL(supabaseUrl);
+          const tokenHash =
+            urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
+          const type = urlObj.searchParams.get('type') || 'invite';
+          const baseUrl =
+            process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+          return `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
+        })()
+      : null;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
     const { data: newUser, error: createError } = await supabase
       .from('m_users')
       .insert({
-        id: authData.user.id,
+        id: inviteData.user.id,
         company_id: company_id,
         email: body.email,
         name: body.name,
@@ -282,7 +303,7 @@ export async function POST(request: NextRequest) {
 
     if (createError) {
       // m_users作成失敗時はauth.userも削除（ロールバック）
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
       throw createError;
     }
 
@@ -312,40 +333,43 @@ export async function POST(request: NextRequest) {
 
     // 会社名と施設名を取得してカスタムメールを送信
     try {
-      const [companyResult, facilityResult] = await Promise.all([
-        supabase
-          .from('m_companies')
-          .select('name')
-          .eq('id', company_id)
-          .single(),
-        targetFacilityId
-          ? supabase
-              .from('m_facilities')
-              .select('name')
-              .eq('id', targetFacilityId)
-              .single()
-          : Promise.resolve({ data: null, error: null }),
-      ]);
+      if (inviteUrl) {
+        const [companyResult, facilityResult] = await Promise.all([
+          supabase
+            .from('m_companies')
+            .select('name')
+            .eq('id', company_id)
+            .single(),
+          targetFacilityId
+            ? supabase
+                .from('m_facilities')
+                .select('name')
+                .eq('id', targetFacilityId)
+                .single()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
 
-      const companyName = companyResult.data?.name;
-      const facilityName = facilityResult.data?.name;
+        const companyName = companyResult.data?.name;
+        const facilityName = facilityResult.data?.name;
 
-      // カスタム招待メールをGAS経由で送信（マジックリンク付き）
-      const emailHtml = buildUserInvitationEmailHtml({
-        userName: newUser.name,
-        userEmail: newUser.email,
-        role: newUser.role,
-        companyName,
-        facilityName,
-        inviteUrl, // 生成されたマジックリンクを含める
-      });
+        // カスタム招待メールをGAS経由で送信（マジックリンク付き）
+        const emailHtml = buildUserInvitationEmailHtml({
+          userName: newUser.name,
+          userEmail: newUser.email,
+          role: newUser.role,
+          companyName,
+          facilityName,
+          inviteUrl, // 生成されたマジックリンクを含める
+        });
 
-      await sendWithGas({
-        to: newUser.email,
-        subject: '【のびレコ】アカウント登録のご案内',
-        htmlBody: emailHtml,
-        senderName: 'のびレコ',
-      });
+        await sendWithGas({
+          to: newUser.email,
+          subject: '【のびレコ】アカウント登録のご案内',
+          htmlBody: emailHtml,
+          senderName: 'のびレコ',
+        });
+      }
+
     } catch (emailError) {
       // メール送信エラーはログに記録するが、ユーザー登録自体は成功とする
       console.error('Failed to send custom invitation email:', emailError);
