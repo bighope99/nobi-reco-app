@@ -246,7 +246,7 @@ export async function DELETE(
     }
 
     // クラス担当を終了
-    await supabase
+    const { error: classUpdateError } = await supabase
       .from('_user_class')
       .update({
         is_current: false,
@@ -255,12 +255,25 @@ export async function DELETE(
       .eq('user_id', targetUserId)
       .eq('is_current', true);
 
+    if (classUpdateError) {
+      console.error('Failed to update _user_class:', classUpdateError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to update class assignments',
+          message: classUpdateError.message,
+        },
+        { status: 500 }
+      );
+    }
+
     const supabaseAdmin = await createAdminClient();
     const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
       targetUserId
     );
 
     if (authDeleteError) {
+      console.error('Failed to delete auth user:', authDeleteError);
       throw authDeleteError;
     }
 
