@@ -25,7 +25,6 @@ yarn-error.log*
 .vercel
 .cursor
 .serena
-.claude
 .ui_file
 .mcp.json
 setting.local.json

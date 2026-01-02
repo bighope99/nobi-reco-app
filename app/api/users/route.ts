@@ -242,19 +242,46 @@ export async function POST(request: NextRequest) {
       throw inviteError || new Error('Failed to invite user');
     }
 
-    const { error: updateMetadataError } = await supabaseAdmin.auth.admin.updateUserById(
-      inviteData.user.id,
-      {
-        app_metadata: {
-          role: body.role,
-          company_id: company_id,
-          current_facility_id: targetFacilityId || null,
-        },
-      }
-    );
+    try {
+      const { error: updateMetadataError } = await supabaseAdmin.auth.admin.updateUserById(
+        inviteData.user.id,
+        {
+          app_metadata: {
+            role: body.role,
+            company_id: company_id,
+            current_facility_id: targetFacilityId || null,
+          },
+        }
+      );
 
-    if (updateMetadataError) {
-      throw updateMetadataError;
+      if (updateMetadataError) {
+        throw updateMetadataError;
+      }
+    } catch (error) {
+      try {
+        const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(
+          inviteData.user.id
+        );
+        if (rollbackError) {
+          console.error(
+            'Failed to rollback invited user after metadata update error:',
+            rollbackError
+          );
+        } else {
+          console.info(
+            'Rolled back invited user after metadata update error:',
+            inviteData.user.id
+          );
+        }
+      } catch (rollbackException) {
+        console.error(
+          'Rollback threw after metadata update error:',
+          rollbackException
+        );
+      }
+
+      console.error('Failed to update invited user metadata:', error);
+      throw error;
     }
 
     const generateInviteLink = supabaseAdmin.auth.admin.generateLink;
