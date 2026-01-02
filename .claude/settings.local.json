@@ -30,7 +30,10 @@
       "Bash(npx playwright install chromium)",
       "WebSearch",
       "WebFetch(domain:playwright.dev)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
