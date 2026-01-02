@@ -8,7 +8,16 @@ export async function POST(request: NextRequest) {
   console.log("[API /auth/v1/verify] Request received");
   try {
     const body = await request.json();
-    console.log("[API /auth/v1/verify] Request body:", body);
+
+    // 開発環境でのみ詳細ログを出力（本番環境では機密情報を含めない）
+    if (process.env.NODE_ENV !== 'production' || process.env.DEBUG === 'true') {
+      console.log("[API /auth/v1/verify] Request details:", {
+        type: body.type,
+        token_hash: body.token_hash ? '[REDACTED]' : undefined,
+      });
+    } else {
+      console.log("[API /auth/v1/verify] Verify request for type:", body.type);
+    }
 
     // E2Eテストモード：テストトークンの場合のみモックレスポンスを返す
     if (

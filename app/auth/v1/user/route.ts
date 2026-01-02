@@ -17,7 +17,16 @@ export async function PATCH(request: NextRequest) {
 async function handleUserUpdate(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log("[API /auth/v1/user] Request body:", { hasPassword: !!body.password });
+
+    // 開発環境でのみ詳細ログを出力（パスワードなどの機密情報は含めない）
+    if (process.env.NODE_ENV !== 'production' || process.env.DEBUG === 'true') {
+      console.log("[API /auth/v1/user] Request details:", {
+        hasPassword: !!body.password,
+        hasEmail: !!body.email,
+      });
+    } else {
+      console.log("[API /auth/v1/user] User update request received");
+    }
 
     // E2Eテストモードの場合のみモックレスポンスを返す
     if (process.env.E2E_TEST === "true") {
