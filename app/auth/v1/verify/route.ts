@@ -21,12 +21,15 @@ export async function POST(request: NextRequest) {
 
     // テスト環境の検証（本番環境では決して実行されない）
     // セキュリティ: モック機能は明示的な環境変数フラグでのみ有効化
+    // E2Eテストフラグが必須
+    const isE2ETest = process.env.E2E_TEST === "true";
     const isTestEnvironment =
       process.env.NODE_ENV === "test" ||
       process.env.ENABLE_TEST_MOCKS === "true";
 
-    // テスト環境でのみモックレスポンスを許可
+    // E2Eテスト環境でのみモックレスポンスを許可
     if (
+      isE2ETest &&
       isTestEnvironment &&
       body.token_hash === "valid-token" &&
       body.type === "invite"
@@ -34,7 +37,9 @@ export async function POST(request: NextRequest) {
       console.log("[API /auth/v1/verify] ⚠️  TEST MODE: Mock authentication path activated");
       console.log("[API /auth/v1/verify] Environment check:", {
         NODE_ENV: process.env.NODE_ENV,
+        E2E_TEST: process.env.E2E_TEST,
         ENABLE_TEST_MOCKS: process.env.ENABLE_TEST_MOCKS,
+        isE2ETest,
         isTestEnvironment,
       });
       console.warn(

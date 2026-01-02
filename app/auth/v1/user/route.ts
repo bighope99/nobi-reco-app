@@ -29,16 +29,25 @@ async function handleUserUpdate(request: NextRequest) {
     }
 
     // テスト環境の検証（本番環境では決して実行されない）
+    // セキュリティ: モック機能は明示的なE2Eテストフラグでのみ有効化
+    // E2Eテストフラグが必須
+    const isE2ETest = process.env.E2E_TEST === "true";
     const isTestEnvironment =
       process.env.NODE_ENV === "test" ||
-      process.env.E2E_TEST === "true" ||
       process.env.ENABLE_TEST_MOCKS === "true";
 
-    // テスト環境でのみモックレスポンスを許可
-    if (isTestEnvironment) {
-      console.log("[API /auth/v1/user] TEST MODE: Returning mock response");
+    // E2Eテスト環境でのみモックレスポンスを許可
+    if (isE2ETest && isTestEnvironment) {
+      console.log("[API /auth/v1/user] ⚠️  TEST MODE: Returning mock response");
+      console.log("[API /auth/v1/user] Environment check:", {
+        NODE_ENV: process.env.NODE_ENV,
+        E2E_TEST: process.env.E2E_TEST,
+        ENABLE_TEST_MOCKS: process.env.ENABLE_TEST_MOCKS,
+        isE2ETest,
+        isTestEnvironment,
+      });
       console.warn(
-        "[Security] Mock user update is enabled - this should only run in test environments"
+        "[Security] ⚠️  Mock user update is enabled - this should only run in E2E test environments"
       );
       return NextResponse.json({
         user: {
