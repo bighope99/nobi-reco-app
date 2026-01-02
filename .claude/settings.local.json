@@ -3,14 +3,18 @@
     "allow": [
       "Bash(rm:*)",
       "Bash(npm install:*)",
-      "mcp__supabase__execute_sql"
+      "mcp__supabase__execute_sql",
+      "Bash(mkdir:*)",
+      "Bash(npm test:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "mcp__supabase__list_migrations"
     ],
     "deny": [],
     "ask": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "supabase",
-    "github"
+    "supabase"
   ]
 }

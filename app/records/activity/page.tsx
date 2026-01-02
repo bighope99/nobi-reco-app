@@ -66,6 +66,7 @@ export default function ActivityRecordPage() {
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
+  const [mentionTokens, setMentionTokens] = useState<Map<string, string>>(new Map())
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [isLoadingClasses, setIsLoadingClasses] = useState(false)
   const [classOptions, setClassOptions] = useState<
@@ -76,6 +77,9 @@ export default function ActivityRecordPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [aiAnalysisResults, setAiAnalysisResults] = useState<any[]>([])
+  const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -199,6 +203,7 @@ export default function ActivityRecordPage() {
 
     setMentionSuggestions([])
     setSelectedMentions([])
+    setMentionTokens(new Map())
     setIsMentionOpen(false)
     setMentionQuery("")
     setMentionStart(null)
@@ -324,15 +329,15 @@ export default function ActivityRecordPage() {
   }
 
   const updateMentionMetrics = (content: string) => {
-    const mentionTokens = new Set<string>()
+    const mentionNames = new Set<string>()
     const mentionRegex = /[@＠]([^\s@＠]+)/g
     let match
 
     while ((match = mentionRegex.exec(content)) !== null) {
-      mentionTokens.add(match[1])
+      mentionNames.add(match[1])
     }
 
-    setChildCount(mentionTokens.size)
+    setChildCount(mentionNames.size)
   }
 
   useEffect(() => {
@@ -407,7 +412,7 @@ export default function ActivityRecordPage() {
     }
   }
 
-  const handleSelectMention = (suggestion: MentionSuggestion) => {
+  const handleSelectMention = async (suggestion: MentionSuggestion) => {
     if (mentionStart === null) return
 
     const mentionEnd = mentionStart + 1 + mentionQuery.length
@@ -424,6 +429,35 @@ export default function ActivityRecordPage() {
       }
       return [...prev, suggestion]
     })
+
+    // Fetch encrypted token for this child
+    if (!mentionTokens.has(suggestion.child_id)) {
+      try {
+        const response = await fetch('/api/mentions/encrypt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            childId: suggestion.child_id,
+          }),
+        })
+
+        const result = await response.json()
+
+        if (response.ok && result.encryptedToken) {
+          setMentionTokens((prev) => {
+            const newMap = new Map(prev)
+            newMap.set(suggestion.child_id, result.encryptedToken)
+            return newMap
+          })
+        } else {
+          console.error('Failed to encrypt child ID:', result.error)
+        }
+      } catch (err) {
+        console.error('Error fetching encrypted token:', err)
+      }
+    }
   }
 
   const insertMentionAtCursor = () => {
@@ -449,6 +483,93 @@ export default function ActivityRecordPage() {
 
   const toggleAnalysisModal = () => {
     setShowAnalysisModal(!showAnalysisModal)
+  }
+
+  const handleAiAnalysis = async () => {
+    // Validation
+    if (!selectedClass) {
+      setAiAnalysisError('クラスを選択してください')
+      return
+    }
+
+    if (!activityDate) {
+      setAiAnalysisError('日付を入力してください')
+      return
+    }
+
+    if (!activityContent.trim()) {
+      setAiAnalysisError('活動内容を入力してください')
+      return
+    }
+
+    if (selectedMentions.length === 0) {
+      setAiAnalysisError('メンションされた子供がいません。@を使って子供をメンションしてください。')
+      return
+    }
+
+    // Gather encrypted tokens
+    const encryptedTokens: string[] = []
+    for (const mention of selectedMentions) {
+      const token = mentionTokens.get(mention.child_id)
+      if (token) {
+        encryptedTokens.push(token)
+      } else {
+        console.warn(`No encrypted token found for child ${mention.child_id}`)
+      }
+    }
+
+    if (encryptedTokens.length === 0) {
+      setAiAnalysisError('暗号化トークンの取得に失敗しました。もう一度お試しください。')
+      return
+    }
+
+    try {
+      setIsAnalyzing(true)
+      setAiAnalysisError(null)
+      setAiAnalysisResults([])
+
+      const response = await fetch('/api/records/activity', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activity_date: activityDate,
+          class_id: selectedClass,
+          content: activityContent.trim(),
+          mentioned_children: encryptedTokens,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'AI解析に失敗しました')
+      }
+
+      // Show results in modal
+      setAiAnalysisResults(result.observations || [])
+      setShowAnalysisModal(true)
+
+      // Show success message
+      if (result.message) {
+        setSaveMessage(result.message)
+      }
+
+      // Clear form
+      setActivityContent('')
+      setSelectedMentions([])
+      setMentionTokens(new Map())
+      setIsMentionOpen(false)
+
+      // Refresh activities list
+      await fetchActivities()
+    } catch (err) {
+      console.error('AI analysis failed:', err)
+      setAiAnalysisError(err instanceof Error ? err.message : 'AI解析に失敗しました')
+    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   const handleSaveActivity = async () => {
@@ -530,9 +651,10 @@ export default function ActivityRecordPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {(saveError || saveMessage) && (
+            {(saveError || saveMessage || aiAnalysisError) && (
               <div className="text-sm font-bold">
                 {saveError && <p className="text-red-600">{saveError}</p>}
+                {aiAnalysisError && <p className="text-red-600">{aiAnalysisError}</p>}
                 {saveMessage && <p className="text-green-600">{saveMessage}</p>}
               </div>
             )}
@@ -720,11 +842,12 @@ export default function ActivityRecordPage() {
                 <span className="font-bold text-gray-800">{childCount}名</span> の児童を検出中
               </div>
               <Button
-                onClick={toggleAnalysisModal}
-                className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 transition flex items-center gap-2"
+                onClick={handleAiAnalysis}
+                disabled={isAnalyzing || selectedMentions.length === 0}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles className="w-5 h-5" />
-                AI解析で個別記録を作成
+                {isAnalyzing ? 'AI解析中...' : 'AI解析で個別記録を作成'}
               </Button>
             </div>
           </CardContent>
@@ -750,39 +873,46 @@ export default function ActivityRecordPage() {
               </div>
               
               <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
-                {/* サンプル結果カード */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                      <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs">
-                        り
-                      </span>
-                      りゅうくん
-                    </h4>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded font-bold">
-                      信頼度: 高
-                    </span>
+                {aiAnalysisResults.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Sparkles className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p className="font-bold">AI解析結果がありません</p>
                   </div>
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs font-bold text-gray-500">抽出された事実</Label>
-                      <p className="text-sm bg-gray-50 p-2 rounded text-gray-700">
-                        新聞紙を破る音を楽しんでいた。細長くちぎって「ヘビさん」と見立てていた。
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-bold text-gray-500">AI推奨タグ</Label>
-                      <div className="flex gap-2 mt-1">
-                        <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full border border-indigo-100 font-bold">
-                          # 想像力
-                        </span>
-                        <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full border border-indigo-100 font-bold">
-                          # 模倣
-                        </span>
+                ) : (
+                  aiAnalysisResults.map((observation, index) => {
+                    // Find matching child from selectedMentions
+                    const child = selectedMentions.find(m => m.child_id === observation.child_id)
+                    const displayName = child?.display_name || '不明'
+                    const initial = displayName.charAt(0)
+
+                    return (
+                      <div key={observation.id || index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs">
+                              {initial}
+                            </span>
+                            {displayName}
+                          </h4>
+                          <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded font-bold">
+                            ✓ 保存済み
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <Label className="text-xs font-bold text-gray-500">AIが抽出した個別記録</Label>
+                            <p className="text-sm bg-gray-50 p-3 rounded text-gray-700 leading-relaxed">
+                              {observation.content}
+                            </p>
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            記録日: {observation.observation_date}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
+                    )
+                  })
+                )}
               </div>
               
               <div className="p-4 border-t bg-gray-50 flex justify-end">
@@ -790,7 +920,7 @@ export default function ActivityRecordPage() {
                   onClick={toggleAnalysisModal}
                   className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold text-sm"
                 >
-                  確定して保存
+                  閉じる
                 </Button>
               </div>
             </div>
