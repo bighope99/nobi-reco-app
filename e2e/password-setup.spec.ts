@@ -43,7 +43,7 @@ test.describe("password setup", () => {
       await route.continue();
     });
 
-    await page.goto("/password/setup?token=valid-token&type=invite");
+    await page.goto("/password/setup?token_hash=valid-token&type=invite");
     await expect(page.getByRole("heading", { name: "パスワード設定" })).toBeVisible();
 
     await page.getByLabel("新しいパスワード").fill("Test1234");

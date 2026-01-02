@@ -17,6 +17,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       E2E_TEST: "true",
+      ENABLE_TEST_MOCKS: "true",
     },
   },
 });
