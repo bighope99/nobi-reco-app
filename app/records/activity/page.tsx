@@ -482,6 +482,13 @@ export default function ActivityRecordPage() {
   }
 
   const toggleAnalysisModal = () => {
+    // モーダルを閉じるときにフォームをクリア
+    if (showAnalysisModal) {
+      setActivityContent('')
+      setSelectedMentions([])
+      setMentionTokens(new Map())
+      setIsMentionOpen(false)
+    }
     setShowAnalysisModal(!showAnalysisModal)
   }
 
@@ -555,12 +562,6 @@ export default function ActivityRecordPage() {
       if (result.message) {
         setSaveMessage(result.message)
       }
-
-      // Clear form
-      setActivityContent('')
-      setSelectedMentions([])
-      setMentionTokens(new Map())
-      setIsMentionOpen(false)
 
       // Refresh activities list
       await fetchActivities()
