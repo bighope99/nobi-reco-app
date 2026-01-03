@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
+      success: true,
       activity,
       observations,
       message: `活動記録を保存し、${observations.length}件の個別記録を生成しました`,
@@ -157,6 +158,133 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Activity API error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * 活動記録を更新
+ *
+ * 処理フロー：
+ * 1. 既存の活動記録を取得して権限チェック
+ * 2. 活動記録を更新（mentioned_childrenも含む）
+ *
+ * 注意：個別記録の再生成は行いません。
+ * 個別記録を再生成する場合は、POST /api/records/activityを使用してください。
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    // 認証チェック
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // セッション情報取得
+    const session = await getUserSession(user.id);
+    if (!session || !session.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const {
+      activity_id,
+      content,
+      mentioned_children = [],
+      activity_date,
+      class_id,
+      title,
+    } = body;
+
+    // バリデーション
+    if (!activity_id || typeof activity_id !== 'string') {
+      return NextResponse.json(
+        { error: 'activity_id is required and must be a string' },
+        { status: 400 }
+      );
+    }
+
+    if (!activity_date || typeof activity_date !== 'string') {
+      return NextResponse.json(
+        { error: 'activity_date is required and must be a string (YYYY-MM-DD)' },
+        { status: 400 }
+      );
+    }
+
+    if (!content || typeof content !== 'string' || content.trim() === '') {
+      return NextResponse.json(
+        { error: 'content is required and must be a non-empty string' },
+        { status: 400 }
+      );
+    }
+
+    if (!Array.isArray(mentioned_children)) {
+      return NextResponse.json(
+        { error: 'mentioned_children must be an array' },
+        { status: 400 }
+      );
+    }
+
+    // 1. 既存の活動記録を取得して権限チェック
+    const { data: existingActivity, error: fetchError } = await supabase
+      .from('r_activity')
+      .select('id, facility_id, created_by')
+      .eq('id', activity_id)
+      .single();
+
+    if (fetchError || !existingActivity) {
+      return NextResponse.json(
+        { error: '活動記録が見つかりませんでした' },
+        { status: 404 }
+      );
+    }
+
+    // 施設IDチェック
+    if (existingActivity.facility_id !== session.current_facility_id) {
+      return NextResponse.json(
+        { error: 'この活動記録を更新する権限がありません' },
+        { status: 403 }
+      );
+    }
+
+    // 2. 活動記録を更新
+    const { data: updatedActivity, error: updateError } = await supabase
+      .from('r_activity')
+      .update({
+        activity_date,
+        title: title || null,
+        content,
+        class_id: class_id || null,
+        mentioned_children,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', activity_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Activity update error:', updateError);
+      return NextResponse.json(
+        { error: updateError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      activity: updatedActivity,
+      message: '活動記録を更新しました',
+    });
+  } catch (error) {
+    console.error('Activity PUT API error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

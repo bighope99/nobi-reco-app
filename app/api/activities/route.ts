@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
         content,
         snack,
         photos,
+        class_id,
+        mentioned_children,
         created_at,
         updated_at,
         m_classes!inner (
@@ -109,7 +111,9 @@ export async function GET(request: NextRequest) {
       content: activity.content,
       snack: activity.snack,
       photos: activity.photos || [],
+      class_id: activity.class_id,
       class_name: activity.m_classes?.name || '',
+      mentioned_children: activity.mentioned_children || [],
       created_by: activity.m_users?.name || '',
       created_at: activity.created_at,
       individual_record_count: observationCounts[activity.id] || 0,

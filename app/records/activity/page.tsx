@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, Camera, X } from "lucide-react"
+import { Mic, Sparkles, Camera, X, Edit2 } from "lucide-react"
 
 interface Activity {
   activity_id: string
@@ -24,9 +24,11 @@ interface Activity {
   snack: string | null
   photos: any[]
   class_name: string
+  class_id?: string
   created_by: string
   created_at: string
   individual_record_count: number
+  mentioned_children?: string[]
 }
 
 interface MentionSuggestion {
@@ -81,6 +83,11 @@ export default function ActivityRecordPage() {
   const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // 編集モードの状態
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -488,8 +495,59 @@ export default function ActivityRecordPage() {
       setSelectedMentions([])
       setMentionTokens(new Map())
       setIsMentionOpen(false)
+      setIsEditMode(false)
+      setEditingActivityId(null)
+      setOriginalMentionedChildren([])
     }
     setShowAnalysisModal(!showAnalysisModal)
+  }
+
+  const handleEditActivity = (activity: Activity) => {
+    // 編集モードに入る
+    setIsEditMode(true)
+    setEditingActivityId(activity.activity_id)
+
+    // フォームに活動記録のデータを設定
+    setActivityDate(activity.activity_date)
+    setActivityContent(activity.content)
+
+    // クラスを設定
+    if (activity.class_id) {
+      setSelectedClass(activity.class_id)
+    }
+
+    // 既存のmentioned_childrenを保存
+    setOriginalMentionedChildren(activity.mentioned_children || [])
+
+    // メンション表示をクリア（編集時は既存メンションを表示しない）
+    setSelectedMentions([])
+    setMentionTokens(new Map())
+
+    // フォームエリアにスクロール
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+
+    // 保存/エラーメッセージをクリア
+    setSaveMessage(null)
+    setSaveError(null)
+    setAiAnalysisError(null)
+  }
+
+  const handleCancelEdit = () => {
+    // 編集モードをキャンセル
+    setIsEditMode(false)
+    setEditingActivityId(null)
+    setOriginalMentionedChildren([])
+
+    // フォームをクリア
+    setActivityContent('')
+    setSelectedMentions([])
+    setMentionTokens(new Map())
+    setIsMentionOpen(false)
+
+    // メッセージをクリア
+    setSaveMessage(null)
+    setSaveError(null)
+    setAiAnalysisError(null)
   }
 
   const handleAiAnalysis = async () => {
@@ -594,33 +652,59 @@ export default function ActivityRecordPage() {
       setSaveError(null)
       setSaveMessage(null)
 
-      const response = await fetch('/api/activities', {
-        method: 'POST',
+      // 編集モードか新規作成モードかを判定
+      const isUpdate = isEditMode && editingActivityId
+
+      // mentioned_childrenを準備（暗号化トークンの配列）
+      // 編集モード: 新しいメンションがあればそれを使用、なければ既存のものを使用
+      // 新規作成モード: 新しいメンションを使用
+      let mentionedChildren: string[]
+      if (isUpdate) {
+        const newMentions = Array.from(mentionTokens.values())
+        mentionedChildren = newMentions.length > 0 ? newMentions : originalMentionedChildren
+      } else {
+        mentionedChildren = Array.from(mentionTokens.values())
+      }
+
+      const response = await fetch('/api/records/activity', {
+        method: isUpdate ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          ...(isUpdate && { activity_id: editingActivityId }),
           activity_date: activityDate,
           class_id: selectedClass,
           content: activityContent.trim(),
-          child_ids: selectedMentions.map((mention) => mention.child_id),
+          mentioned_children: mentionedChildren,
         }),
       })
 
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '活動記録の保存に失敗しました')
+        throw new Error(result.error || `活動記録の${isUpdate ? '更新' : '保存'}に失敗しました`)
       }
 
-      setSaveMessage('活動記録を保存しました')
+      setSaveMessage(isUpdate ? '活動記録を更新しました' : '活動記録を保存しました')
+
+      // 編集モードをリセット
+      if (isUpdate) {
+        setIsEditMode(false)
+        setEditingActivityId(null)
+        setOriginalMentionedChildren([])
+      }
+
+      // フォームをクリア
       setActivityContent('')
       setSelectedMentions([])
+      setMentionTokens(new Map())
       setIsMentionOpen(false)
+
       await fetchActivities()
     } catch (err) {
       console.error('Failed to save activity:', err)
-      setSaveError(err instanceof Error ? err.message : '活動記録の保存に失敗しました')
+      setSaveError(err instanceof Error ? err.message : `活動記録の${isEditMode ? '更新' : '保存'}に失敗しました`)
     } finally {
       setIsSaving(false)
     }
@@ -633,12 +717,32 @@ export default function ActivityRecordPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>活動記録の入力</CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle>
+                  {isEditMode ? '活動記録の編集' : '活動記録の入力'}
+                </CardTitle>
+                {isEditMode && (
+                  <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-200 font-bold">
+                    編集中
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-100 font-bold flex items-center gap-1">
                   <Sparkles className="w-3 h-3" />
                   Gemini Pro 搭載
                 </span>
+                {isEditMode && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-sm font-bold"
+                    onClick={handleCancelEdit}
+                    disabled={isSaving}
+                  >
+                    キャンセル
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -646,7 +750,7 @@ export default function ActivityRecordPage() {
                   onClick={handleSaveActivity}
                   disabled={isSaving}
                 >
-                  {isSaving ? '保存中...' : '保存'}
+                  {isSaving ? '保存中...' : isEditMode ? '更新' : '保存'}
                 </Button>
               </div>
             </div>
@@ -982,6 +1086,15 @@ export default function ActivityRecordPage() {
                           )}
                         </div>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-4"
+                        onClick={() => handleEditActivity(activity)}
+                      >
+                        <Edit2 className="w-4 h-4 mr-1" />
+                        編集
+                      </Button>
                     </div>
                   ))}
                 </div>
