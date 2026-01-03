@@ -227,62 +227,115 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = await createAdminClient();
 
     // Supabase Auth にユーザーを作成（メール送信なし）
-    const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
-      email: body.email,
-      email_confirm: false, // メール確認は招待リンクで行う
-      app_metadata: {
-        role: body.role,
-        company_id: company_id,
-        current_facility_id: targetFacilityId || null,
-      },
-    });
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      body.email,
+      {
+        data: {
+          role: body.role,
+          company_id: company_id,
+          current_facility_id: targetFacilityId || null,
+        },
+      }
+    );
 
-    if (authCreateError || !authData.user) {
-      throw authCreateError || new Error('Failed to create user');
+    if (inviteError || !inviteData?.user) {
+      throw inviteError || new Error('Failed to invite user');
     }
 
-    // マジックリンク（招待リンク）を生成
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    try {
+      const { error: updateMetadataError } = await supabaseAdmin.auth.admin.updateUserById(
+        inviteData.user.id,
+        {
+          app_metadata: {
+            role: body.role,
+            company_id: company_id,
+            current_facility_id: targetFacilityId || null,
+          },
+        }
+      );
+
+      if (updateMetadataError) {
+        throw updateMetadataError;
+      }
+    } catch (error) {
+      try {
+        const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(
+          inviteData.user.id
+        );
+        if (rollbackError) {
+          console.error(
+            'Failed to rollback invited user after metadata update error:',
+            rollbackError
+          );
+        } else {
+          console.info(
+            'Rolled back invited user after metadata update error:',
+            inviteData.user.id
+          );
+        }
+      } catch (rollbackException) {
+        console.error(
+          'Rollback threw after metadata update error:',
+          rollbackException
+        );
+      }
+
+      console.error('Failed to update invited user metadata:', error);
+      throw error;
+    }
+
+    const linkResult = await supabaseAdmin.auth.admin.generateLink({
       type: 'invite',
       email: body.email,
     });
 
-    if (linkError || !linkData) {
-      // ユーザー作成に失敗した場合はロールバック
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw linkError || new Error('Failed to generate invite link');
+    if (linkResult.error) {
+      await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
+      throw linkResult.error;
     }
+
+    const linkData = linkResult.data;
 
     // Supabaseが生成したURLからトークンハッシュを抽出
-    const supabaseUrl = linkData.properties.action_link;
-    const urlObj = new URL(supabaseUrl);
-    const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
-    const type = urlObj.searchParams.get('type') || 'invite';
+    const supabaseUrl = linkData?.properties?.action_link;
+    let inviteUrl: string | null = null;
 
-    // トークンハッシュの検証
-    if (!tokenHash) {
-      console.error('Failed to extract token from invite link:', supabaseUrl);
-      // Authユーザーをロールバック
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to generate valid invite link',
-          message: 'Token hash is missing from the generated link',
-        },
-        { status: 500 }
-      );
+    if (supabaseUrl) {
+      try {
+        const urlObj = new URL(supabaseUrl);
+        const tokenHash =
+          urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
+        const type = urlObj.searchParams.get('type') || 'invite';
+
+        // トークンハッシュの存在を検証
+        if (!tokenHash) {
+          console.error(
+            'Failed to extract token_hash from Supabase invite link:',
+            supabaseUrl
+          );
+          // tokenHashがない場合はinviteUrlをnullのままにする
+        } else {
+          // トークンを安全にエンコードしてURLを構築
+          const baseUrl =
+            process.env.NEXT_PUBLIC_SITE_URL ||
+            `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+          const params = new URLSearchParams({
+            token_hash: tokenHash,
+            type: type,
+          });
+          inviteUrl = `${baseUrl}/password/setup?${params.toString()}`;
+        }
+      } catch (urlError) {
+        console.error('Failed to parse Supabase invite URL:', urlError, supabaseUrl);
+        // URL解析エラーの場合もinviteUrlはnullのまま
+      }
     }
-
-    // 独自のパスワード設定ページURLを構築
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
     const { data: newUser, error: createError } = await supabase
       .from('m_users')
       .insert({
-        id: authData.user.id,
+        id: inviteData.user.id,
         company_id: company_id,
         email: body.email,
         name: body.name,
@@ -297,7 +350,7 @@ export async function POST(request: NextRequest) {
 
     if (createError) {
       // m_users作成失敗時はauth.userも削除（ロールバック）
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
       throw createError;
     }
 
@@ -327,40 +380,43 @@ export async function POST(request: NextRequest) {
 
     // 会社名と施設名を取得してカスタムメールを送信
     try {
-      const [companyResult, facilityResult] = await Promise.all([
-        supabase
-          .from('m_companies')
-          .select('name')
-          .eq('id', company_id)
-          .single(),
-        targetFacilityId
-          ? supabase
-              .from('m_facilities')
-              .select('name')
-              .eq('id', targetFacilityId)
-              .single()
-          : Promise.resolve({ data: null, error: null }),
-      ]);
+      if (inviteUrl) {
+        const [companyResult, facilityResult] = await Promise.all([
+          supabase
+            .from('m_companies')
+            .select('name')
+            .eq('id', company_id)
+            .single(),
+          targetFacilityId
+            ? supabase
+                .from('m_facilities')
+                .select('name')
+                .eq('id', targetFacilityId)
+                .single()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
 
-      const companyName = companyResult.data?.name;
-      const facilityName = facilityResult.data?.name;
+        const companyName = companyResult.data?.name;
+        const facilityName = facilityResult.data?.name;
 
-      // カスタム招待メールをGAS経由で送信（マジックリンク付き）
-      const emailHtml = buildUserInvitationEmailHtml({
-        userName: newUser.name,
-        userEmail: newUser.email,
-        role: newUser.role,
-        companyName,
-        facilityName,
-        inviteUrl, // 生成されたマジックリンクを含める
-      });
+        // カスタム招待メールをGAS経由で送信（マジックリンク付き）
+        const emailHtml = buildUserInvitationEmailHtml({
+          userName: newUser.name,
+          userEmail: newUser.email,
+          role: newUser.role,
+          companyName,
+          facilityName,
+          inviteUrl, // 生成されたマジックリンクを含める
+        });
 
-      await sendWithGas({
-        to: newUser.email,
-        subject: '【のびレコ】アカウント登録のご案内',
-        htmlBody: emailHtml,
-        senderName: 'のびレコ',
-      });
+        await sendWithGas({
+          to: newUser.email,
+          subject: '【のびレコ】アカウント登録のご案内',
+          htmlBody: emailHtml,
+          senderName: 'のびレコ',
+        });
+      }
+
     } catch (emailError) {
       // メール送信エラーはログに記録するが、ユーザー登録自体は成功とする
       console.error('Failed to send custom invitation email:', emailError);
