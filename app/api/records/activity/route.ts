@@ -39,6 +39,8 @@ export async function POST(request: NextRequest) {
       activity_date,
       class_id,
       title,
+      activity_id,
+      ai_preview = false,
     } = body;
 
     // バリデーション
@@ -63,28 +65,136 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. 活動記録を保存
-    const { data: activity, error: activityError } = await supabase
-      .from('r_activity')
-      .insert({
-        facility_id: session.current_facility_id,
-        class_id: class_id || null,
-        activity_date,
-        title: title || null,
-        content,
-        mentioned_children,
-        created_by: session.user_id,
-      })
-      .select()
-      .single();
+    const ensureActivityRecord = async () => {
+      if (activity_id) {
+        const { data: existingActivity, error: fetchError } = await supabase
+          .from('r_activity')
+          .select('id, facility_id')
+          .eq('id', activity_id)
+          .is('deleted_at', null)
+          .single();
 
-    if (activityError) {
-      console.error('Activity insert error:', activityError);
-      return NextResponse.json(
-        { error: activityError.message },
-        { status: 500 }
-      );
+        if (fetchError || !existingActivity) {
+          return { error: '活動記録が見つかりませんでした', status: 404 };
+        }
+
+        if (existingActivity.facility_id !== session.current_facility_id) {
+          return { error: 'この活動記録にアクセスする権限がありません', status: 403 };
+        }
+
+        const { data: updatedActivity, error: updateError } = await supabase
+          .from('r_activity')
+          .update({
+            activity_date,
+            title: title || null,
+            content,
+            class_id: class_id || null,
+            mentioned_children,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', activity_id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('Activity update error in preview:', updateError);
+          return { error: updateError.message, status: 500 };
+        }
+
+        return { activity: updatedActivity };
+      }
+
+      const { data: newActivity, error: createError } = await supabase
+        .from('r_activity')
+        .insert({
+          facility_id: session.current_facility_id,
+          class_id: class_id || null,
+          activity_date,
+          title: title || null,
+          content,
+          mentioned_children,
+          created_by: session.user_id,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Activity insert error:', createError);
+        return { error: createError.message, status: 500 };
+      }
+
+      return { activity: newActivity };
+    };
+
+    if (ai_preview) {
+      const ensured = await ensureActivityRecord();
+      if ('error' in ensured) {
+        return NextResponse.json({ error: ensured.error }, { status: ensured.status });
+      }
+
+      const previewObservations: Array<{
+        child_id: string;
+        content: string;
+        observation_date: string;
+      }> = [];
+      const errors = [];
+
+      for (const encryptedToken of mentioned_children) {
+        try {
+          const childId = decryptChildId(encryptedToken);
+          if (!childId) {
+            errors.push({
+              token: encryptedToken,
+              error: 'Decryption failed',
+            });
+            continue;
+          }
+
+          let childContent: string;
+          try {
+            childContent = await extractChildContent(content, childId, encryptedToken);
+          } catch (aiError) {
+            console.error(`AI extraction error for child ${childId}:`, aiError);
+            errors.push({
+              childId,
+              error: 'AI extraction failed',
+            });
+            continue;
+          }
+
+          previewObservations.push({
+            child_id: childId,
+            content: childContent,
+            observation_date: activity_date,
+          });
+        } catch (error) {
+          console.error('Unexpected error processing child in preview:', error);
+          errors.push({
+            token: encryptedToken,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        mode: 'preview',
+        activity: ensured.activity,
+        observations: previewObservations,
+        message:
+          errors.length > 0
+            ? 'AI解析が一部の児童で失敗しました。結果を確認してください。'
+            : 'AI解析結果を確認し、必要な児童のみ許可してください。',
+        ...(errors.length > 0 && { errors }),
+      });
     }
+
+    // 1. 活動記録を保存
+    const ensured = await ensureActivityRecord();
+    if ('error' in ensured) {
+      return NextResponse.json({ error: ensured.error }, { status: ensured.status });
+    }
+    const activity = ensured.activity;
 
     // 2. 各子供の個別記録を生成
     const observations = [];
@@ -121,7 +231,6 @@ export async function POST(request: NextRequest) {
           .from('r_observation')
           .insert({
             child_id: childId,
-            facility_id: session.current_facility_id,
             observation_date: activity_date,
             content: childContent,
             activity_id: activity.id, // 元の活動記録IDを保存

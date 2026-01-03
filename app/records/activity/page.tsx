@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from "react"
+import { useRouter } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -49,7 +50,18 @@ interface ActivitiesData {
   has_more: boolean
 }
 
+interface AiObservationResult {
+  tempId: string
+  child_id: string
+  child_display_name: string
+  observation_date: string
+  content: string
+  status: "pending" | "saved"
+  observation_id?: string
+}
+
 export default function ActivityRecordPage() {
+  const router = useRouter()
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -79,9 +91,11 @@ export default function ActivityRecordPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
-  const [aiAnalysisResults, setAiAnalysisResults] = useState<any[]>([])
+  const [aiAnalysisResults, setAiAnalysisResults] = useState<AiObservationResult[]>([])
   const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [savingObservationId, setSavingObservationId] = useState<string | null>(null)
+  const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // 編集モードの状態
@@ -490,16 +504,6 @@ export default function ActivityRecordPage() {
   }
 
   const toggleAnalysisModal = () => {
-    // モーダルを閉じるときにフォームをクリア
-    if (showAnalysisModal) {
-      setActivityContent('')
-      setSelectedMentions([])
-      setMentionTokens(new Map())
-      setIsMentionOpen(false)
-      setIsEditMode(false)
-      setEditingActivityId(null)
-      setOriginalMentionedChildren([])
-    }
     setShowAnalysisModal(!showAnalysisModal)
   }
 
@@ -644,21 +648,39 @@ export default function ActivityRecordPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          ...(editingActivityId && { activity_id: editingActivityId }),
           activity_date: activityDate,
           class_id: selectedClass,
           content: activityContent.trim(),
           mentioned_children: encryptedTokens,
+          ai_preview: true,
         }),
       })
 
       const result = await response.json()
 
-      if (!response.ok) {
+      if (!response.ok || !result.success) {
         throw new Error(result.error || 'AI解析に失敗しました')
       }
 
-      // Show results in modal
-      setAiAnalysisResults(result.observations || [])
+      if (result.activity?.id) {
+        setEditingActivityId(result.activity.id)
+        setOriginalMentionedChildren(result.activity.mentioned_children || encryptedTokens)
+      }
+
+      const formattedResults: AiObservationResult[] = (result.observations || []).map((obs: any, index: number) => {
+        const child = selectedMentions.find((m) => m.child_id === obs.child_id)
+        return {
+          tempId: `${obs.child_id}-${index}-${Date.now()}`,
+          child_id: obs.child_id,
+          child_display_name: child?.display_name || '不明',
+          observation_date: obs.observation_date,
+          content: obs.content,
+          status: 'pending',
+        }
+      })
+
+      setAiAnalysisResults(formattedResults)
       setShowAnalysisModal(true)
 
       // Show success message
@@ -674,6 +696,102 @@ export default function ActivityRecordPage() {
     } finally {
       setIsAnalyzing(false)
     }
+  }
+
+  const handleApproveObservation = async (draft: AiObservationResult) => {
+    if (!editingActivityId) {
+      setAiAnalysisError('活動記録がまだ保存されていません。先にAI解析を実行してください。')
+      return
+    }
+
+    try {
+      setSavingObservationId(draft.tempId)
+      setAiAnalysisError(null)
+
+      const response = await fetch('/api/records/observation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          activity_id: editingActivityId,
+          child_id: draft.child_id,
+          content: draft.content,
+          observation_date: draft.observation_date,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '個別記録の保存に失敗しました')
+      }
+
+      setAiAnalysisResults((prev) =>
+        prev.map((item) =>
+          item.tempId === draft.tempId
+            ? {
+                ...item,
+                status: 'saved',
+                observation_id: result.data?.id,
+                content: result.data?.content ?? item.content,
+                observation_date: result.data?.observation_date ?? item.observation_date,
+              }
+            : item,
+        ),
+      )
+      setSaveMessage('個別記録を保存しました')
+      await fetchActivities()
+    } catch (err) {
+      console.error('Failed to save observation:', err)
+      setAiAnalysisError(err instanceof Error ? err.message : '個別記録の保存に失敗しました')
+    } finally {
+      setSavingObservationId(null)
+    }
+  }
+
+  const handleDeleteObservationDraft = async (draft: AiObservationResult) => {
+    // 未保存の場合はローカル削除
+    if (draft.status !== 'saved' || !draft.observation_id) {
+      setAiAnalysisResults((prev) => prev.filter((item) => item.tempId !== draft.tempId))
+      return
+    }
+
+    try {
+      setDeletingObservationId(draft.tempId)
+      const response = await fetch('/api/records/observation', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          observation_id: draft.observation_id,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '個別記録の削除に失敗しました')
+      }
+
+      setAiAnalysisResults((prev) => prev.filter((item) => item.tempId !== draft.tempId))
+      setSaveMessage('個別記録を削除しました')
+      await fetchActivities()
+    } catch (err) {
+      console.error('Failed to delete observation:', err)
+      setAiAnalysisError(err instanceof Error ? err.message : '個別記録の削除に失敗しました')
+    } finally {
+      setDeletingObservationId(null)
+    }
+  }
+
+  const handleEditObservation = (draft: AiObservationResult) => {
+    if (!draft.observation_id) {
+      setAiAnalysisError('編集する前に個別記録を保存してください')
+      return
+    }
+    router.push(`/records/personal/${draft.observation_id}/edit`)
   }
 
   const handleSaveActivity = async () => {
@@ -698,7 +816,7 @@ export default function ActivityRecordPage() {
       setSaveMessage(null)
 
       // 編集モードか新規作成モードかを判定
-      const isUpdate = isEditMode && editingActivityId
+      const isUpdate = Boolean(editingActivityId)
 
       // mentioned_childrenを準備（暗号化トークンの配列）
       // 編集モード: 新しいメンションがあればそれを使用、なければ既存のものを使用
@@ -1025,14 +1143,13 @@ export default function ActivityRecordPage() {
                     <p className="font-bold">AI解析結果が見つかりません</p>
                   </div>
                 ) : (
-                  aiAnalysisResults.map((observation, index) => {
-                    // Find matching child from selectedMentions
-                    const child = selectedMentions.find(m => m.child_id === observation.child_id)
-                    const displayName = child?.display_name || '不明'
+                  aiAnalysisResults.map((observation) => {
+                    const displayName = observation.child_display_name
                     const initial = displayName.charAt(0)
+                    const isSaved = observation.status === 'saved'
 
                     return (
-                      <div key={observation.id || index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+                      <div key={observation.tempId} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
                         <div className="flex justify-between items-start mb-3">
                           <h4 className="font-bold text-gray-800 flex items-center gap-2">
                             <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs">
@@ -1040,8 +1157,12 @@ export default function ActivityRecordPage() {
                             </span>
                             {displayName}
                           </h4>
-                          <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded font-bold">
-                            新規保存済み
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                              isSaved ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {isSaved ? '保存済み' : '未保存'}
                           </span>
                         </div>
                         <div className="space-y-3">
@@ -1054,6 +1175,33 @@ export default function ActivityRecordPage() {
                           <div className="text-xs text-gray-400">
                             記録日: {observation.observation_date}
                           </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 justify-end mt-4">
+                          <Button
+                            size="sm"
+                            className="bg-indigo-600 text-white"
+                            disabled={isSaved || savingObservationId === observation.tempId}
+                            onClick={() => handleApproveObservation(observation)}
+                          >
+                            {savingObservationId === observation.tempId ? '保存中...' : isSaved ? '保存済み' : '許可して保存'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={deletingObservationId === observation.tempId}
+                            onClick={() => handleDeleteObservationDraft(observation)}
+                          >
+                            {deletingObservationId === observation.tempId ? '削除中...' : '削除'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!observation.observation_id}
+                            onClick={() => handleEditObservation(observation)}
+                          >
+                            <Edit2 className="w-4 h-4 mr-1" />
+                            編集
+                          </Button>
                         </div>
                       </div>
                     )
