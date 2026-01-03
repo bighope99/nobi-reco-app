@@ -433,7 +433,8 @@ CREATE TABLE IF NOT EXISTS r_activity (
   title VARCHAR(200),                            -- タイトル（例: 公園で外遊び）
   content TEXT NOT NULL,                         -- 活動内容（本文）
   snack TEXT,                                    -- おやつ
-  
+  mentioned_children TEXT[],                     -- メンションされた子供の暗号化トークンの配列
+
   -- 写真（JSONBで複数枚保存）
   photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
   
@@ -457,6 +458,7 @@ CREATE INDEX idx_activity_class_id ON r_activity(class_id) WHERE deleted_at IS N
 CREATE INDEX idx_activity_date ON r_activity(activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_created_by ON r_activity(created_by);
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
 ```
 
 ---
