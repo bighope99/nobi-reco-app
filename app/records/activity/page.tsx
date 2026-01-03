@@ -977,7 +977,7 @@ export default function ActivityRecordPage() {
               <div className="grid grid-cols-4 gap-2">
                 <button className="aspect-square bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 transition">
                   <Camera className="w-6 h-6 mb-1" />
-                  <span className="text-[10px]">霑ｽ蜉</span>
+                  <span className="text-[10px]">追加</span>
                 </button>
               </div>
             </div>
@@ -985,7 +985,7 @@ export default function ActivityRecordPage() {
             {/* 選択されたメンション */}
             <div className="flex justify-between items-center pt-4 border-t">
               <div className="text-xs text-gray-500">
-                <span className="font-bold text-gray-800">{childCount}人/span> の子供がメンションされています
+                <span className="font-bold text-gray-800">{childCount}名</span> の児童を検出中
               </div>
               <Button
                 onClick={handleAiAnalysis}
@@ -993,13 +993,13 @@ export default function ActivityRecordPage() {
                 className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles className="w-5 h-5" />
-                {isAnalyzing ? 'AI解析中...' : 'AI解析で個別記録を生成'}
+                {isAnalyzing ? 'AI解析中...' : 'AI解析で個別記録を作成'}
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* AI隗｣譫舌Δ繝ｼ繝繝ｫ */}
+        {/* AI解析モーダル */}
         {showAnalysisModal && (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
@@ -1052,7 +1052,7 @@ export default function ActivityRecordPage() {
                             </p>
                           </div>
                           <div className="text-xs text-gray-400">
-                            活動日: {observation.observation_date}
+                            記録日: {observation.observation_date}
                           </div>
                         </div>
                       </div>
@@ -1073,14 +1073,14 @@ export default function ActivityRecordPage() {
           </div>
         )}
 
-        {/* エラー陦ｨ遉ｺ */}
+        {/* エラー表示 */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600 text-sm">エラー: {error}</p>
           </div>
         )}
 
-        {/* 險倬鹸荳隕ｧ */}
+        {/* 記録一覧 */}
         {loading ? (
           <div className="p-12 text-center text-slate-400">
             <p>読み込み中...</p>
@@ -1088,7 +1088,7 @@ export default function ActivityRecordPage() {
         ) : activitiesData && (
           <Card>
             <CardHeader>
-              <CardTitle>活動記録荳隕ｧ</CardTitle>
+              <CardTitle>活動記録一覧</CardTitle>
             </CardHeader>
             <CardContent>
               {activitiesData.activities.length === 0 ? (
@@ -1123,7 +1123,7 @@ export default function ActivityRecordPage() {
                         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                           <span>記録者： {activity.created_by}</span>
                           {activity.individual_record_count > 0 && (
-                            <span>個別記録: {activity.individual_record_count}莉ｶ</span>
+                            <span>個別記録: {activity.individual_record_count}件</span>
                           )}
                         </div>
                       </div>
@@ -1158,4 +1158,3 @@ export default function ActivityRecordPage() {
     </StaffLayout>
   )
 }
-
