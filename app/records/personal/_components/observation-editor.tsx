@@ -28,7 +28,6 @@ import {
   X,
 } from 'lucide-react';
 import { mockChildren } from '@/lib/mock-data';
-import { createClient } from '@/utils/supabase/client';
 
 type AiObservationDraft = {
   draft_id: string;
@@ -449,38 +448,15 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
     setError('');
 
     try {
-      const supabase = createClient();
-      const { data, error: fetchError } = await supabase
-        .from('r_observation')
-        .select(
-          `
-          id,
-          child_id,
-          observation_date,
-          content,
-          created_by,
-          created_at,
-          updated_at,
-          m_children (
-            family_name,
-            given_name,
-            nickname
-          )
-        `,
-        )
-        .eq('id', id)
-        .is('deleted_at', null)
-        .single();
+      const response = await fetch(`/api/records/personal/${id}`);
+      const result = await response.json();
 
-      if (fetchError || !data) {
-        throw fetchError || new Error('データが見つかりませんでした');
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'データが見つかりませんでした');
       }
 
-      const childName =
-        data.m_children?.nickname ||
-        [data.m_children?.family_name, data.m_children?.given_name].filter(Boolean).join(' ') ||
-        '';
-
+      const data = result.data;
+      const childName = data.child_name || '';
       const observedAt = data.observation_date
         ? new Date(data.observation_date).toISOString()
         : data.created_at || new Date().toISOString();
