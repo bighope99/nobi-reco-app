@@ -59,6 +59,12 @@ Use this repository in alignment with the specifications in the `docs/` folder. 
 - Plan automated coverage with Jest, Supertest, and Playwright; add meaningful unit/e2e coverage for new behavior and keep CI friendliness in mind.
 - Document operational hooks (logging, Sentry/Datadog APM, incident response) when adding production-facing changes to stay aligned with the reviewed nonfunctional requirements.
 
+## コミットメッセージ
+- コミットメッセージは日本語で記載する（英語のみのメッセージは避ける）。
+- 形式は `種別: 要約` とし、要約は1行で簡潔に書く。
+- 種別は `feat` / `fix` / `refactor` / `test` / `docs` / `chore` のいずれかを使用する。
+- 例: `fix: 観察記録の取得APIを修正`
+
 ## Next.js 15 Framework Rules
 - **Async Params in API Routes/Server Pages**: In Next.js 15, dynamic route parameters (`params`) and search parameters (`searchParams`) are asynchronous. You **MUST** await them before access.
   ```typescript

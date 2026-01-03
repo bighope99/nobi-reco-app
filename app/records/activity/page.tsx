@@ -86,11 +86,12 @@ const loadAiDraftsFromCookie = () => {
 
 const persistAiDraftsToCookie = (drafts: AiObservationResult[]) => {
   if (typeof document === "undefined") return
-  if (drafts.length === 0) {
+  const pendingDrafts = drafts.filter((draft) => draft.status !== "saved")
+  if (pendingDrafts.length === 0) {
     document.cookie = `${AI_DRAFT_COOKIE}=; path=/; max-age=0`
     return
   }
-  const value = encodeURIComponent(JSON.stringify(drafts))
+  const value = encodeURIComponent(JSON.stringify(pendingDrafts))
   document.cookie = `${AI_DRAFT_COOKIE}=${value}; path=/; max-age=86400`
 }
 
@@ -197,7 +198,7 @@ export default function ActivityRecordPage() {
 
   useEffect(() => {
     const syncDrafts = () => {
-      const drafts = loadAiDraftsFromCookie()
+      const drafts = loadAiDraftsFromCookie().filter((draft) => draft.status !== "saved")
       if (drafts.length === 0) return
       setAiAnalysisResults(drafts)
       const activityId = drafts[0]?.activity_id
