@@ -26,6 +26,18 @@ describe('/api/attendance/checkin POST', () => {
       maybeSingle: jest.fn(),
       single: jest.fn(),
       insert: jest.fn().mockReturnThis(),
+      auth: {
+        getSession: jest.fn().mockResolvedValue({
+          data: {
+            session: {
+              user: {
+                id: 'user-123',
+              },
+            },
+          },
+          error: null,
+        }),
+      },
     };
 
     (createClient as jest.Mock).mockResolvedValue(mockSupabase);
@@ -33,7 +45,10 @@ describe('/api/attendance/checkin POST', () => {
 
   describe('認証チェック', () => {
     it('セッションがない場合は401を返す', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(null);
+      mockSupabase.auth.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
@@ -48,7 +63,7 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.error).toBe('Unauthorized');
     });
 
-    it('facility_idがない場合は401を返す', async () => {
+                                                                                                                                                                it('current_facility_idがない場合は401を返す', async () => {
       (getUserSession as jest.Mock).mockResolvedValue({ user_id: 'user-123' });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
@@ -69,7 +84,7 @@ describe('/api/attendance/checkin POST', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
-        facility_id: 'facility-123',
+        current_facility_id: 'facility-123',
       });
     });
 
@@ -106,7 +121,7 @@ describe('/api/attendance/checkin POST', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
-        facility_id: 'facility-123',
+        current_facility_id: 'facility-123',
       });
     });
 
@@ -153,7 +168,7 @@ describe('/api/attendance/checkin POST', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
-        facility_id: 'facility-123',
+        current_facility_id: 'facility-123',
       });
 
       (jwt.verify as jest.Mock).mockReturnValue({
@@ -184,7 +199,7 @@ describe('/api/attendance/checkin POST', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
-        facility_id: 'facility-123',
+        current_facility_id: 'facility-123',
       });
 
       (jwt.verify as jest.Mock).mockReturnValue({
@@ -242,7 +257,7 @@ describe('/api/attendance/checkin POST', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
-        facility_id: 'facility-123',
+        current_facility_id: 'facility-123',
       });
 
       (jwt.verify as jest.Mock).mockReturnValue({
@@ -365,7 +380,7 @@ describe('/api/attendance/checkin POST', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
-        facility_id: 'facility-123',
+        current_facility_id: 'facility-123',
       });
 
       (jwt.verify as jest.Mock).mockReturnValue({
