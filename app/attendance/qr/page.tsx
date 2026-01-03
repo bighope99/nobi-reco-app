@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Camera, Check, Loader2, TriangleAlert, VideoOff } from "lucide-react"
+import { BrowserQRCodeReader } from "@zxing/browser"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
@@ -15,32 +16,27 @@ interface AttendanceQrPayload {
   signature: string
 }
 
-type BarcodeDetectorInstance = {
-  detect: (source: HTMLVideoElement | HTMLCanvasElement | ImageBitmapSource) => Promise<Array<{ rawValue: string }>>
-}
-
-type BarcodeDetectorConstructor = {
-  new (options?: { formats?: string[] }): BarcodeDetectorInstance
-  getSupportedFormats?: () => Promise<string[]>
-}
-
 type ScanStatus = "idle" | "starting" | "scanning" | "stopped"
 
 export default function QRAttendanceScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const animationRef = useRef<number | null>(null)
-  const detectorRef = useRef<BarcodeDetectorInstance | null>(null)
+  const codeReaderRef = useRef<BrowserQRCodeReader | null>(null)
+  const controlsRef = useRef<{ stop: () => void } | null>(null)
 
   const [scanStatus, setScanStatus] = useState<ScanStatus>("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [lastRawValue, setLastRawValue] = useState<string | null>(null)
   const [lastPayload, setLastPayload] = useState<AttendanceQrPayload | null>(null)
 
-  const stopScanner = useCallback(() => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
-      animationRef.current = null
+  const stopScanner = useCallback(async () => {
+    if (controlsRef.current) {
+      try {
+        controlsRef.current.stop()
+      } catch (error) {
+        console.error("Error stopping code reader", error)
+      }
+      controlsRef.current = null
     }
 
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -50,6 +46,7 @@ export default function QRAttendanceScannerPage() {
       videoRef.current.srcObject = null
     }
 
+    codeReaderRef.current = null
     setScanStatus("stopped")
   }, [])
 
@@ -77,22 +74,6 @@ export default function QRAttendanceScannerPage() {
     setLastPayload(payload)
   }
 
-  const scanLoop = useCallback(async () => {
-    if (!detectorRef.current || !videoRef.current) return
-
-    try {
-      const barcodes = await detectorRef.current.detect(videoRef.current)
-      if (barcodes.length > 0) {
-        processDetection(barcodes[0].rawValue)
-      }
-    } catch (error) {
-      console.error("Barcode detection error", error)
-      setErrorMessage("QRコードの読み取りに失敗しました。カメラ位置を調整してください。")
-    }
-
-    animationRef.current = requestAnimationFrame(scanLoop)
-  }, [])
-
   const startScanner = useCallback(async () => {
     setErrorMessage(null)
     setScanStatus("starting")
@@ -103,9 +84,19 @@ export default function QRAttendanceScannerPage() {
       return
     }
 
-    stopScanner()
+    await stopScanner()
 
     try {
+      if (!videoRef.current) {
+        throw new Error("ビデオ要素が見つかりません")
+      }
+
+      // ZXingのBrowserQRCodeReaderを初期化
+      if (!codeReaderRef.current) {
+        codeReaderRef.current = new BrowserQRCodeReader()
+      }
+
+      // カメラストリームを取得してビデオ要素に設定
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
@@ -116,41 +107,48 @@ export default function QRAttendanceScannerPage() {
       })
 
       streamRef.current = stream
+      videoRef.current.srcObject = stream
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        try {
-          await videoRef.current.play()
-        } catch (playError) {
-          console.error("Video play error", playError)
-          throw new Error("カメラ映像の再生に失敗しました。ブラウザの権限設定を確認してください。")
-        }
-      }
-
-      if (!detectorRef.current) {
-        const barcodeDetectorCtor = (window as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
-        if (!barcodeDetectorCtor) {
-          throw new Error("BarcodeDetector is not supported")
-        }
-
-        detectorRef.current = new barcodeDetectorCtor({ formats: ["qr_code"] })
+      try {
+        await videoRef.current.play()
+      } catch (playError) {
+        console.error("Video play error", playError)
+        throw new Error("カメラ映像の再生に失敗しました。ブラウザの権限設定を確認してください。")
       }
 
       setScanStatus("scanning")
-      animationRef.current = requestAnimationFrame(scanLoop)
+
+      // ZXingでQRコードを読み取り開始
+      // undefinedを渡すとデフォルトのカメラ（背面カメラ優先）を使用
+      const controls = await codeReaderRef.current.decodeFromVideoDevice(
+        undefined,
+        videoRef.current,
+        (result, error) => {
+          if (result) {
+            processDetection(result.getText())
+          } else if (error && error.name !== "NotFoundException") {
+            // NotFoundExceptionはQRコードが見つからないだけなので無視
+            console.error("QR code decode error", error)
+          }
+        }
+      )
+
+      controlsRef.current = controls
     } catch (error) {
       console.error("Camera start error", error)
       if (error instanceof DOMException && error.name === "NotAllowedError") {
         setErrorMessage("カメラへのアクセスが拒否されました。ブラウザの許可設定を確認してください。")
       } else if (error instanceof DOMException && error.name === "NotFoundError") {
         setErrorMessage("カメラデバイスが検出できませんでした。接続を確認して再度お試しください。")
+      } else if (error instanceof Error) {
+        setErrorMessage(error.message)
       } else {
         setErrorMessage("カメラの起動に失敗しました。ブラウザの権限設定を確認してください。")
       }
-      stopScanner()
+      await stopScanner()
       setScanStatus("idle")
     }
-  }, [scanLoop, stopScanner])
+  }, [stopScanner])
 
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
