@@ -201,6 +201,14 @@ describe('/api/attendance/checkin POST', () => {
             id: 'child-123',
             family_name: '田中',
             given_name: '太郎',
+            _child_class: [
+              {
+                class: {
+                  id: 'class-123',
+                  name: 'ひまわり組',
+                },
+              },
+            ],
           },
           error: null,
         });
@@ -226,6 +234,7 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.error).toBe('Already checked in today');
       expect(data.data).toHaveProperty('child_id', 'child-123');
       expect(data.data).toHaveProperty('child_name', '田中 太郎');
+      expect(data.data).toHaveProperty('class_name', 'ひまわり組');
     });
   });
 
@@ -253,6 +262,14 @@ describe('/api/attendance/checkin POST', () => {
             id: 'child-123',
             family_name: '田中',
             given_name: '太郎',
+            _child_class: [
+              {
+                class: {
+                  id: 'class-123',
+                  name: 'ひまわり組',
+                },
+              },
+            ],
           },
           error: null,
         })
@@ -285,6 +302,7 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.success).toBe(true);
       expect(data.data).toHaveProperty('child_id', 'child-123');
       expect(data.data).toHaveProperty('child_name', '田中 太郎');
+      expect(data.data).toHaveProperty('class_name', 'ひまわり組');
       expect(data.data).toHaveProperty('checked_in_at');
       expect(data.data).toHaveProperty('attendance_date', today);
     });
@@ -298,6 +316,14 @@ describe('/api/attendance/checkin POST', () => {
             id: 'child-123',
             family_name: '田中',
             given_name: '太郎',
+            _child_class: [
+              {
+                class: {
+                  id: 'class-123',
+                  name: 'ひまわり組',
+                },
+              },
+            ],
           },
           error: null,
         })
@@ -356,6 +382,14 @@ describe('/api/attendance/checkin POST', () => {
             id: 'child-123',
             family_name: '田中',
             given_name: '太郎',
+            _child_class: [
+              {
+                class: {
+                  id: 'class-123',
+                  name: 'ひまわり組',
+                },
+              },
+            ],
           },
           error: null,
         });

@@ -51,12 +51,23 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // Check if child exists and belongs to facility
+    // Check if child exists and belongs to facility, and get their class info
     const { data: child, error: childError } = await supabase
       .from('m_children')
-      .select('id, family_name, given_name')
+      .select(`
+        id,
+        family_name,
+        given_name,
+        _child_class!inner (
+          class:m_classes!inner (
+            id,
+            name
+          )
+        )
+      `)
       .eq('id', child_id)
       .eq('facility_id', session.facility_id)
+      .eq('_child_class.is_current', true)
       .single();
 
     if (childError || !child) {
@@ -65,6 +76,9 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    // Extract class name from the nested structure
+    const className = child._child_class?.[0]?.class?.name || 'クラス未設定';
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -90,6 +104,7 @@ export async function POST(request: NextRequest) {
           data: {
             child_id,
             child_name: `${child.family_name} ${child.given_name}`,
+            class_name: className,
             checked_in_at: existing.checked_in_at,
           },
         },
@@ -122,6 +137,7 @@ export async function POST(request: NextRequest) {
       data: {
         child_id,
         child_name: `${child.family_name} ${child.given_name}`,
+        class_name: className,
         checked_in_at: attendance.checked_in_at,
         attendance_date: today,
       },
