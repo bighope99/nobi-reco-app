@@ -41,7 +41,7 @@ export async function GET(
         created_by,
         created_at,
         updated_at,
-        m_users (
+        m_users!r_observation_created_by_fkey (
           name
         ),
         m_children (
@@ -63,7 +63,10 @@ export async function GET(
       );
     }
 
-    if (data.m_children?.facility_id !== session.current_facility_id) {
+    const child = Array.isArray(data.m_children) ? data.m_children[0] : data.m_children;
+    const creator = Array.isArray(data.m_users) ? data.m_users[0] : data.m_users;
+    
+    if (child?.facility_id !== session.current_facility_id) {
       return NextResponse.json(
         { error: 'この観察記録を閲覧する権限がありません' },
         { status: 403 },
@@ -71,8 +74,8 @@ export async function GET(
     }
 
     const childName =
-      data.m_children?.nickname ||
-      [data.m_children?.family_name, data.m_children?.given_name]
+      child?.nickname ||
+      [child?.family_name, child?.given_name]
         .filter(Boolean)
         .join(' ') ||
       '';
@@ -85,7 +88,7 @@ export async function GET(
         child_name: childName,
         observation_date: data.observation_date,
         content: data.content,
-        created_by: data.m_users?.name || data.created_by,
+        created_by: (creator as { name?: string })?.name || data.created_by,
         created_at: data.created_at,
         updated_at: data.updated_at,
       },
