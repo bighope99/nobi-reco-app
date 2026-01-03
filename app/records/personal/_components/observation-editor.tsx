@@ -147,33 +147,14 @@ interface Addendum {
 
 interface Observation {
   id: string;
-  facility_id: string;
   child_id: string;
   child_name?: string;
   observed_at: string;
   body_text: string;
-  body_text_hash: string;
   ai_date_text: string;
   ai_action: string;
   ai_opinion: string;
-  flag_emo: number;
-  flag_emp: number;
-  flag_social: number;
-  flag_assert: number;
-  flag_listen: number;
-  flag_resilient: number;
-  flag_efficacy: number;
-  flag_motive: number;
-  flag_meta: number;
-  flag_adapt: number;
-  flag_creative: number;
-  flag_positive: number;
-  flag_negative: number;
-  flag_responsibility: number;
-  flag_emotion_control: number;
-  flag_cooperation: number;
-  flag_flexibility: number;
-  flag_self_motivation: number;
+  tag_flags?: Record<string, boolean>;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -186,6 +167,15 @@ type ObservationEditorMode = 'new' | 'edit';
 type ObservationEditorProps = {
   mode: ObservationEditorMode;
   observationId?: string;
+  initialChildId?: string;
+};
+
+type ObservationTag = {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  sort_order: number;
 };
 
 type AiAnalysisResult = {
@@ -195,71 +185,27 @@ type AiAnalysisResult = {
   flags: Record<string, boolean>;
 };
 
-const flagLabels: Record<string, string> = {
-  flag_responsibility: '責任をもって粘り強く取り組む力',
-  flag_emotion_control: '感情をうまくコントロールする力',
-  flag_cooperation: '他者と良い関係を築く協調性・共感力',
-  flag_flexibility: '新しいことを受け入れる柔軟性',
-  flag_self_motivation: '自ら目標を持ち、行動する力',
-  flag_positive: 'ポジティブ',
-  flag_negative: 'ネガティブ',
-};
-
-const aiPromptTemplate = (text: string) =>
-  [
-    'あなたは保育園の個別記録を分析するAIです。',
-    '観察内容を読み、以下のJSON形式で出力してください。',
-    'JSONに含めるキー: ai_date_text, ai_action, ai_opinion, flags',
-    `観察内容: ${text}`,
-  ].join('\n');
-
-const buildDefaultFlags = () =>
-  Object.keys(flagLabels).reduce((acc, key) => {
-    acc[key] = false;
+const buildDefaultTagFlags = (tags: ObservationTag[]) =>
+  tags.reduce((acc, tag) => {
+    acc[tag.id] = false;
     return acc;
   }, {} as Record<string, boolean>);
 
-const buildAiJson = (text: string) => {
-  const prompt = aiPromptTemplate(text);
-  const normalizedText = text.trim();
-  const ai_action = normalizedText.split('。')[0] || normalizedText;
-  const ai_opinion = normalizedText.includes('協力')
-    ? '協調性が育ってきている様子が見られます。'
-    : '観察内容から前向きな成長が見られます。';
-  const flags = buildDefaultFlags();
-
-  if (normalizedText.includes('集中') || normalizedText.includes('最後まで')) {
-    flags.flag_responsibility = true;
+const normalizeTagFlags = (tags: ObservationTag[], rawFlags?: Record<string, unknown>) => {
+  const nextFlags = buildDefaultTagFlags(tags);
+  if (!rawFlags || typeof rawFlags !== 'object') {
+    return nextFlags;
   }
-  if (normalizedText.includes('協力') || normalizedText.includes('友達')) {
-    flags.flag_cooperation = true;
-  }
-  if (normalizedText.includes('楽しい') || normalizedText.includes('嬉しい')) {
-    flags.flag_positive = true;
-  }
-
-  const payload = {
-    ai_date_text: new Date().toISOString().split('T')[0],
-    ai_action,
-    ai_opinion,
-    flags,
-  };
-
-  return {
-    prompt,
-    json: JSON.stringify(payload, null, 2),
-  };
+  tags.forEach((tag) => {
+    const byId = rawFlags[tag.id];
+    const byName = rawFlags[tag.name];
+    if (byId === true || byId === 1 || byName === true || byName === 1) {
+      nextFlags[tag.id] = true;
+    }
+  });
+  return nextFlags;
 };
 
-const parseAiJson = (json: string): AiAnalysisResult => {
-  const parsed = JSON.parse(json) as Partial<AiAnalysisResult>;
-  return {
-    ai_date_text: parsed.ai_date_text || '',
-    ai_action: parsed.ai_action || '',
-    ai_opinion: parsed.ai_opinion || '',
-    flags: parsed.flags || buildDefaultFlags(),
-  };
-};
 
 const ChildSelect = ({
   value,
@@ -288,7 +234,7 @@ const ChildSelect = ({
   </Select>
 );
 
-export function ObservationEditor({ mode, observationId }: ObservationEditorProps) {
+export function ObservationEditor({ mode, observationId, initialChildId }: ObservationEditorProps) {
   const isNew = mode === 'new';
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -316,7 +262,8 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
   const [aiEditError, setAiEditError] = useState('');
   const [aiEditSuccess, setAiEditSuccess] = useState(false);
   const [isOnline, setIsOnline] = useState(getConnectionMonitor().getStatus());
-  const [, setAiRawJson] = useState('');
+  const [observationTags, setObservationTags] = useState<ObservationTag[]>([]);
+  const [tagError, setTagError] = useState('');
   const autoAiTriggeredRef = useRef(false);
   const autoAiParam = searchParams?.get('autoAi');
 
@@ -327,12 +274,9 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
 
   const buildFlagState = (obs: Observation | null) => {
     if (!obs) {
-      return buildDefaultFlags();
+      return buildDefaultTagFlags(observationTags);
     }
-    return Object.keys(flagLabels).reduce((acc, key) => {
-      acc[key] = (obs as any)[key] === 1;
-      return acc;
-    }, {} as Record<string, boolean>);
+    return normalizeTagFlags(observationTags, obs.tag_flags);
   };
 
   useEffect(() => {
@@ -350,10 +294,47 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
         ai_date_text: '',
         ai_action: '',
         ai_opinion: '',
-        flags: buildDefaultFlags(),
+        flags: buildDefaultTagFlags(observationTags),
       });
     }
-  }, [isNew]);
+  }, [isNew, observationTags]);
+
+  useEffect(() => {
+    if (!isNew || !initialChildId) return;
+    setSelectedChildId(initialChildId);
+  }, [initialChildId, isNew]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTags = async () => {
+      setTagError('');
+      try {
+        const response = await fetch('/api/records/personal/tags');
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'タグの取得に失敗しました');
+        }
+
+        if (isMounted) {
+          setObservationTags((result.data as ObservationTag[]) || []);
+        }
+      } catch (err) {
+        console.error('Tag load error:', err);
+        if (isMounted) {
+          setObservationTags([]);
+          setTagError('観点タグの取得に失敗しました。');
+        }
+      }
+    };
+
+    loadTags();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -366,9 +347,9 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
       ai_date_text: draft.observation_date || '',
       ai_action: '',
       ai_opinion: '',
-      flags: buildDefaultFlags(),
+      flags: buildDefaultTagFlags(observationTags),
     });
-  }, [draftId, isNew]);
+  }, [draftId, isNew, observationTags]);
 
   // 接続状態の監視（モック: 常にオンライン）
   useEffect(() => {
@@ -376,15 +357,15 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
   }, []);
 
   useEffect(() => {
-    if (!observation) return;
+    if (!observation && !observationTags.length) return;
     const flagState = buildFlagState(observation);
-    setAiEditForm({
-      ai_date_text: observation.ai_date_text || '',
-      ai_action: observation.ai_action || '',
-      ai_opinion: observation.ai_opinion || '',
-      flags: flagState,
-    });
-  }, [observation]);
+    setAiEditForm((prev) => ({
+      ai_date_text: observation?.ai_date_text || '',
+      ai_action: observation?.ai_action || '',
+      ai_opinion: observation?.ai_opinion || '',
+      flags: Object.keys(prev.flags).length ? prev.flags : flagState,
+    }));
+  }, [observation, observationTags]);
 
   useEffect(() => {
     if (!observationId || !autoAiParam || autoAiTriggeredRef.current || !observation) return;
@@ -420,11 +401,6 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
     });
     if (!observation) return;
 
-    const normalizedFlags: Record<string, number> = {};
-    Object.entries(aiResult.flags).forEach(([key, value]) => {
-      normalizedFlags[key] = value ? 1 : 0;
-    });
-
     setObservation((prev) =>
       prev
         ? {
@@ -432,16 +408,31 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
             ai_date_text: aiResult.ai_date_text,
             ai_action: aiResult.ai_action,
             ai_opinion: aiResult.ai_opinion,
-            ...normalizedFlags,
+            tag_flags: aiResult.flags,
           }
         : prev,
     );
   };
 
   const runAiAnalysis = async (text: string) => {
-    const { json } = buildAiJson(text);
-    setAiRawJson(json);
-    return parseAiJson(json);
+    const response = await fetch('/api/records/personal/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'AI解析に失敗しました');
+    }
+    const objective = result.data?.objective ?? result.data?.ai_action ?? '';
+    const subjective = result.data?.subjective ?? result.data?.ai_opinion ?? '';
+    const flags = normalizeTagFlags(observationTags, result.data?.flags as Record<string, unknown>);
+    return {
+      ai_date_text: '',
+      ai_action: objective,
+      ai_opinion: subjective,
+      flags,
+    };
   };
 
   const load = async (id: string) => {
@@ -463,33 +454,14 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
 
       const observationRecord: Observation = {
         id: data.id,
-        facility_id: '',
         child_id: data.child_id,
         child_name: childName || undefined,
         observed_at: observedAt,
         body_text: data.content || '',
-        body_text_hash: '',
         ai_date_text: '',
         ai_action: '',
         ai_opinion: '',
-        flag_emo: 0,
-        flag_emp: 0,
-        flag_social: 0,
-        flag_assert: 0,
-        flag_listen: 0,
-        flag_resilient: 0,
-        flag_efficacy: 0,
-        flag_motive: 0,
-        flag_meta: 0,
-        flag_adapt: 0,
-        flag_creative: 0,
-        flag_positive: 0,
-        flag_negative: 0,
-        flag_responsibility: 0,
-        flag_emotion_control: 0,
-        flag_cooperation: 0,
-        flag_flexibility: 0,
-        flag_self_motivation: 0,
+        tag_flags: {},
         created_by: data.created_by || '',
         created_at: data.created_at || new Date().toISOString(),
         updated_at: data.updated_at || new Date().toISOString(),
@@ -543,7 +515,7 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
   };
 
   const handleAiSelectAll = (checked: boolean) => {
-    const nextFlags = buildDefaultFlags();
+    const nextFlags = buildDefaultTagFlags(observationTags);
     Object.keys(nextFlags).forEach((key) => {
       nextFlags[key] = checked;
     });
@@ -632,33 +604,14 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
       const now = new Date().toISOString();
       const newObservation: Observation = {
         id: `mock-observation-${Date.now()}`,
-        facility_id: 'mock-facility-id',
         child_id: selectedChildId,
         child_name: selectedChild?.name || '不明',
         observed_at: now,
         body_text: text,
-        body_text_hash: 'mock-hash',
         ai_date_text: aiResult.ai_date_text,
         ai_action: aiResult.ai_action,
         ai_opinion: aiResult.ai_opinion,
-        flag_emo: 0,
-        flag_emp: 0,
-        flag_social: 0,
-        flag_assert: 0,
-        flag_listen: 0,
-        flag_resilient: 0,
-        flag_efficacy: 0,
-        flag_motive: 0,
-        flag_meta: 0,
-        flag_adapt: 0,
-        flag_creative: 0,
-        flag_positive: aiResult.flags.flag_positive ? 1 : 0,
-        flag_negative: aiResult.flags.flag_negative ? 1 : 0,
-        flag_responsibility: aiResult.flags.flag_responsibility ? 1 : 0,
-        flag_emotion_control: aiResult.flags.flag_emotion_control ? 1 : 0,
-        flag_cooperation: aiResult.flags.flag_cooperation ? 1 : 0,
-        flag_flexibility: aiResult.flags.flag_flexibility ? 1 : 0,
-        flag_self_motivation: aiResult.flags.flag_self_motivation ? 1 : 0,
+        tag_flags: aiResult.flags,
         created_by: user?.id || 'mock-user-id',
         created_at: now,
         updated_at: now,
@@ -940,18 +893,25 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
                         </Button>
                       </div>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {Object.entries(flagLabels).map(([flagKey, label]) => (
-                        <label key={flagKey} className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
-                          <Checkbox
-                            checked={aiEditForm.flags[flagKey] ?? false}
-                            onCheckedChange={(checked) => handleAiFlagToggle(flagKey, checked === true)}
-                            disabled={aiEditSaving}
-                          />
-                          <span>{label}</span>
-                        </label>
-                      ))}
-                    </div>
+                    {tagError ? (
+                      <Alert variant="destructive">
+                        <AlertDescription>{tagError}</AlertDescription>
+                      </Alert>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {observationTags.length === 0 && <div className="text-sm text-gray-500">タグがありません。</div>}
+                        {observationTags.map((tag) => (
+                          <label key={tag.id} className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
+                            <Checkbox
+                              checked={aiEditForm.flags[tag.id] ?? false}
+                              onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
+                              disabled={aiEditSaving}
+                            />
+                            <span>{tag.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {aiEditError && (
                     <Alert variant="destructive">

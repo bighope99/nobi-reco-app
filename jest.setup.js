@@ -9,4 +9,4 @@ global.ReadableStream = ReadableStream
 
 // Mock環境変数
 process.env.CHILD_ID_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-process.env.GOOGLE_GEMINI_API_KEY = 'test-gemini-api-key'
+process.env.GOOGLE_GENAI_API_KEY = 'test-gemini-api-key'

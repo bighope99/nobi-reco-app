@@ -4,17 +4,9 @@ import { getUserSession } from '@/lib/auth/session';
 
 export async function GET(
   request: NextRequest,
-  props: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await props.params;
-    if (!id) {
-      return NextResponse.json(
-        { error: 'observation_id is required' },
-        { status: 400 },
-      );
-    }
-
     const supabase = await createClient();
     const {
       data: { user },
@@ -22,13 +14,15 @@ export async function GET(
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const session = await getUserSession(user.id);
     if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+
+    const { id } = await params;
 
     const { data, error: fetchError } = await supabase
       .from('r_observation')
@@ -41,14 +35,11 @@ export async function GET(
         created_by,
         created_at,
         updated_at,
-        m_users!r_observation_created_by_fkey (
-          name
-        ),
-        m_children (
+        m_children!inner (
+          facility_id,
           family_name,
           given_name,
-          nickname,
-          facility_id
+          nickname
         )
       `,
       )
@@ -58,26 +49,18 @@ export async function GET(
 
     if (fetchError || !data) {
       return NextResponse.json(
-        { error: '観察記録が見つかりませんでした' },
+        { success: false, error: fetchError?.message || 'データが見つかりませんでした' },
         { status: 404 },
       );
     }
 
-    const child = Array.isArray(data.m_children) ? data.m_children[0] : data.m_children;
-    const creator = Array.isArray(data.m_users) ? data.m_users[0] : data.m_users;
-    
-    if (child?.facility_id !== session.current_facility_id) {
-      return NextResponse.json(
-        { error: 'この観察記録を閲覧する権限がありません' },
-        { status: 403 },
-      );
+    if (data.m_children?.facility_id !== session.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
     const childName =
-      child?.nickname ||
-      [child?.family_name, child?.given_name]
-        .filter(Boolean)
-        .join(' ') ||
+      data.m_children?.nickname ||
+      [data.m_children?.family_name, data.m_children?.given_name].filter(Boolean).join(' ') ||
       '';
 
     return NextResponse.json({
@@ -88,16 +71,13 @@ export async function GET(
         child_name: childName,
         observation_date: data.observation_date,
         content: data.content,
-        created_by: (creator as { name?: string })?.name || data.created_by,
+        created_by: data.created_by,
         created_at: data.created_at,
         updated_at: data.updated_at,
       },
     });
   } catch (error) {
     console.error('Observation detail API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
