@@ -18,6 +18,17 @@ interface AttendanceQrPayload {
 
 type ScanStatus = "idle" | "starting" | "scanning" | "stopped"
 
+interface CheckInResult {
+  success: boolean
+  data?: {
+    child_id: string
+    child_name: string
+    checked_in_at: string
+    attendance_date: string
+  }
+  error?: string
+}
+
 export default function QRAttendanceScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -28,6 +39,8 @@ export default function QRAttendanceScannerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [lastRawValue, setLastRawValue] = useState<string | null>(null)
   const [lastPayload, setLastPayload] = useState<AttendanceQrPayload | null>(null)
+  const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null)
+  const [isCheckingIn, setIsCheckingIn] = useState(false)
 
   const stopScanner = useCallback(async () => {
     if (controlsRef.current) {
@@ -65,6 +78,40 @@ export default function QRAttendanceScannerPage() {
     } catch (error) {
       console.error("QR parse error", error)
       return null
+    }
+  }
+
+  const handleCheckIn = async (payload: AttendanceQrPayload) => {
+    setIsCheckingIn(true)
+    setCheckInResult(null)
+
+    try {
+      const response = await fetch('/api/attendance/checkin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: payload.signature,
+          child_id: payload.child_id,
+        }),
+      })
+
+      const result: CheckInResult = await response.json()
+      setCheckInResult(result)
+
+      if (result.success) {
+        setLastRawValue(null)
+        setLastPayload(null)
+      }
+    } catch (error) {
+      console.error('Check-in error:', error)
+      setCheckInResult({
+        success: false,
+        error: 'チェックイン処理中にエラーが発生しました',
+      })
+    } finally {
+      setIsCheckingIn(false)
     }
   }
 
@@ -213,20 +260,81 @@ export default function QRAttendanceScannerPage() {
             <CardDescription>児童のQRコードをスキャンするとここに表示されます</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {lastRawValue ? (
-              <div className="space-y-2 rounded-lg border p-3">
+            {checkInResult ? (
+              <div className="space-y-3">
+                {checkInResult.success ? (
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                    <div className="flex items-center gap-2 font-semibold text-green-700 dark:text-green-400">
+                      <Check className="h-5 w-5" />
+                      出席記録完了
+                    </div>
+                    {checkInResult.data && (
+                      <div className="mt-3 space-y-1 text-sm text-green-900 dark:text-green-300">
+                        <p className="text-lg font-bold">{checkInResult.data.child_name}</p>
+                        <p>登所時刻: {new Date(checkInResult.data.checked_in_at).toLocaleTimeString('ja-JP')}</p>
+                        <p>日付: {checkInResult.data.attendance_date}</p>
+                      </div>
+                    )}
+                    <Button
+                      onClick={() => setCheckInResult(null)}
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                    >
+                      次の児童を読み取る
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
+                    <div className="flex items-start gap-2 font-semibold text-red-700 dark:text-red-400">
+                      <TriangleAlert className="mt-0.5 h-5 w-5" />
+                      <div className="flex-1">
+                        <p>出席記録エラー</p>
+                        <p className="mt-1 text-sm font-normal">{checkInResult.error}</p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setCheckInResult(null)}
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                    >
+                      閉じる
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : lastRawValue ? (
+              <div className="space-y-3 rounded-lg border p-3">
                 <Label className="text-xs text-muted-foreground">QRデータ</Label>
                 <p className="break-all font-mono text-sm leading-relaxed">{lastRawValue}</p>
                 {lastPayload ? (
-                  <div className="mt-2 space-y-1 rounded-md bg-muted/60 p-2 text-sm">
-                    <div className="flex items-center gap-2 font-semibold">
-                      <Check className="h-4 w-4 text-green-600" />
-                      attendance QR として認識しました
+                  <>
+                    <div className="mt-2 space-y-1 rounded-md bg-muted/60 p-2 text-sm">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <Check className="h-4 w-4 text-green-600" />
+                        attendance QR として認識しました
+                      </div>
+                      <p>児童ID: {lastPayload.child_id}</p>
+                      <p>施設ID: {lastPayload.facility_id}</p>
+                      <p className="text-xs text-muted-foreground">署名: {lastPayload.signature}</p>
                     </div>
-                    <p>児童ID: {lastPayload.child_id}</p>
-                    <p>施設ID: {lastPayload.facility_id}</p>
-                    <p className="text-xs text-muted-foreground">署名: {lastPayload.signature}</p>
-                  </div>
+                    <Button
+                      onClick={() => handleCheckIn(lastPayload)}
+                      disabled={isCheckingIn}
+                      className="w-full"
+                    >
+                      {isCheckingIn ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> チェックイン処理中...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="mr-2 h-4 w-4" /> 出席記録する
+                        </>
+                      )}
+                    </Button>
+                  </>
                 ) : (
                   <p className="text-sm text-destructive">attendance用QRではないか、形式が正しくありません。</p>
                 )}
@@ -234,9 +342,6 @@ export default function QRAttendanceScannerPage() {
             ) : (
               <p className="text-sm text-muted-foreground">まだQRコードは読み取られていません。</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              読み取ったデータは出欠チェックインAPIに連携する想定です。署名検証・打刻処理はAPI側で実装してください。
-            </p>
           </CardContent>
         </Card>
       </div>
