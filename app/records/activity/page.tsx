@@ -51,13 +51,47 @@ interface ActivitiesData {
 }
 
 interface AiObservationResult {
-  tempId: string
+  draft_id: string
+  activity_id: string | null
   child_id: string
   child_display_name: string
   observation_date: string
   content: string
   status: "pending" | "saved"
   observation_id?: string
+}
+
+const AI_DRAFT_COOKIE = "nobiRecoAiDrafts"
+
+const readCookieValue = (name: string) => {
+  if (typeof document === "undefined") return null
+  const cookie = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${name}=`))
+  if (!cookie) return null
+  return cookie.split("=").slice(1).join("=")
+}
+
+const loadAiDraftsFromCookie = () => {
+  const raw = readCookieValue(AI_DRAFT_COOKIE)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw)) as AiObservationResult[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch (error) {
+    console.error("Failed to parse AI drafts cookie:", error)
+    return []
+  }
+}
+
+const persistAiDraftsToCookie = (drafts: AiObservationResult[]) => {
+  if (typeof document === "undefined") return
+  if (drafts.length === 0) {
+    document.cookie = `${AI_DRAFT_COOKIE}=; path=/; max-age=0`
+    return
+  }
+  const value = encodeURIComponent(JSON.stringify(drafts))
+  document.cookie = `${AI_DRAFT_COOKIE}=${value}; path=/; max-age=86400`
 }
 
 export default function ActivityRecordPage() {
@@ -160,6 +194,25 @@ export default function ActivityRecordPage() {
   useEffect(() => {
     fetchActivities()
   }, [fetchActivities])
+
+  useEffect(() => {
+    const syncDrafts = () => {
+      const drafts = loadAiDraftsFromCookie()
+      if (drafts.length === 0) return
+      setAiAnalysisResults(drafts)
+      const activityId = drafts[0]?.activity_id
+      if (activityId) {
+        setEditingActivityId(activityId)
+      }
+      setShowAnalysisModal(true)
+    }
+
+    syncDrafts()
+
+    const handleFocus = () => syncDrafts()
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
+  }, [])
 
   const toHiragana = (text: string) =>
     text.replace(/[ァ-ン]/g, (char) =>
@@ -668,10 +721,15 @@ export default function ActivityRecordPage() {
         setOriginalMentionedChildren(result.activity.mentioned_children || encryptedTokens)
       }
 
+      const activityId = result.activity?.id || editingActivityId || null
       const formattedResults: AiObservationResult[] = (result.observations || []).map((obs: any, index: number) => {
         const child = selectedMentions.find((m) => m.child_id === obs.child_id)
+        const draftId = typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${obs.child_id}-${Date.now()}-${index}`
         return {
-          tempId: `${obs.child_id}-${index}-${Date.now()}`,
+          draft_id: draftId,
+          activity_id: activityId,
           child_id: obs.child_id,
           child_display_name: child?.display_name || '不明',
           observation_date: obs.observation_date,
@@ -681,6 +739,7 @@ export default function ActivityRecordPage() {
       })
 
       setAiAnalysisResults(formattedResults)
+      persistAiDraftsToCookie(formattedResults)
       setShowAnalysisModal(true)
 
       // Show success message
@@ -705,7 +764,7 @@ export default function ActivityRecordPage() {
     }
 
     try {
-      setSavingObservationId(draft.tempId)
+      setSavingObservationId(draft.draft_id)
       setAiAnalysisError(null)
 
       const response = await fetch('/api/records/observation', {
@@ -727,9 +786,9 @@ export default function ActivityRecordPage() {
         throw new Error(result.error || '個別記録の保存に失敗しました')
       }
 
-      setAiAnalysisResults((prev) =>
-        prev.map((item) =>
-          item.tempId === draft.tempId
+      setAiAnalysisResults((prev) => {
+        const next = prev.map((item) =>
+          item.draft_id === draft.draft_id
             ? {
                 ...item,
                 status: 'saved',
@@ -738,8 +797,10 @@ export default function ActivityRecordPage() {
                 observation_date: result.data?.observation_date ?? item.observation_date,
               }
             : item,
-        ),
-      )
+        )
+        persistAiDraftsToCookie(next)
+        return next
+      })
       setSaveMessage('個別記録を保存しました')
       await fetchActivities()
     } catch (err) {
@@ -753,12 +814,16 @@ export default function ActivityRecordPage() {
   const handleDeleteObservationDraft = async (draft: AiObservationResult) => {
     // 未保存の場合はローカル削除
     if (draft.status !== 'saved' || !draft.observation_id) {
-      setAiAnalysisResults((prev) => prev.filter((item) => item.tempId !== draft.tempId))
+      setAiAnalysisResults((prev) => {
+        const next = prev.filter((item) => item.draft_id !== draft.draft_id)
+        persistAiDraftsToCookie(next)
+        return next
+      })
       return
     }
 
     try {
-      setDeletingObservationId(draft.tempId)
+      setDeletingObservationId(draft.draft_id)
       const response = await fetch('/api/records/observation', {
         method: 'DELETE',
         headers: {
@@ -775,7 +840,11 @@ export default function ActivityRecordPage() {
         throw new Error(result.error || '個別記録の削除に失敗しました')
       }
 
-      setAiAnalysisResults((prev) => prev.filter((item) => item.tempId !== draft.tempId))
+      setAiAnalysisResults((prev) => {
+        const next = prev.filter((item) => item.draft_id !== draft.draft_id)
+        persistAiDraftsToCookie(next)
+        return next
+      })
       setSaveMessage('個別記録を削除しました')
       await fetchActivities()
     } catch (err) {
@@ -787,11 +856,11 @@ export default function ActivityRecordPage() {
   }
 
   const handleEditObservation = (draft: AiObservationResult) => {
-    if (!draft.observation_id) {
-      setAiAnalysisError('編集する前に個別記録を保存してください')
+    if (draft.observation_id) {
+      router.push(`/records/personal/${draft.observation_id}/edit`)
       return
     }
-    router.push(`/records/personal/${draft.observation_id}/edit`)
+    router.push(`/records/personal/new?draftId=${draft.draft_id}`)
   }
 
   const handleSaveActivity = async () => {
@@ -1085,7 +1154,7 @@ export default function ActivityRecordPage() {
               </div>
               
               <p className="text-xs text-gray-400 mt-2 text-right">
-                メンションされた子供は自動的に個別記録が生成されます。@マークを入力すると候補が表示されます。キーボードの上下キーで選択、Enterで確定できます。
+                AI解析で個別記録の下書きが生成されます。@マークを入力すると候補が表示されます。キーボードの上下キーで選択、Enterで確定できます。
               </p>
             </div>
 
@@ -1105,14 +1174,14 @@ export default function ActivityRecordPage() {
               <div className="text-xs text-gray-500">
                 <span className="font-bold text-gray-800">{childCount}名</span> の児童を検出中
               </div>
-              <Button
-                onClick={handleAiAnalysis}
-                disabled={isAnalyzing || selectedMentions.length === 0}
-                className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Sparkles className="w-5 h-5" />
-                {isAnalyzing ? 'AI解析中...' : 'AI解析で個別記録を作成'}
-              </Button>
+                <Button
+                  onClick={handleAiAnalysis}
+                  disabled={isAnalyzing || selectedMentions.length === 0}
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  {isAnalyzing ? 'AI解析中...' : 'AI解析で下書きを作成'}
+                </Button>
             </div>
           </CardContent>
         </Card>
@@ -1149,7 +1218,7 @@ export default function ActivityRecordPage() {
                     const isSaved = observation.status === 'saved'
 
                     return (
-                      <div key={observation.tempId} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+                      <div key={observation.draft_id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
                         <div className="flex justify-between items-start mb-3">
                           <h4 className="font-bold text-gray-800 flex items-center gap-2">
                             <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs">
@@ -1180,23 +1249,22 @@ export default function ActivityRecordPage() {
                           <Button
                             size="sm"
                             className="bg-indigo-600 text-white"
-                            disabled={isSaved || savingObservationId === observation.tempId}
+                            disabled={isSaved || savingObservationId === observation.draft_id}
                             onClick={() => handleApproveObservation(observation)}
                           >
-                            {savingObservationId === observation.tempId ? '保存中...' : isSaved ? '保存済み' : '許可して保存'}
+                            {savingObservationId === observation.draft_id ? '保存中...' : isSaved ? '保存済み' : '保存'}
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={deletingObservationId === observation.tempId}
+                            disabled={deletingObservationId === observation.draft_id}
                             onClick={() => handleDeleteObservationDraft(observation)}
                           >
-                            {deletingObservationId === observation.tempId ? '削除中...' : '削除'}
+                            {deletingObservationId === observation.draft_id ? '削除中...' : '削除'}
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            disabled={!observation.observation_id}
                             onClick={() => handleEditObservation(observation)}
                           >
                             <Edit2 className="w-4 h-4 mr-1" />

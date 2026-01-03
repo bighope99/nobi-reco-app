@@ -30,6 +30,50 @@ import {
 import { mockChildren } from '@/lib/mock-data';
 import { createClient } from '@/utils/supabase/client';
 
+type AiObservationDraft = {
+  draft_id: string;
+  activity_id: string | null;
+  child_id: string;
+  child_display_name: string;
+  observation_date: string;
+  content: string;
+  status: 'pending' | 'saved';
+  observation_id?: string;
+};
+
+const AI_DRAFT_COOKIE = 'nobiRecoAiDrafts';
+
+const readCookieValue = (name: string) => {
+  if (typeof document === 'undefined') return null;
+  const cookie = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith(`${name}=`));
+  if (!cookie) return null;
+  return cookie.split('=').slice(1).join('=');
+};
+
+const loadAiDraftsFromCookie = () => {
+  const raw = readCookieValue(AI_DRAFT_COOKIE);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw)) as AiObservationDraft[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('Failed to parse AI drafts cookie:', error);
+    return [];
+  }
+};
+
+const persistAiDraftsToCookie = (drafts: AiObservationDraft[]) => {
+  if (typeof document === 'undefined') return;
+  if (drafts.length === 0) {
+    document.cookie = `${AI_DRAFT_COOKIE}=; path=/; max-age=0`;
+    return;
+  }
+  const value = encodeURIComponent(JSON.stringify(drafts));
+  document.cookie = `${AI_DRAFT_COOKIE}=${value}; path=/; max-age=86400`;
+};
+
 // モックコンポーネント
 const Dialog = ({
   open,
@@ -249,6 +293,7 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
   const isNew = mode === 'new';
   const router = useRouter();
   const searchParams = useSearchParams();
+  const draftId = searchParams?.get('draftId');
   const { user } = useAuth();
   const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
@@ -310,6 +355,21 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
       });
     }
   }, [isNew]);
+
+  useEffect(() => {
+    if (!isNew || !draftId) return;
+    const drafts = loadAiDraftsFromCookie();
+    const draft = drafts.find((item) => item.draft_id === draftId);
+    if (!draft) return;
+    setSelectedChildId(draft.child_id);
+    setEditText(draft.content);
+    setAiEditForm({
+      ai_date_text: draft.observation_date || '',
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultFlags(),
+    });
+  }, [draftId, isNew]);
 
   // 接続状態の監視（モック: 常にオンライン）
   useEffect(() => {
@@ -642,6 +702,48 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
 
   const handleSaveEdit = async () => {
     if (isNew) {
+      if (draftId) {
+        const text = editText.trim();
+        if (!selectedChildId) {
+          setError('対象児童を選択してください');
+          return;
+        }
+        if (!text) {
+          setError('本文を入力してください');
+          return;
+        }
+        setSavingEdit(true);
+        setError('');
+        try {
+          const drafts = loadAiDraftsFromCookie();
+          const target = drafts.find((item) => item.draft_id === draftId);
+          if (!target) {
+            throw new Error('下書きが見つかりませんでした');
+          }
+
+          const childName = mockChildren.find((child) => child.id === selectedChildId)?.name || '不明';
+          const next = drafts.map((item) =>
+            item.draft_id === draftId
+              ? {
+                  ...item,
+                  child_id: selectedChildId,
+                  child_display_name: childName,
+                  content: text,
+                  observation_date: item.observation_date || new Date().toISOString().split('T')[0],
+                }
+              : item,
+          );
+
+          persistAiDraftsToCookie(next);
+          router.back();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '下書きの更新に失敗しました';
+          setError(message);
+        } finally {
+          setSavingEdit(false);
+        }
+        return;
+      }
       await handleCreateObservation();
       return;
     }
@@ -688,6 +790,11 @@ export function ObservationEditor({ mode, observationId }: ObservationEditorProp
         </div>
 
         <div className="max-w-6xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-3">
+          {isNew && draftId && (
+            <Alert>
+              <AlertDescription>AI下書きを編集中です。保存すると下書きを更新して前の画面に戻ります。</AlertDescription>
+            </Alert>
+          )}
           {!isOnline && (
             <Alert variant="destructive">
               <AlertDescription>オフラインです。インターネット接続を確認してください。</AlertDescription>
