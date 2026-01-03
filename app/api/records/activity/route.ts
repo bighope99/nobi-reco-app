@@ -291,3 +291,85 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
+
+/**
+ * 活動記録を削除（ソフトデリート）
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const session = await getUserSession(user.id);
+    if (!session || !session.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { activity_id } = body;
+
+    if (!activity_id || typeof activity_id !== 'string') {
+      return NextResponse.json(
+        { error: 'activity_id is required and must be a string' },
+        { status: 400 }
+      );
+    }
+
+    const { data: existingActivity, error: fetchError } = await supabase
+      .from('r_activity')
+      .select('id, facility_id')
+      .eq('id', activity_id)
+      .is('deleted_at', null)
+      .single();
+
+    if (fetchError || !existingActivity) {
+      return NextResponse.json(
+        { error: '活動記録が見つかりませんでした' },
+        { status: 404 }
+      );
+    }
+
+    if (existingActivity.facility_id !== session.current_facility_id) {
+      return NextResponse.json(
+        { error: 'この活動記録を削除する権限がありません' },
+        { status: 403 }
+      );
+    }
+
+    const deletedAt = new Date().toISOString();
+    const { error: deleteError } = await supabase
+      .from('r_activity')
+      .update({
+        deleted_at: deletedAt,
+        updated_at: deletedAt,
+      })
+      .eq('id', activity_id);
+
+    if (deleteError) {
+      console.error('Activity delete error:', deleteError);
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      activity_id,
+      message: '活動記録を削除しました',
+    });
+  } catch (error) {
+    console.error('Activity DELETE API error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

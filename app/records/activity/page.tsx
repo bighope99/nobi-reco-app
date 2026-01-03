@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, Camera, X, Edit2 } from "lucide-react"
+import { Mic, Sparkles, Camera, X, Edit2, Trash2 } from "lucide-react"
 
 interface Activity {
   activity_id: string
@@ -88,6 +88,7 @@ export default function ActivityRecordPage() {
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -550,6 +551,50 @@ export default function ActivityRecordPage() {
     setAiAnalysisError(null)
   }
 
+  const handleDeleteActivity = async (activity: Activity) => {
+    if (!confirm('この活動記録を削除しますか？この操作は元に戻せません。')) return
+
+    try {
+      setIsDeletingId(activity.activity_id)
+      setError(null)
+
+      const response = await fetch('/api/records/activity', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ activity_id: activity.activity_id }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '削除に失敗しました')
+      }
+
+      if (isEditMode && editingActivityId === activity.activity_id) {
+        handleCancelEdit()
+      }
+
+      setActivitiesData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          activities: prev.activities.filter(
+            (item) => item.activity_id !== activity.activity_id,
+          ),
+          total: Math.max(prev.total - 1, 0),
+        }
+      })
+      setSaveMessage('活動記録を削除しました')
+    } catch (err) {
+      console.error('Failed to delete activity:', err)
+      setError(err instanceof Error ? err.message : '削除に失敗しました')
+    } finally {
+      setIsDeletingId(null)
+    }
+  }
+
   const handleAiAnalysis = async () => {
     // Validation
     if (!selectedClass) {
@@ -728,10 +773,6 @@ export default function ActivityRecordPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-100 font-bold flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  Gemini Pro 搭載
-                </span>
                 {isEditMode && (
                   <Button
                     variant="ghost"
@@ -792,7 +833,7 @@ export default function ActivityRecordPage() {
                 )}
               </div>
               <div>
-                <Label className="text-xs font-bold text-gray-500 mb-1">日付</Label>
+                <Label className="text-xs font-bold text-gray-500 mb-1">活動日</Label>
                 <Input
                   type="date"
                   value={activityDate}
@@ -918,7 +959,7 @@ export default function ActivityRecordPage() {
                     <div className="text-center">
                       <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-2"></div>
                       <p className="text-xs font-bold text-indigo-600 animate-pulse">
-                        Geminiが文章を整えています...
+                        文章を整えています...
                       </p>
                     </div>
                   </div>
@@ -926,25 +967,25 @@ export default function ActivityRecordPage() {
               </div>
               
               <p className="text-xs text-gray-400 mt-2 text-right">
-                「今日は雨で室内遊び。りゅうくんは新聞紙破いて楽しそうだった」のように箇条書きでもOK！
+                メンションされた子供は自動的に個別記録が生成されます。@マークを入力すると候補が表示されます。キーボードの上下キーで選択、Enterで確定できます。
               </p>
             </div>
 
-            {/* 写真添付 */}
+            {/* 写真アップロード */}
             <div>
               <Label className="text-sm font-bold text-gray-700 mb-2 block">写真</Label>
               <div className="grid grid-cols-4 gap-2">
                 <button className="aspect-square bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 transition">
                   <Camera className="w-6 h-6 mb-1" />
-                  <span className="text-[10px]">追加</span>
+                  <span className="text-[10px]">霑ｽ蜉</span>
                 </button>
               </div>
             </div>
 
-            {/* 下部アクションバー */}
+            {/* 選択されたメンション */}
             <div className="flex justify-between items-center pt-4 border-t">
               <div className="text-xs text-gray-500">
-                <span className="font-bold text-gray-800">{childCount}名</span> の児童を検出中
+                <span className="font-bold text-gray-800">{childCount}人/span> の子供がメンションされています
               </div>
               <Button
                 onClick={handleAiAnalysis}
@@ -952,13 +993,13 @@ export default function ActivityRecordPage() {
                 className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles className="w-5 h-5" />
-                {isAnalyzing ? 'AI解析中...' : 'AI解析で個別記録を作成'}
+                {isAnalyzing ? 'AI解析中...' : 'AI解析で個別記録を生成'}
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* AI解析モーダル */}
+        {/* AI隗｣譫舌Δ繝ｼ繝繝ｫ */}
         {showAnalysisModal && (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
@@ -981,7 +1022,7 @@ export default function ActivityRecordPage() {
                 {aiAnalysisResults.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
                     <Sparkles className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p className="font-bold">AI解析結果がありません</p>
+                    <p className="font-bold">AI解析結果が見つかりません</p>
                   </div>
                 ) : (
                   aiAnalysisResults.map((observation, index) => {
@@ -1000,18 +1041,18 @@ export default function ActivityRecordPage() {
                             {displayName}
                           </h4>
                           <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded font-bold">
-                            ✓ 保存済み
+                            新規保存済み
                           </span>
                         </div>
                         <div className="space-y-3">
                           <div>
-                            <Label className="text-xs font-bold text-gray-500">AIが抽出した個別記録</Label>
+                            <Label className="text-xs font-bold text-gray-500">AIが生成した個別記録</Label>
                             <p className="text-sm bg-gray-50 p-3 rounded text-gray-700 leading-relaxed">
                               {observation.content}
                             </p>
                           </div>
                           <div className="text-xs text-gray-400">
-                            記録日: {observation.observation_date}
+                            活動日: {observation.observation_date}
                           </div>
                         </div>
                       </div>
@@ -1032,14 +1073,14 @@ export default function ActivityRecordPage() {
           </div>
         )}
 
-        {/* エラー表示 */}
+        {/* エラー陦ｨ遉ｺ */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600 text-sm">エラー: {error}</p>
           </div>
         )}
 
-        {/* 記録一覧 */}
+        {/* 險倬鹸荳隕ｧ */}
         {loading ? (
           <div className="p-12 text-center text-slate-400">
             <p>読み込み中...</p>
@@ -1047,7 +1088,7 @@ export default function ActivityRecordPage() {
         ) : activitiesData && (
           <Card>
             <CardHeader>
-              <CardTitle>活動記録一覧</CardTitle>
+              <CardTitle>活動記録荳隕ｧ</CardTitle>
             </CardHeader>
             <CardContent>
               {activitiesData.activities.length === 0 ? (
@@ -1080,21 +1121,32 @@ export default function ActivityRecordPage() {
                           </p>
                         )}
                         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                          <span>記録者: {activity.created_by}</span>
+                          <span>記録者： {activity.created_by}</span>
                           {activity.individual_record_count > 0 && (
-                            <span>個別記録: {activity.individual_record_count}件</span>
+                            <span>個別記録: {activity.individual_record_count}莉ｶ</span>
                           )}
                         </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="ml-4"
-                        onClick={() => handleEditActivity(activity)}
-                      >
-                        <Edit2 className="w-4 h-4 mr-1" />
-                        編集
-                      </Button>
+                      <div className="ml-4 flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditActivity(activity)}
+                          disabled={isDeletingId === activity.activity_id}
+                        >
+                          <Edit2 className="w-4 h-4 mr-1" />
+                          編集
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteActivity(activity)}
+                          disabled={isDeletingId === activity.activity_id}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          {isDeletingId === activity.activity_id ? '削除中' : '削除'}
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1106,3 +1158,4 @@ export default function ActivityRecordPage() {
     </StaffLayout>
   )
 }
+
