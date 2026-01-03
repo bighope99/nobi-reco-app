@@ -13,15 +13,28 @@ interface TokenPayload {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getUserSession();
-    if (!session?.facility_id) {
+    const supabase = await createClient();
+
+    // 認証チェック
+    const { data: { session: authSession }, error: authError } = await supabase.auth.getSession();
+    if (authError || !authSession) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const { token, child_id } = await request.json();
+    // セッション情報取得
+    const userSession = await getUserSession(authSession.user.id);
+    if (!userSession?.current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { token: tokenRaw, child_id } = await request.json();
+    let token: unknown = tokenRaw;
 
     if (!token || !child_id) {
       return NextResponse.json(
@@ -30,11 +43,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Handle array case: use first element if token is an array
+    if (Array.isArray(token)) {
+      if (token.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Token array is empty' },
+          { status: 400 }
+        );
+      }
+      token = token[0];
+    }
+
+    // Convert token to string
+    const tokenString = String(token).trim();
+
+    // Validate token format (JWT should have 3 parts separated by dots)
+    if (tokenString.split('.').length !== 3) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid token format' },
+        { status: 400 }
+      );
+    }
+
     // Verify JWT token
     let decoded: TokenPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
-    } catch (error) {
+      decoded = jwt.verify(tokenString, JWT_SECRET) as TokenPayload;
+    } catch (error: any) {
+      if (error?.name === 'JsonWebTokenError') {
+        return NextResponse.json(
+          { success: false, error: 'Invalid or malformed token' },
+          { status: 401 }
+        );
+      }
+      if (error?.name === 'TokenExpiredError') {
+        return NextResponse.json(
+          { success: false, error: 'Token has expired' },
+          { status: 401 }
+        );
+      }
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
         { status: 401 }
@@ -42,14 +89,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify facility_id matches
-    if (decoded.facility_id !== session.facility_id) {
+    if (decoded.facility_id !== userSession.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Facility mismatch' },
         { status: 403 }
       );
     }
-
-    const supabase = await createClient();
 
     // Check if child exists and belongs to facility, and get their class info
     const { data: child, error: childError } = await supabase
@@ -66,7 +111,7 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('id', child_id)
-      .eq('facility_id', session.facility_id)
+      .eq('facility_id', userSession.current_facility_id)
       .eq('_child_class.is_current', true)
       .single();
 
@@ -78,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Extract class name from the nested structure
-    const className = child._child_class?.[0]?.class?.name || 'クラス未設定';
+    const className = child._child_class?.[0]?.class?.[0]?.name || 'クラス未設定';
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -90,7 +135,7 @@ export async function POST(request: NextRequest) {
       .from('h_attendance')
       .select('id, checked_in_at')
       .eq('child_id', child_id)
-      .eq('facility_id', session.facility_id)
+      .eq('facility_id', userSession.current_facility_id)
       .gte('checked_in_at', startOfDay)
       .lte('checked_in_at', endOfDay)
       .order('checked_in_at', { ascending: true })
@@ -117,7 +162,7 @@ export async function POST(request: NextRequest) {
       .from('h_attendance')
       .insert({
         child_id,
-        facility_id: session.facility_id,
+        facility_id: userSession.current_facility_id,
         checked_in_at: now.toISOString(),
         check_in_method: 'qr',
       })
