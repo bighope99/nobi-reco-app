@@ -8,11 +8,43 @@ export async function POST(request: NextRequest) {
   console.log("[API /auth/v1/verify] Request received");
   try {
     const body = await request.json();
-    console.log("[API /auth/v1/verify] Request body:", body);
 
-    // For E2E testing: return mock response for test token
-    if (body.token_hash === "valid-token" && body.type === "invite") {
-      console.log("[API /auth/v1/verify] Test mode detected, returning mock response");
+    // 開発環境でのみ詳細ログを出力（本番環境では機密情報を含めない）
+    if (process.env.NODE_ENV !== 'production' || process.env.DEBUG === 'true') {
+      console.log("[API /auth/v1/verify] Request details:", {
+        type: body.type,
+        token_hash: body.token_hash ? '[REDACTED]' : undefined,
+      });
+    } else {
+      console.log("[API /auth/v1/verify] Verify request for type:", body.type);
+    }
+
+    // テスト環境の検証（本番環境では決して実行されない）
+    // セキュリティ: モック機能は明示的な環境変数フラグでのみ有効化
+    // E2Eテストフラグが必須
+    const isE2ETest = process.env.E2E_TEST === "true";
+    const isTestEnvironment =
+      process.env.NODE_ENV === "test" ||
+      process.env.ENABLE_TEST_MOCKS === "true";
+
+    // E2Eテスト環境でのみモックレスポンスを許可
+    if (
+      isE2ETest &&
+      isTestEnvironment &&
+      body.token_hash === "valid-token" &&
+      body.type === "invite"
+    ) {
+      console.log("[API /auth/v1/verify] ⚠️  TEST MODE: Mock authentication path activated");
+      console.log("[API /auth/v1/verify] Environment check:", {
+        NODE_ENV: process.env.NODE_ENV,
+        E2E_TEST: process.env.E2E_TEST,
+        ENABLE_TEST_MOCKS: process.env.ENABLE_TEST_MOCKS,
+        isE2ETest,
+        isTestEnvironment,
+      });
+      console.warn(
+        "[Security] ⚠️  Mock authentication is enabled - this should only run in test environments"
+      );
       return NextResponse.json({
         access_token: "access-token",
         refresh_token: "refresh-token",

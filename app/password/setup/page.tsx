@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic';
 
 type AuthStatus = "verifying" | "ready" | "error";
 
-const isPasswordAlnumMixed = (value: string) => /[A-Za-z]/.test(value) && /\d/.test(value);
+const isPasswordAlnumMixed = (value: string) => 
+  value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
 
 function PasswordSetupContent() {
   const router = useRouter();
@@ -133,7 +134,7 @@ function PasswordSetupContent() {
     setError(null);
 
     if (!isPasswordAlnumMixed(password)) {
-      setError("パスワードは英字と数字を両方含めてください。");
+      setError("パスワードは8文字以上で、英字と数字を両方含めてください。");
       return;
     }
 
@@ -205,7 +206,7 @@ function PasswordSetupContent() {
                 disabled={!isReady || isBusy}
                 required
               />
-              <p className="text-xs text-muted-foreground">英字と数字を含めてください。</p>
+              <p className="text-xs text-muted-foreground">8文字以上で、英字と数字を含めてください。</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">パスワード確認</Label>

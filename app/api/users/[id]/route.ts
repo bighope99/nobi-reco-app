@@ -231,6 +231,25 @@ export async function DELETE(
 
     const deletedAt = new Date().toISOString();
 
+    // STEP 1: Auth削除を先に実行（データの不整合を防ぐため）
+    const supabaseAdmin = await createAdminClient();
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
+      targetUserId
+    );
+
+    if (authDeleteError) {
+      console.error('Failed to delete auth user:', authDeleteError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to delete authentication user',
+          message: authDeleteError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    // STEP 2: Auth削除が成功した場合のみDB更新を実行
     // ユーザー無効化（ソフトデリート）
     const { error: deleteError } = await supabase
       .from('m_users')
@@ -242,10 +261,18 @@ export async function DELETE(
       .eq('id', targetUserId);
 
     if (deleteError) {
-      throw deleteError;
+      console.error('Failed to soft delete user in m_users:', deleteError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to update user status',
+          message: deleteError.message,
+        },
+        { status: 500 }
+      );
     }
 
-    // クラス担当を終了
+    // STEP 3: クラス担当を終了
     const { error: classUpdateError } = await supabase
       .from('_user_class')
       .update({
@@ -265,16 +292,6 @@ export async function DELETE(
         },
         { status: 500 }
       );
-    }
-
-    const supabaseAdmin = await createAdminClient();
-    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
-      targetUserId
-    );
-
-    if (authDeleteError) {
-      console.error('Failed to delete auth user:', authDeleteError);
-      throw authDeleteError;
     }
 
     return NextResponse.json({
