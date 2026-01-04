@@ -16,6 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Mic, Sparkles, Camera, X, Edit2, Trash2 } from "lucide-react"
+import {
+  type AiObservationDraft as AiObservationResult,
+  loadAiDraftsFromCookie,
+  persistAiDraftsToCookie,
+} from "@/lib/drafts/aiDraftCookie"
 
 interface Activity {
   activity_id: string
@@ -50,50 +55,7 @@ interface ActivitiesData {
   has_more: boolean
 }
 
-interface AiObservationResult {
-  draft_id: string
-  activity_id: string | null
-  child_id: string
-  child_display_name: string
-  observation_date: string
-  content: string
-  status: "pending" | "saved"
-  observation_id?: string
-}
-
-const AI_DRAFT_COOKIE = "nobiRecoAiDrafts"
-
-const readCookieValue = (name: string) => {
-  if (typeof document === "undefined") return null
-  const cookie = document.cookie
-    .split("; ")
-    .find((item) => item.startsWith(`${name}=`))
-  if (!cookie) return null
-  return cookie.split("=").slice(1).join("=")
-}
-
-const loadAiDraftsFromCookie = () => {
-  const raw = readCookieValue(AI_DRAFT_COOKIE)
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw)) as AiObservationResult[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch (error) {
-    console.error("Failed to parse AI drafts cookie:", error)
-    return []
-  }
-}
-
-const persistAiDraftsToCookie = (drafts: AiObservationResult[]) => {
-  if (typeof document === "undefined") return
-  const pendingDrafts = drafts.filter((draft) => draft.status !== "saved")
-  if (pendingDrafts.length === 0) {
-    document.cookie = `${AI_DRAFT_COOKIE}=; path=/; max-age=0`
-    return
-  }
-  const value = encodeURIComponent(JSON.stringify(pendingDrafts))
-  document.cookie = `${AI_DRAFT_COOKIE}=${value}; path=/; max-age=86400`
-}
+// AiObservationResult型は共通ファイルからimport済み
 
 export default function ActivityRecordPage() {
   const router = useRouter()

@@ -28,50 +28,13 @@ import {
   X,
 } from 'lucide-react';
 import { mockChildren } from '@/lib/mock-data';
-
-type AiObservationDraft = {
-  draft_id: string;
-  activity_id: string | null;
-  child_id: string;
-  child_display_name: string;
-  observation_date: string;
-  content: string;
-  status: 'pending' | 'saved';
-  observation_id?: string;
-};
-
-const AI_DRAFT_COOKIE = 'nobiRecoAiDrafts';
-
-const readCookieValue = (name: string) => {
-  if (typeof document === 'undefined') return null;
-  const cookie = document.cookie
-    .split('; ')
-    .find((item) => item.startsWith(`${name}=`));
-  if (!cookie) return null;
-  return cookie.split('=').slice(1).join('=');
-};
-
-const loadAiDraftsFromCookie = () => {
-  const raw = readCookieValue(AI_DRAFT_COOKIE);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw)) as AiObservationDraft[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error('Failed to parse AI drafts cookie:', error);
-    return [];
-  }
-};
-
-const persistAiDraftsToCookie = (drafts: AiObservationDraft[]) => {
-  if (typeof document === 'undefined') return;
-  if (drafts.length === 0) {
-    document.cookie = `${AI_DRAFT_COOKIE}=; path=/; max-age=0`;
-    return;
-  }
-  const value = encodeURIComponent(JSON.stringify(drafts));
-  document.cookie = `${AI_DRAFT_COOKIE}=${value}; path=/; max-age=86400`;
-};
+import {
+  type AiObservationDraft,
+  loadAiDraftsFromCookie,
+  persistAiDraftsToCookie,
+  markDraftAsSaved,
+  getDraftById,
+} from '@/lib/drafts/aiDraftCookie';
 
 // モックコンポーネント
 const Dialog = ({
@@ -151,7 +114,6 @@ interface Observation {
   child_name?: string;
   observed_at: string;
   body_text: string;
-  ai_date_text: string;
   ai_action: string;
   ai_opinion: string;
   tag_flags?: Record<string, boolean>;
@@ -179,7 +141,6 @@ type ObservationTag = {
 };
 
 type AiAnalysisResult = {
-  ai_date_text: string;
   ai_action: string;
   ai_opinion: string;
   flags: Record<string, boolean>;
@@ -253,7 +214,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [editText, setEditText] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [aiEditForm, setAiEditForm] = useState({
-    ai_date_text: '',
     ai_action: '',
     ai_opinion: '',
     flags: {} as Record<string, boolean>,
@@ -291,7 +251,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setEditText('');
       setIsEditing(true);
       setAiEditForm({
-        ai_date_text: '',
         ai_action: '',
         ai_opinion: '',
         flags: buildDefaultTagFlags(observationTags),
@@ -344,7 +303,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     setSelectedChildId(draft.child_id);
     setEditText(draft.content);
     setAiEditForm({
-      ai_date_text: draft.observation_date || '',
       ai_action: '',
       ai_opinion: '',
       flags: buildDefaultTagFlags(observationTags),
@@ -360,7 +318,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     if (!observation && !observationTags.length) return;
     const flagState = buildFlagState(observation);
     setAiEditForm((prev) => ({
-      ai_date_text: observation?.ai_date_text || '',
       ai_action: observation?.ai_action || '',
       ai_opinion: observation?.ai_opinion || '',
       flags: Object.keys(prev.flags).length ? prev.flags : flagState,
@@ -371,7 +328,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     if (!observationId || !autoAiParam || autoAiTriggeredRef.current || !observation) return;
 
     const hasAiOutput = Boolean(
-      observation.ai_action?.trim() || observation.ai_opinion?.trim() || observation.ai_date_text?.trim(),
+      observation.ai_action?.trim() || observation.ai_opinion?.trim(),
     );
 
     autoAiTriggeredRef.current = true;
@@ -394,7 +351,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const applyAiResult = (aiResult: AiAnalysisResult) => {
     setAiEditForm({
-      ai_date_text: aiResult.ai_date_text,
       ai_action: aiResult.ai_action,
       ai_opinion: aiResult.ai_opinion,
       flags: aiResult.flags,
@@ -405,7 +361,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       prev
         ? {
             ...prev,
-            ai_date_text: aiResult.ai_date_text,
             ai_action: aiResult.ai_action,
             ai_opinion: aiResult.ai_opinion,
             tag_flags: aiResult.flags,
@@ -428,7 +383,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     const subjective = result.data?.subjective ?? result.data?.ai_opinion ?? '';
     const flags = normalizeTagFlags(observationTags, result.data?.flags as Record<string, unknown>);
     return {
-      ai_date_text: '',
       ai_action: objective,
       ai_opinion: subjective,
       flags,
@@ -458,7 +412,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         child_name: childName || undefined,
         observed_at: observedAt,
         body_text: data.content || '',
-        ai_date_text: '',
         ai_action: '',
         ai_opinion: '',
         tag_flags: {},
@@ -497,7 +450,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
-  const handleAiFieldChange = (field: 'ai_date_text' | 'ai_action' | 'ai_opinion', value: string) => {
+  const handleAiFieldChange = (field: 'ai_action' | 'ai_opinion', value: string) => {
     setAiEditForm((prev) => ({
       ...prev,
       [field]: value,
@@ -537,7 +490,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         normalizedFlags[key] = value ? 1 : 0;
       });
       const payload: Record<string, string | number> = {
-        ai_date_text: aiEditForm.ai_date_text.trim(),
         ai_action: aiEditForm.ai_action.trim(),
         ai_opinion: aiEditForm.ai_opinion.trim(),
         ...normalizedFlags,
@@ -599,27 +551,68 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     setSavingEdit(true);
     setError('');
     try {
-      setAiProcessing(true);
-      const aiResult = await runAiAnalysis(text);
-      const now = new Date().toISOString();
+      // draftIdがある場合はAI解析済みなのでスキップ、それ以外は実行
+      let aiResult: AiAnalysisResult;
+      if (draftId) {
+        // draftから既存のAI解析結果を使用
+        aiResult = {
+          ai_action: aiEditForm.ai_action,
+          ai_opinion: aiEditForm.ai_opinion,
+          flags: aiEditForm.flags,
+        };
+      } else {
+        // 新規作成の場合はAI解析を実行
+        setAiProcessing(true);
+        aiResult = await runAiAnalysis(text);
+      }
+
+      const observationDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD形式
+
+      // APIに保存
+      const response = await fetch('/api/records/personal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          child_id: selectedChildId,
+          observation_date: observationDate,
+          content: text,
+          ai_action: aiResult.ai_action,
+          ai_opinion: aiResult.ai_opinion,
+          tag_flags: aiResult.flags,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '保存に失敗しました');
+      }
+
+      // 保存成功時、観察記録を設定
       const newObservation: Observation = {
-        id: `mock-observation-${Date.now()}`,
+        id: result.data.id,
         child_id: selectedChildId,
         child_name: selectedChild?.name || '不明',
-        observed_at: now,
+        observed_at: new Date().toISOString(),
         body_text: text,
-        ai_date_text: aiResult.ai_date_text,
         ai_action: aiResult.ai_action,
         ai_opinion: aiResult.ai_opinion,
         tag_flags: aiResult.flags,
-        created_by: user?.id || 'mock-user-id',
-        created_at: now,
-        updated_at: now,
+        created_by: user?.id || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         addenda: [],
       };
       setObservation(newObservation);
       applyAiResult(aiResult);
       setIsEditing(false);
+
+      // draftIdがある場合、ステータスを'saved'に更新
+      if (draftId) {
+        markDraftAsSaved(draftId, result.data.id, result.data.observation_date, result.data.content);
+        // 一覧画面に戻る（activityページに戻る）
+        router.push('/records/activity');
+      }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '新規保存に失敗しました';
       setError(errorMessage);
@@ -846,18 +839,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </CardHeader>
               <CardContent className="space-y-4">
                 <form className="space-y-4" onSubmit={handleAiEditSubmit}>
-                  <div>
-                    <Label htmlFor="ai_date_text" className="text-sm font-medium text-gray-700">
-                      日付
-                    </Label>
-                    <Input
-                      id="ai_date_text"
-                      type="date"
-                      value={aiEditForm.ai_date_text}
-                      onChange={(e) => handleAiFieldChange('ai_date_text', e.target.value)}
-                      disabled={aiEditSaving}
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
                       抽出された事実

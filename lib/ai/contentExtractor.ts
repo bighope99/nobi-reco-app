@@ -49,9 +49,17 @@ export async function extractChildContent(
   );
 
   // Gemini APIクライアントの初期化
+  // 環境変数 GOOGLE_GENAI_API_KEY が設定されている必要があります
+  const apiKey = process.env.GOOGLE_GENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'GOOGLE_GENAI_API_KEY environment variable is not set. Please set it in your .env file or environment variables.'
+    );
+  }
+
   const model = new ChatGoogleGenerativeAI({
-    modelName: 'gemini-2.0-flash-exp',
-    apiKey: process.env.GOOGLE_GEMINI_API_KEY,
+    model: 'gemini-2.0-flash-exp',
+    apiKey: apiKey,
     temperature: 0.7,
     maxOutputTokens: 300,
   });
