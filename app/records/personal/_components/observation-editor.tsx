@@ -272,7 +272,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const aiFlagsInitializedRef = useRef(false);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
-  const isChildLocked = Boolean(lockedChildId);
+  const isChildLocked = !isNew && Boolean(lockedChildId);
 
   const nameByIdMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -329,6 +329,22 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       });
     }
   }, [isNew, observationTags]);
+
+  useEffect(() => {
+    if (!isNew || !lockedChildId) return;
+    setSelectedChildId(lockedChildId);
+    if (paramChildName) {
+      setLockedChildName(paramChildName);
+    }
+  }, [isNew, lockedChildId, paramChildName]);
+
+  useEffect(() => {
+    if (!isNew || !lockedChildId || lockedChildName) return;
+    const resolvedName = childOptions.find((child) => child.id === lockedChildId)?.name;
+    if (resolvedName) {
+      setLockedChildName(resolvedName);
+    }
+  }, [childOptions, isNew, lockedChildId, lockedChildName]);
 
   useEffect(() => {
     if (!isNew || !lockedChildId) return;
@@ -946,6 +962,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     });
   };
 
+  const hasAiOutput =
+    aiProcessing ||
+    Boolean(observation?.ai_action?.trim() || observation?.ai_opinion?.trim()) ||
+    Object.values(aiEditForm.flags).some(Boolean) ||
+    aiEditForm.ai_action.trim().length > 0 ||
+    aiEditForm.ai_opinion.trim().length > 0;
+
   const displayRecentContent = useCallback(
     (text: string) => toDisplayText(text),
     [toDisplayText],
@@ -1124,106 +1147,108 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="flex items-center gap-2">
-                    <Brain className="h-5 w-5 text-purple-600" /> AI解析結果
-                  </CardTitle>
-                  {aiProcessing && (
-                    <Badge className="bg-blue-100 text-blue-700">
-                      <Loader2 className="h-3 w-3 mr-1 animate-spin" /> 解析中...
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <form className="space-y-4" onSubmit={handleAiEditSubmit}>
-                  <div>
-                    <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
-                      抽出された事実
-                    </Label>
-                    <Textarea
-                      id="ai_action"
-                      className="min-h-[120px]"
-                      value={aiEditForm.ai_action}
-                      onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
-                      disabled={aiEditSaving}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
-                      解釈・所感
-                    </Label>
-                    <Textarea
-                      id="ai_opinion"
-                      className="min-h-[120px]"
-                      value={aiEditForm.ai_opinion}
-                      onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
-                      disabled={aiEditSaving}
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium text-gray-700 mb-3 block">非認知能力フラグ</Label>
-                      <div className="flex gap-2">
-                        <Button type="button" variant="ghost" size="sm" onClick={() => handleAiSelectAll(true)} disabled={aiEditSaving}>
-                          全選択
-                        </Button>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => handleAiSelectAll(false)} disabled={aiEditSaving}>
-                          全解除
-                        </Button>
-                      </div>
-                    </div>
-                    {tagError ? (
-                      <Alert variant="destructive">
-                        <AlertDescription>{tagError}</AlertDescription>
-                      </Alert>
-                    ) : (
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {observationTags.length === 0 && <div className="text-sm text-gray-500">タグがありません。</div>}
-                        {observationTags.map((tag) => (
-                          <label key={tag.id} className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
-                            <Checkbox
-                              checked={aiEditForm.flags[tag.id] ?? false}
-                              onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
-                              disabled={aiEditSaving}
-                            />
-                            <span>{tag.name}</span>
-                          </label>
-                        ))}
-                      </div>
+            {hasAiOutput && (
+              <Card>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
+                      <Brain className="h-5 w-5 text-purple-600" /> AI解析結果
+                    </CardTitle>
+                    {aiProcessing && (
+                      <Badge className="bg-blue-100 text-blue-700">
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" /> 解析中...
+                      </Badge>
                     )}
                   </div>
-                  {aiEditError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{aiEditError}</AlertDescription>
-                    </Alert>
-                  )}
-                  {aiEditSuccess && (
-                    <div className="rounded-md border border-green-200 bg-green-50 p-4 text-green-800">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span>AI解析結果を保存しました</span>
-                      </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <form className="space-y-4" onSubmit={handleAiEditSubmit}>
+                    <div>
+                      <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
+                        抽出された事実
+                      </Label>
+                      <Textarea
+                        id="ai_action"
+                        className="min-h-[120px]"
+                        value={aiEditForm.ai_action}
+                        onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
+                        disabled={aiEditSaving}
+                      />
                     </div>
-                  )}
-                  <div className="flex justify-end gap-2">
-                    <Button type="submit" data-testid="ai-save" className="bg-purple-600 hover:bg-purple-700" disabled={aiEditSaving}>
-                      {aiEditSaving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
-                        </>
+                    <div>
+                      <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
+                        解釈・所感
+                      </Label>
+                      <Textarea
+                        id="ai_opinion"
+                        className="min-h-[120px]"
+                        value={aiEditForm.ai_opinion}
+                        onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
+                        disabled={aiEditSaving}
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium text-gray-700 mb-3 block">非認知能力フラグ</Label>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleAiSelectAll(true)} disabled={aiEditSaving}>
+                            全選択
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleAiSelectAll(false)} disabled={aiEditSaving}>
+                            全解除
+                          </Button>
+                        </div>
+                      </div>
+                      {tagError ? (
+                        <Alert variant="destructive">
+                          <AlertDescription>{tagError}</AlertDescription>
+                        </Alert>
                       ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" /> 保存
-                        </>
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {observationTags.length === 0 && <div className="text-sm text-gray-500">タグがありません。</div>}
+                          {observationTags.map((tag) => (
+                            <label key={tag.id} className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
+                              <Checkbox
+                                checked={aiEditForm.flags[tag.id] ?? false}
+                                onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
+                                disabled={aiEditSaving}
+                              />
+                              <span>{tag.name}</span>
+                            </label>
+                          ))}
+                        </div>
                       )}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+                    </div>
+                    {aiEditError && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{aiEditError}</AlertDescription>
+                      </Alert>
+                    )}
+                    {aiEditSuccess && (
+                      <div className="rounded-md border border-green-200 bg-green-50 p-4 text-green-800">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span>AI解析結果を保存しました</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <Button type="submit" data-testid="ai-save" className="bg-purple-600 hover:bg-purple-700" disabled={aiEditSaving}>
+                        {aiEditSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" /> 保存
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
 
             {(Boolean(selectedChildId) || !isNew) && (
               <Card>
