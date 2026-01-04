@@ -93,6 +93,7 @@ export default function QRAttendanceScannerPage() {
         body: JSON.stringify({
           token: payload.signature,
           child_id: payload.child_id,
+          facility_id: payload.facility_id,
         }),
       })
 

@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { createHmac } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-
-interface TokenPayload {
-  facility_id: string;
-  issued_at: string;
-  expires_at: string;
+function getQrSignatureSecret(): string {
+  return process.env.QR_SIGNATURE_SECRET || process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 }
 
 export async function POST(request: NextRequest) {
@@ -33,78 +29,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { token: tokenRaw, child_id } = await request.json();
-    let token: unknown = tokenRaw;
+    const { token: signatureRaw, child_id, facility_id: qrFacilityId } = await request.json();
+    let signature: unknown = signatureRaw;
 
-    if (!token || !child_id) {
+    if (!signature || !child_id) {
       return NextResponse.json(
         { success: false, error: 'Token and child_id are required' },
         { status: 400 }
       );
     }
 
-    // Handle array case: use first element if token is an array
-    if (Array.isArray(token)) {
-      if (token.length === 0) {
+    // Handle array case: use first element if signature is an array
+    if (Array.isArray(signature)) {
+      if (signature.length === 0) {
         return NextResponse.json(
-          { success: false, error: 'Token array is empty' },
+          { success: false, error: 'Signature array is empty' },
           { status: 400 }
         );
       }
-      token = token[0];
+      signature = signature[0];
     }
 
-    // Convert token to string
-    const tokenString = String(token).trim();
+    // Convert signature to string
+    const signatureString = String(signature).trim();
 
-    // Validate token format (JWT should have 3 parts separated by dots)
-    if (tokenString.split('.').length !== 3) {
+    // Validate signature format (HMAC-SHA256 should be 64 hex characters)
+    if (!/^[a-f0-9]{64}$/i.test(signatureString)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid token format' },
+        { success: false, error: 'Invalid signature format' },
         { status: 400 }
       );
     }
 
-    // Verify JWT token
-    let decoded: TokenPayload;
-    try {
-      decoded = jwt.verify(tokenString, JWT_SECRET) as TokenPayload;
-    } catch (error: any) {
-      if (error?.name === 'JsonWebTokenError') {
-        return NextResponse.json(
-          { success: false, error: 'Invalid or malformed token' },
-          { status: 401 }
-        );
-      }
-      if (error?.name === 'TokenExpiredError') {
-        return NextResponse.json(
-          { success: false, error: 'Token has expired' },
-          { status: 401 }
-        );
-      }
-      return NextResponse.json(
-        { success: false, error: 'Invalid or expired token' },
-        { status: 401 }
-      );
-    }
-
-    // Verify facility_id matches
-    if (decoded.facility_id !== userSession.current_facility_id) {
-      return NextResponse.json(
-        { success: false, error: 'Facility mismatch' },
-        { status: 403 }
-      );
-    }
-
     // Check if child exists and belongs to facility, and get their class info
+    // Note: LEFT JOIN to allow children without class assignment
     const { data: child, error: childError } = await supabase
       .from('m_children')
       .select(`
         id,
+        facility_id,
         family_name,
         given_name,
-        _child_class!inner (
-          class:m_classes!inner (
+        _child_class (
+          class:m_classes (
             id,
             name
           )
@@ -112,18 +79,58 @@ export async function POST(request: NextRequest) {
       `)
       .eq('id', child_id)
       .eq('facility_id', userSession.current_facility_id)
-      .eq('_child_class.is_current', true)
-      .single();
+      .maybeSingle();
 
     if (childError || !child) {
       return NextResponse.json(
-        { success: false, error: 'Child not found' },
+        { success: false, error: 'Child not found or access denied' },
         { status: 404 }
       );
     }
 
+    // Verify HMAC signature
+    // Calculate expected signature: HMAC(child_id + facility_id + secret)
+    // Note: Must match the exact same string concatenation used in createQrPayload
+    // Use facility_id from QR code payload if provided, otherwise use DB value
+    // This ensures we verify against the same facility_id used to generate the signature
+    const facilityIdForVerification = qrFacilityId || child.facility_id;
+
+    // Verify facility_id matches (security check)
+    if (qrFacilityId && qrFacilityId !== child.facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Facility ID mismatch' },
+        { status: 403 }
+      );
+    }
+
+    const qrSecret = getQrSignatureSecret();
+    const expectedSignature = createHmac('sha256', qrSecret)
+      .update(`${child_id}${facilityIdForVerification}${qrSecret}`)
+      .digest('hex');
+
+    // Verify signature matches
+    if (signatureString !== expectedSignature) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid signature' },
+        { status: 401 }
+      );
+    }
+
     // Extract class name from the nested structure
-    const className = child._child_class?.[0]?.class?.[0]?.name || 'クラス未設定';
+    // Prioritize current class (is_current = true), fallback to first class, or 'クラス未設定'
+    // Note: class can be either an object or array depending on Supabase relationship structure
+    const currentClass = child._child_class?.find((cc: any) => cc.is_current === true);
+    const getClassName = (cc: any) => {
+      if (!cc?.class) return null;
+      // Handle both array and object cases
+      if (Array.isArray(cc.class)) {
+        return cc.class[0]?.name;
+      }
+      return cc.class.name;
+    };
+    const className = getClassName(currentClass) 
+      || (child._child_class?.[0] ? getClassName(child._child_class[0]) : null)
+      || 'クラス未設定';
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
