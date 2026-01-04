@@ -347,6 +347,7 @@ export async function PUT(request: NextRequest) {
       .from('r_activity')
       .select('id, facility_id, created_by')
       .eq('id', activity_id)
+      .is('deleted_at', null)
       .single();
 
     if (fetchError || !existingActivity) {

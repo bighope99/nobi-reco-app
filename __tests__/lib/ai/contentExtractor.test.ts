@@ -192,7 +192,7 @@ describe('extractChildContent', () => {
   });
 
   describe('エラーハンドリング', () => {
-    it('API呼び出しが失敗した場合でもエラーをスローせず適切に処理すること', async () => {
+    it('API呼び出しが失敗した場合はエラーをスローすること', async () => {
       // Gemini APIのモックを一時的にエラーを返すように変更
       const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
       const mockInvoke = jest.fn().mockRejectedValueOnce(new Error('API Error'));
