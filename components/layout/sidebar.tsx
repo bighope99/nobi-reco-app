@@ -35,6 +35,7 @@ const staffNavItems: NavItem[] = [
     children: [
       { label: "記録状況一覧", href: "/records/status" },
       { label: "活動記録入力", href: "/records/activity" },
+      { label: "観察内容入力", href: "/records/personal/new" },
     ],
   },
   {
