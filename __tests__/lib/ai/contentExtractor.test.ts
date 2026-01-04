@@ -1,25 +1,29 @@
 import { extractChildContent } from '@/lib/ai/contentExtractor';
 
+const sampleEncryptedToken1 = 'sample_encrypted_token_1';
+const sampleEncryptedToken2 = 'sample_encrypted_token_2';
+const sampleEncryptedToken3 = 'sample_encrypted_token_3';
+
 // Gemini APIのモック
 jest.mock('@langchain/google-genai', () => ({
   ChatGoogleGenerativeAI: jest.fn().mockImplementation(() => ({
     invoke: jest.fn().mockImplementation(async (messages) => {
-      // メッセージから子供の名前を抽出
+      // メッセージから子供のIDを抽出
       const userMessage = messages.find((m: any) => m._getType() === 'human');
       const content = userMessage?.content || '';
 
       // テスト用のモックレスポンス
-      if (content.includes('田中太郎')) {
+      if (content.includes(`child:${sampleEncryptedToken1}`)) {
         return {
-          content: '田中太郎くんが積み木で高い塔を作りました。創造性と集中力が見られました。',
+          content: `@child:${sampleEncryptedToken1} が積み木で高い塔を作りました。創造性と集中力が見られました。`,
         };
-      } else if (content.includes('佐藤花子')) {
+      } else if (content.includes(`child:${sampleEncryptedToken2}`)) {
         return {
-          content: '佐藤花子さんが友達と協力して作品を完成させました。協調性が育っています。',
+          content: `@child:${sampleEncryptedToken2} が友達と協力して作品を完成させました。協調性が育っています。`,
         };
-      } else if (content.includes('鈴木次郎')) {
+      } else if (content.includes(`child:${sampleEncryptedToken3}`)) {
         return {
-          content: '鈴木次郎くんが元気に外遊びを楽しみました。活発な様子が見られました。',
+          content: `@child:${sampleEncryptedToken3} が元気に外遊びを楽しみました。活発な様子が見られました。`,
         };
       }
 
@@ -31,10 +35,6 @@ jest.mock('@langchain/google-genai', () => ({
 }));
 
 describe('extractChildContent', () => {
-  const sampleEncryptedToken1 = 'sample_encrypted_token_1';
-  const sampleEncryptedToken2 = 'sample_encrypted_token_2';
-  const sampleEncryptedToken3 = 'sample_encrypted_token_3';
-
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -49,7 +49,7 @@ describe('extractChildContent', () => {
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
       expect(result.length).toBeGreaterThan(0);
-      expect(result).toContain('田中太郎');
+      expect(result).toContain(`child:${sampleEncryptedToken1}`);
     });
 
     it('複数のメンションがある場合、指定した子供の内容のみを抽出すること', async () => {
@@ -61,8 +61,8 @@ describe('extractChildContent', () => {
 
       const result = await extractChildContent(fullContent, childId, sampleEncryptedToken1);
 
-      expect(result).toContain('田中太郎');
-      // 佐藤花子については言及されていても良いが、メインは田中太郎
+      expect(result).toContain(`child:${sampleEncryptedToken1}`);
+      // 他の子供が言及されていても良いが、メインは指定ID
     });
 
     it('メンションタグをプレーンテキスト化して処理すること', async () => {
@@ -71,7 +71,7 @@ describe('extractChildContent', () => {
 
       const result = await extractChildContent(fullContent, childId, sampleEncryptedToken1);
 
-      // HTMLタグが除去され、@田中太郎の形式で処理されること
+      // HTMLタグが除去され、@child:{ID}の形式で処理されること
       expect(result).toBeDefined();
     });
   });
@@ -123,15 +123,15 @@ describe('extractChildContent', () => {
     });
   });
 
-  describe('メンション名の抽出', () => {
-    it('メンションタグから子供の名前を正しく抽出すること', async () => {
+  describe('メンションIDの抽出', () => {
+    it('メンションタグから子供のIDを正しく抽出すること', async () => {
       const fullContent = `<mention data-child-id="${sampleEncryptedToken1}">@田中太郎</mention>くんが遊びました。`;
       const childId = 'child-id-1';
 
       const result = await extractChildContent(fullContent, childId, sampleEncryptedToken1);
 
-      // 子供の名前が結果に含まれていることを確認
-      expect(result).toContain('田中太郎');
+      // 子供のIDが結果に含まれていることを確認
+      expect(result).toContain(`child:${sampleEncryptedToken1}`);
     });
 
     it('複数の同じ子供のメンションがある場合でも正しく処理すること', async () => {
@@ -144,7 +144,7 @@ describe('extractChildContent', () => {
       const result = await extractChildContent(fullContent, childId, sampleEncryptedToken1);
 
       expect(result).toBeDefined();
-      expect(result).toContain('田中太郎');
+      expect(result).toContain(`child:${sampleEncryptedToken1}`);
     });
   });
 

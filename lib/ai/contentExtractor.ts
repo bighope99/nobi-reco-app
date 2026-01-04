@@ -18,7 +18,7 @@ import { buildActivityExtractionMessages } from '@/lib/ai/prompts';
  * ```typescript
  * const fullContent = '<mention data-child-id="token1">@田中太郎</mention>くんが積み木で遊びました。';
  * const extracted = await extractChildContent(fullContent, 'child-id-1', 'token1');
- * console.log(extracted); // "田中太郎くんが積み木で高い塔を作りました。..."
+ * console.log(extracted); // "@child:token1 が積み木で高い塔を作りました。..."
  * ```
  */
 export async function extractChildContent(
@@ -26,27 +26,17 @@ export async function extractChildContent(
   childId: string,
   mentionToken: string
 ): Promise<string> {
-  // メンションタグから子供の名前を抽出
-  let childName = '該当の子供';
+  const targetIdentifier =
+    mentionToken && mentionToken.length > 0
+      ? `child:${mentionToken}`
+      : childId
+      ? `child:${childId}`
+      : 'child:unknown';
 
-  if (mentionToken) {
-    // 正規表現の特殊文字をエスケープ
-    const escapedToken = mentionToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const mentionRegex = new RegExp(
-      `<mention data-child-id="${escapedToken}">@([^<]+)</mention>`,
-      'g'
-    );
-
-    const match = mentionRegex.exec(fullContent);
-    if (match && match[1]) {
-      childName = match[1];
-    }
-  }
-
-  // HTMLタグを除去してプレーンテキスト化
+  // メンションタグをIDに置換してプレーンテキスト化
   const plainContent = fullContent.replace(
-    /<mention[^>]*>@([^<]+)<\/mention>/g,
-    '@$1'
+    /<mention[^>]*data-child-id="([^"]+)"[^>]*>@[^<]*<\/mention>/g,
+    '@child:$1'
   );
 
   // Gemini APIクライアントの初期化
@@ -65,7 +55,10 @@ export async function extractChildContent(
     maxOutputTokens: 300,
   });
 
-  const { system, user } = buildActivityExtractionMessages(plainContent, childName);
+  const { system, user } = buildActivityExtractionMessages(
+    plainContent,
+    targetIdentifier
+  );
   const systemMessage = new SystemMessage(system);
   const userMessage = new HumanMessage(user);
 

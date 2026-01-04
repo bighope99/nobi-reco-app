@@ -120,7 +120,7 @@ describe('/api/records/personal/[id]', () => {
     const data = await response.json();
 
     expect(response.status).toBe(404);
-    expect(data.error).toBe('観察記録が見つかりませんでした');
+    expect(data.error).toBe('データが見つかりませんでした');
   });
 
   it('観察記録を取得できること', async () => {

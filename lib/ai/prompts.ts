@@ -60,23 +60,23 @@ export const buildPersonalRecordPrompt = (text: string, tags: ObservationTag[]) 
   ].join('\n');
 };
 
-export const buildActivityExtractionMessages = (plainContent: string, childName: string) => {
+export const buildActivityExtractionMessages = (plainContent: string, childIdentifier: string) => {
   return {
     system: `あなたは学童保育の記録作成支援AIです。活動記録から特定の子供に関する内容を抽出してください。
 
 【抽出ルール】
 1. その子供の行動、発言、様子に関する記述を抽出
 2. その子供がメンションされている文脈を含める
-3. 他の子供との関わりも含める
-4. 個別記録として自然な文章に整形
-5. 簡潔に200文字程度でまとめる
-6. 事実ベースで記述し、推測や誇張は避ける
-7. 子供の成長に関わる観察ポイントを含める`,
+3. 個別記録として自然な文章に整形
+4. 事実ベースで記述し、推測や誇張は禁止
+5. 児童はIDで識別する（名前は使わない）
+6. ID表記は "child:{ID}"、本文のメンションは "@child:{ID}" を使用する
+7. 出力にも名前は含めず、ID表記のみを使う`,
     user: `【活動記録全文】
 ${plainContent}
 
-【対象の子供】
-${childName}
+【対象の子供ID】
+${childIdentifier}
 
 この子供に関する個別記録を抽出してください。`,
   };

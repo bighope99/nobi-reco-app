@@ -334,6 +334,10 @@ export default function ActivityRecordClient() {
     setAiAnalysisError(null)
 
     try {
+      if (selectedMentions.length === 0) {
+        throw new Error('メンションされた児童がありません')
+      }
+
       const response = await fetch('/api/ai/observation', {
         method: 'POST',
         headers: {
@@ -487,17 +491,18 @@ export default function ActivityRecordClient() {
   }
 
   const handleSaveObservation = async (result: AiObservationResult) => {
-    setSavingObservationId(result.activity_id)
+    setSavingObservationId(result.draft_id)
 
     try {
-      const response = await fetch(`/api/activities/${result.activity_id}/observations`, {
+      const response = await fetch('/api/records/personal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          observation: result.content,
-          mention_children: (result as any).mentioned_children || [],
+          child_id: result.child_id,
+          observation_date: result.observation_date,
+          content: result.content,
         }),
       })
 
@@ -509,17 +514,14 @@ export default function ActivityRecordClient() {
 
       setAiAnalysisResults((prev) => {
         const updated = prev.map((item) =>
-          item.activity_id === result.activity_id ? { ...item, status: 'saved' as const } : item
+          item.draft_id === result.draft_id ? { ...item, status: 'saved' as const, observation_id: data.data.id } : item
         )
         persistAiDraftsToCookie(updated)
         return updated
       })
 
-      if (result.activity_id) {
-        window.sessionStorage.setItem("nobiRecoAiLastSavedDraft", JSON.stringify(result))
-      }
-
-      router.push("/records/activity?aiModal=1")
+      // 保存成功のメッセージ表示（オプション）
+      setSaveMessage(`${result.child_display_name}の記録を保存しました`)
     } catch (err) {
       console.error('Failed to save observation:', err)
       setAiAnalysisError(err instanceof Error ? err.message : '保存に失敗しました')
@@ -529,9 +531,9 @@ export default function ActivityRecordClient() {
   }
 
   const handleDeleteObservation = (result: AiObservationResult) => {
-    setAiAnalysisResults((prev) => prev.filter((item) => item.activity_id !== result.activity_id))
+    setAiAnalysisResults((prev) => prev.filter((item) => item.draft_id !== result.draft_id))
     persistAiDraftsToCookie(
-      aiAnalysisResults.filter((item) => item.activity_id !== result.activity_id)
+      aiAnalysisResults.filter((item) => item.draft_id !== result.draft_id)
     )
   }
 
@@ -887,7 +889,7 @@ export default function ActivityRecordClient() {
             ) : aiAnalysisResults.length ? (
               <div className="space-y-4">
                 {aiAnalysisResults.map((result) => (
-                  <Card key={result.activity_id}>
+                  <Card key={result.draft_id}>
                     <CardContent className="space-y-2 pt-6">
                       <div className="flex items-center justify-between">
                         <div>
@@ -898,9 +900,9 @@ export default function ActivityRecordClient() {
                           <Button
                             size="sm"
                             onClick={() => handleSaveObservation(result)}
-                            disabled={savingObservationId === result.activity_id}
+                            disabled={savingObservationId === result.draft_id || result.status === "saved"}
                           >
-                            保存
+                            {result.status === "saved" ? "保存済み" : "保存"}
                           </Button>
                           <Button
                             size="sm"
@@ -912,7 +914,7 @@ export default function ActivityRecordClient() {
                         </div>
                       </div>
                       {result.status === "saved" && (
-                        <p className="text-xs text-green-600">保存済み</p>
+                        <p className="text-xs text-green-600">個別記録として保存されました</p>
                       )}
                     </CardContent>
                   </Card>
