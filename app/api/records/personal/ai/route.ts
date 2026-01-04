@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HumanMessage } from '@langchain/core/messages';
 
 type ObservationTag = {
   id: string;
@@ -90,6 +92,36 @@ const splitObjectiveSubjective = (text: string) => {
   };
 };
 
+const extractJsonPayload = (rawText: string) => {
+  const cleaned = rawText
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('AI解析結果のJSONが見つかりませんでした');
+  }
+  const payload = cleaned.slice(start, end + 1);
+  return JSON.parse(payload);
+};
+
+const normalizeAiOutput = (raw: unknown, tags: ObservationTag[]) => {
+  if (!Array.isArray(raw) || raw.length === 0 || typeof raw[0] !== 'object' || raw[0] === null) {
+    throw new Error('AI解析結果の形式が不正です');
+  }
+  const record = raw[0] as Record<string, unknown>;
+  const objective = typeof record.objective === 'string' ? record.objective : '';
+  const subjective = typeof record.subjective === 'string' ? record.subjective : '';
+  const flags = tags.reduce<Record<string, number>>((acc, tag) => {
+    const rawValue = record[tag.name];
+    const numeric = typeof rawValue === 'number' ? rawValue : rawValue ? 1 : 0;
+    acc[tag.name] = numeric === 1 ? 1 : 0;
+    return acc;
+  }, {});
+  return { objective, subjective, flags };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -127,12 +159,40 @@ export async function POST(request: NextRequest) {
 
     const tagList = (tags as ObservationTag[]) || [];
     const prompt = buildPrompt(text, tagList);
-    const { objective, subjective } = splitObjectiveSubjective(text);
+    const apiKey = process.env.GOOGLE_GENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ success: false, error: 'GeminiのAPIキーが設定されていません' }, { status: 500 });
+    }
 
-    const flags = tagList.reduce<Record<string, number>>((acc, tag) => {
-      acc[tag.name] = text.includes(tag.name) ? 1 : 0;
-      return acc;
-    }, {});
+    const model = new ChatGoogleGenerativeAI({
+      model: 'gemini-2.0-flash-exp',
+      apiKey,
+      temperature: 0.2,
+      maxOutputTokens: 1200,
+    });
+
+    const response = await model.invoke([new HumanMessage(prompt)]);
+    const responseText = typeof response.content === 'string' ? response.content : response.content.toString();
+
+    let objective = '';
+    let subjective = '';
+    let flags: Record<string, number> = {};
+    try {
+      const payload = extractJsonPayload(responseText);
+      const normalized = normalizeAiOutput(payload, tagList);
+      objective = normalized.objective;
+      subjective = normalized.subjective;
+      flags = normalized.flags;
+    } catch (error) {
+      console.error('Failed to parse AI response:', error);
+      const fallback = splitObjectiveSubjective(text);
+      objective = fallback.objective;
+      subjective = fallback.subjective;
+      flags = tagList.reduce<Record<string, number>>((acc, tag) => {
+        acc[tag.name] = text.includes(tag.name) ? 1 : 0;
+        return acc;
+      }, {});
+    }
 
     return NextResponse.json({
       success: true,

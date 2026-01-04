@@ -478,6 +478,12 @@ CREATE TABLE IF NOT EXISTS r_observation (
   content TEXT NOT NULL,                         -- 観察内容（本文）
   is_fact BOOLEAN DEFAULT true,                  -- 事実か所感か（AIで判定）
   
+  -- AI解析結果
+  objective TEXT,                                -- AI解析で分離された客観/事実部分
+  subjective TEXT,                               -- AI解析で分離された主観/所感部分
+  ai_analyzed_at TIMESTAMP WITH TIME ZONE,      -- AI解析実行日時
+  is_ai_analyzed BOOLEAN DEFAULT false,          -- AI解析が実行されたかどうか
+  
   -- 写真
   photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
   
@@ -1103,8 +1109,20 @@ CREATE POLICY facility_access ON r_activity
 
 **詳細**: `docs/api/08_dashboard_api.md` 参照
 
+### AI解析結果保存機能（2025年12月）
+
+#### `r_observation`テーブルの変更
+- **追加**: `objective TEXT` - AI解析で分離された客観/事実部分
+- **追加**: `subjective TEXT` - AI解析で分離された主観/所感部分
+- **追加**: `ai_analyzed_at TIMESTAMP WITH TIME ZONE` - AI解析実行日時
+- **追加**: `is_ai_analyzed BOOLEAN DEFAULT false` - AI解析が実行されたかどうか
+- **理由**: 
+  - `/records/personal/new` でAI解析結果（objective/subjective）を保存するため
+  - 元の `content` は保持しつつ、AI解析で分離された客観/主観を別カラムで管理
+  - タグは既存の `_record_tag` テーブルにリレーションで保存（変更なし）
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2025年12月13日（ダッシュボード機能拡張）
+**最終更新**: 2025年12月（AI解析結果保存機能追加）
 **管理者**: プロジェクトリーダー

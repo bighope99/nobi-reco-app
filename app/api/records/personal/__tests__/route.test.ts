@@ -1,3 +1,4 @@
+/** @jest-environment node */
 /**
  * 観察記録保存APIのテスト
  * POST /api/records/personal
@@ -119,6 +120,17 @@ describe('POST /api/records/personal', () => {
       expect(data.data.child_id).toBe('child-123');
       expect(data.data.observation_date).toBe('2024-01-15');
       expect(data.data.content).toBe('テスト観察内容');
+      expect(mockObservationInsert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          child_id: 'child-123',
+          observation_date: '2024-01-15',
+          content: 'テスト観察内容',
+          objective: '客観的事実',
+          subjective: '主観的解釈',
+          is_ai_analyzed: true,
+          ai_analyzed_at: expect.any(String),
+        }),
+      );
 
       // タグが正しく保存されたか確認
       expect(mockTagInsert.insert).toHaveBeenCalledWith([
@@ -204,6 +216,17 @@ describe('POST /api/records/personal', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.data.id).toBe('observation-456');
+      expect(mockObservationInsert.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          child_id: 'child-123',
+          observation_date: '2024-01-16',
+          content: 'タグなしテスト',
+          objective: null,
+          subjective: null,
+          is_ai_analyzed: false,
+          ai_analyzed_at: null,
+        }),
+      );
     });
   });
 

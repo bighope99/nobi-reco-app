@@ -25,6 +25,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { child_id, observation_date, content, ai_action, ai_opinion, tag_flags } = body;
+    const objective = typeof ai_action === 'string' ? ai_action.trim() : '';
+    const subjective = typeof ai_opinion === 'string' ? ai_opinion.trim() : '';
+    const hasAiResult = Boolean(objective || subjective);
 
     // バリデーション
     if (!child_id || !observation_date || !content) {
@@ -57,6 +60,10 @@ export async function POST(request: NextRequest) {
         child_id,
         observation_date,
         content,
+        objective: objective || null,
+        subjective: subjective || null,
+        is_ai_analyzed: hasAiResult,
+        ai_analyzed_at: hasAiResult ? new Date().toISOString() : null,
         created_by: user.id,
         updated_by: user.id,
       })

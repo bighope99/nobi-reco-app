@@ -226,6 +226,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [observationTags, setObservationTags] = useState<ObservationTag[]>([]);
   const [tagError, setTagError] = useState('');
   const autoAiTriggeredRef = useRef(false);
+  const autoAiDraftTriggeredRef = useRef(false);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = Boolean(lockedChildId);
@@ -317,6 +318,30 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       flags: buildDefaultTagFlags(observationTags),
     });
   }, [draftId, isNew, lockedChildId, observationTags]);
+
+  useEffect(() => {
+    if (!isNew || !draftId) return;
+    if (autoAiDraftTriggeredRef.current) return;
+    if (!editText.trim()) return;
+    if (!observationTags.length && !tagError) return;
+
+    autoAiDraftTriggeredRef.current = true;
+    const runDraftAnalysis = async () => {
+      setAiProcessing(true);
+      setError('');
+      try {
+        const aiResult = await runAiAnalysis(editText.trim());
+        applyAiResult(aiResult);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'AI解析に失敗しました';
+        setError(message);
+      } finally {
+        setAiProcessing(false);
+      }
+    };
+
+    runDraftAnalysis();
+  }, [draftId, editText, isNew, observationTags, tagError]);
 
   // 接続状態の監視（モック: 常にオンライン）
   useEffect(() => {
@@ -560,17 +585,18 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     setSavingEdit(true);
     setError('');
     try {
-      // draftIdがある場合はAI解析済みなのでスキップ、それ以外は実行
+      const hasAiOutput =
+        aiEditForm.ai_action.trim() ||
+        aiEditForm.ai_opinion.trim() ||
+        Object.values(aiEditForm.flags).some(Boolean);
       let aiResult: AiAnalysisResult;
-      if (draftId) {
-        // draftから既存のAI解析結果を使用
+      if (hasAiOutput) {
         aiResult = {
           ai_action: aiEditForm.ai_action,
           ai_opinion: aiEditForm.ai_opinion,
           flags: aiEditForm.flags,
         };
       } else {
-        // 新規作成の場合はAI解析を実行
         setAiProcessing(true);
         aiResult = await runAiAnalysis(text);
       }
