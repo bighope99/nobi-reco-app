@@ -657,6 +657,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleAiEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isNew) {
+      setAiEditSaving(true);
+      setAiEditError('');
+      try {
+        await handleCreateObservation();
+      } finally {
+        setAiEditSaving(false);
+      }
+      return;
+    }
     if (!observation) return;
     setAiEditSaving(true);
     setAiEditError('');
@@ -715,7 +725,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
-  const handleCreateObservation = async () => {
+  const handleCreateObservation = async ({ forceAi = false }: { forceAi?: boolean } = {}) => {
     const text = editText.trim();
     if (!selectedChildId) {
       setError('対象児童を選択してください');
@@ -733,7 +743,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         aiEditForm.ai_opinion.trim() ||
         Object.values(aiEditForm.flags).some(Boolean);
       let aiResult: AiAnalysisResult;
-      if (hasAiOutput) {
+      if (!forceAi && hasAiOutput) {
         aiResult = {
           ai_action: aiEditForm.ai_action,
           ai_opinion: aiEditForm.ai_opinion,
@@ -742,6 +752,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       } else {
         setAiProcessing(true);
         aiResult = await runAiAnalysis(text);
+        applyAiResult(aiResult);
       }
 
       const observationDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD形式
@@ -783,7 +794,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         addenda: [],
       };
       setObservation(newObservation);
-      applyAiResult(aiResult);
       setIsEditing(false);
 
       // draftIdがある場合、ステータスを'saved'に更新
@@ -821,7 +831,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleSaveEdit = async () => {
     if (isNew) {
-      await handleCreateObservation();
+      await handleCreateObservation({ forceAi: true });
       return;
     }
     await handleUpdateObservation();

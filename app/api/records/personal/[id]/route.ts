@@ -107,6 +107,29 @@ export async function GET(
       console.error('Recent observations load error:', recentError);
     }
 
+    const recentIds = (recentObservations || []).map((obs) => obs.id).filter(Boolean);
+    let recentTagMap: Record<string, string[]> = {};
+    if (recentIds.length > 0) {
+      const { data: recentTags, error: recentTagsError } = await supabase
+        .from('_record_tag')
+        .select('observation_id, tag_id')
+        .in('observation_id', recentIds);
+      if (recentTagsError) {
+        console.error('Recent observation tags load error:', recentTagsError);
+      } else {
+        recentTagMap = (recentTags || []).reduce<Record<string, string[]>>((acc, row) => {
+          if (!row.observation_id || !row.tag_id) {
+            return acc;
+          }
+          if (!acc[row.observation_id]) {
+            acc[row.observation_id] = [];
+          }
+          acc[row.observation_id].push(row.tag_id);
+          return acc;
+        }, {});
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -127,9 +150,17 @@ export async function GET(
           observation_date: obs.observation_date,
           content: obs.content,
           created_at: obs.created_at,
-          tag_ids: (obs.record_tags || [])
-            .map((tag: { tag_id?: string }) => tag.tag_id)
-            .filter(Boolean),
+          tag_ids: (() => {
+            const fromJoin = Array.isArray(obs.record_tags)
+              ? obs.record_tags
+                  .map((tag: { tag_id?: string }) => tag.tag_id)
+                  .filter(Boolean)
+              : [];
+            if (fromJoin.length > 0) {
+              return fromJoin;
+            }
+            return recentTagMap[obs.id] || [];
+          })(),
         })),
       },
     });
