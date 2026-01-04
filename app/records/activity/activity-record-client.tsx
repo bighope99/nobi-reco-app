@@ -28,6 +28,7 @@ import {
   loadAiDraftsFromCookie,
   persistAiDraftsToCookie,
 } from "@/lib/drafts/aiDraftCookie"
+import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 
 interface Activity {
   activity_id: string
@@ -357,9 +358,10 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '分析に失敗しました')
       }
 
-      setAiAnalysisResults(result.data?.analysis_results || [])
+      const analysisResults = result.data?.analysis_results || []
+      setAiAnalysisResults(analysisResults)
       setShowAnalysisModal(true)
-      persistAiDraftsToCookie(result.data?.analysis_results || [])
+      persistAiDraftsToCookie(analysisResults)
     } catch (err) {
       console.error('Failed to analyze:', err)
       setAiAnalysisError(err instanceof Error ? err.message : '分析に失敗しました')
@@ -647,6 +649,33 @@ export default function ActivityRecordClient() {
       .replace(/\n\n/gim, "<br/><br/>")
       .replace(/\n/gim, "<br/>")
 
+  const formatAnalysisContentForResult = (
+    result: AiObservationResult,
+    content: string
+  ) => {
+    if (!content) return content
+    const nameById = new Map<string, string>()
+    selectedMentions.forEach((mention) => {
+      nameById.set(mention.child_id, mention.display_name)
+    })
+    if (result.child_id && result.child_display_name) {
+      nameById.set(result.child_id, result.child_display_name)
+    }
+    return replaceChildIdsWithNames(content, nameById)
+  }
+
+  const getEditUrl = (result: AiObservationResult) => {
+    if (result.status === "saved" && result.observation_id) {
+      return `/records/personal/${result.observation_id}/edit`
+    }
+    const params = new URLSearchParams()
+    if (result.draft_id) params.set("draftId", result.draft_id)
+    if (result.child_id) params.set("childId", result.child_id)
+    if (result.child_display_name) params.set("childName", result.child_display_name)
+    const query = params.toString()
+    return query ? `/records/personal/new?${query}` : "/records/personal/new"
+  }
+
   return (
     <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
@@ -894,7 +923,9 @@ export default function ActivityRecordClient() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm text-muted-foreground">{result.child_display_name}</p>
-                          <p className="font-medium">{result.content}</p>
+                          <p className="font-medium">
+                            {formatAnalysisContentForResult(result, result.content)}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Button
@@ -903,6 +934,13 @@ export default function ActivityRecordClient() {
                             disabled={savingObservationId === result.draft_id || result.status === "saved"}
                           >
                             {result.status === "saved" ? "保存済み" : "保存"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(getEditUrl(result))}
+                          >
+                            編集
                           </Button>
                           <Button
                             size="sm"

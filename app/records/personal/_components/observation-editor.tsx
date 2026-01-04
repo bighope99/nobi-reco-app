@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ import {
   loadAiDraftsFromCookie,
   markDraftAsSaved,
 } from '@/lib/drafts/aiDraftCookie';
+import { replaceChildIdsWithNames, replaceChildNamesWithIds } from '@/lib/ai/childIdFormatter';
 
 // TODO: UIコンポーネントライブラリからインポートに置き換え（今後開発）
 const Alert = ({
@@ -273,6 +274,31 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = Boolean(lockedChildId);
 
+  const nameByIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    childOptions.forEach((child) => {
+      if (child.id && child.name) {
+        map.set(child.id, child.name);
+      }
+    });
+    if (lockedChildId && lockedChildName) {
+      map.set(lockedChildId, lockedChildName);
+    }
+    if (observation?.child_id && observation?.child_name) {
+      map.set(observation.child_id, observation.child_name);
+    }
+    return map;
+  }, [childOptions, lockedChildId, lockedChildName, observation?.child_id, observation?.child_name]);
+
+  const toDisplayText = useCallback(
+    (text: string) => replaceChildIdsWithNames(text, nameByIdMap),
+    [nameByIdMap],
+  );
+  const toIdText = useCallback(
+    (text: string) => replaceChildNamesWithIds(text, nameByIdMap),
+    [nameByIdMap],
+  );
+
   const selectedChild = useMemo(
     () => childOptions.find((child) => child.id === selectedChildId),
     [childOptions, selectedChildId],
@@ -287,9 +313,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   useEffect(() => {
     if (observation && !isEditing) {
-      setEditText(observation.body_text || '');
+      setEditText(toDisplayText(observation.body_text || ''));
     }
-  }, [observation, isEditing]);
+  }, [observation, isEditing, toDisplayText]);
 
   useEffect(() => {
     if (isNew) {
@@ -392,14 +418,36 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     const draft = drafts.find((item) => item.draft_id === draftId);
     if (!draft) return;
     setSelectedChildId(lockedChildId || draft.child_id);
-    setEditText(draft.content);
+    setEditText(toDisplayText(draft.content));
     setLockedChildName((prev) => draft.child_display_name || prev);
     setAiEditForm({
       ai_action: '',
       ai_opinion: '',
       flags: buildDefaultTagFlags(observationTags),
     });
-  }, [draftId, isNew, lockedChildId, observationTags]);
+  }, [draftId, isNew, lockedChildId, observationTags, toDisplayText]);
+
+  useEffect(() => {
+    if (!nameByIdMap.size) return;
+    if (!editText.includes('child:')) return;
+    const replaced = toDisplayText(editText);
+    if (replaced !== editText) {
+      setEditText(replaced);
+    }
+  }, [editText, toDisplayText]);
+
+  useEffect(() => {
+    if (!nameByIdMap.size) return;
+    if (!aiEditForm.ai_action.includes('child:') && !aiEditForm.ai_opinion.includes('child:')) return;
+    const nextAction = toDisplayText(aiEditForm.ai_action);
+    const nextOpinion = toDisplayText(aiEditForm.ai_opinion);
+    if (nextAction === aiEditForm.ai_action && nextOpinion === aiEditForm.ai_opinion) return;
+    setAiEditForm((prev) => ({
+      ...prev,
+      ai_action: nextAction,
+      ai_opinion: nextOpinion,
+    }));
+  }, [aiEditForm.ai_action, aiEditForm.ai_opinion, nameByIdMap, toDisplayText]);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -412,7 +460,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setAiProcessing(true);
       setError('');
       try {
-        const aiResult = await runAiAnalysis(editText.trim());
+        const aiResult = await runAiAnalysis(toIdText(editText.trim()));
         applyAiResult(aiResult);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'AI解析に失敗しました';
@@ -477,8 +525,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const applyAiResult = (aiResult: AiAnalysisResult) => {
     setAiEditForm({
-      ai_action: aiResult.ai_action,
-      ai_opinion: aiResult.ai_opinion,
+      ai_action: toDisplayText(aiResult.ai_action),
+      ai_opinion: toDisplayText(aiResult.ai_opinion),
       flags: aiResult.flags,
     });
     if (!observation) return;
@@ -487,8 +535,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       prev
         ? {
             ...prev,
-            ai_action: aiResult.ai_action,
-            ai_opinion: aiResult.ai_opinion,
+            ai_action: toDisplayText(aiResult.ai_action),
+            ai_opinion: toDisplayText(aiResult.ai_opinion),
             tag_flags: aiResult.flags,
           }
         : prev,
@@ -532,14 +580,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ? new Date(data.observation_date).toISOString()
         : data.created_at || new Date().toISOString();
 
+      const displayContent = toDisplayText(data.content || '');
       const observationRecord: Observation = {
         id: data.id,
         child_id: data.child_id,
         child_name: childName || undefined,
         observed_at: observedAt,
-        body_text: data.content || '',
-        ai_action: data.objective || '',
-        ai_opinion: data.subjective || '',
+        body_text: displayContent,
+        ai_action: toDisplayText(data.objective || ''),
+        ai_opinion: toDisplayText(data.subjective || ''),
         tag_flags: data.tag_flags || {},
         created_by: data.created_by || '',
         created_by_name: data.created_by_name || '',
@@ -676,9 +725,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       Object.entries(aiEditForm.flags).forEach(([key, value]) => {
         normalizedFlags[key] = value ? 1 : 0;
       });
+      const aiAction = toIdText(aiEditForm.ai_action.trim());
+      const aiOpinion = toIdText(aiEditForm.ai_opinion.trim());
       const payload: Record<string, string | number> = {
-        ai_action: aiEditForm.ai_action.trim(),
-        ai_opinion: aiEditForm.ai_opinion.trim(),
+        ai_action: aiAction,
+        ai_opinion: aiOpinion,
         ...normalizedFlags,
       };
 
@@ -696,7 +747,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       }
 
       setAiEditSuccess(true);
-      setObservation((prev) => (prev ? { ...prev, ...payload } : prev));
+      setObservation((prev) =>
+        prev
+          ? {
+              ...prev,
+              ai_action: toDisplayText(aiAction),
+              ai_opinion: toDisplayText(aiOpinion),
+              tag_flags: aiEditForm.flags,
+            }
+          : prev,
+      );
 
       setTimeout(() => {
         setAiEditSuccess(false);
@@ -712,7 +772,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleUpdateObservation = async () => {
     if (!observation) return;
-    const text = editText.trim();
+    const displayText = editText.trim();
+    const text = toIdText(displayText).trim();
     if (!text) {
       setError('本文を入力してください');
       return;
@@ -733,7 +794,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      setObservation((prev) => (prev ? { ...prev, body_text: text } : prev));
+      setObservation((prev) => (prev ? { ...prev, body_text: displayText } : prev));
       setIsEditing(false);
       setAiProcessing(true);
       const aiResult = await runAiAnalysis(text);
@@ -748,7 +809,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const handleCreateObservation = async ({ forceAi = false }: { forceAi?: boolean } = {}) => {
-    const text = editText.trim();
+    const displayText = editText.trim();
+    const text = toIdText(displayText).trim();
     if (!selectedChildId) {
       setError('対象児童を選択してください');
       return;
@@ -767,8 +829,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       let aiResult: AiAnalysisResult;
       if (!forceAi && hasAiOutput) {
         aiResult = {
-          ai_action: aiEditForm.ai_action,
-          ai_opinion: aiEditForm.ai_opinion,
+          ai_action: toIdText(aiEditForm.ai_action),
+          ai_opinion: toIdText(aiEditForm.ai_opinion),
           flags: aiEditForm.flags,
         };
       } else {
@@ -806,9 +868,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         child_id: selectedChildId,
         child_name: resolvedChildName,
         observed_at: new Date().toISOString(),
-        body_text: text,
-        ai_action: aiResult.ai_action,
-        ai_opinion: aiResult.ai_opinion,
+        body_text: displayText,
+        ai_action: toDisplayText(aiResult.ai_action),
+        ai_opinion: toDisplayText(aiResult.ai_opinion),
         tag_flags: aiResult.flags,
         created_by: user?.id || '',
         created_at: new Date().toISOString(),
@@ -875,7 +937,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     if (!sourceText.trim()) return;
     setAiProcessing(true);
     try {
-      const aiResult = await runAiAnalysis(sourceText.trim());
+      const aiResult = await runAiAnalysis(toIdText(sourceText.trim()));
       applyAiResult(aiResult);
     } finally {
       setAiProcessing(false);
