@@ -39,6 +39,7 @@ import {
   markDraftAsSaved,
 } from '@/lib/drafts/aiDraftCookie';
 
+// TODO: UIコンポーネントライブラリからインポートに置き換え（今後開発）
 const Alert = ({
   variant,
   className,
@@ -54,7 +55,8 @@ const Alert = ({
 
 const AlertDescription = ({ children }: { children: React.ReactNode }) => <div>{children}</div>;
 
-// モックフック
+// TODO: 実装予定のフック・コンポーネント（今後開発）
+// 接続監視フック - オフライン対応実装時に置き換え
 const getConnectionMonitor = () => ({
   getStatus: () => true,
   addListener: (callback: (status: boolean) => void) => {
@@ -63,6 +65,7 @@ const getConnectionMonitor = () => ({
   },
 });
 
+// 観察記録関連フック - 追記・児童付け替え機能実装時に置き換え
 const useObservations = () => ({
   addAddendum: async (id: string, text: string) => ({
     success: true,
@@ -73,8 +76,10 @@ const useObservations = () => ({
   }),
 });
 
+// 認証コンポーネント - 認証システム実装時に置き換え
 const RequireAuth = ({ children }: { children: React.ReactNode }) => <>{children}</>;
 
+// 認証フック - 認証システム実装時に置き換え
 const useAuth = () => ({
   user: { id: 'mock-user-id', email: 'mock@example.com', display_name: 'モックユーザー' },
 });
@@ -420,7 +425,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     runDraftAnalysis();
   }, [draftId, editText, isNew, observationTags, tagError]);
 
-  // 接続状態の監視（モック: 常にオンライン）
+  // TODO: 接続状態の監視（今後開発：オフライン対応実装時に実装）
   useEffect(() => {
     setIsOnline(true);
   }, []);
@@ -677,8 +682,18 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ...normalizedFlags,
       };
 
-      // モック: 更新処理をシミュレート
-      console.log('Mock update:', payload);
+      // TODO: API実装 - AI解析結果の更新処理
+      const response = await fetch(`/api/records/personal/${observation.id}/ai`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'AI解析結果の保存に失敗しました');
+      }
 
       setAiEditSuccess(true);
       setObservation((prev) => (prev ? { ...prev, ...payload } : prev));
@@ -705,7 +720,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     setSavingEdit(true);
     setError('');
     try {
-      console.log('Mock update body_text:', text);
+      // TODO: API実装 - 観察内容の更新処理
+      const response = await fetch(`/api/records/personal/${observation.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '更新に失敗しました');
+      }
+
       setObservation((prev) => (prev ? { ...prev, body_text: text } : prev));
       setIsEditing(false);
       setAiProcessing(true);
