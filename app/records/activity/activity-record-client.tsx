@@ -89,6 +89,7 @@ export default function ActivityRecordClient() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [aiAnalysisResults, setAiAnalysisResults] = useState<AiObservationResult[]>([])
   const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -529,7 +530,11 @@ export default function ActivityRecordClient() {
   }
 
   const handleDelete = async (activityId: string) => {
+    const confirmed = window.confirm("この活動記録を削除しますか？")
+    if (!confirmed) return
+
     setIsDeletingId(activityId)
+    setDeleteError(null)
 
     try {
       const response = await fetch(`/api/activities/${activityId}`, {
@@ -545,6 +550,7 @@ export default function ActivityRecordClient() {
       fetchActivities()
     } catch (err) {
       console.error('Failed to delete:', err)
+      setDeleteError(err instanceof Error ? err.message : '削除に失敗しました')
     } finally {
       setIsDeletingId(null)
     }
@@ -781,6 +787,7 @@ export default function ActivityRecordClient() {
             <CardTitle>活動記録一覧</CardTitle>
           </CardHeader>
           <CardContent>
+            {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
             {loading ? (
               <p>読み込み中...</p>
             ) : error ? (
