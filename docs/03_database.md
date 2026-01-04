@@ -175,6 +175,66 @@ const metadata = await getAuthenticatedUserMetadata();
 
 **詳細**: `docs/jwt-custom-claims-setup.md` を参照
 
+#### 観察記録タグ更新関数（`update_observation_tags`）
+
+```sql
+CREATE OR REPLACE FUNCTION update_observation_tags(
+  p_observation_id UUID,
+  p_tag_ids TEXT[],
+  p_is_auto_tagged BOOLEAN DEFAULT true
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM _record_tag WHERE observation_id = p_observation_id;
+
+  IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
+    INSERT INTO _record_tag (observation_id, tag_id, is_auto_tagged, confidence_score)
+    SELECT p_observation_id, unnest(p_tag_ids), p_is_auto_tagged, NULL;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE EXCEPTION 'Failed to update observation tags for observation_id %: %',
+      p_observation_id, SQLERRM;
+END;
+$$;
+```
+
+**説明**:
+- 観察記録（`r_observation`）のタグを原子的（アトミック）に更新
+- 既存のタグを削除してから新しいタグを挿入（トランザクション内で実行）
+- エラー発生時は自動的にロールバックされ、データ整合性を保証
+- AI解析結果のタグ更新時に使用
+
+**使用例**:
+```sql
+-- 観察記録にタグ「social_skills」「leadership」を追加
+SELECT update_observation_tags(
+  'observation-uuid-here',
+  ARRAY['social_skills', 'leadership'],
+  true  -- AI自動タグ付け
+);
+
+-- タグを全て削除（空配列を渡す）
+SELECT update_observation_tags(
+  'observation-uuid-here',
+  ARRAY[]::TEXT[],
+  true
+);
+```
+
+**API側での使用例**:
+```typescript
+const { error } = await supabase.rpc('update_observation_tags', {
+  p_observation_id: observationId,
+  p_tag_ids: ['social_skills', 'leadership'],
+  p_is_auto_tagged: true,
+});
+```
+
 ---
 
 ## 3. ENUM型定義

@@ -83,51 +83,17 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
     }
 
-    const { data: existingTags, error: tagFetchError } = await supabase
-      .from('_record_tag')
-      .select('tag_id, is_auto_tagged, confidence_score')
-      .eq('observation_id', id);
+    // Atomically update tags using RPC function (transaction-safe)
+    const tagIds = Object.keys(tagFlags);
+    const { error: rpcError } = await supabase.rpc('update_observation_tags', {
+      p_observation_id: id,
+      p_tag_ids: tagIds,
+      p_is_auto_tagged: true,
+    });
 
-    if (tagFetchError) {
-      console.error('Observation tag fetch error:', tagFetchError);
+    if (rpcError) {
+      console.error('Observation tag update error:', rpcError);
       return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
-    }
-
-    const { error: deleteError } = await supabase
-      .from('_record_tag')
-      .delete()
-      .eq('observation_id', id);
-
-    if (deleteError) {
-      console.error('Observation tag delete error:', deleteError);
-      return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
-    }
-
-    const tagInserts = Object.keys(tagFlags).map((tagId) => ({
-      observation_id: id,
-      tag_id: tagId,
-      is_auto_tagged: true,
-      confidence_score: null,
-    }));
-
-    if (tagInserts.length > 0) {
-      const { error: insertError } = await supabase.from('_record_tag').insert(tagInserts);
-      if (insertError) {
-        console.error('Observation tag insert error:', insertError);
-        if (existingTags && existingTags.length > 0) {
-          const rollbackInserts = existingTags.map((tag) => ({
-            observation_id: id,
-            tag_id: tag.tag_id,
-            is_auto_tagged: tag.is_auto_tagged ?? false,
-            confidence_score: tag.confidence_score ?? null,
-          }));
-          const { error: rollbackError } = await supabase.from('_record_tag').insert(rollbackInserts);
-          if (rollbackError) {
-            console.error('Observation tag rollback error:', rollbackError);
-          }
-        }
-        return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
-      }
     }
 
     return NextResponse.json({
