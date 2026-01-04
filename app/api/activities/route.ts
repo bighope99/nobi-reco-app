@@ -4,6 +4,45 @@ import { getUserSession } from '@/lib/auth/session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
+const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
+const SIGNED_URL_EXPIRES_IN = 300;
+
+const signActivityPhotos = async (
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  facilityId: string,
+  photos: any
+) => {
+  if (!Array.isArray(photos)) return photos || [];
+
+  const signedPhotos = await Promise.all(
+    photos.map(async (photo) => {
+      if (!photo || typeof photo !== 'object') return photo;
+      const filePath = photo.file_path;
+      if (typeof filePath !== 'string' || !filePath.startsWith(`${facilityId}/`)) {
+        return photo;
+      }
+
+      const { data: signed, error } = await supabase.storage
+        .from(ACTIVITY_PHOTO_BUCKET)
+        .createSignedUrl(filePath, SIGNED_URL_EXPIRES_IN);
+
+      if (error || !signed) {
+        console.error('Failed to sign activity photo URL:', error);
+        return photo;
+      }
+
+      return {
+        ...photo,
+        url: signed.signedUrl,
+        thumbnail_url: signed.signedUrl,
+        expires_in: SIGNED_URL_EXPIRES_IN,
+      };
+    })
+  );
+
+  return signedPhotos;
+};
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -104,20 +143,20 @@ export async function GET(request: NextRequest) {
     }
 
     // データを整形
-    const formattedActivities = (activities || []).map((activity: any) => ({
+    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => ({
       activity_id: activity.id,
       activity_date: activity.activity_date,
       title: activity.title || '無題',
       content: activity.content,
       snack: activity.snack,
-      photos: activity.photos || [],
+      photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
       class_id: activity.class_id,
       class_name: activity.m_classes?.name || '',
       mentioned_children: activity.mentioned_children || [],
       created_by: activity.m_users?.name || '',
       created_at: activity.created_at,
       individual_record_count: observationCounts[activity.id] || 0,
-    }));
+    })));
 
     return NextResponse.json({
       success: true,
