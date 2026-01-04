@@ -61,7 +61,7 @@ const normalizeAiOutput = (raw: unknown, tags: ObservationTag[]) => {
   const flags = tags.reduce<Record<string, number>>((acc, tag) => {
     const rawValue = record[tag.name];
     const numeric = typeof rawValue === 'number' ? rawValue : rawValue ? 1 : 0;
-    acc[tag.name] = numeric === 1 ? 1 : 0;
+    acc[tag.id] = numeric === 1 ? 1 : 0;
     return acc;
   }, {});
   return { objective, subjective, flags };
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
       objective = fallback.objective;
       subjective = fallback.subjective;
       flags = tagList.reduce<Record<string, number>>((acc, tag) => {
-        acc[tag.name] = text.includes(tag.name) ? 1 : 0;
+        acc[tag.id] = text.includes(tag.name) ? 1 : 0;
         return acc;
       }, {});
     }
