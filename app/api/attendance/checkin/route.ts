@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { getQrSignatureSecret } from '@/lib/qr/secrets';
@@ -105,8 +105,20 @@ export async function POST(request: NextRequest) {
       .update(`${child_id}${facilityIdForVerification}${qrSecret}`)
       .digest('hex');
 
-    // Verify signature matches
-    if (signatureString !== expectedSignature) {
+    // Verify signature matches using constant-time comparison to prevent timing attacks
+    const signatureBuffer = Buffer.from(signatureString, 'hex');
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    
+    // Check lengths match first (constant-time length check)
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid signature' },
+        { status: 401 }
+      );
+    }
+    
+    // Use constant-time comparison
+    if (!timingSafeEqual(signatureBuffer, expectedBuffer)) {
       return NextResponse.json(
         { success: false, error: 'Invalid signature' },
         { status: 401 }
@@ -174,6 +186,41 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
+      // Check if error is due to duplicate (race condition or unique constraint violation)
+      // PostgreSQL error code 23505 = unique_violation
+      const isDuplicateError = insertError.code === '23505' || 
+                               insertError.message?.includes('duplicate') ||
+                               insertError.message?.includes('unique');
+      
+      if (isDuplicateError) {
+        // Fetch existing record for today
+        const { data: existingAttendance } = await supabase
+          .from('h_attendance')
+          .select('id, checked_in_at')
+          .eq('child_id', child_id)
+          .eq('facility_id', userSession.current_facility_id)
+          .gte('checked_in_at', startOfDay)
+          .lte('checked_in_at', endOfDay)
+          .order('checked_in_at', { ascending: true })
+          .maybeSingle();
+
+        if (existingAttendance) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Already checked in today',
+              data: {
+                child_id,
+                child_name: `${child.family_name} ${child.given_name}`,
+                class_name: className,
+                checked_in_at: existingAttendance.checked_in_at,
+              },
+            },
+            { status: 409 }
+          );
+        }
+      }
+
       console.error('Attendance insert error:', insertError);
       return NextResponse.json(
         { success: false, error: 'Failed to record attendance' },
