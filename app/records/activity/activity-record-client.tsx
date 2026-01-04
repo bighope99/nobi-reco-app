@@ -583,17 +583,13 @@ export default function ActivityRecordClient() {
         throw new Error(data.error || '保存に失敗しました')
       }
 
-      setAiAnalysisResults((prev) =>
-        prev.map((item) =>
-          item.activity_id === result.activity_id ? { ...item, status: 'saved' } : item
+      setAiAnalysisResults((prev) => {
+        const updated = prev.map((item) =>
+          item.activity_id === result.activity_id ? { ...item, status: 'saved' as const } : item
         )
-      )
-
-      persistAiDraftsToCookie(
-        aiAnalysisResults.map((item) =>
-          item.activity_id === result.activity_id ? { ...item, status: 'saved' } : item
-        )
-      )
+        persistAiDraftsToCookie(updated)
+        return updated
+      })
 
       if (result.activity_id) {
         window.sessionStorage.setItem("nobiRecoAiLastSavedDraft", JSON.stringify(result))
