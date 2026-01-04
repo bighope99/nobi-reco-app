@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Mic, Sparkles, Camera, X, Edit2, Trash2 } from "lucide-react"
+import DOMPurify from "dompurify"
 import {
   type AiObservationDraft as AiObservationResult,
   loadAiDraftsFromCookie,
@@ -818,7 +819,9 @@ export default function ActivityRecordClient() {
                       </div>
                       <div className="text-sm text-muted-foreground">
                         <div
-                          dangerouslySetInnerHTML={{ __html: convertToMarkdown(activity.content) }}
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(convertToMarkdown(activity.content)),
+                          }}
                         />
                       </div>
                       <div className="text-xs text-muted-foreground">
