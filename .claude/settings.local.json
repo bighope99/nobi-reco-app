@@ -10,7 +10,22 @@
       "Bash(npm run build:*)",
       "mcp__supabase__list_migrations",
       "mcp__supabase__list_tables",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(cat:*)",
+      "Bash(git --git-dir=/mnt/c/Users/bigho/project/nobi-reco-app/.git/worktrees/tree-record --work-tree=/mnt/c/Users/bigho/project/nobi-reco-app/tree-record status)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(git tag:*)",
+      "Bash(git log:*)",
+      "Bash(git --git-dir=/mnt/c/Users/bigho/project/nobi-reco-app/.git/worktrees/tree-record --work-tree=/mnt/c/Users/bigho/project/nobi-reco-app/tree-record add app/records/activity/activity-record-client.tsx)"
     ],
     "deny": [],
     "ask": []
