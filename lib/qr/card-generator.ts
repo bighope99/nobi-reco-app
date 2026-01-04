@@ -1,10 +1,7 @@
 import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
-
-function getQrSignatureSecret(): string {
-  return process.env.QR_SIGNATURE_SECRET || process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-}
+import { getQrSignatureSecret } from '@/lib/qr/secrets'
 
 interface QrPayload {
   payload: string

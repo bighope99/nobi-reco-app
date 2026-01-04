@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
-
-function getQrSignatureSecret(): string {
-  return process.env.QR_SIGNATURE_SECRET || process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-}
+import { getQrSignatureSecret } from '@/lib/qr/secrets';
 
 export async function POST(request: NextRequest) {
   try {
