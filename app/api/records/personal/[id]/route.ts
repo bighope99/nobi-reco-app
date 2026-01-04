@@ -169,3 +169,84 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const session = await getUserSession(user.id);
+    if (!session || !session.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    const content = typeof body?.content === 'string' ? body.content.trim() : '';
+
+    if (!content) {
+      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    }
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('r_observation')
+      .select(
+        `
+        id,
+        child_id,
+        m_children!inner (
+          facility_id
+        )
+      `,
+      )
+      .eq('id', id)
+      .is('deleted_at', null)
+      .single();
+
+    if (fetchError || !existing) {
+      return NextResponse.json(
+        { success: false, error: fetchError?.message || 'データが見つかりませんでした' },
+        { status: 404 },
+      );
+    }
+
+    const child = Array.isArray(existing.m_children) ? existing.m_children[0] : existing.m_children;
+    if (!child || child.facility_id !== session.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('r_observation')
+      .update({
+        content,
+        updated_at: new Date().toISOString(),
+        updated_by: user.id,
+      })
+      .eq('id', id)
+      .select('id, content, updated_at')
+      .single();
+
+    if (updateError || !updated) {
+      console.error('Observation update error:', updateError);
+      return NextResponse.json({ success: false, error: '更新に失敗しました' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: updated,
+    });
+  } catch (error) {
+    console.error('Observation update API error:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+  }
+}

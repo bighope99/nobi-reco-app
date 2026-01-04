@@ -496,6 +496,22 @@ export default function ActivityRecordClient() {
     setSavingObservationId(result.draft_id)
 
     try {
+      const aiResponse = await fetch('/api/records/personal/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: result.content,
+        }),
+      })
+
+      const aiResult = await aiResponse.json()
+
+      if (!aiResponse.ok || !aiResult.success) {
+        throw new Error(aiResult.error || 'AI解析に失敗しました')
+      }
+
       const response = await fetch('/api/records/personal', {
         method: 'POST',
         headers: {
@@ -505,6 +521,9 @@ export default function ActivityRecordClient() {
           child_id: result.child_id,
           observation_date: result.observation_date,
           content: result.content,
+          ai_action: aiResult.data?.objective ?? '',
+          ai_opinion: aiResult.data?.subjective ?? '',
+          tag_flags: aiResult.data?.flags ?? {},
         }),
       })
 

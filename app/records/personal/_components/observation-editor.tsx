@@ -781,7 +781,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     setSavingEdit(true);
     setError('');
     try {
-      // TODO: API実装 - 観察内容の更新処理
       const response = await fetch(`/api/records/personal/${observation.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -798,7 +797,22 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setIsEditing(false);
       setAiProcessing(true);
       const aiResult = await runAiAnalysis(text);
-      applyAiResult(aiResult);
+      const aiAction = toIdText(aiResult.ai_action);
+      const aiOpinion = toIdText(aiResult.ai_opinion);
+      const aiSaveResponse = await fetch(`/api/records/personal/${observation.id}/ai`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ai_action: aiAction,
+          ai_opinion: aiOpinion,
+          ...aiResult.flags,
+        }),
+      });
+      const aiSaveResult = await aiSaveResponse.json();
+      if (!aiSaveResponse.ok || !aiSaveResult.success) {
+        throw new Error(aiSaveResult.error || 'AI解析結果の保存に失敗しました');
+      }
+      applyAiResult({ ...aiResult, ai_action: aiAction, ai_opinion: aiOpinion });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '更新に失敗しました';
       setError(errorMessage);
@@ -932,6 +946,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     });
   };
 
+  const displayRecentContent = useCallback(
+    (text: string) => toDisplayText(text),
+    [toDisplayText],
+  );
+
   const handleReanalyze = async () => {
     const sourceText = observation?.body_text || editText;
     if (!sourceText.trim()) return;
@@ -1052,12 +1071,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               <CardContent>
                 {!isEditing ? (
                   <>
-                    <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">{observation?.body_text}</div>
+                    <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
+                      {toDisplayText(observation?.body_text || '')}
+                    </div>
                     <div className="mt-4 flex justify-end">
                       <Button
                         variant="outline"
                         onClick={() => {
-                          setEditText(observation?.body_text || '');
+                          setEditText(toDisplayText(observation?.body_text || ''));
                           setIsEditing(true);
                         }}
                       >
@@ -1227,7 +1248,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                               編集
                             </Button>
                           </div>
-                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{item.content}</p>
+                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">
+                            {displayRecentContent(item.content)}
+                          </p>
                           {tagBadges.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1.5">
                               {tagBadges.map((tag) => (
