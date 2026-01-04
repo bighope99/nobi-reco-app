@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
 
     const facility_id = userSession.current_facility_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, child_ids } = body;
+    const { activity_date, class_id, title, content, snack, child_ids, photos } = body;
 
     if (!activity_date || !class_id || !content) {
       return NextResponse.json(
@@ -169,6 +169,35 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (photos && !Array.isArray(photos)) {
+      return NextResponse.json(
+        { success: false, error: 'photos must be an array' },
+        { status: 400 }
+      );
+    }
+
+    if (Array.isArray(photos) && photos.length > 6) {
+      return NextResponse.json(
+        { success: false, error: '写真は最大6枚までです' },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPhotos = Array.isArray(photos)
+      ? photos
+          .map((photo: any) => {
+            if (!photo || typeof photo.url !== 'string') return null;
+            return {
+              url: photo.url,
+              caption: typeof photo.caption === 'string' ? photo.caption : null,
+              thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
+              file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
+              file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
+            };
+          })
+          .filter(Boolean)
+      : null;
 
     // 活動記録を作成
     const { data: activity, error: activityError } = await supabase
@@ -180,6 +209,7 @@ export async function POST(request: NextRequest) {
         title: title || '活動記録',
         content,
         snack,
+        photos: normalizedPhotos,
         created_by: session.user.id,
       })
       .select()

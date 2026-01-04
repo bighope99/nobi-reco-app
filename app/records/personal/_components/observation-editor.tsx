@@ -55,6 +55,8 @@ const Alert = ({
 };
 
 const AlertDescription = ({ children }: { children: React.ReactNode }) => <div>{children}</div>;
+const OBSERVATION_BODY_MAX = 5000
+const AI_RESULT_MAX = 5000
 
 // TODO: 実装予定のフック・コンポーネント（今後開発）
 // 接続監視フック - オフライン対応実装時に置き換え
@@ -1111,13 +1113,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </>
                 ) : (
                   <div className="space-y-3">
-                    <Label htmlFor="observation_body">本文</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="observation_body">本文</Label>
+                      <span className="text-sm text-gray-500">
+                        {editText.length}/{OBSERVATION_BODY_MAX}文字
+                      </span>
+                    </div>
                     <Textarea
                       id="observation_body"
                       autoFocus
                       className="min-h-[200px]"
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
+                      maxLength={OBSERVATION_BODY_MAX}
                     />
                     <div className="flex justify-end gap-2">
                       {!isNew && (
@@ -1164,27 +1172,39 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 <CardContent className="space-y-4">
                   <form className="space-y-4" onSubmit={handleAiEditSubmit}>
                     <div>
-                      <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
-                        抽出された事実
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
+                          抽出された事実
+                        </Label>
+                        <span className="text-sm text-gray-500">
+                          {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
+                        </span>
+                      </div>
                       <Textarea
                         id="ai_action"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_action}
                         onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
                         disabled={aiEditSaving}
+                        maxLength={AI_RESULT_MAX}
                       />
                     </div>
                     <div>
-                      <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
-                        解釈・所感
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
+                          解釈・所感
+                        </Label>
+                        <span className="text-sm text-gray-500">
+                          {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
+                        </span>
+                      </div>
                       <Textarea
                         id="ai_opinion"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_opinion}
                         onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
                         disabled={aiEditSaving}
+                        maxLength={AI_RESULT_MAX}
                       />
                     </div>
                     <div className="space-y-3">

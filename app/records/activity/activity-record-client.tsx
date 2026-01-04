@@ -36,13 +36,21 @@ interface Activity {
   title: string
   content: string
   snack: string | null
-  photos: any[]
+  photos: Array<ActivityPhoto | string>
   class_name: string
   class_id?: string
   created_by: string
   created_at: string
   individual_record_count: number
   mentioned_children?: string[]
+}
+
+interface ActivityPhoto {
+  url: string
+  caption?: string | null
+  thumbnail_url?: string | null
+  file_id?: string
+  file_path?: string
 }
 
 interface MentionSuggestion {
@@ -110,6 +118,13 @@ export default function ActivityRecordClient() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<ActivityPhoto[]>([])
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const ACTIVITY_CONTENT_MAX = 10000
+  const MAX_PHOTOS = 6
+  const MAX_PHOTO_SIZE = 5 * 1024 * 1024
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -386,6 +401,7 @@ export default function ActivityRecordClient() {
           activity_date: activityDate,
           content: activityContent,
           mentioned_children: selectedMentions.map((child) => child.child_id),
+          photos,
         }),
       })
 
@@ -398,6 +414,8 @@ export default function ActivityRecordClient() {
       setActivityContent("")
       setSelectedMentions([])
       setMentionTokens(new Map())
+      setPhotos([])
+      setPhotoUploadError(null)
       setSaveMessage('保存しました')
       fetchActivities()
     } catch (err) {
@@ -426,6 +444,7 @@ export default function ActivityRecordClient() {
           activity_date: activityDate,
           content: activityContent,
           mentioned_children: selectedMentions.map((child) => child.child_id),
+          photos,
         }),
       })
 
@@ -441,6 +460,8 @@ export default function ActivityRecordClient() {
       setActivityContent("")
       setSelectedMentions([])
       setMentionTokens(new Map())
+      setPhotos([])
+      setPhotoUploadError(null)
       fetchActivities()
     } catch (err) {
       console.error('Failed to update:', err)
@@ -457,6 +478,10 @@ export default function ActivityRecordClient() {
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
     setOriginalMentionedChildren(activity.mentioned_children || [])
+    const mappedPhotos = (activity.photos || [])
+      .map((photo) => (typeof photo === 'string' ? { url: photo } : photo))
+      .filter(Boolean) as ActivityPhoto[]
+    setPhotos(mappedPhotos)
   }
 
   const handleDelete = async (activityId: string) => {
@@ -565,12 +590,16 @@ export default function ActivityRecordClient() {
     setSelectedMentions([])
     setMentionTokens(new Map())
     setOriginalMentionedChildren([])
+    setPhotos([])
+    setPhotoUploadError(null)
   }
 
   const handleRestart = () => {
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
+    setPhotos([])
+    setPhotoUploadError(null)
   }
 
   const handleMentionPickerSelect = (mention: MentionSuggestion) => {
@@ -593,6 +622,86 @@ export default function ActivityRecordClient() {
     setMentionTokens((prev) => new Map(prev).set(mention.unique_key, token.trim()))
     setShowMentionPicker(false)
     setMentionSearchQuery('')
+  }
+
+  const handlePhotoSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    if (!files.length) return
+
+    const remainingSlots = MAX_PHOTOS - photos.length
+    if (remainingSlots <= 0) {
+      setPhotoUploadError(`写真は最大${MAX_PHOTOS}枚までです`)
+      event.target.value = ''
+      return
+    }
+
+    const uploadTargets = files.slice(0, remainingSlots)
+    const uploaded: ActivityPhoto[] = []
+    const errors: string[] = []
+
+    setIsUploadingPhotos(true)
+    setPhotoUploadError(null)
+
+    for (const file of uploadTargets) {
+      if (!file.type.startsWith('image/')) {
+        errors.push(`${file.name}: 画像ファイルのみアップロードできます`)
+        continue
+      }
+      if (file.size > MAX_PHOTO_SIZE) {
+        errors.push(`${file.name}: 5MB以下のファイルを選択してください`)
+        continue
+      }
+
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('activity_date', activityDate)
+
+        const response = await fetch('/api/storage/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const result = await response.json()
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || '写真のアップロードに失敗しました')
+        }
+
+        uploaded.push({
+          url: result.data.url,
+          thumbnail_url: result.data.thumbnail_url,
+          caption: result.data.caption ?? null,
+          file_id: result.data.file_id,
+          file_path: result.data.file_path,
+        })
+      } catch (error) {
+        console.error('Failed to upload photo:', error)
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : 'アップロードに失敗しました'}`)
+      }
+    }
+
+    if (uploaded.length > 0) {
+      setPhotos((prev) => [...prev, ...uploaded])
+    }
+    if (errors.length > 0) {
+      setPhotoUploadError(errors.join('\n'))
+    }
+
+    setIsUploadingPhotos(false)
+    event.target.value = ''
+  }
+
+  const removePhoto = (fileId?: string, index?: number) => {
+    setPhotos((prev) => {
+      if (fileId) {
+        return prev.filter((photo) => photo.file_id !== fileId)
+      }
+      if (typeof index === 'number') {
+        return prev.filter((_, idx) => idx !== index)
+      }
+      return prev
+    })
   }
 
   const startRecording = async () => {
@@ -738,7 +847,7 @@ export default function ActivityRecordClient() {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>{selectedMentions.length}人</span>
                   <span>・</span>
-                  <span>{activityContent.length}文字</span>
+                  <span>{activityContent.length}/{ACTIVITY_CONTENT_MAX}文字</span>
                 </div>
               </div>
 
@@ -771,10 +880,69 @@ export default function ActivityRecordClient() {
                 rows={12}
                 value={activityContent}
                 onChange={handleContentChange}
+                maxLength={ACTIVITY_CONTENT_MAX}
                 placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
                 className="min-h-[300px]"
               />
               {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">写真</Label>
+                <span className="text-xs text-muted-foreground">{photos.length}/{MAX_PHOTOS}枚</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={isUploadingPhotos || photos.length >= MAX_PHOTOS}
+                >
+                  写真を追加
+                </Button>
+                <span className="text-xs text-muted-foreground">JPEG/PNG/WEBP・最大5MB</span>
+                {isUploadingPhotos && (
+                  <span className="text-xs text-muted-foreground">アップロード中...</span>
+                )}
+              </div>
+              {photoUploadError && (
+                <p className="text-sm text-red-500 whitespace-pre-line">{photoUploadError}</p>
+              )}
+              {photos.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {photos.map((photo, index) => (
+                    <div
+                      key={photo.file_id ?? `${photo.url}-${index}`}
+                      className="relative overflow-hidden rounded-lg border"
+                    >
+                      <img
+                        src={photo.thumbnail_url || photo.url}
+                        alt="活動写真"
+                        className="h-32 w-full object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1 h-7 w-7 rounded-full bg-white/80 text-foreground hover:bg-white"
+                        onClick={() => removePhoto(photo.file_id, index)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {selectedMentions.length > 0 && (
@@ -814,7 +982,7 @@ export default function ActivityRecordClient() {
                 </Button>
                 {isEditMode ? (
                   <>
-                    <Button type="button" onClick={handleUpdate} disabled={isSaving} className="flex-1 sm:flex-none">
+                    <Button type="button" onClick={handleUpdate} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
                       <Edit2 className="mr-2 h-4 w-4" />
                       更新
                     </Button>
@@ -823,7 +991,7 @@ export default function ActivityRecordClient() {
                     </Button>
                   </>
                 ) : (
-                  <Button type="button" onClick={handleSave} disabled={isSaving || !activityContent.trim()} className="flex-1 sm:flex-none">
+                  <Button type="button" onClick={handleSave} disabled={isSaving || isUploadingPhotos || !activityContent.trim()} className="flex-1 sm:flex-none">
                     保存
                   </Button>
                 )}
@@ -878,6 +1046,25 @@ export default function ActivityRecordClient() {
                               }}
                             />
                           </div>
+                          {Array.isArray(activity.photos) && activity.photos.length > 0 && (
+                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {activity.photos.map((photo, index) => {
+                                const url =
+                                  typeof photo === "string"
+                                    ? photo
+                                    : photo.thumbnail_url || photo.url
+                                if (!url) return null
+                                return (
+                                  <div
+                                    key={typeof photo === "string" ? `${photo}-${index}` : photo.file_id ?? `${photo.url}-${index}`}
+                                    className="overflow-hidden rounded-lg border"
+                                  >
+                                    <img src={url} alt="活動写真" className="h-24 w-full object-cover" />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <Button

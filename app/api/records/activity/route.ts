@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       title,
       activity_id,
       ai_preview = false,
+      photos,
     } = body;
 
     // バリデーション
@@ -65,6 +66,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (photos && !Array.isArray(photos)) {
+      return NextResponse.json(
+        { error: 'photos must be an array' },
+        { status: 400 }
+      );
+    }
+
+    if (Array.isArray(photos) && photos.length > 6) {
+      return NextResponse.json(
+        { error: '写真は最大6枚までです' },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPhotos = Array.isArray(photos)
+      ? photos
+          .map((photo: any) => {
+            if (!photo || typeof photo.url !== 'string') return null;
+            return {
+              url: photo.url,
+              caption: typeof photo.caption === 'string' ? photo.caption : null,
+              thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
+              file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
+              file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
+            };
+          })
+          .filter(Boolean)
+      : null;
+
     const ensureActivityRecord = async () => {
       if (activity_id) {
         const { data: existingActivity, error: fetchError } = await supabase
@@ -82,16 +112,22 @@ export async function POST(request: NextRequest) {
           return { error: 'この活動記録にアクセスする権限がありません', status: 403 };
         }
 
+        const updatePayload: Record<string, unknown> = {
+          activity_date,
+          title: title || null,
+          content,
+          class_id: class_id || null,
+          mentioned_children,
+          updated_at: new Date().toISOString(),
+        }
+
+        if (Array.isArray(photos)) {
+          updatePayload.photos = normalizedPhotos
+        }
+
         const { data: updatedActivity, error: updateError } = await supabase
           .from('r_activity')
-          .update({
-            activity_date,
-            title: title || null,
-            content,
-            class_id: class_id || null,
-            mentioned_children,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', activity_id)
           .select()
           .single();
@@ -104,17 +140,23 @@ export async function POST(request: NextRequest) {
         return { activity: updatedActivity };
       }
 
+      const insertPayload: Record<string, unknown> = {
+        facility_id: session.current_facility_id,
+        class_id: class_id || null,
+        activity_date,
+        title: title || null,
+        content,
+        mentioned_children,
+        created_by: session.user_id,
+      }
+
+      if (Array.isArray(photos)) {
+        insertPayload.photos = normalizedPhotos
+      }
+
       const { data: newActivity, error: createError } = await supabase
         .from('r_activity')
-        .insert({
-          facility_id: session.current_facility_id,
-          class_id: class_id || null,
-          activity_date,
-          title: title || null,
-          content,
-          mentioned_children,
-          created_by: session.user_id,
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
