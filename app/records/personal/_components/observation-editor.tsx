@@ -697,17 +697,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   return (
     <RequireAuth>
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white border-b">
-          <div className="max-w-6xl mx-auto px-4 py-4">
+      <div className="space-y-6">
+        {/* ヘッダー（全幅） */}
+        <div className="border-b -m-4 sm:-m-6 px-4 sm:px-6 py-4">
+          <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <BookOpen className="h-5 w-5" /> {isNew ? '個別記録の新規作成' : '観察詳細'}
-                </h1>
-                <p className="text-gray-600 flex items-center gap-2 text-sm">
-                  <Calendar className="h-4 w-4" /> {isNew ? '新しい記録を登録します' : '記録の確認と編集'}
-                </p>
+                
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => router.back()}>
@@ -718,7 +714,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-3">
+        {/* アラートメッセージ（全幅） */}
+        <div className="max-w-6xl mx-auto space-y-4">
           {isNew && draftId && (
             <Alert>
               <AlertDescription>AI下書きを編集中です。保存すると下書きを更新して前の画面に戻ります。</AlertDescription>
@@ -743,6 +740,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </AlertDescription>
             </Alert>
           )}
+        </div>
+
+        {/* メインコンテンツ */}
+        <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
