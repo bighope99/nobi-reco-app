@@ -1,5 +1,6 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { buildActivityExtractionMessages } from '@/lib/ai/prompts';
 
 /**
  * 活動記録から特定の子供に関する内容を抽出
@@ -64,30 +65,9 @@ export async function extractChildContent(
     maxOutputTokens: 300,
   });
 
-  // システムプロンプト
-  const systemMessage = new SystemMessage(
-    `あなたは学童保育の記録作成支援AIです。活動記録から特定の子供に関する内容を抽出してください。
-
-【抽出ルール】
-1. その子供の行動、発言、様子に関する記述を抽出
-2. その子供がメンションされている文脈を含める
-3. 他の子供との関わりも含める
-4. 個別記録として自然な文章に整形
-5. 簡潔に200文字程度でまとめる
-6. 事実ベースで記述し、推測や誇張は避ける
-7. 子供の成長に関わる観察ポイントを含める`
-  );
-
-  // ユーザープロンプト
-  const userMessage = new HumanMessage(
-    `【活動記録全文】
-${plainContent}
-
-【対象の子供】
-${childName}
-
-この子供に関する個別記録を抽出してください。`
-  );
+  const { system, user } = buildActivityExtractionMessages(plainContent, childName);
+  const systemMessage = new SystemMessage(system);
+  const userMessage = new HumanMessage(user);
 
   try {
     // Gemini API呼び出し

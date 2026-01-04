@@ -76,6 +76,36 @@ export async function GET(
       }
       return acc;
     }, {});
+    const { data: createdByUser } = await supabase
+      .from('m_users')
+      .select('name')
+      .eq('id', data.created_by)
+      .single();
+    const createdByName = createdByUser?.name || '';
+
+    const { data: recentObservations, error: recentError } = await supabase
+      .from('r_observation')
+      .select(
+        `
+        id,
+        observation_date,
+        content,
+        created_at,
+        record_tags:_record_tag!observation_id (
+          tag_id
+        )
+      `,
+      )
+      .eq('child_id', data.child_id)
+      .is('deleted_at', null)
+      .neq('id', data.id)
+      .order('observation_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (recentError) {
+      console.error('Recent observations load error:', recentError);
+    }
 
     return NextResponse.json({
       success: true,
@@ -89,8 +119,18 @@ export async function GET(
         subjective: data.subjective ?? '',
         tag_flags: tagFlags,
         created_by: data.created_by,
+        created_by_name: createdByName,
         created_at: data.created_at,
         updated_at: data.updated_at,
+        recent_observations: (recentObservations || []).map((obs) => ({
+          id: obs.id,
+          observation_date: obs.observation_date,
+          content: obs.content,
+          created_at: obs.created_at,
+          tag_ids: (obs.record_tags || [])
+            .map((tag: { tag_id?: string }) => tag.tag_id)
+            .filter(Boolean),
+        })),
       },
     });
   } catch (error) {

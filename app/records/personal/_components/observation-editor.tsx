@@ -21,13 +21,11 @@ import {
   CheckCircle,
   Brain,
   MessageSquare,
-  Hash,
   FileText,
   Pencil,
   Save,
   X,
 } from 'lucide-react';
-import { mockChildren } from '@/lib/mock-data';
 import {
   type AiObservationDraft,
   loadAiDraftsFromCookie,
@@ -116,6 +114,7 @@ interface Observation {
   ai_opinion: string;
   tag_flags?: Record<string, boolean>;
   created_by: string;
+  created_by_name?: string;
   created_at: string;
   updated_at: string;
   addenda: Addendum[];
@@ -144,21 +143,55 @@ type AiAnalysisResult = {
   flags: Record<string, boolean>;
 };
 
+type ChildOption = {
+  id: string;
+  name: string;
+  className: string;
+};
+
+type RecentObservation = {
+  id: string;
+  observation_date: string;
+  content: string;
+  created_at: string;
+  tag_ids?: string[];
+};
+
 const buildDefaultTagFlags = (tags: ObservationTag[]) =>
   tags.reduce((acc, tag) => {
     acc[tag.id] = false;
     return acc;
   }, {} as Record<string, boolean>);
 
-const normalizeTagFlags = (tags: ObservationTag[], rawFlags?: Record<string, unknown>) => {
+  const normalizeTagFlags = (tags: ObservationTag[], rawFlags?: Record<string, unknown> | unknown[]) => {
   const nextFlags = buildDefaultTagFlags(tags);
-  if (!rawFlags || typeof rawFlags !== 'object') {
+  if (!rawFlags) {
+    return nextFlags;
+  }
+  if (Array.isArray(rawFlags)) {
+    rawFlags.forEach((entry) => {
+      const id =
+        typeof entry === 'string'
+          ? entry
+          : entry && typeof entry === 'object' && 'tag_id' in entry
+            ? (entry as { tag_id?: string }).tag_id
+            : undefined;
+      if (id && id in nextFlags) {
+        nextFlags[id] = true;
+      }
+    });
+    return nextFlags;
+  }
+  if (typeof rawFlags !== 'object') {
     return nextFlags;
   }
   tags.forEach((tag) => {
-    const byId = rawFlags[tag.id];
-    const byName = rawFlags[tag.name];
-    if (byId === true || byId === 1 || byName === true || byName === 1) {
+    const byId = (rawFlags as Record<string, unknown>)[tag.id];
+    const byName = (rawFlags as Record<string, unknown>)[tag.name];
+    const byUuid = (rawFlags as Record<string, unknown>)[tag.id?.toLowerCase?.() || ''];
+    if (byId === true || byId === 1 || byId === '1' || byName === true || byName === 1 || byName === '1') {
+      nextFlags[tag.id] = true;
+    } else if (byUuid === true || byUuid === 1 || byUuid === '1') {
       nextFlags[tag.id] = true;
     }
   });
@@ -172,19 +205,21 @@ const ChildSelect = ({
   placeholder,
   testId,
   disabled,
+  options,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   testId?: string;
   disabled?: boolean;
+  options: ChildOption[];
 }) => (
   <Select value={value} onValueChange={onChange} disabled={disabled}>
     <SelectTrigger data-testid={testId} aria-label={placeholder}>
       <SelectValue placeholder={placeholder} />
     </SelectTrigger>
     <SelectContent>
-      {mockChildren.map((child) => (
+      {options.map((child) => (
         <SelectItem key={child.id} value={child.id}>
           {child.name}（{child.className}）
         </SelectItem>
@@ -225,15 +260,22 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [isOnline, setIsOnline] = useState(getConnectionMonitor().getStatus());
   const [observationTags, setObservationTags] = useState<ObservationTag[]>([]);
   const [tagError, setTagError] = useState('');
+  const [recentObservations, setRecentObservations] = useState<RecentObservation[]>([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recentError, setRecentError] = useState('');
+  const [childOptions, setChildOptions] = useState<ChildOption[]>([]);
+  const [childOptionsError, setChildOptionsError] = useState('');
+  const [childOptionsLoading, setChildOptionsLoading] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
+  const aiFlagsInitializedRef = useRef(false);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = Boolean(lockedChildId);
 
   const selectedChild = useMemo(
-    () => mockChildren.find((child) => child.id === selectedChildId),
-    [selectedChildId],
+    () => childOptions.find((child) => child.id === selectedChildId),
+    [childOptions, selectedChildId],
   );
 
   const buildFlagState = (obs: Observation | null) => {
@@ -305,6 +347,46 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const loadChildren = async () => {
+      setChildOptionsLoading(true);
+      setChildOptionsError('');
+      try {
+        const response = await fetch('/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200');
+        const result = await response.json();
+        if (!response.ok || result.error) {
+          throw new Error(result.error || '児童一覧の取得に失敗しました');
+        }
+        const children = (result.data?.children || []).map((child: any) => ({
+          id: child.child_id,
+          name: child.name,
+          className: child.class_name || '未設定',
+        }));
+        if (isMounted) {
+          setChildOptions(children);
+        }
+      } catch (err) {
+        console.error('Children load error:', err);
+        if (isMounted) {
+          setChildOptions([]);
+          setChildOptionsError('児童一覧の取得に失敗しました。');
+        }
+      } finally {
+        if (isMounted) {
+          setChildOptionsLoading(false);
+        }
+      }
+    };
+
+    loadChildren();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isNew || !draftId) return;
     const drafts = loadAiDraftsFromCookie();
     const draft = drafts.find((item) => item.draft_id === draftId);
@@ -349,13 +431,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   }, []);
 
   useEffect(() => {
+    if (observation && observationTags.length === 0) return;
     if (!observation && !observationTags.length) return;
     const flagState = buildFlagState(observation);
     setAiEditForm((prev) => ({
       ai_action: observation?.ai_action || '',
       ai_opinion: observation?.ai_opinion || '',
-      flags: Object.keys(prev.flags).length ? prev.flags : flagState,
+      flags: observation
+        ? aiFlagsInitializedRef.current
+          ? prev.flags
+          : flagState
+        : Object.keys(prev.flags).length
+          ? prev.flags
+          : flagState,
     }));
+    if (observation && !aiFlagsInitializedRef.current) {
+      aiFlagsInitializedRef.current = true;
+    }
   }, [observation, observationTags]);
 
   useEffect(() => {
@@ -450,12 +542,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ai_opinion: data.subjective || '',
         tag_flags: data.tag_flags || {},
         created_by: data.created_by || '',
+        created_by_name: data.created_by_name || '',
         created_at: data.created_at || new Date().toISOString(),
         updated_at: data.updated_at || new Date().toISOString(),
         addenda: [],
       };
 
       setObservation(observationRecord);
+      setAiEditForm({
+        ai_action: observationRecord.ai_action,
+        ai_opinion: observationRecord.ai_opinion,
+        flags:
+          data.tag_flags && typeof data.tag_flags === 'object'
+            ? (data.tag_flags as Record<string, boolean>)
+            : buildDefaultTagFlags(observationTags),
+      });
+      aiFlagsInitializedRef.current = true;
+      setRecentObservations((data.recent_observations as RecentObservation[]) || []);
     } catch (err) {
       console.error('Load error:', err);
       const errorMessage = err instanceof Error ? err.message : 'データの読み込みに失敗しました。';
@@ -468,13 +571,53 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     load(observationId);
   }, [isNew, observationId]);
 
+  useEffect(() => {
+    if (!isNew) return;
+    if (!selectedChildId) {
+      setRecentObservations([]);
+      setRecentError('');
+      return;
+    }
+    let isMounted = true;
+    const fetchRecent = async () => {
+      setRecentLoading(true);
+      setRecentError('');
+      try {
+        const response = await fetch(`/api/records/personal/child/${selectedChildId}/recent`);
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || '過去記録の取得に失敗しました');
+        }
+        if (isMounted) {
+          setRecentObservations((result.data?.recent_observations as RecentObservation[]) || []);
+        }
+      } catch (err) {
+        console.error('Recent observations load error:', err);
+        if (isMounted) {
+          setRecentObservations([]);
+          setRecentError('過去記録の取得に失敗しました。');
+        }
+      } finally {
+        if (isMounted) {
+          setRecentLoading(false);
+        }
+      }
+    };
+
+    fetchRecent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isNew, selectedChildId]);
+
   const handleReassign = async () => {
     if (!selectedNewChild || !reassignReason.trim() || !observation) return;
     setLoading(true);
     try {
       const res = await reassignChild(observation.id, selectedNewChild, reassignReason.trim());
       if (!res.success) throw new Error('付け替えに失敗しました');
-      const newChildName = mockChildren.find((child) => child.id === selectedNewChild)?.name || 'モック児童';
+      const newChildName = childOptions.find((child) => child.id === selectedNewChild)?.name || '児童';
       setObservation((prev) => (prev ? { ...prev, child_id: selectedNewChild, child_name: newChildName } : prev));
       setSelectedNewChild('');
       setReassignReason('');
@@ -684,6 +827,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     await handleUpdateObservation();
   };
 
+  const getTagBadges = (tagIds?: string[]) => {
+    if (!tagIds?.length) return [];
+    return tagIds.map((tagId) => {
+      const tag = observationTags.find((item) => item.id === tagId);
+      return {
+        id: tagId,
+        name: tag?.name || tagId,
+      };
+    });
+  };
+
   const handleReanalyze = async () => {
     const sourceText = observation?.body_text || editText;
     if (!sourceText.trim()) return;
@@ -700,7 +854,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
     : observation?.child_name || observation?.child_id;
   const createdByName =
-    observation?.created_by === user?.id ? user?.display_name || user?.email || '現在のユーザー' : observation?.created_by || '不明';
+    observation?.created_by_name ||
+    (observation?.created_by === user?.id
+      ? user?.display_name || user?.email || '現在のユーザー'
+      : observation?.created_by || '不明');
+
+  const handleEditRecent = (id: string) => {
+    router.push(`/records/personal/${id}/edit`);
+  };
 
   return (
     <RequireAuth>
@@ -747,6 +908,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </AlertDescription>
             </Alert>
           )}
+          {childOptionsError && (
+            <Alert variant="destructive">
+              <AlertDescription>{childOptionsError}</AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* メインコンテンツ */}
@@ -770,7 +936,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                             onChange={setSelectedChildId}
                             placeholder="対象児童を選択"
                             testId="child-select-trigger"
-                            disabled={savingEdit}
+                            disabled={savingEdit || childOptionsLoading}
+                            options={childOptions}
                           />
                         </div>
                       )
@@ -943,6 +1110,47 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </CardContent>
             </Card>
 
+            {(Boolean(selectedChildId) || !isNew) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">過去の記録（直近10件）</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {recentLoading ? (
+                    <p className="text-sm text-gray-500">読み込み中...</p>
+                  ) : recentError ? (
+                    <p className="text-sm text-red-600">{recentError}</p>
+                  ) : recentObservations.length === 0 ? (
+                    <p className="text-sm text-gray-500">過去の記録はありません。</p>
+                  ) : (
+                    recentObservations.map((item) => {
+                      const tagBadges = getTagBadges(item.tag_ids);
+                      return (
+                        <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                          <div className="flex items-start justify-between gap-2 text-xs text-gray-500">
+                            <span>{item.observation_date ? formatDateTime(item.observation_date) : '日付不明'}</span>
+                            <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
+                              編集
+                            </Button>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{item.content}</p>
+                          {tagBadges.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              {tagBadges.map((tag) => (
+                                <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200">
+                                  {tag.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {!isNew && observation && observation.addenda.length > 0 && (
               <Card>
                 <CardHeader>
@@ -974,11 +1182,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 <CardTitle className="text-lg">観察情報</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <Hash className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-600">ID:</span>
-                  <span className="font-mono text-xs">{observation?.id || '未保存'}</span>
-                </div>
                 <div className="flex items-center gap-2 text-sm">
                   <User className="h-4 w-4 text-blue-600" />
                   <span className="text-gray-600">対象児童:</span>
@@ -1046,7 +1249,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </DialogHeader>
               <div className="space-y-3">
                 <Label>新しい児童</Label>
-                <ChildSelect value={selectedNewChild} onChange={setSelectedNewChild} placeholder="新しい児童を選択" />
+                <ChildSelect
+                  value={selectedNewChild}
+                  onChange={setSelectedNewChild}
+                  placeholder="新しい児童を選択"
+                  options={childOptions}
+                />
                 <Label>理由</Label>
                 <Textarea value={reassignReason} onChange={(e) => setReassignReason(e.target.value)} className="min-h-[80px]" />
                 <div className="flex justify-end gap-2">

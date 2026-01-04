@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getVoiceTranscriptionPrompt } from "@/lib/ai/prompts"
 
 export async function POST(req: Request) {
   try {
@@ -33,8 +34,7 @@ export async function POST(req: Request) {
         {
           parts: [
             {
-              text:
-                "次の音声メモを日本語で文字起こししてください。児童や保護者など個人を特定する名前は一般的な仮名（例: 児童A、児童B）に置き換えてください。文字起こしのみを出力。",
+              text: getVoiceTranscriptionPrompt(),
             },
             {
               inline_data: {
