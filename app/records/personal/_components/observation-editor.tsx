@@ -11,6 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   BookOpen,
   Calendar,
   User,
@@ -31,31 +38,6 @@ import {
   loadAiDraftsFromCookie,
   markDraftAsSaved,
 } from '@/lib/drafts/aiDraftCookie';
-
-// モックコンポーネント
-const Dialog = ({
-  open,
-  onOpenChange,
-  children,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
-}) => {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => onOpenChange(false)}>
-      <div className="bg-white rounded-lg p-6 max-w-md w-full m-4" onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  );
-};
-
-const DialogContent = ({ children }: { children: React.ReactNode }) => <div>{children}</div>;
-const DialogHeader = ({ children }: { children: React.ReactNode }) => <div className="mb-4">{children}</div>;
-const DialogTitle = ({ children }: { children: React.ReactNode }) => <h2 className="text-lg font-semibold">{children}</h2>;
-const DialogDescription = ({ children }: { children: React.ReactNode }) => <p className="text-sm text-gray-600 mt-1">{children}</p>;
 
 const Alert = ({
   variant,
@@ -1265,7 +1247,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
         {!isNew && (
           <Dialog open={showReassignDialog} onOpenChange={setShowReassignDialog}>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>児童付け替え</DialogTitle>
                 <DialogDescription>誤登録などの場合に対象児童を変更します。</DialogDescription>
