@@ -317,23 +317,17 @@ export default function ActivityRecordClient() {
   }
 
   const updateMentionedChildren = (content: string) => {
-    const mentions = Array.from(mentionTokens.values())
-    const detected = mentions.filter((token) => content.includes(token))
-    if (detected.length === mentions.length) return
-
-    setMentionTokens((prev) => {
-      const next = new Map(prev)
-      for (const [key, token] of prev) {
-        if (!content.includes(token)) {
-          next.delete(key)
-        }
+    const nextTokens = new Map(mentionTokens)
+    for (const [key, token] of nextTokens) {
+      if (!content.includes(token)) {
+        nextTokens.delete(key)
       }
-      return next
-    })
+    }
 
-    setSelectedMentions((prev) =>
-      prev.filter((mention) => content.includes(mentionTokens.get(mention.unique_key) || ""))
-    )
+    if (nextTokens.size === mentionTokens.size) return
+
+    setMentionTokens(nextTokens)
+    setSelectedMentions((prev) => prev.filter((mention) => nextTokens.has(mention.unique_key)))
   }
 
   const handleContentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -572,8 +566,8 @@ export default function ActivityRecordClient() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          observation: result.observation,
-          mention_children: result.mentioned_children,
+          observation: result.content,
+          mention_children: (result as any).mentioned_children || [],
         }),
       })
 
@@ -856,8 +850,8 @@ export default function ActivityRecordClient() {
                       <CardContent className="space-y-2 pt-6">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-muted-foreground">{result.child_name}</p>
-                            <p className="font-medium">{result.observation}</p>
+                            <p className="text-sm text-muted-foreground">{result.child_display_name}</p>
+                            <p className="font-medium">{result.content}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
