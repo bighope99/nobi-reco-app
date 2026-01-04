@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from "react"
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,13 +9,19 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, Camera, X, Edit2, Trash2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
   type AiObservationDraft as AiObservationResult,
@@ -70,17 +76,13 @@ export default function ActivityRecordClient() {
   const [activityDate, setActivityDate] = useState(new Date().toISOString().split('T')[0])
   const [activityContent, setActivityContent] = useState("")
   const [isAiLoading, setIsAiLoading] = useState(false)
-  const [childCount, setChildCount] = useState(0)
+  const [showMentionPicker, setShowMentionPicker] = useState(false)
+  const [mentionSearchQuery, setMentionSearchQuery] = useState("")
   const [showAnalysisModal, setShowAnalysisModal] = useState(false)
-  const [mentionSuggestions, setMentionSuggestions] = useState<MentionSuggestion[]>([])
-  const [isMentionOpen, setIsMentionOpen] = useState(false)
-  const [mentionQuery, setMentionQuery] = useState("")
-  const [mentionStart, setMentionStart] = useState<number | null>(null)
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
   const [mentionTokens, setMentionTokens] = useState<Map<string, string>>(new Map())
-  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [isLoadingClasses, setIsLoadingClasses] = useState(false)
   const [classOptions, setClassOptions] = useState<
     { class_id: string; class_name: string }[]
@@ -97,6 +99,10 @@ export default function ActivityRecordClient() {
   const [savingObservationId, setSavingObservationId] = useState<string | null>(null)
   const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
 
   // 編集モードの状態
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
@@ -219,6 +225,7 @@ export default function ActivityRecordClient() {
     normalizeKana(name)
 
   const filterSuggestions = (children: MentionSuggestion[], query: string) => {
+    if (!query) return children
     const normalizedQuery = normalizeQuery(query)
     return children.filter((child) => {
       const name = normalizeName(child.name)
@@ -232,77 +239,11 @@ export default function ActivityRecordClient() {
     })
   }
 
-  const updateMentionSuggestions = useCallback(
-    (query: string) => {
-      if (!query) {
-        setMentionSuggestions([])
-        return
-      }
-
-      const filtered = filterSuggestions(classChildren, query)
-      setMentionSuggestions(filtered)
-    },
-    [classChildren]
-  )
-
   const handleClassChange = (value: string) => {
     setSelectedClass(value)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
-    setMentionSuggestions([])
-    setMentionQuery("")
-    setMentionStart(null)
-    setActiveMentionIndex(0)
-  }
-
-  const extractMentionToken = (query: string) => {
-    if (!query) return null
-    return query.replace(/^@/, "")
-  }
-
-  const updateMentionQuery = (value: string, cursorPosition: number | null) => {
-    if (cursorPosition === null) return
-    const text = value.slice(0, cursorPosition)
-    const match = /@([^\s@]*)$/.exec(text)
-    if (match) {
-      const query = match[1]
-      setMentionQuery(query)
-      setIsMentionOpen(true)
-      setMentionStart(cursorPosition - query.length - 1)
-      updateMentionSuggestions(query)
-    } else {
-      setMentionQuery("")
-      setIsMentionOpen(false)
-      setMentionStart(null)
-      setMentionSuggestions([])
-    }
-  }
-
-  const handleMentionSelect = (mention: MentionSuggestion) => {
-    if (mentionStart === null) return
-
-    const before = activityContent.slice(0, mentionStart)
-    const after = activityContent.slice(mentionStart + mentionQuery.length + 1)
-    const token = `@${mention.display_name}`
-    const updated = `${before}${token}${after}`
-
-    setActivityContent(updated)
-    setSelectedMentions((prev) => [...prev, mention])
-    setMentionTokens((prev) => new Map(prev).set(mention.unique_key, token))
-
-    setMentionQuery("")
-    setIsMentionOpen(false)
-    setMentionStart(null)
-    setMentionSuggestions([])
-
-    requestAnimationFrame(() => {
-      if (textareaRef.current) {
-        const cursor = before.length + token.length
-        textareaRef.current.focus()
-        textareaRef.current.setSelectionRange(cursor, cursor)
-      }
-    })
   }
 
   const removeMention = (mention: MentionSuggestion) => {
@@ -335,31 +276,13 @@ export default function ActivityRecordClient() {
   const handleContentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const value = event.target.value
     setActivityContent(value)
-    updateMentionQuery(value, event.target.selectionStart)
     updateMentionedChildren(value)
-  }
 
-  const handleContentKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!isMentionOpen || mentionSuggestions.length === 0) return
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault()
-      setActiveMentionIndex((prev) => (prev + 1) % mentionSuggestions.length)
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault()
-      setActiveMentionIndex((prev) =>
-        (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length
-      )
-    } else if (event.key === "Enter") {
-      event.preventDefault()
-      handleMentionSelect(mentionSuggestions[activeMentionIndex])
+    // @を入力したらメンションピッカーを開く
+    if (value.endsWith('@')) {
+      setShowMentionPicker(true)
+      setMentionSearchQuery('')
     }
-  }
-
-  const handleMentionBlur = () => {
-    setTimeout(() => {
-      setIsMentionOpen(false)
-    }, 100)
   }
 
   const loadClassChildren = useCallback(
@@ -627,16 +550,89 @@ export default function ActivityRecordClient() {
     setMentionTokens(new Map())
   }
 
-  const handleMentionClick = (mention: MentionSuggestion) => {
-    handleMentionSelect(mention)
+  const handleMentionPickerSelect = (mention: MentionSuggestion) => {
+    // 既に選択済みの場合は追加しない
+    if (selectedMentions.find((m) => m.unique_key === mention.unique_key)) {
+      setShowMentionPicker(false)
+      return
+    }
+
+    const token = `@${mention.display_name} `
+
+    // @を入力して開いた場合は、最後の@を置き換える
+    if (activityContent.endsWith('@')) {
+      setActivityContent((prev) => prev.slice(0, -1) + token)
+    } else {
+      setActivityContent((prev) => prev + token)
+    }
+
+    setSelectedMentions((prev) => [...prev, mention])
+    setMentionTokens((prev) => new Map(prev).set(mention.unique_key, token.trim()))
+    setShowMentionPicker(false)
+    setMentionSearchQuery('')
   }
 
-  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const pastedText = event.clipboardData.getData("text")
-    const cursorPosition = event.currentTarget.selectionStart
-    const value = activityContent
-    const updated = value.slice(0, cursorPosition) + pastedText + value.slice(cursorPosition)
-    updateMentionQuery(updated, cursorPosition + pastedText.length)
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        await transcribeAudio(audioBlob)
+        stream.getTracks().forEach(track => track.stop())
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('Failed to start recording:', error)
+      setSaveError('音声録音の開始に失敗しました')
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+    }
+  }
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setIsTranscribing(true)
+      setSaveError(null)
+
+      const formData = new FormData()
+      formData.append('audio', audioBlob)
+
+      const response = await fetch('/api/voice/transcribe', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '文字起こしに失敗しました')
+      }
+
+      const transcribedText = result.text
+      setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
+    } catch (error) {
+      console.error('Failed to transcribe:', error)
+      setSaveError(error instanceof Error ? error.message : '文字起こしに失敗しました')
+    } finally {
+      setIsTranscribing(false)
+    }
   }
 
   const convertToMarkdown = (text: string) =>
@@ -656,239 +652,325 @@ export default function ActivityRecordClient() {
           <CardHeader>
             <CardTitle>活動記録の入力</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="class">クラス</Label>
-              <Select value={selectedClass} onValueChange={handleClassChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="クラスを選択" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classOptions.map((classOption) => (
-                    <SelectItem key={classOption.class_id} value={classOption.class_id}>
-                      {classOption.class_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {classError && <p className="text-sm text-red-500">{classError}</p>}
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="class">クラス</Label>
+                <Select value={selectedClass} onValueChange={handleClassChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="クラスを選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classOptions.map((classOption) => (
+                      <SelectItem key={classOption.class_id} value={classOption.class_id}>
+                        {classOption.class_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {classError && <p className="text-sm text-red-500">{classError}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="activityDate">日付</Label>
+                <Input
+                  id="activityDate"
+                  type="date"
+                  value={activityDate}
+                  onChange={(event) => setActivityDate(event.target.value)}
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="activityDate">日付</Label>
-              <Input
-                id="activityDate"
-                type="date"
-                value={activityDate}
-                onChange={(event) => setActivityDate(event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label htmlFor="activityContent">活動内容</Label>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{childCount}人</span>
+                <Label htmlFor="activityContent" className="text-base font-semibold">活動内容</Label>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{selectedMentions.length}人</span>
                   <span>・</span>
                   <span>{activityContent.length}文字</span>
                 </div>
               </div>
-              <div className="relative">
-                <Textarea
-                  ref={textareaRef}
-                  id="activityContent"
-                  rows={8}
-                  value={activityContent}
-                  onChange={handleContentChange}
-                  onKeyDown={handleContentKeyDown}
-                  onBlur={handleMentionBlur}
-                  onPaste={handlePaste}
-                  placeholder="園での活動内容を入力してください"
-                />
-                {isMentionOpen && mentionSuggestions.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-full rounded-md border bg-white shadow">
-                    <ul className="max-h-48 overflow-y-auto">
-                      {mentionSuggestions.map((child, index) => (
-                        <li
-                          key={child.unique_key}
-                          className={`cursor-pointer px-3 py-2 text-sm hover:bg-muted ${
-                            index === activeMentionIndex ? "bg-muted" : ""
-                          }`}
-                          onMouseDown={() => handleMentionClick(child)}
-                        >
-                          <div className="font-medium">{child.display_name}</div>
-                          <div className="text-xs text-muted-foreground">{child.class_name}</div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowMentionPicker(true)}
+                  disabled={!selectedClass || classChildren.length === 0}
+                >
+                  <span className="mr-1">@</span>
+                  児童をメンション
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isRecording ? "destructive" : "outline"}
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isTranscribing}
+                >
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                  {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                </Button>
               </div>
+
+              <Textarea
+                ref={textareaRef}
+                id="activityContent"
+                rows={12}
+                value={activityContent}
+                onChange={handleContentChange}
+                placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+                className="min-h-[300px]"
+              />
               {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {selectedMentions.map((mention) => (
-                <span
-                  key={mention.unique_key}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs"
-                >
-                  {mention.display_name}
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => removeMention(mention)}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
+            {selectedMentions.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">メンション中の児童</Label>
+                <div className="flex flex-wrap gap-2">
+                  {selectedMentions.map((mention) => (
+                    <span
+                      key={mention.unique_key}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3 py-1.5 text-sm font-medium"
+                    >
+                      {mention.display_name}
+                      <button
+                        type="button"
+                        className="hover:text-primary/80 transition-colors"
+                        onClick={() => removeMention(mention)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isAiLoading || !activityContent.trim()}
-                onClick={handleAnalyze}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                AI分析
-              </Button>
-              <Button type="button" onClick={handleSave} disabled={isSaving || !activityContent.trim()}>
-                <Mic className="mr-2 h-4 w-4" />
-                保存
-              </Button>
-              <Button type="button" variant="outline" onClick={handleRestart}>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-wrap gap-3 flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isAiLoading || !activityContent.trim()}
+                  onClick={handleAnalyze}
+                  className="flex-1 sm:flex-none"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  AI分析
+                </Button>
+                {isEditMode ? (
+                  <>
+                    <Button type="button" onClick={handleUpdate} disabled={isSaving} className="flex-1 sm:flex-none">
+                      <Edit2 className="mr-2 h-4 w-4" />
+                      更新
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleCancelEdit} className="flex-1 sm:flex-none">
+                      キャンセル
+                    </Button>
+                  </>
+                ) : (
+                  <Button type="button" onClick={handleSave} disabled={isSaving || !activityContent.trim()} className="flex-1 sm:flex-none">
+                    保存
+                  </Button>
+                )}
+              </div>
+              <Button type="button" variant="ghost" onClick={handleRestart}>
                 リセット
               </Button>
-              {isEditMode ? (
-                <>
-                  <Button type="button" onClick={handleUpdate} disabled={isSaving}>
-                    <Edit2 className="mr-2 h-4 w-4" />
-                    更新
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={handleCancelEdit}>
-                    キャンセル
-                  </Button>
-                </>
-              ) : null}
             </div>
             {saveError && <p className="text-sm text-red-500">{saveError}</p>}
             {saveMessage && <p className="text-sm text-green-600">{saveMessage}</p>}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>活動記録一覧</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
-            {loading ? (
-              <p>読み込み中...</p>
-            ) : error ? (
-              <p className="text-sm text-red-500">{error}</p>
-            ) : activitiesData?.activities.length ? (
-              <div className="space-y-4">
-                {activitiesData.activities.map((activity) => (
-                  <Card key={activity.activity_id}>
-                    <CardContent className="space-y-2 pt-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-muted-foreground">{activity.activity_date}</p>
-                          <p className="font-medium">{activity.class_name}</p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">活動記録一覧</h2>
+          </div>
+
+          {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
+          {loading ? (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <p className="text-muted-foreground">読み込み中...</p>
+              </CardContent>
+            </Card>
+          ) : error ? (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-sm text-red-500">{error}</p>
+              </CardContent>
+            </Card>
+          ) : activitiesData?.activities.length ? (
+            <div className="space-y-3">
+              {activitiesData.activities.map((activity) => (
+                <Card key={activity.activity_id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
+                              {activity.activity_date}
+                            </span>
+                            <span className="text-sm font-medium text-muted-foreground">
+                              {activity.class_name}
+                            </span>
+                          </div>
+                          <div className="text-sm leading-relaxed mt-2">
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(convertToMarkdown(activity.content)),
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8"
                             onClick={() => handleEdit(activity)}
                           >
-                            <Edit2 className="h-4 w-4" />
+                            <Edit2 className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => handleDelete(activity.activity_id)}
                             disabled={isDeletingId === activity.activity_id}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        <div
-                          dangerouslySetInnerHTML={{
-                            __html: DOMPurify.sanitize(convertToMarkdown(activity.content)),
-                          }}
-                        />
+
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          {activity.individual_record_count}件の個別記録
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          作成: {activity.created_by}
+                        </span>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {activity.individual_record_count}件の個別記録
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground">活動記録はまだありません。</p>
+                <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <Dialog open={showAnalysisModal} onOpenChange={(open) => !open && closeModal()}>
+          <DialogContent className="max-h-[90vh] w-full max-w-4xl overflow-y-auto">
+            <DialogHeader className="mb-4 flex flex-row items-center justify-between">
+              <DialogTitle>AI分析結果</DialogTitle>
+              <Button variant="ghost" size="icon" onClick={closeModal}>
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogHeader>
+            {aiAnalysisError && <p className="text-sm text-red-500">{aiAnalysisError}</p>}
+            {isAiLoading || isAnalyzing ? (
+              <p>分析中...</p>
+            ) : aiAnalysisResults.length ? (
+              <div className="space-y-4">
+                {aiAnalysisResults.map((result) => (
+                  <Card key={result.activity_id}>
+                    <CardContent className="space-y-2 pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">{result.child_display_name}</p>
+                          <p className="font-medium">{result.content}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveObservation(result)}
+                            disabled={savingObservationId === result.activity_id}
+                          >
+                            保存
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteObservation(result)}
+                          >
+                            削除
+                          </Button>
+                        </div>
                       </div>
+                      {result.status === "saved" && (
+                        <p className="text-xs text-green-600">保存済み</p>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">活動記録はまだありません。</p>
+              <p className="text-sm text-muted-foreground">分析結果がありません。</p>
             )}
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
 
-        {showAnalysisModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">AI分析結果</h2>
-                <Button variant="ghost" size="icon" onClick={closeModal}>
-                  <X className="h-4 w-4" />
-                </Button>
+        <Dialog open={showMentionPicker} onOpenChange={(open) => {
+          setShowMentionPicker(open)
+          if (!open) setMentionSearchQuery('')
+        }}>
+          <DialogContent className="max-h-[85vh] w-full max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>児童を選択</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="児童名で検索..."
+                  value={mentionSearchQuery}
+                  onChange={(e) => setMentionSearchQuery(e.target.value)}
+                  className="w-full"
+                  autoFocus
+                />
               </div>
-              {aiAnalysisError && <p className="text-sm text-red-500">{aiAnalysisError}</p>}
-              {isAiLoading || isAnalyzing ? (
-                <p>分析中...</p>
-              ) : aiAnalysisResults.length ? (
-                <div className="space-y-4">
-                  {aiAnalysisResults.map((result) => (
-                    <Card key={result.activity_id}>
-                      <CardContent className="space-y-2 pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-muted-foreground">{result.child_display_name}</p>
-                            <p className="font-medium">{result.content}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleSaveObservation(result)}
-                              disabled={savingObservationId === result.activity_id}
-                            >
-                              保存
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteObservation(result)}
-                            >
-                              削除
-                            </Button>
-                          </div>
-                        </div>
-                        {result.status === "saved" && (
-                          <p className="text-xs text-green-600">保存済み</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
+              {mentionLoading ? (
+                <p className="text-center py-8">読み込み中...</p>
+              ) : classChildren.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[55vh] overflow-y-auto">
+                  {filterSuggestions(classChildren, mentionSearchQuery).map((child) => {
+                    const isSelected = selectedMentions.some((m) => m.unique_key === child.unique_key)
+                    return (
+                      <Button
+                        key={child.unique_key}
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        className="h-auto py-3 px-4 flex flex-col items-start"
+                        onClick={() => handleMentionPickerSelect(child)}
+                      >
+                        <div className="font-medium text-sm">{child.display_name}</div>
+                        <div className="text-xs text-muted-foreground">{child.class_name}</div>
+                      </Button>
+                    )
+                  })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">分析結果がありません。</p>
+                <p className="text-center py-8 text-muted-foreground">
+                  児童が見つかりません。クラスを選択してください。
+                </p>
               )}
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
       </div>
     </StaffLayout>
   )
