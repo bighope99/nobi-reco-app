@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { fetchAttendanceContext, isScheduledForDate, weekdayJpMap } from '../utils/attendance';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,29 +36,6 @@ export async function GET(request: NextRequest) {
     // 対象日（デフォルトは今日）
     const targetDate = dateParam || new Date().toISOString().split('T')[0];
 
-    // 曜日を取得
-    const date = new Date(targetDate);
-    const dayOfWeek = date.getDay(); // 0=日曜, 1=月曜, ...
-    const weekdayMap: { [key: number]: string } = {
-      0: 'sunday',
-      1: 'monday',
-      2: 'tuesday',
-      3: 'wednesday',
-      4: 'thursday',
-      5: 'friday',
-      6: 'saturday',
-    };
-    const weekday = weekdayMap[dayOfWeek];
-    const weekdayJp: { [key: string]: string } = {
-      sunday: '日',
-      monday: '月',
-      tuesday: '火',
-      wednesday: '水',
-      thursday: '木',
-      friday: '金',
-      saturday: '土',
-    };
-
     // 児童一覧を取得
     let childrenQuery = supabase
       .from('m_children')
@@ -78,19 +56,11 @@ export async function GET(request: NextRequest) {
             name,
             age_group
           )
-        ),
-        s_attendance_schedule (
-          monday,
-          tuesday,
-          wednesday,
-          thursday,
-          friday,
-          saturday,
-          sunday
         )
       `)
       .eq('facility_id', facility_id)
       .eq('enrollment_status', 'enrolled')
+      .eq('_child_class.is_current', true)
       .is('deleted_at', null);
 
     if (class_id) {
@@ -101,7 +71,7 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.or(`family_name.ilike.%${search}%,given_name.ilike.%${search}%,family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
     }
 
-    const { data: children, error: childrenError } = await childrenQuery;
+    const { data: childrenRaw, error: childrenError } = await childrenQuery;
 
     if (childrenError) {
       console.error('Database error:', childrenError);
@@ -111,35 +81,50 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 出席記録を取得
-    const { data: attendanceRecords, error: attendanceError } = await supabase
-      .from('h_attendance')
-      .select('child_id, checked_in_at, checked_out_at, status, scan_method, note')
-      .eq('facility_id', facility_id)
-      .gte('attendance_date', targetDate)
-      .lt('attendance_date', new Date(new Date(targetDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-      .is('deleted_at', null);
+    const children = childrenRaw ?? [];
 
-    if (attendanceError) {
-      console.error('Attendance error:', attendanceError);
-      // エラーでも続行（出席記録がない場合もある）
-    }
+    // スケジュール・当日設定・出席実績を共通ロジックで取得
+    const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = await fetchAttendanceContext(
+      supabase,
+      facility_id,
+      targetDate,
+      children.map((c: any) => c.id)
+    );
 
-    // データを整形
+    const weekday = dayOfWeekKey;
+
     const attendanceMap = new Map();
-    (attendanceRecords || []).forEach((record: any) => {
-      attendanceMap.set(record.child_id, record);
+    attendanceLogsData.forEach((record: any) => {
+      const existing = attendanceMap.get(record.child_id);
+      if (!existing) {
+        attendanceMap.set(record.child_id, record);
+        return;
+      }
+
+      if (existing.checked_in_at && record.checked_in_at) {
+        const existingTime = new Date(existing.checked_in_at).getTime();
+        const currentTime = new Date(record.checked_in_at).getTime();
+
+        if (currentTime < existingTime) {
+          attendanceMap.set(record.child_id, record);
+        }
+
+        return;
+      }
+
+      if (!existing.checked_in_at && record.checked_in_at) {
+        attendanceMap.set(record.child_id, record);
+      }
     });
 
     const formattedChildren = children.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classData = currentClass?.m_classes;
-      const schedule = Array.isArray(child.s_attendance_schedule) && child.s_attendance_schedule.length > 0
-        ? child.s_attendance_schedule[0]
-        : null;
-
-      const isExpected = schedule ? schedule[weekday] === true : false;
+      const schedulePattern = (schedulePatterns || []).find((schedule: any) => schedule.child_id === child.id);
+      const dailyRecord = (dailyAttendanceData || []).find((record: any) => record.child_id === child.id);
+      const isExpected = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
+      const isMarkedAbsent = dailyRecord?.status === 'absent';
       const attendance = attendanceMap.get(child.id);
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
@@ -149,27 +134,25 @@ export async function GET(request: NextRequest) {
       let status = 'not_arrived';
       let isUnexpected = false;
 
-      if (attendance) {
-        if (attendance.checked_in_at) {
-          const checkedInTime = new Date(attendance.checked_in_at);
-          const hour = checkedInTime.getHours();
-          const minute = checkedInTime.getMinutes();
+      if (attendance?.checked_in_at) {
+        const checkedInTime = new Date(attendance.checked_in_at);
+        const hour = checkedInTime.getHours();
+        const minute = checkedInTime.getMinutes();
 
-          // 9:30以降をチェックイン遅刻とみなす
-          if (hour > 9 || (hour === 9 && minute >= 30)) {
-            status = 'late';
-          } else {
-            status = 'present';
-          }
+        // 9:30以降をチェックイン遅刻とみなす
+        if (hour > 9 || (hour === 9 && minute >= 30)) {
+          status = 'late';
+        } else {
+          status = 'present';
+        }
 
-          // 予定外チェック
-          if (!isExpected) {
-            isUnexpected = true;
-          }
-        } else if (attendance.status === 'absent') {
-          status = 'absent';
+        // 予定外チェック
+        if (!isExpected) {
+          isUnexpected = true;
         }
       } else if (isExpected) {
+        status = 'absent';
+      } else if (isMarkedAbsent) {
         status = 'absent';
       }
 
@@ -187,7 +170,7 @@ export async function GET(request: NextRequest) {
         is_expected: isExpected,
         checked_in_at: attendance?.checked_in_at || null,
         checked_out_at: attendance?.checked_out_at || null,
-        scan_method: attendance?.scan_method || null,
+        check_in_method: attendance?.check_in_method || null,
         is_unexpected: isUnexpected,
       };
     });
@@ -230,7 +213,7 @@ export async function GET(request: NextRequest) {
       data: {
         date: targetDate,
         weekday,
-        weekday_jp: weekdayJp[weekday],
+        weekday_jp: weekdayJpMap[weekday],
         summary,
         children: filteredChildren,
         filters: {

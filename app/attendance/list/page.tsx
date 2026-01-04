@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import {
   Calendar,
@@ -14,13 +14,6 @@ import {
   AlertCircle,
   CheckCircle2
 } from "lucide-react"
-
-const statusLabels: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  present: { label: "出席", variant: "default" },
-  absent: { label: "欠席", variant: "secondary" },
-  late: { label: "遅刻", variant: "destructive" },
-  not_arrived: { label: "未到着", variant: "outline" },
-}
 
 interface ChildAttendance {
   child_id: string
@@ -36,7 +29,7 @@ interface ChildAttendance {
   is_expected: boolean
   checked_in_at: string | null
   checked_out_at: string | null
-  scan_method: string | null
+  check_in_method: string | null
   is_unexpected: boolean
 }
 
@@ -75,33 +68,45 @@ export default function AttendanceListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filterClass, setFilterClass] = useState<string>('all')
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const fetchAttendance = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch(`/api/attendance/list?date=${selectedDate}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch attendance')
+      }
+
+      if (result.success) {
+        setAttendanceData(result.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch attendance:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch attendance')
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedDate])
 
   useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        const response = await fetch(`/api/attendance/list?date=${selectedDate}`)
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to fetch attendance')
-        }
-
-        if (result.success) {
-          setAttendanceData(result.data)
-        }
-      } catch (err) {
-        console.error('Failed to fetch attendance:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch attendance')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchAttendance()
-  }, [selectedDate])
+  }, [fetchAttendance])
+
+  const isPastDate = (dateString: string) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const target = new Date(dateString)
+    target.setHours(0, 0, 0, 0)
+
+    return target < today
+  }
 
   // 日付操作関数
   const changeDate = (days: number) => {
@@ -141,26 +146,141 @@ export default function AttendanceListPage() {
       : attendanceData.children.filter(c => c.class_id === filterClass)
     : []
 
-  // ステータスバッジコンポーネント
-  const StatusBadge = ({ child }: { child: ChildAttendance }) => {
+  const getStatusPresentation = (child: ChildAttendance) => {
     if (child.is_unexpected) {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">予定外登園</span>
+      return {
+        label: '予定外登園',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200',
+      }
     }
 
-    switch (child.status) {
-      case 'present':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">出席</span>
-      case 'late':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">遅刻</span>
-      case 'absent':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">欠席</span>
-      case 'not_arrived':
-        if (child.is_expected) {
-          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">未到着</span>
+    if (child.status === 'present') {
+      return {
+        label: '出席',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200',
+      }
+    }
+
+    if (child.status === 'late') {
+      return {
+        label: '遅刻',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200',
+      }
+    }
+
+    if (child.status === 'absent') {
+      const isPast = isPastDate(attendanceData?.date || selectedDate)
+
+      if (!child.is_expected) {
+        return {
+          label: '欠席予定',
+          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
         }
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400 border border-gray-200">予定なし</span>
-      default:
-        return null
+      }
+
+      return {
+        label: isPast ? '欠席' : '出席予定',
+        className: isPast
+          ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
+          : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+      }
+    }
+
+    if (child.status === 'not_arrived') {
+      if (child.is_expected) {
+        return {
+          label: '未到着',
+          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+        }
+      }
+
+      return {
+        label: '欠席予定',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
+      }
+    }
+
+    return null
+  }
+
+  // ステータスバッジコンポーネント
+  const StatusBadge = ({ child }: { child: ChildAttendance }) => {
+    const presentation = getStatusPresentation(child)
+
+    if (!presentation) return null
+
+    return <span className={presentation.className}>{presentation.label}</span>
+  }
+
+  const StatusActionButton = ({
+    child,
+    onMarkStatus,
+    isLoading,
+  }: {
+    child: ChildAttendance
+    onMarkStatus: (childId: string, status: 'absent' | 'present') => void
+    isLoading: boolean
+  }) => {
+    const presentation = getStatusPresentation(child)
+
+    if (!presentation) return null
+
+    if (presentation.label === '出席予定') {
+      return (
+        <button
+          onClick={() => onMarkStatus(child.child_id, 'absent')}
+          disabled={isLoading}
+          className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
+        >
+          {isLoading ? '処理中...' : '欠席にする'}
+        </button>
+      )
+    }
+
+    if (presentation.label === '欠席予定') {
+      return (
+        <button
+          onClick={() => onMarkStatus(child.child_id, 'present')}
+          disabled={isLoading}
+          className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
+        >
+          {isLoading ? '処理中...' : '出席にする'}
+        </button>
+      )
+    }
+
+    return null
+  }
+
+  const handleStatusChange = async (childId: string, nextStatus: 'absent' | 'present') => {
+    setActionError(null)
+    setActionLoading(prev => ({ ...prev, [childId]: true }))
+
+    try {
+      const response = await fetch('/api/attendance/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          status: nextStatus,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '出席ステータスの更新に失敗しました')
+      }
+
+      await fetchAttendance()
+    } catch (err) {
+      console.error('Failed to update attendance status:', err)
+      setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [childId]: false }))
     }
   }
 
@@ -198,6 +318,12 @@ export default function AttendanceListPage() {
         </style>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+
+          {actionError && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {actionError}
+            </div>
+          )}
 
           {/* Header with Date Selector */}
           <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 pb-6">
@@ -337,6 +463,7 @@ export default function AttendanceListPage() {
                     <th className="px-5 py-3 font-medium">児童名</th>
                     <th className="px-5 py-3 font-medium">クラス / 学年</th>
                     <th className="px-5 py-3 font-medium">ステータス</th>
+                    <th className="px-5 py-3 font-medium text-center">操作</th>
                     <th className="px-5 py-3 font-medium">チェックイン時刻</th>
                     <th className="px-5 py-3 font-medium">チェックアウト時刻</th>
                   </tr>
@@ -353,6 +480,13 @@ export default function AttendanceListPage() {
                         <div className="text-xs text-slate-500">{child.grade_label || '-'}</div>
                       </td>
                       <td className="px-5 py-3"><StatusBadge child={child} /></td>
+                      <td className="px-5 py-3 text-center">
+                        <StatusActionButton
+                          child={child}
+                          onMarkStatus={handleStatusChange}
+                          isLoading={Boolean(actionLoading[child.child_id])}
+                        />
+                      </td>
                       <td className="px-5 py-3 text-slate-600">
                         {child.checked_in_at ? (
                           <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
@@ -393,6 +527,14 @@ export default function AttendanceListPage() {
                         </div>
                       </div>
                       <StatusBadge child={child} />
+                    </div>
+
+                    <div className="mb-3">
+                      <StatusActionButton
+                        child={child}
+                        onMarkStatus={handleStatusChange}
+                        isLoading={Boolean(actionLoading[child.child_id])}
+                      />
                     </div>
 
                     {(child.checked_in_at || child.checked_out_at) && (

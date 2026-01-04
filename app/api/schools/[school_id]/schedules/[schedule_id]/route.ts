@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * PUT /api/schools/:school_id/schedules/:schedule_id
@@ -13,35 +14,20 @@ export async function PUT(
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id, current_facility_id } = metadata;
 
     // 権限チェック（staffは更新不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -67,19 +53,9 @@ export async function PUT(
     }
 
     // 施設アクセス権限チェック
-    if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
+    if (role === 'facility_admin' || role === 'staff') {
       const scheduleFacilityId = (schedule.m_schools as any).facility_id;
-      if (!facilityIds.includes(scheduleFacilityId)) {
+      if (current_facility_id !== scheduleFacilityId) {
         return NextResponse.json(
           { success: false, error: 'Schedule not found' },
           { status: 404 }
@@ -174,35 +150,20 @@ export async function DELETE(
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, company_id, current_facility_id } = metadata;
 
     // 権限チェック（staffは削除不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -228,19 +189,9 @@ export async function DELETE(
     }
 
     // 施設アクセス権限チェック
-    if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
+    if (role === 'facility_admin' || role === 'staff') {
       const scheduleFacilityId = (schedule.m_schools as any).facility_id;
-      if (!facilityIds.includes(scheduleFacilityId)) {
+      if (current_facility_id !== scheduleFacilityId) {
         return NextResponse.json(
           { success: false, error: 'Schedule not found' },
           { status: 404 }
@@ -248,16 +199,12 @@ export async function DELETE(
       }
     }
 
-    const deletedAt = new Date().toISOString();
-
-    // スケジュール削除（ソフトデリート）
+    // スケジュール削除（物理削除）
     const { error: deleteError } = await supabase
       .from('s_school_schedules')
-      .update({
-        deleted_at: deletedAt,
-        updated_at: deletedAt,
-      })
-      .eq('id', schedule_id);
+      .delete()
+      .eq('id', schedule_id)
+      .eq('school_id', school_id);
 
     if (deleteError) {
       throw deleteError;
@@ -267,7 +214,6 @@ export async function DELETE(
       success: true,
       data: {
         schedule_id: schedule_id,
-        deleted_at: deletedAt,
       },
       message: 'スケジュールを削除しました',
     });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * PUT /api/schools/schedules/bulk
@@ -9,35 +10,20 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, current_facility_id } = metadata;
 
     // 権限チェック（staffは更新不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -53,20 +39,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // ユーザーがアクセスできる施設IDを取得
-    let allowedFacilityIds: string[] = [];
-    if (
-      userData.role === 'facility_admin' ||
-      userData.role === 'staff'
-    ) {
-      const { data: userFacilities } = await supabase
-        .from('_user_facility')
-        .select('facility_id')
-        .eq('user_id', user.id)
-        .eq('is_current', true);
-
-      allowedFacilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
-    }
+    // ユーザーがアクセスできる施設IDを設定
+    const allowedFacilityIds: string[] | null =
+      role === 'facility_admin' && current_facility_id
+        ? [current_facility_id]
+        : null;
 
     const results = [];
     let updatedCount = 0;

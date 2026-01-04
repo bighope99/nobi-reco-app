@@ -36,6 +36,8 @@ interface Child {
   age_group: string;
   grade: number | null;
   grade_label: string;
+  school_id: string | null;
+  school_name: string | null;
   photo_url: string | null;
   status: ChildStatus;
   is_scheduled_today: boolean;
@@ -43,7 +45,7 @@ interface Child {
   scheduled_end_time: string | null;
   actual_in_time: string | null;
   actual_out_time: string | null;
-  guardian_phone: string;
+  guardian_phone: string | null;
   last_record_date: string | null;
   weekly_record_count: number;
 }
@@ -95,12 +97,13 @@ export default function ChildcareDashboard() {
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(false);
   const [sortKey, setSortKey] = useState<SortKey>('status');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
 
   // データ取得
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/dashboard/summary');
+      const response = await fetch('/api/dashboard/summary', { cache: 'no-store' });
 
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard data');
@@ -124,8 +127,13 @@ export default function ChildcareDashboard() {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
+  useEffect(() => {
+    const now = new Date();
+    setCurrentTimeDisplay(now.toTimeString().slice(0, 5));
+  }, []);
+
   // --- Actions ---
-  const postAttendanceAction = async (action: string, childId: string) => {
+  const postAttendanceAction = async (action: string, childId: string, actionTimestamp?: string) => {
     try {
       setError(null);
       const response = await fetch('/api/dashboard/attendance', {
@@ -133,7 +141,7 @@ export default function ChildcareDashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action, child_id: childId }),
+        body: JSON.stringify({ action, child_id: childId, action_timestamp: actionTimestamp }),
       });
 
       const result = await response.json();
@@ -151,12 +159,14 @@ export default function ChildcareDashboard() {
 
   // 登園処理
   const handleCheckIn = async (childId: string) => {
-    await postAttendanceAction('check_in', childId);
+    const clickedAt = new Date().toISOString();
+    await postAttendanceAction('check_in', childId, clickedAt);
   };
 
   // 退室処理
   const handleCheckOut = async (childId: string) => {
-    await postAttendanceAction('check_out', childId);
+    const clickedAt = new Date().toISOString();
+    await postAttendanceAction('check_out', childId, clickedAt);
   };
 
   // 欠席処理
@@ -206,9 +216,9 @@ export default function ChildcareDashboard() {
 
     // 2. Filter: Show/Hide Unscheduled
     if (showUnscheduled) {
-      result = result.filter(c => c.status === 'absent' && !c.is_scheduled_today);
+      result = result.filter(c => !c.is_scheduled_today);
     } else {
-      result = result.filter(c => c.status === 'checked_in' || c.is_scheduled_today);
+      result = result.filter(c => c.is_scheduled_today || c.status === 'checked_in' || c.status === 'checked_out');
     }
 
     // 3. Sort
@@ -326,7 +336,7 @@ export default function ChildcareDashboard() {
     if (child.status === 'checked_in') {
       return (
         <button onClick={() => handleCheckOut(child.child_id)} className="text-xs text-slate-400 hover:text-slate-600 underline">
-          退室登録
+          帰宅
         </button>
       );
     }
@@ -382,7 +392,7 @@ export default function ChildcareDashboard() {
                 <h1 className="text-lg sm:text-xl font-bold text-slate-800">安全管理ダッシュボード</h1>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 pl-6 sm:pl-7">
-                {dashboardData.current_date.replace(/-/g, '/')} <span className="mx-1 sm:mx-2">|</span> 現在時刻 <span className="font-mono font-bold text-slate-700">{dashboardData.current_time}</span>
+                {dashboardData.current_date.replace(/-/g, '/')} <span className="mx-1 sm:mx-2">|</span> 現在時刻 <span className="font-mono font-bold text-slate-700">{currentTimeDisplay || dashboardData.current_time}</span>
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -451,17 +461,27 @@ export default function ChildcareDashboard() {
                     </div>
                   ))}
 
-                  {/* Late Alerts */}
+                  {/* Late Alerts - 30分以上遅刻の児童をアラート表示 */}
                   {dashboardData.alerts.late.map(child => (
                     <div key={child.child_id} className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                       <div className="flex items-start gap-3 w-full">
                         <div className="bg-red-100 p-2 rounded-full text-red-600 shrink-0">
                           <UserMinus size={20} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-red-900">{child.name}</span>
                             <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 font-bold">未登園・遅刻</span>
+                          </div>
+                          {/* 学校名と学年を表示 */}
+                          <div className="text-xs text-red-700 mt-1 flex flex-wrap items-center gap-x-2">
+                            {child.school_name && (
+                              <span className="bg-red-100/50 px-1.5 py-0.5 rounded">{child.school_name}</span>
+                            )}
+                            {child.grade_label && (
+                              <span className="bg-red-100/50 px-1.5 py-0.5 rounded">{child.grade_label}</span>
+                            )}
+                            <span className="text-red-600">{child.class_name}</span>
                           </div>
                           <div className="text-sm text-red-800 mt-1 flex flex-wrap gap-x-4">
                             <span className="flex items-center gap-1"><Clock size={14} /> 予定: {child.scheduled_start_time}</span>
@@ -470,7 +490,7 @@ export default function ChildcareDashboard() {
                         </div>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
-                        <button onClick={() => alert(`発信: ${child.guardian_phone}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
+                        <button onClick={() => alert(`発信: ${child.guardian_phone || '電話番号未登録'}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
                           <Phone size={14} /> 連絡
                         </button>
                         <button onClick={() => handleMarkAbsent(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-bold text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">

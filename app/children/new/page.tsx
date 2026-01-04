@@ -4,7 +4,7 @@ import ChildForm from "@/components/children/ChildForm";
 
 export default function ChildRegistrationForm() {
   return (
-    <StaffLayout title="園児登録">
+    <StaffLayout title="児童登録">
       <ChildForm mode="new" />
     </StaffLayout>
   );

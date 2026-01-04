@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
+import {
+  LATE_ARRIVAL_THRESHOLD_MINUTES,
+  OVERDUE_DEPARTURE_THRESHOLD_MINUTES,
+} from '@/lib/constants/attendance';
+import {
+  type LateArrivalAlert,
+  getMinutesDiff,
+} from '@/lib/alerts/late-arrival';
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,6 +53,7 @@ export async function GET(request: NextRequest) {
         grade_add,
         photo_url,
         parent_phone,
+        school_id,
         _child_class (
           class_id,
           is_current,
@@ -63,39 +73,121 @@ export async function GET(request: NextRequest) {
       attendanceQuery = attendanceQuery.eq('_child_class.class_id', class_id);
     }
 
-    const { data: childrenData, error: childrenError } = await attendanceQuery;
+    const { data: childrenDataRaw, error: childrenError } = await attendanceQuery;
 
     if (childrenError) {
       console.error('Children fetch error:', childrenError);
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    // 2. 本日の出席予定を取得（r_daily_attendance）
-    const { data: dailyAttendanceData } = await supabase
-      .from('r_daily_attendance')
-      .select('*')
-      .eq('attendance_date', date)
-      .in('child_id', childrenData.map((c: any) => c.id));
+    const childrenData = childrenDataRaw ?? [];
+    const childIds = childrenData.map((c: any) => c.id);
 
-    // 3. 本日の実績を取得（h_attendance）
-    const { data: attendanceLogsData } = await supabase
-      .from('h_attendance')
-      .select('*')
-      .gte('checked_in_at', `${date}T00:00:00`)
-      .lte('checked_in_at', `${date}T23:59:59`)
-      .in('child_id', childrenData.map((c: any) => c.id));
+    // 事前計算: 学校ID一覧
+    const schoolIds = Array.from(new Set(childrenData
+      .map((c: any) => c.school_id)
+      .filter((id: string | null) => Boolean(id)))) as string[];
 
-    // 4. 記録情報取得（最終記録日、週間記録数）
+    // 週間記録数計算用の日付
     const oneWeekAgo = new Date(date);
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
 
-    const { data: observationsData } = await supabase
-      .from('r_observation')
-      .select('child_id, observation_date')
-      .in('child_id', childrenData.map((c: any) => c.id))
-      .gte('observation_date', oneWeekAgoStr)
-      .is('deleted_at', null);
+    // 並列でデータ取得（パフォーマンス最適化）
+    const [
+      attendanceContext,
+      schoolScheduleResult,
+      schoolsResult,
+      observationsResult,
+      classesResult
+    ] = await Promise.all([
+      // 1. 通所予定・当日設定・実績を取得
+      fetchAttendanceContext(supabase, facility_id, date, childIds),
+
+      // 2. 学校別登校時刻を取得
+      schoolIds.length > 0
+        ? supabase
+            .from('s_school_schedules')
+            .select('school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time')
+            .in('school_id', schoolIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 3. 学校マスタを取得（学校名表示用）
+      schoolIds.length > 0
+        ? supabase
+            .from('m_schools')
+            .select('id, name')
+            .in('id', schoolIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 4. 記録情報を取得（最終記録日、週間記録数）
+      childIds.length > 0
+        ? supabase
+            .from('r_observation')
+            .select('child_id, observation_date')
+            .in('child_id', childIds)
+            .gte('observation_date', oneWeekAgoStr)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 5. クラス一覧を取得（フィルター用）
+      supabase
+        .from('m_classes')
+        .select('id, name')
+        .eq('facility_id', facility_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('name'),
+    ]);
+
+    const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = attendanceContext;
+
+    // エラーチェック
+    if (schoolScheduleResult.error) {
+      console.error('School schedule fetch error:', schoolScheduleResult.error);
+      return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
+    }
+
+    // データ構造最適化: O(n)検索をO(1)に変換するためMapを使用
+    const schedulePatternMap = new Map(
+      (schedulePatterns || []).map((s: any) => [s.child_id, s])
+    );
+
+    const dailyAttendanceMap = new Map(
+      (dailyAttendanceData || []).map((r: any) => [r.child_id, r])
+    );
+
+    // attendanceLogsは1子どもに対して複数ログがあるためグループ化
+    const attendanceLogsMap = new Map<string, any[]>();
+    for (const log of attendanceLogsData || []) {
+      const existing = attendanceLogsMap.get(log.child_id) || [];
+      existing.push(log);
+      attendanceLogsMap.set(log.child_id, existing);
+    }
+
+    // observationsも1子どもに対して複数あるためグループ化
+    const observationsMap = new Map<string, any[]>();
+    for (const obs of observationsResult.data || []) {
+      const existing = observationsMap.get(obs.child_id) || [];
+      existing.push(obs);
+      observationsMap.set(obs.child_id, existing);
+    }
+
+    // 学校スケジュールをschool_idでグループ化
+    const schoolSchedules: Record<string, any[]> = {};
+    for (const schedule of schoolScheduleResult.data || []) {
+      if (!schoolSchedules[schedule.school_id]) {
+        schoolSchedules[schedule.school_id] = [];
+      }
+      schoolSchedules[schedule.school_id].push(schedule);
+    }
+
+    // 学校名マップを作成（O(1)アクセス用）
+    const schoolNameMap = new Map<string, string>(
+      (schoolsResult.data || []).map((s: any) => [s.id, s.name])
+    );
 
     // データ整形
     type AttendanceListItem = {
@@ -107,6 +199,8 @@ export async function GET(request: NextRequest) {
       age_group: string;
       grade: number | null;
       grade_label: string;
+      school_id: string | null;
+      school_name: string | null;
       photo_url: string | null;
       status: 'checked_in' | 'checked_out' | 'absent';
       is_scheduled_today: boolean;
@@ -114,23 +208,52 @@ export async function GET(request: NextRequest) {
       scheduled_end_time: string | null;
       actual_in_time: string | null;
       actual_out_time: string | null;
-      guardian_phone: string;
+      guardian_phone: string | null;
       last_record_date: string | null;
       weekly_record_count: number;
+    };
+
+    const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {
+      if (!schoolId || grade === null || grade === undefined) return null;
+      const schedules = schoolSchedules[schoolId] || [];
+      const gradeKey = String(grade);
+      const matchedSchedule = schedules.find((schedule: any) => (schedule.grades || []).includes(gradeKey));
+      if (!matchedSchedule) return null;
+      const weekdayKey = `${dayOfWeekKey}_time`;
+      return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
+    };
+
+    const formatTimeToMinutes = (time: string | null) => {
+      if (!time) return null;
+      const [hours, minutes] = time.split(':');
+      return `${hours}:${minutes}`;
     };
 
     const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
-      const dailyAttendance = (dailyAttendanceData || []).find((da: any) => da.child_id === child.id);
-      const attendanceLog = (attendanceLogsData || []).find((log: any) => log.child_id === child.id && !log.checked_out_at);
+
+      // Mapから O(1) でデータ取得（パフォーマンス最適化）
+      const schedulePattern = schedulePatternMap.get(child.id);
+      const dailyRecord = dailyAttendanceMap.get(child.id);
+      const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
+
+      // 出席ログも O(1) で取得
+      const todaysLogs = attendanceLogsMap.get(child.id) || [];
+      const activeLog = todaysLogs.find((log: any) => !log.checked_out_at);
+      const latestClosedLog = todaysLogs
+        .filter((log: any) => log.checked_out_at)
+        .sort((a: any, b: any) => new Date(b.checked_in_at).getTime() - new Date(a.checked_in_at).getTime())[0];
+      const displayLog = activeLog || latestClosedLog;
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
 
-      // 記録情報
-      const childObservations = (observationsData || []).filter((obs: any) => obs.child_id === child.id);
+      const scheduledStartTime = isScheduledToday ? getSchoolStartTime(child.school_id, grade) : null;
+
+      // 記録情報も O(1) で取得
+      const childObservations = observationsMap.get(child.id) || [];
       const lastRecordDate = childObservations.length > 0
         ? childObservations.sort((a: any, b: any) => b.observation_date.localeCompare(a.observation_date))[0].observation_date
         : null;
@@ -138,8 +261,14 @@ export async function GET(request: NextRequest) {
 
       // ステータス判定
       let status: 'checked_in' | 'checked_out' | 'absent' = 'absent';
-      if (attendanceLog) {
-        status = attendanceLog.checked_out_at ? 'checked_out' : 'checked_in';
+      if (activeLog) {
+        status = 'checked_in';
+      } else if (latestClosedLog) {
+        status = 'checked_out';
+      }
+
+      if (!activeLog && !latestClosedLog && dailyRecord?.status === 'absent') {
+        status = 'absent';
       }
 
       return {
@@ -151,14 +280,16 @@ export async function GET(request: NextRequest) {
         age_group: classInfo?.age_group || '',
         grade,
         grade_label: gradeLabel,
+        school_id: child.school_id || null,
+        school_name: child.school_id ? schoolNameMap.get(child.school_id) || null : null,
         photo_url: child.photo_url,
         status,
-        is_scheduled_today: !!dailyAttendance,
-        scheduled_start_time: dailyAttendance?.scheduled_start_time || null,
-        scheduled_end_time: dailyAttendance?.scheduled_end_time || null,
-        actual_in_time: attendanceLog?.checked_in_at ? new Date(attendanceLog.checked_in_at).toTimeString().slice(0, 5) : null,
-        actual_out_time: attendanceLog?.checked_out_at ? new Date(attendanceLog.checked_out_at).toTimeString().slice(0, 5) : null,
-        guardian_phone: child.parent_phone,
+        is_scheduled_today: isScheduledToday,
+        scheduled_start_time: formatTimeToMinutes(scheduledStartTime),
+        scheduled_end_time: formatTimeToMinutes(null),
+        actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
+        actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
+        guardian_phone: child.parent_phone || null,
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
       };
@@ -171,17 +302,11 @@ export async function GET(request: NextRequest) {
     const checkedOut = attendanceList.filter(c => c.status === 'checked_out').length;
 
     // アラート判定
-    const getMinutesDiff = (current: string, target: string) => {
-      if (!target) return 0;
-      const [h1, m1] = current.split(':').map(Number);
-      const [h2, m2] = target.split(':').map(Number);
-      return (h1 * 60 + m1) - (h2 * 60 + m2);
-    };
-
+    // 未帰所アラート（予定終了時刻から30分以上超過）
     const overdue = attendanceList
       .filter(c => {
         if (c.status !== 'checked_in' || !c.is_scheduled_today || !c.scheduled_end_time) return false;
-        return getMinutesDiff(currentTime, c.scheduled_end_time) >= 30;
+        return getMinutesDiff(currentTime, c.scheduled_end_time) >= OVERDUE_DEPARTURE_THRESHOLD_MINUTES;
       })
       .map(c => ({
         child_id: c.child_id,
@@ -189,16 +314,23 @@ export async function GET(request: NextRequest) {
         kana: c.kana,
         class_name: c.class_name,
         age_group: c.age_group,
+        grade: c.grade,
+        grade_label: c.grade_label,
+        school_id: c.school_id,
+        school_name: c.school_name,
         scheduled_end_time: c.scheduled_end_time,
         actual_in_time: c.actual_in_time,
         minutes_overdue: getMinutesDiff(currentTime, c.scheduled_end_time || ''),
         guardian_phone: c.guardian_phone,
       }));
 
-    const late = attendanceList
+    // 遅刻アラート（予定到着時刻から30分以上遅れ）
+    // 学校と学年情報を含めて、将来の外部通知機能に対応
+    const late: LateArrivalAlert[] = attendanceList
       .filter(c => {
         if (c.status !== 'absent' || !c.is_scheduled_today || !c.scheduled_start_time) return false;
-        return getMinutesDiff(currentTime, c.scheduled_start_time) > 0;
+        // 30分閾値を使用
+        return getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES;
       })
       .map(c => ({
         child_id: c.child_id,
@@ -206,11 +338,17 @@ export async function GET(request: NextRequest) {
         kana: c.kana,
         class_name: c.class_name,
         age_group: c.age_group,
-        scheduled_start_time: c.scheduled_start_time,
+        grade: c.grade,
+        grade_label: c.grade_label,
+        school_id: c.school_id,
+        school_name: c.school_name,
+        scheduled_start_time: c.scheduled_start_time!,
         minutes_late: getMinutesDiff(currentTime, c.scheduled_start_time || ''),
         guardian_phone: c.guardian_phone,
+        alert_triggered_at: new Date().toISOString(),
       }));
 
+    // 予定外登園アラート
     const unexpected = attendanceList
       .filter(c => c.status === 'checked_in' && !c.is_scheduled_today)
       .map(c => ({
@@ -252,17 +390,9 @@ export async function GET(request: NextRequest) {
         };
       });
 
-    // クラス一覧（フィルター用）
-    const { data: classesData } = await supabase
-      .from('m_classes')
-      .select('id, name')
-      .eq('facility_id', facility_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .order('name');
-
+    // クラス一覧（フィルター用）- 並列取得済みのclassesResultを使用
     const filters = {
-      classes: (classesData || []).map((cls: any) => ({
+      classes: (classesResult.data || []).map((cls: any) => ({
         class_id: cls.id,
         class_name: cls.name,
       })),
