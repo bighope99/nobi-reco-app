@@ -31,9 +31,7 @@ import { mockChildren } from '@/lib/mock-data';
 import {
   type AiObservationDraft,
   loadAiDraftsFromCookie,
-  persistAiDraftsToCookie,
   markDraftAsSaved,
-  getDraftById,
 } from '@/lib/drafts/aiDraftCookie';
 
 // モックコンポーネント
@@ -200,12 +198,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftId = searchParams?.get('draftId');
+  const paramChildId = searchParams?.get('childId')?.trim() || '';
+  const paramChildName = searchParams?.get('childName')?.trim() || '';
   const { user } = useAuth();
   const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
   const [showReassignDialog, setShowReassignDialog] = useState(false);
   const [selectedNewChild, setSelectedNewChild] = useState('');
   const [selectedChildId, setSelectedChildId] = useState('');
+  const [lockedChildName, setLockedChildName] = useState('');
   const [reassignReason, setReassignReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
@@ -226,6 +227,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [tagError, setTagError] = useState('');
   const autoAiTriggeredRef = useRef(false);
   const autoAiParam = searchParams?.get('autoAi');
+  const lockedChildId = paramChildId || initialChildId || '';
+  const isChildLocked = Boolean(lockedChildId);
 
   const selectedChild = useMemo(
     () => mockChildren.find((child) => child.id === selectedChildId),
@@ -259,9 +262,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   }, [isNew, observationTags]);
 
   useEffect(() => {
-    if (!isNew || !initialChildId) return;
-    setSelectedChildId(initialChildId);
-  }, [initialChildId, isNew]);
+    if (!isNew || !lockedChildId) return;
+    setSelectedChildId(lockedChildId);
+  }, [isNew, lockedChildId]);
+
+  useEffect(() => {
+    if (!paramChildName) return;
+    setLockedChildName(paramChildName);
+  }, [paramChildName]);
 
   useEffect(() => {
     let isMounted = true;
@@ -300,14 +308,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     const drafts = loadAiDraftsFromCookie();
     const draft = drafts.find((item) => item.draft_id === draftId);
     if (!draft) return;
-    setSelectedChildId(draft.child_id);
+    setSelectedChildId(lockedChildId || draft.child_id);
     setEditText(draft.content);
+    setLockedChildName((prev) => draft.child_display_name || prev);
     setAiEditForm({
       ai_action: '',
       ai_opinion: '',
       flags: buildDefaultTagFlags(observationTags),
     });
-  }, [draftId, isNew, observationTags]);
+  }, [draftId, isNew, lockedChildId, observationTags]);
 
   // 接続状態の監視（モック: 常にオンライン）
   useEffect(() => {
@@ -589,10 +598,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       }
 
       // 保存成功時、観察記録を設定
+      const resolvedChildName = lockedChildName || selectedChild?.name || '不明';
       const newObservation: Observation = {
         id: result.data.id,
         child_id: selectedChildId,
-        child_name: selectedChild?.name || '不明',
+        child_name: resolvedChildName,
         observed_at: new Date().toISOString(),
         body_text: text,
         ai_action: aiResult.ai_action,
@@ -609,9 +619,27 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
       // draftIdがある場合、ステータスを'saved'に更新
       if (draftId) {
-        markDraftAsSaved(draftId, result.data.id, result.data.observation_date, result.data.content);
+        markDraftAsSaved(
+          draftId,
+          result.data.id,
+          result.data.observation_date,
+          result.data.content ?? text,
+        );
+        if (typeof window !== 'undefined') {
+          const lastSaved = {
+            draft_id: draftId,
+            activity_id: null,
+            child_id: selectedChildId,
+            child_display_name: resolvedChildName,
+            observation_date: result.data.observation_date ?? new Date().toISOString().split('T')[0],
+            content: result.data.content ?? text,
+            status: 'saved' as const,
+            observation_id: result.data.id,
+          };
+          window.sessionStorage.setItem('nobiRecoAiLastSavedDraft', JSON.stringify(lastSaved));
+        }
         // 一覧画面に戻る（activityページに戻る）
-        router.push('/records/activity');
+        router.push('/records/activity?aiModal=1');
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '新規保存に失敗しました';
@@ -624,48 +652,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleSaveEdit = async () => {
     if (isNew) {
-      if (draftId) {
-        const text = editText.trim();
-        if (!selectedChildId) {
-          setError('対象児童を選択してください');
-          return;
-        }
-        if (!text) {
-          setError('本文を入力してください');
-          return;
-        }
-        setSavingEdit(true);
-        setError('');
-        try {
-          const drafts = loadAiDraftsFromCookie();
-          const target = drafts.find((item) => item.draft_id === draftId);
-          if (!target) {
-            throw new Error('下書きが見つかりませんでした');
-          }
-
-          const childName = mockChildren.find((child) => child.id === selectedChildId)?.name || '不明';
-          const next = drafts.map((item) =>
-            item.draft_id === draftId
-              ? {
-                  ...item,
-                  child_id: selectedChildId,
-                  child_display_name: childName,
-                  content: text,
-                  observation_date: item.observation_date || new Date().toISOString().split('T')[0],
-                }
-              : item,
-          );
-
-          persistAiDraftsToCookie(next);
-          router.back();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : '下書きの更新に失敗しました';
-          setError(message);
-        } finally {
-          setSavingEdit(false);
-        }
-        return;
-      }
       await handleCreateObservation();
       return;
     }
@@ -684,7 +670,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
-  const childDisplayName = isNew ? selectedChild?.name || '未選択' : observation?.child_name || observation?.child_id;
+  const childDisplayName = isNew
+    ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
+    : observation?.child_name || observation?.child_id;
   const createdByName =
     observation?.created_by === user?.id ? user?.display_name || user?.email || '現在のユーザー' : observation?.created_by || '不明';
 
@@ -711,7 +699,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         <div className="max-w-6xl mx-auto space-y-4">
           {isNew && draftId && (
             <Alert>
-              <AlertDescription>AI下書きを編集中です。保存すると下書きを更新して前の画面に戻ります。</AlertDescription>
+              <AlertDescription>AI下書きを編集中です。保存すると記録を保存して前の画面に戻ります。</AlertDescription>
             </Alert>
           )}
           {!isOnline && (
@@ -747,15 +735,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <div className="flex items-center gap-1">
                     <User className="h-4 w-4" />
                     {isNew ? (
-                      <div className="min-w-[220px]">
-                        <ChildSelect
-                          value={selectedChildId}
-                          onChange={setSelectedChildId}
-                          placeholder="対象児童を選択"
-                          testId="child-select-trigger"
-                          disabled={savingEdit}
-                        />
-                      </div>
+                      isChildLocked ? (
+                        <span className="font-medium">{childDisplayName}</span>
+                      ) : (
+                        <div className="min-w-[220px]">
+                          <ChildSelect
+                            value={selectedChildId}
+                            onChange={setSelectedChildId}
+                            placeholder="対象児童を選択"
+                            testId="child-select-trigger"
+                            disabled={savingEdit}
+                          />
+                        </div>
+                      )
                     ) : (
                       <span>{childDisplayName}</span>
                     )}

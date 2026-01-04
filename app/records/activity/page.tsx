@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -59,6 +59,7 @@ interface ActivitiesData {
 
 export default function ActivityRecordPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -160,6 +161,25 @@ export default function ActivityRecordPage() {
 
   useEffect(() => {
     const syncDrafts = () => {
+      const shouldShowSaved = searchParams?.get("aiModal") === "1"
+      if (shouldShowSaved && typeof window !== "undefined") {
+        const raw = window.sessionStorage.getItem("nobiRecoAiLastSavedDraft")
+        if (raw) {
+          try {
+            const draft = JSON.parse(raw) as AiObservationResult
+            setAiAnalysisResults([draft])
+            if (draft.activity_id) {
+              setEditingActivityId(draft.activity_id)
+            }
+            setShowAnalysisModal(true)
+            window.sessionStorage.removeItem("nobiRecoAiLastSavedDraft")
+            return
+          } catch (error) {
+            console.error("Failed to parse last saved draft:", error)
+          }
+        }
+      }
+
       const drafts = loadAiDraftsFromCookie().filter((draft) => draft.status !== "saved")
       if (drafts.length === 0) return
       setAiAnalysisResults(drafts)
@@ -175,7 +195,7 @@ export default function ActivityRecordPage() {
     const handleFocus = () => syncDrafts()
     window.addEventListener("focus", handleFocus)
     return () => window.removeEventListener("focus", handleFocus)
-  }, [])
+  }, [searchParams])
 
   const toHiragana = (text: string) =>
     text.replace(/[ァ-ン]/g, (char) =>
@@ -819,11 +839,26 @@ export default function ActivityRecordPage() {
   }
 
   const handleEditObservation = (draft: AiObservationResult) => {
+    const params = new URLSearchParams()
+    if (draft.child_id) {
+      params.set('childId', draft.child_id)
+    }
+    if (draft.child_display_name) {
+      params.set('childName', draft.child_display_name)
+    }
+
     if (draft.observation_id) {
-      router.push(`/records/personal/${draft.observation_id}/edit`)
+      const query = params.toString()
+      router.push(
+        query
+          ? `/records/personal/${draft.observation_id}/edit?${query}`
+          : `/records/personal/${draft.observation_id}/edit`,
+      )
       return
     }
-    router.push(`/records/personal/new?draftId=${draft.draft_id}`)
+
+    params.set('draftId', draft.draft_id)
+    router.push(`/records/personal/new?${params.toString()}`)
   }
 
   const handleSaveActivity = async () => {
