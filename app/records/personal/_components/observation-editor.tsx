@@ -149,6 +149,19 @@ type ChildOption = {
   className: string;
 };
 
+type ChildApi = {
+  child_id: string;
+  name: string;
+  class_name?: string | null;
+};
+
+type ChildListResponse = {
+  data?: {
+    children?: ChildApi[];
+  };
+  error?: string;
+};
+
 type RecentObservation = {
   id: string;
   observation_date: string;
@@ -354,11 +367,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setChildOptionsError('');
       try {
         const response = await fetch('/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200');
-        const result = await response.json();
+        const result = (await response.json()) as ChildListResponse;
         if (!response.ok || result.error) {
           throw new Error(result.error || '児童一覧の取得に失敗しました');
         }
-        const children = (result.data?.children || []).map((child: any) => ({
+        const children = (result.data?.children || []).map((child) => ({
           id: child.child_id,
           name: child.name,
           className: child.class_name || '未設定',

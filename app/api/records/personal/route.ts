@@ -98,10 +98,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // TODO: ai_actionとai_opinionをどこに保存するか検討
-    // 現在のDBスキーマではr_observationテーブルにAI解析結果のカラムがないため、
-    // 将来的には専用のテーブルを作成するか、r_observationにカラムを追加する必要がある
-
     return NextResponse.json({
       success: true,
       data: {
