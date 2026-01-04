@@ -47,8 +47,8 @@ describe('/api/records/activity DELETE', () => {
     jest.clearAllMocks();
   });
 
-  describe('隱崎ｨｼ繝・せ繝・, () => {
-    it('隱崎ｨｼ縺輔ｌ縺ｦ縺・↑縺・ｴ蜷医・401繧定ｿ斐☆縺薙→', async () => {
+  describe('認証テスト', () => {
+    it('認証されていない場合は401を返すこと', async () => {
       const mockSupabase = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
@@ -72,8 +72,8 @@ describe('/api/records/activity DELETE', () => {
     });
   });
 
-  describe('繝舌Μ繝・・繧ｷ繝ｧ繝ｳ', () => {
-    it('activity_id縺悟ｿ・医〒縺ゅｋ縺薙→', async () => {
+  describe('活動記録削除', () => {
+    it('activity_idが必須であること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       const mockSupabase = {
@@ -99,18 +99,18 @@ describe('/api/records/activity DELETE', () => {
     });
   });
 
-  describe('豢ｻ蜍戊ｨ倬鹸蜑企勁', () => {
-    it('蟄伜惠縺励↑縺・ｴｻ蜍戊ｨ倬鹸縺ｮ蜑企勁譎ゅ・404繧定ｿ斐☆縺薙→', async () => {
+  describe('活動記録が見つからない場合', () => {
+    it('404を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: any = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
             error: null,
           }),
         },
-        from: jest.fn((tableName: string) => {
+        from: jest.fn((tableName: string): any => {
           if (tableName === 'r_activity') {
             return {
               select: jest.fn().mockReturnThis(),
@@ -136,20 +136,20 @@ describe('/api/records/activity DELETE', () => {
       const data = await response.json();
 
       expect(response.status).toBe(404);
-      expect(data.error).toContain('隕九▽縺九ｊ縺ｾ縺帙ｓ');
+      expect(data.error).toContain('活動記録が見つかりませんでした');
     });
 
-    it('莉悶・譁ｽ險ｭ縺ｮ豢ｻ蜍戊ｨ倬鹸繧貞炎髯､縺ｧ縺阪↑縺・％縺ｨ', async () => {
+    it('403を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: any = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
             error: null,
           }),
         },
-        from: jest.fn((tableName: string) => {
+        from: jest.fn((tableName: string): any => {
           if (tableName === 'r_activity') {
             return {
               select: jest.fn().mockReturnThis(),
@@ -178,21 +178,21 @@ describe('/api/records/activity DELETE', () => {
       const data = await response.json();
 
       expect(response.status).toBe(403);
-      expect(data.error).toContain('讓ｩ髯');
+      expect(data.error).toContain('この活動記録を削除する権限がありません');
     });
 
-    it('豢ｻ蜍戊ｨ倬鹸繧貞炎髯､縺励∪縺励◆', async () => {
+    it('200を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       let updatedData: any = null;
-      const mockSupabase = {
+      const mockSupabase: any = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
             error: null,
           }),
         },
-        from: jest.fn((tableName: string) => {
+        from: jest.fn((tableName: string): any => {
           if (tableName === 'r_activity') {
             return {
               select: jest.fn().mockReturnThis(),
@@ -241,18 +241,18 @@ describe('/api/records/activity DELETE', () => {
     });
   });
 
-  describe('繧ｨ繝ｩ繝ｼ繝上Φ繝峨Μ繝ｳ繧ｰ', () => {
-    it('繝・・繧ｿ繝吶・繧ｹ繧ｨ繝ｩ繝ｼ譎ゅ・500繧定ｿ斐☆縺薙→', async () => {
+  describe('削除に失敗した場合', () => {
+    it('500を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: any = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
             error: null,
           }),
         },
-        from: jest.fn((tableName: string) => {
+        from: jest.fn((tableName: string): any => {
           if (tableName === 'r_activity') {
             return {
               select: jest.fn().mockReturnThis(),
