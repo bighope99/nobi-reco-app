@@ -1,8 +1,7 @@
 import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
-
-const QR_SIGNATURE_SECRET = process.env.QR_SIGNATURE_SECRET
+import { getQrSignatureSecret } from '@/lib/qr/secrets'
 
 interface QrPayload {
   payload: string
@@ -30,17 +29,11 @@ function escapePdfText(text: string): string {
   return text.replace(ESCAPE_REGEX, (match) => `\\${match}`)
 }
 
-function ensureSignatureSecret(): string {
-  if (!QR_SIGNATURE_SECRET) {
-    throw new Error('QR_SIGNATURE_SECRET is not configured')
-  }
-  return QR_SIGNATURE_SECRET
-}
-
 export function createQrPayload(childId: string, facilityId: string): QrPayload {
-  const secret = ensureSignatureSecret()
+  const secret = getQrSignatureSecret();
+  const inputString = `${childId}${facilityId}${secret}`;
   const signature = createHmac('sha256', secret)
-    .update(`${childId}${facilityId}${secret}`)
+    .update(inputString)
     .digest('hex')
 
   const payload = JSON.stringify({

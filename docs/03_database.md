@@ -1189,8 +1189,76 @@ CREATE POLICY facility_access ON r_activity
 
 **マイグレーション**: `remove_unique_email_constraint`
 
+### データベーススキーマの確認と文書化（2026年1月4日）
+
+#### 背景
+出席管理API（`app/api/attendance/checkin/route.ts`）の実装において、`m_classes`（クラスマスタ）と`_child_class`（子ども-クラス紐付け）テーブルへの参照が必要であることが判明。しかし、`supabase/migrations`ディレクトリにこれらのテーブルを作成するマイグレーションファイルが存在しなかったため、データベースの実態を調査。
+
+#### 調査結果
+**重要な発見**: 両テーブルは**既にSupabaseデータベースに存在**し、正常に稼働中であることを確認。
+
+**`m_classes`テーブル（現行スキーマ）**:
+- ✅ テーブル存在確認: 6件のクラスデータが存在（例: きりん組、くま組、ぞう組）
+- ✅ カラム構成: `id`, `facility_id`, `name`, `age_group`, `room_number`, `color_code`, `display_order`, `capacity`, `is_active`, `created_at`, `updated_at`, `deleted_at`
+- ✅ 外部キー: `facility_id` → `m_facilities(id)` ON DELETE CASCADE
+- ✅ インデックス: `facility_id`, `display_order` で検索最適化済み
+
+**`_child_class`テーブル（現行スキーマ）**:
+- ✅ テーブル存在確認: 10件の子ども-クラス紐付けデータが存在
+- ✅ カラム構成: `id`, `child_id`, `class_id`, `school_year`, `started_at`, `ended_at`, `is_current`, `created_at`, `updated_at`
+- ✅ 外部キー:
+  - `child_id` → `m_children(id)` ON DELETE CASCADE
+  - `class_id` → `m_classes(id)` ON DELETE CASCADE
+- ✅ 一意制約: `(child_id, class_id, school_year)`
+- ✅ インデックス: `child_id`, `class_id`, `is_current`, `school_year` で検索最適化済み
+
+**推測**: これらのテーブルは、マイグレーション管理システム導入以前に、Supabase DashboardのSQL Editorや別の方法で直接作成された可能性が高い。
+
+#### 対応内容
+
+1. **マイグレーションファイルの作成**（ドキュメント・履歴管理目的）:
+   - ✅ `supabase/migrations/005_create_m_classes.sql` を作成
+   - ✅ `supabase/migrations/006_create_child_class_relationship.sql` を作成
+   - ⚠️ **重要**: これらのマイグレーションファイルは**Supabaseには適用していない**（テーブルは既存のため）
+   - 📝 目的: 既存スキーマ構造をマイグレーションファイルとして記録し、今後の変更履歴管理に備える
+
+2. **Supabaseリレーション機能の動作検証**:
+   - ✅ 出席チェックインAPI内で以下のネストクエリが正常動作することを確認
+   ```typescript
+   _child_class (
+     class:m_classes (
+       id,
+       name
+     )
+   )
+   ```
+   - ✅ `_child_class` → `m_classes` の関連を `class:m_classes` で参照可能
+   - ✅ LEFT JOIN semanticsにより、クラス未割当の子どもも正常に取得可能
+
+3. **スキーマ整合性の確認**:
+   - ✅ セクション「4.3 クラスマスタ」および「8.3 子ども-クラス」の定義と実際のスキーマが一致
+   - ✅ 外部キー制約、カスケード削除設定も本ドキュメント記載通りに実装済み
+
+#### 今回の作業で実施したこと・しなかったこと
+
+**実施したこと**:
+- ✅ 既存テーブルの存在確認とスキーマ調査
+- ✅ マイグレーションファイルの作成（ドキュメント目的）
+- ✅ APIクエリの動作検証
+- ✅ 本ドキュメントへの変更履歴の追記
+
+**実施しなかったこと**:
+- ❌ テーブルの作成（既に存在するため不要）
+- ❌ インデックスの追加（既に適切に設定済み）
+- ❌ Supabaseへのマイグレーション適用（テーブルは既存のため不要）
+
+#### 結論
+- データベーススキーマは本ドキュメントの定義通りに正しく構築済み
+- マイグレーション管理外で作成されたテーブルを事後的に文書化
+- 今後のスキーマ変更は必ずマイグレーションファイル経由で実施し、Supabaseに適用すること
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2025年12月31日（メールアドレス制約削除）
+**最終更新**: 2026年1月4日（データベーススキーマの確認と文書化）
 **管理者**: プロジェクトリーダー

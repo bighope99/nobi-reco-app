@@ -89,7 +89,24 @@ describe('POST /api/users (email invite flow)', () => {
     });
     const updateUserById = jest.fn().mockResolvedValue({ data: null, error: null });
 
-    const createUser = jest.fn();
+    const createUser = jest.fn().mockResolvedValue({
+      data: {
+        user: {
+          id: 'auth-user-id',
+          email: 'newuser@example.com',
+        },
+      },
+      error: null,
+    });
+
+    const generateLink = jest.fn().mockResolvedValue({
+      data: {
+        properties: {
+          action_link: 'https://example.com/invite?token=abc123',
+        },
+      },
+      error: null,
+    });
 
     const mockAdmin = {
       auth: {
@@ -97,6 +114,7 @@ describe('POST /api/users (email invite flow)', () => {
           inviteUserByEmail,
           updateUserById,
           createUser,
+          generateLink,
         },
       },
     };
@@ -115,20 +133,11 @@ describe('POST /api/users (email invite flow)', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(inviteUserByEmail).toHaveBeenCalledTimes(1);
-    expect(inviteUserByEmail).toHaveBeenCalledWith(
-      'newuser@example.com',
+    expect(createUser).toHaveBeenCalledTimes(1);
+    expect(createUser).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          role: 'staff',
-          company_id: 'company-1',
-          current_facility_id: 'facility-1',
-        }),
-      })
-    );
-    expect(updateUserById).toHaveBeenCalledWith(
-      'auth-user-id',
-      expect.objectContaining({
+        email: 'newuser@example.com',
+        email_confirm: false,
         app_metadata: expect.objectContaining({
           role: 'staff',
           company_id: 'company-1',
@@ -136,7 +145,15 @@ describe('POST /api/users (email invite flow)', () => {
         }),
       })
     );
-    expect(createUser).not.toHaveBeenCalled();
+    expect(generateLink).toHaveBeenCalledTimes(1);
+    expect(generateLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'invite',
+        email: 'newuser@example.com',
+      })
+    );
+    expect(inviteUserByEmail).not.toHaveBeenCalled();
+    expect(updateUserById).not.toHaveBeenCalled();
     expect(mUsersQuery.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'auth-user-id',
