@@ -83,6 +83,16 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
     }
 
+    const { data: existingTags, error: tagFetchError } = await supabase
+      .from('_record_tag')
+      .select('tag_id, is_auto_tagged, confidence_score')
+      .eq('observation_id', id);
+
+    if (tagFetchError) {
+      console.error('Observation tag fetch error:', tagFetchError);
+      return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
+    }
+
     const { error: deleteError } = await supabase
       .from('_record_tag')
       .delete()
@@ -104,6 +114,18 @@ export async function PATCH(
       const { error: insertError } = await supabase.from('_record_tag').insert(tagInserts);
       if (insertError) {
         console.error('Observation tag insert error:', insertError);
+        if (existingTags && existingTags.length > 0) {
+          const rollbackInserts = existingTags.map((tag) => ({
+            observation_id: id,
+            tag_id: tag.tag_id,
+            is_auto_tagged: tag.is_auto_tagged ?? false,
+            confidence_score: tag.confidence_score ?? null,
+          }));
+          const { error: rollbackError } = await supabase.from('_record_tag').insert(rollbackInserts);
+          if (rollbackError) {
+            console.error('Observation tag rollback error:', rollbackError);
+          }
+        }
         return NextResponse.json({ success: false, error: 'AI解析結果の保存に失敗しました' }, { status: 500 });
       }
     }
