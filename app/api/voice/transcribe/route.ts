@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const audioBase64 = buffer.toString("base64")
 
     // Gemini APIを直接呼び出し（LangChainJSは音声ファイルを直接サポートしていないため）
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
 
     const payload = {
       contents: [

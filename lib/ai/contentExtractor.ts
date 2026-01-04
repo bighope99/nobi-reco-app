@@ -49,7 +49,7 @@ export async function extractChildContent(
   }
 
   const model = new ChatGoogleGenerativeAI({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.0-flash',
     apiKey: apiKey,
     temperature: 0.7,
     maxOutputTokens: 300,
