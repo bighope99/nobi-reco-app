@@ -87,9 +87,6 @@ export async function POST(request: NextRequest) {
 
     // Verify HMAC signature
     // Calculate expected signature: HMAC(child_id + facility_id + secret)
-    // Note: Must match the exact same string concatenation used in createQrPayload
-    // Use facility_id from QR code payload if provided, otherwise use DB value
-    // This ensures we verify against the same facility_id used to generate the signature
     const facilityIdForVerification = qrFacilityId || child.facility_id;
 
     // Verify facility_id matches (security check)
@@ -157,20 +154,19 @@ export async function POST(request: NextRequest) {
       .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
+    // If already checked in today, return success without saving (idempotent behavior)
     if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Already checked in today',
-          data: {
-            child_id,
-            child_name: `${child.family_name} ${child.given_name}`,
-            class_name: className,
-            checked_in_at: existing.checked_in_at,
-          },
+      return NextResponse.json({
+        success: true,
+        data: {
+          child_id,
+          child_name: `${child.family_name} ${child.given_name}`,
+          class_name: className,
+          checked_in_at: existing.checked_in_at,
+          attendance_date: today,
+          already_checked_in: true, // Flag to indicate this was already checked in
         },
-        { status: 409 }
-      );
+      });
     }
 
     // Create attendance record
@@ -204,20 +200,19 @@ export async function POST(request: NextRequest) {
           .order('checked_in_at', { ascending: true })
           .maybeSingle();
 
+        // If duplicate error but record exists, return success (idempotent behavior)
         if (existingAttendance) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: 'Already checked in today',
-              data: {
-                child_id,
-                child_name: `${child.family_name} ${child.given_name}`,
-                class_name: className,
-                checked_in_at: existingAttendance.checked_in_at,
-              },
+          return NextResponse.json({
+            success: true,
+            data: {
+              child_id,
+              child_name: `${child.family_name} ${child.given_name}`,
+              class_name: className,
+              checked_in_at: existingAttendance.checked_in_at,
+              attendance_date: today,
+              already_checked_in: true, // Flag to indicate this was already checked in
             },
-            { status: 409 }
-          );
+          });
         }
       }
 
