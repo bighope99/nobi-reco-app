@@ -32,6 +32,8 @@ export async function GET(
         child_id,
         observation_date,
         content,
+        objective,
+        subjective,
         created_by,
         created_at,
         updated_at,
@@ -40,6 +42,9 @@ export async function GET(
           family_name,
           given_name,
           nickname
+        ),
+        record_tags:_record_tag!observation_id (
+          tag_id
         )
       `,
       )
@@ -54,14 +59,23 @@ export async function GET(
       );
     }
 
-    if (data.m_children?.facility_id !== session.current_facility_id) {
+    // m_children は配列の可能性があるため、単一オブジェクトとして取得
+    const child = Array.isArray(data.m_children) ? data.m_children[0] : data.m_children;
+
+    if (!child || child.facility_id !== session.current_facility_id) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
     const childName =
-      data.m_children?.nickname ||
-      [data.m_children?.family_name, data.m_children?.given_name].filter(Boolean).join(' ') ||
+      child.nickname ||
+      [child.family_name, child.given_name].filter(Boolean).join(' ') ||
       '';
+    const tagFlags = (data.record_tags || []).reduce<Record<string, boolean>>((acc, item) => {
+      if (item?.tag_id) {
+        acc[item.tag_id] = true;
+      }
+      return acc;
+    }, {});
 
     return NextResponse.json({
       success: true,
@@ -71,6 +85,9 @@ export async function GET(
         child_name: childName,
         observation_date: data.observation_date,
         content: data.content,
+        objective: data.objective ?? '',
+        subjective: data.subjective ?? '',
+        tag_flags: tagFlags,
         created_by: data.created_by,
         created_at: data.created_at,
         updated_at: data.updated_at,
