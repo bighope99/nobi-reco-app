@@ -23,8 +23,14 @@ interface ChildPayload {
     class_id?: string | null;
   };
   contact?: {
+    parent_name?: string;           // 保護者名（追加）
     parent_phone?: string;
     parent_email?: string;
+    emergency_contacts?: Array<{    // 緊急連絡先リスト（追加）
+      name: string;
+      relation: string;
+      phone: string;
+    }>;
   };
   care_info?: {
     allergies?: string | null;
@@ -119,6 +125,7 @@ async function saveChild(
     result = childData;
   }
 
+  // クラス紐付け処理
   if (affiliation?.class_id) {
     const enrollmentDate = affiliation.enrolled_at || new Date().toISOString().split('T')[0];
 
@@ -141,6 +148,98 @@ async function saveChild(
 
     if (classError) {
       console.error('Class assignment error:', classError);
+    }
+  }
+
+  // 保護者情報の保存処理
+  if (contact?.parent_name || contact?.emergency_contacts) {
+    // 更新時は既存の保護者紐付けを削除
+    if (isUpdate) {
+      await supabase
+        .from('_child_guardian')
+        .delete()
+        .eq('child_id', result.id);
+    }
+
+    // 主たる保護者の保存
+    if (contact.parent_name) {
+      // 名前から姓と名に分割（スペース区切り）
+      const nameParts = contact.parent_name.trim().split(/\s+/);
+      const familyName = nameParts[0] || contact.parent_name;
+      const givenName = nameParts.slice(1).join(' ') || '';
+
+      const { data: guardianData, error: guardianError } = await supabase
+        .from('m_guardians')
+        .insert({
+          facility_id: facilityId,
+          family_name: familyName,
+          given_name: givenName,
+          phone: contact.parent_phone || null,
+          email: contact.parent_email || null,
+        })
+        .select('id')
+        .single();
+
+      if (guardianError || !guardianData) {
+        console.error('Guardian creation error:', guardianError);
+      } else {
+        // 児童と保護者を紐付け
+        const { error: linkError } = await supabase
+          .from('_child_guardian')
+          .insert({
+            child_id: result.id,
+            guardian_id: guardianData.id,
+            relationship: '保護者',
+            is_primary: true,
+            is_emergency_contact: true,
+          });
+
+        if (linkError) {
+          console.error('Child-guardian link error:', linkError);
+        }
+      }
+    }
+
+    // 緊急連絡先の保存
+    if (contact.emergency_contacts && contact.emergency_contacts.length > 0) {
+      for (const emergencyContact of contact.emergency_contacts) {
+        if (!emergencyContact.name || !emergencyContact.phone) continue;
+
+        // 名前から姓と名に分割
+        const nameParts = emergencyContact.name.trim().split(/\s+/);
+        const familyName = nameParts[0] || emergencyContact.name;
+        const givenName = nameParts.slice(1).join(' ') || '';
+
+        const { data: emergencyGuardianData, error: emergencyGuardianError } = await supabase
+          .from('m_guardians')
+          .insert({
+            facility_id: facilityId,
+            family_name: familyName,
+            given_name: givenName,
+            phone: emergencyContact.phone,
+          })
+          .select('id')
+          .single();
+
+        if (emergencyGuardianError || !emergencyGuardianData) {
+          console.error('Emergency contact creation error:', emergencyGuardianError);
+        } else {
+          // 児童と緊急連絡先を紐付け
+          const { error: emergencyLinkError } = await supabase
+            .from('_child_guardian')
+            .insert({
+              child_id: result.id,
+              guardian_id: emergencyGuardianData.id,
+              relationship: emergencyContact.relation || 'その他',
+              is_primary: false,
+              is_emergency_contact: true,
+            });
+
+          if (emergencyLinkError) {
+            console.error('Emergency contact link error:', emergencyLinkError);
+          }
+        }
+      }
     }
   }
 

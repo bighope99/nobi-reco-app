@@ -259,7 +259,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             enrolled_at: data.affiliation?.enrolled_at ? data.affiliation.enrolled_at.split('T')[0] : '',
             withdrawn_at: data.affiliation?.withdrawn_at ? data.affiliation.withdrawn_at.split('T')[0] : '',
             class_id: data.affiliation?.class_id || '',
-            parent_name: '',
+            parent_name: data.contact?.parent_name || '',
             parent_phone: data.contact?.parent_phone || '',
             parent_email: data.contact?.parent_email || '',
             allergies: data.care_info?.allergies || '',
@@ -268,6 +268,18 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             photo_permission_public: data.permissions?.photo_permission_public ?? true,
             photo_permission_share: data.permissions?.photo_permission_share ?? true,
           });
+
+          // 緊急連絡先の初期化
+          if (data.contact?.emergency_contacts && data.contact.emergency_contacts.length > 0) {
+            setEmergencyContacts(
+              data.contact.emergency_contacts.map((ec: any, idx: number) => ({
+                id: Date.now() + idx,
+                name: ec.name || '',
+                relation: ec.relation || '',
+                phone: ec.phone || '',
+              }))
+            );
+          }
         }
       } catch (err) {
         console.error('Failed to fetch child data:', err);
@@ -349,6 +361,35 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     }
   };
 
+  // 兄弟紐づけハンドラ
+  const handleSiblingLink = async (siblingId: string, siblingName: string) => {
+    if (!isEditMode) {
+      alert('先に児童情報を保存してから兄弟紐づけを行ってください。');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/children/link-sibling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          child_id: childId,
+          sibling_id: siblingId,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        alert(`${siblingName}と兄弟紐づけを作成しました`);
+        setSiblingResult(null);
+      } else {
+        setError(result.error || '兄弟紐づけに失敗しました');
+      }
+    } catch (err) {
+      setError('兄弟紐づけに失敗しました');
+    }
+  };
+
   const addEmergencyContact = () => {
     setEmergencyContacts([...emergencyContacts, { id: Date.now(), name: '', relation: '', phone: '' }]);
   };
@@ -397,8 +438,10 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
           class_id: formData.class_id || null,
         },
         contact: {
+          parent_name: formData.parent_name,
           parent_phone: formData.parent_phone,
           parent_email: formData.parent_email,
+          emergency_contacts: emergencyContacts.filter(c => c.name && c.phone),
         },
         care_info: {
           allergies: formData.allergies,
@@ -786,7 +829,11 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                             </div>
                           </div>
                         </div>
-                        <button type="button" className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium flex items-center gap-1 shadow-sm">
+                        <button
+                          type="button"
+                          onClick={() => handleSiblingLink(siblingResult.id, siblingResult.name)}
+                          className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium flex items-center gap-1 shadow-sm"
+                        >
                           <Check size={12} /> 紐付ける
                         </button>
                       </div>
@@ -813,9 +860,36 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       <span className="bg-slate-200 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
                         {index + 1}
                       </span>
-                      <Input placeholder="氏名" className="h-9 py-1" />
-                      <Input placeholder="続柄" className="h-9 py-1 sm:w-24" />
-                      <Input placeholder="電話番号" className="h-9 py-1" />
+                      <Input
+                        placeholder="氏名"
+                        className="h-9 py-1"
+                        value={contact.name}
+                        onChange={(e: any) => {
+                          const updated = [...emergencyContacts];
+                          updated[index].name = e.target.value;
+                          setEmergencyContacts(updated);
+                        }}
+                      />
+                      <Input
+                        placeholder="続柄"
+                        className="h-9 py-1 sm:w-24"
+                        value={contact.relation}
+                        onChange={(e: any) => {
+                          const updated = [...emergencyContacts];
+                          updated[index].relation = e.target.value;
+                          setEmergencyContacts(updated);
+                        }}
+                      />
+                      <Input
+                        placeholder="電話番号"
+                        className="h-9 py-1"
+                        value={contact.phone}
+                        onChange={(e: any) => {
+                          const updated = [...emergencyContacts];
+                          updated[index].phone = e.target.value;
+                          setEmergencyContacts(updated);
+                        }}
+                      />
                       <button
                         type="button"
                         onClick={() => removeEmergencyContact(contact.id)}
