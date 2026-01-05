@@ -79,11 +79,16 @@ export function buildChildPayload(
   const givenName = getValue(row, headerLabels.given_name);
   const birthDate = getValue(row, headerLabels.birth_date);
   const enrolledAt = getValue(row, headerLabels.enrolled_at);
+  const parentName = getValue(row, headerLabels.parent_name);
+  const parentPhoneRaw = getValue(row, headerLabels.parent_phone);
+  const parentPhone = normalizePhone(parentPhoneRaw);
 
   if (!familyName) errors.push('姓が未入力です');
   if (!givenName) errors.push('名が未入力です');
   if (!birthDate) errors.push('生年月日が未入力です');
   if (!enrolledAt) errors.push('入所日が未入力です');
+  if (!parentName) errors.push('保護者氏名が未入力です');
+  if (!parentPhone) errors.push('保護者電話が未入力です');
 
   if (errors.length > 0) {
     return { errors };
@@ -118,8 +123,8 @@ export function buildChildPayload(
       class_id: defaults.class_id || null,
     },
     contact: {
-      parent_name: getValue(row, headerLabels.parent_name) || undefined,
-      parent_phone: getValue(row, headerLabels.parent_phone),
+      parent_name: parentName || undefined,
+      parent_phone: parentPhone,
       parent_email: getValue(row, headerLabels.parent_email),
       emergency_contacts: emergencyContacts.length > 0 ? emergencyContacts : undefined,
     },
@@ -250,6 +255,10 @@ function parseBoolean(value: string, defaultValue: boolean): boolean {
     return false;
   }
   return defaultValue;
+}
+
+function normalizePhone(value: string): string {
+  return value.replace(/[-‐‑–—―ー－\s\u3000]/g, '').trim();
 }
 
 function parseCsvRecords(text: string): string[][] {

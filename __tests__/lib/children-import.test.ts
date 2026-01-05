@@ -33,6 +33,8 @@ describe('children import csv helpers', () => {
       生年月日: '2019-04-12',
       入所日: '2024-04-01',
       性別: '女',
+      保護者氏名: '山田 太郎',
+      保護者電話: '090-1234-5678',
     };
 
     const result = buildChildPayload(row, { school_id: 'school-1', class_id: 'class-1' });
@@ -42,5 +44,22 @@ describe('children import csv helpers', () => {
     expect(result.payload?.affiliation?.class_id).toBe('class-1');
     expect(result.payload?.basic_info?.gender).toBe('female');
     expect(result.payload?.affiliation?.enrollment_status).toBe('enrolled');
+    expect(result.payload?.contact?.parent_phone).toBe('09012345678');
+  });
+
+  it('normalizes phone numbers with full-width separators', () => {
+    const row = {
+      姓: '山田',
+      名: '花子',
+      生年月日: '2019-04-12',
+      入所日: '2024-04-01',
+      性別: '女',
+      保護者氏名: '山田 太郎',
+      保護者電話: '０９０ー１２３４－５６７８',
+    };
+
+    const result = buildChildPayload(row, { school_id: null, class_id: null });
+
+    expect(result.payload?.contact?.parent_phone).toBe('０９０１２３４５６７８');
   });
 });
