@@ -48,6 +48,7 @@ export async function saveChild(
   facilityId: string,
   supabase: any,
   targetChildId?: string,
+  options?: { skipParentLegacy?: boolean },
 ) {
   const { basic_info, affiliation, contact, care_info, permissions } = payload;
 
@@ -72,6 +73,7 @@ export async function saveChild(
     }
   }
 
+  const shouldSaveParentLegacy = !options?.skipParentLegacy;
   const childValues: any = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
@@ -87,9 +89,9 @@ export async function saveChild(
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
-    parent_name: contact?.parent_name || null,
-    parent_phone: contact?.parent_phone || '',
-    parent_email: contact?.parent_email || '',
+    parent_name: shouldSaveParentLegacy ? (contact?.parent_name || null) : null,
+    parent_phone: shouldSaveParentLegacy ? (contact?.parent_phone || '') : '',
+    parent_email: shouldSaveParentLegacy ? (contact?.parent_email || '') : '',
     allergies: care_info?.allergies || null,
     child_characteristics: care_info?.child_characteristics || null,
     parent_characteristics: care_info?.parent_characteristics || null,

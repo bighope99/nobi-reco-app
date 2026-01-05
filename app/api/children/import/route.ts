@@ -2,7 +2,64 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { saveChild } from '@/app/api/children/save/route';
-import { buildChildPayload, buildPreviewRow, parseCsvText } from '@/lib/children/import-csv';
+import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText } from '@/lib/children/import-csv';
+import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
+
+async function fetchExistingSiblingRows(
+  supabase: any,
+  facilityId: string,
+  normalizedPhoneSet: Set<string>,
+): Promise<ExistingSiblingRow[]> {
+  if (normalizedPhoneSet.size === 0) return [];
+
+  const { data: guardians, error } = await supabase
+    .from('m_guardians')
+    .select(
+      `
+      id,
+      family_name,
+      given_name,
+      phone,
+      _child_guardian (
+        child_id,
+        m_children (
+          id,
+          family_name,
+          given_name,
+          deleted_at
+        )
+      )
+    `
+    )
+    .eq('facility_id', facilityId);
+
+  if (error) {
+    console.error('Failed to fetch guardians for siblings:', error);
+    return [];
+  }
+
+  const existingRows: ExistingSiblingRow[] = [];
+  (guardians || []).forEach((guardian: any) => {
+    const phoneKey = normalizePhone(guardian.phone || '');
+    if (!phoneKey || !normalizedPhoneSet.has(phoneKey)) return;
+
+    const guardianName = `${guardian.family_name || ''} ${guardian.given_name || ''}`.trim();
+    const links = guardian._child_guardian || [];
+    links.forEach((link: any) => {
+      const child = link.m_children;
+      if (!child || child.deleted_at) return;
+      const childName = `${child.family_name || ''} ${child.given_name || ''}`.trim();
+      existingRows.push({
+        child_id: child.id,
+        child_name: childName,
+        guardian_name: guardianName,
+        phone: guardian.phone || '',
+      });
+    });
+  });
+
+  return existingRows;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -81,6 +138,7 @@ export async function POST(request: NextRequest) {
 
     const results: Array<{ row: number; success: boolean; message?: string }> = [];
     const previewRows: ReturnType<typeof buildPreviewRow>[] = [];
+    const incomingSiblingRows: IncomingSiblingRow[] = [];
     let successCount = 0;
     let failureCount = 0;
 
@@ -90,6 +148,14 @@ export async function POST(request: NextRequest) {
 
       if (mode === 'preview') {
         previewRows.push(buildPreviewRow(rows[i], rowNumber, payload, errors));
+        if (payload?.contact?.parent_phone && payload?.basic_info?.family_name && payload?.basic_info?.given_name) {
+          incomingSiblingRows.push({
+            row: rowNumber,
+            child_name: `${payload.basic_info.family_name} ${payload.basic_info.given_name}`.trim(),
+            parent_name: payload.contact.parent_name || '',
+            phone: payload.contact.parent_phone,
+          });
+        }
         if (errors.length > 0) {
           failureCount += 1;
         } else {
@@ -108,7 +174,9 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const response = await saveChild(payload, targetFacilityId, supabase);
+      const response = await saveChild(payload, targetFacilityId, supabase, undefined, {
+        skipParentLegacy: true,
+      });
       const json = await response.json();
 
       if (!response.ok) {
@@ -126,6 +194,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === 'preview') {
+      const normalizedPhoneSet = new Set(
+        incomingSiblingRows.map((row) => normalizePhone(row.phone)).filter(Boolean)
+      );
+      const existingSiblingRows = await fetchExistingSiblingRows(
+        supabase,
+        targetFacilityId,
+        normalizedPhoneSet,
+      );
+      const siblingCandidates = buildSiblingCandidateGroups(incomingSiblingRows, existingSiblingRows);
+
       return NextResponse.json({
         success: true,
         data: {
@@ -133,8 +211,54 @@ export async function POST(request: NextRequest) {
           success_count: successCount,
           failure_count: failureCount,
           rows: previewRows,
+          sibling_candidates: siblingCandidates,
         },
       });
+    }
+
+    const approvedKeysRaw = formData.get('approved_phone_keys');
+    const approvedPhoneKeys =
+      typeof approvedKeysRaw === 'string' && approvedKeysRaw.trim().length > 0
+        ? (JSON.parse(approvedKeysRaw) as string[])
+        : [];
+
+    if (approvedPhoneKeys.length > 0) {
+      const approvedSet = new Set(approvedPhoneKeys);
+      const existingSiblingRows = await fetchExistingSiblingRows(supabase, targetFacilityId, approvedSet);
+      const approvedCandidates = buildSiblingCandidateGroups([], existingSiblingRows).filter((group) =>
+        approvedSet.has(group.phone_key)
+      );
+
+      const siblingInserts: Array<{ child_id: string; sibling_id: string; relationship: string }> = [];
+      approvedCandidates.forEach((group) => {
+        const childIds = group.children
+          .filter((child) => child.child_id)
+          .map((child) => child.child_id as string);
+        const uniqueIds = Array.from(new Set(childIds));
+        for (let i = 0; i < uniqueIds.length; i += 1) {
+          for (let j = i + 1; j < uniqueIds.length; j += 1) {
+            siblingInserts.push({
+              child_id: uniqueIds[i],
+              sibling_id: uniqueIds[j],
+              relationship: '兄弟',
+            });
+            siblingInserts.push({
+              child_id: uniqueIds[j],
+              sibling_id: uniqueIds[i],
+              relationship: '兄弟',
+            });
+          }
+        }
+      });
+
+      if (siblingInserts.length > 0) {
+        const { error: siblingError } = await supabase
+          .from('_child_sibling')
+          .insert(siblingInserts);
+        if (siblingError) {
+          console.error('Failed to create sibling links:', siblingError);
+        }
+      }
     }
 
     return NextResponse.json({

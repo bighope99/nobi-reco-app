@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -28,6 +29,15 @@ type PreviewRow = {
   parent_name: string
   errors: string[]
 }
+type SiblingCandidate = {
+  phone_key: string
+  guardian_names: string[]
+  children: Array<{
+    source: "existing" | "import"
+    name: string
+    row?: number
+  }>
+}
 
 export default function ChildImportPage() {
   const [facilities, setFacilities] = useState<FacilityOption[]>([])
@@ -48,7 +58,9 @@ export default function ChildImportPage() {
     success_count: number
     failure_count: number
     rows: PreviewRow[]
+    sibling_candidates: SiblingCandidate[]
   } | null>(null)
+  const [approvedSiblingPhones, setApprovedSiblingPhones] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -107,7 +119,6 @@ export default function ChildImportPage() {
     try {
       setPreviewLoading(true)
       setError(null)
-      setPreviewResult(null)
       setImportResult(null)
 
       const formData = new FormData()
@@ -128,6 +139,7 @@ export default function ChildImportPage() {
       }
 
       setPreviewResult(json.data)
+      setApprovedSiblingPhones([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "プレビューの取得に失敗しました")
     } finally {
@@ -162,6 +174,7 @@ export default function ChildImportPage() {
 
       const formData = new FormData()
       formData.append("file", selectedFile)
+      formData.append("approved_phone_keys", JSON.stringify(approvedSiblingPhones))
       if (selectedFacilityId) formData.append("facility_id", selectedFacilityId)
       if (selectedSchoolId) formData.append("school_id", selectedSchoolId)
       if (selectedClassId) formData.append("class_id", selectedClassId)
@@ -182,6 +195,7 @@ export default function ChildImportPage() {
       setSelectedClassId("")
       setSelectedFile(null)
       setPreviewResult(null)
+      setApprovedSiblingPhones([])
       setError(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
@@ -197,10 +211,20 @@ export default function ChildImportPage() {
     setSelectedFile(null)
     setPreviewResult(null)
     setImportResult(null)
+    setApprovedSiblingPhones([])
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
+  }
+
+  const toggleSiblingApproval = (phoneKey: string, checked: boolean) => {
+    setApprovedSiblingPhones((prev) => {
+      if (checked) {
+        return prev.includes(phoneKey) ? prev : [...prev, phoneKey]
+      }
+      return prev.filter((key) => key !== phoneKey)
+    })
   }
 
   return (
@@ -210,7 +234,7 @@ export default function ChildImportPage() {
     >
       <div className="mx-auto max-w-5xl space-y-6">
         {/* CSVアップロードとテンプレート（プレビュー非表示時のみ） */}
-        {!previewResult && !previewLoading && (
+        {!selectedFile && !previewLoading && !previewResult && (
           <>
             <Card className="border-2">
               <CardHeader className="pb-4">
@@ -232,9 +256,17 @@ export default function ChildImportPage() {
                     accept=".csv"
                     className="sr-only"
                     onChange={handleFileChange}
+                    onClick={(event) => {
+                      (event.currentTarget as HTMLInputElement).value = ""
+                    }}
                     ref={fileInputRef}
                   />
                 </div>
+                {error && (
+                  <p className="text-sm text-red-600">
+                    {error}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -258,9 +290,14 @@ export default function ChildImportPage() {
         )}
 
         {/* 保存・キャンセルボタン（プレビュー表示時のみ） */}
-        {(previewResult || previewLoading) && (
+        {(selectedFile || previewResult || previewLoading) && (
           <Card className="border-2 border-primary/20 bg-primary/5">
             <CardContent className="py-4">
+              {error && (
+                <p className="text-sm text-red-600 mb-3">
+                  {error}
+                </p>
+              )}
               <div className="flex items-center gap-3">
                 {selectedFile && (
                   <div className="flex items-center gap-2 px-3 py-2 bg-background/80 border border-primary/20 rounded-lg flex-1">
@@ -476,6 +513,54 @@ export default function ChildImportPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="px-6 py-5 border-t bg-muted/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold text-foreground/80">兄弟候補の確認</h4>
+                      <span className="text-xs text-muted-foreground">
+                        電話番号単位で承認（表示は保護者名）
+                      </span>
+                    </div>
+                    {previewResult.sibling_candidates.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">兄弟候補はありません。</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {previewResult.sibling_candidates.map((candidate) => (
+                          <div
+                            key={candidate.phone_key}
+                            className="rounded-lg border bg-background/80 p-4 space-y-2"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id={`sibling-${candidate.phone_key}`}
+                                checked={approvedSiblingPhones.includes(candidate.phone_key)}
+                                onCheckedChange={(checked) =>
+                                  toggleSiblingApproval(candidate.phone_key, Boolean(checked))
+                                }
+                              />
+                              <label
+                                htmlFor={`sibling-${candidate.phone_key}`}
+                                className="text-sm font-semibold cursor-pointer"
+                              >
+                                承認する
+                              </label>
+                              <span className="text-xs text-muted-foreground">
+                                保護者: {candidate.guardian_names.join(" / ")}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              兄弟候補:
+                              {candidate.children.map((child) => (
+                                <span key={`${candidate.phone_key}-${child.name}-${child.row ?? ""}`} className="ml-2">
+                                  {child.source === "import" ? "新規" : "既存"}:{child.name}
+                                  {child.row ? `(${child.row}行目)` : ""}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

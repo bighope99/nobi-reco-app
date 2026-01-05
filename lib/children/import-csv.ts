@@ -257,7 +257,7 @@ function parseBoolean(value: string, defaultValue: boolean): boolean {
   return defaultValue;
 }
 
-function normalizePhone(value: string): string {
+export function normalizePhone(value: string): string {
   return value.replace(/[-‐‑–—―ー－\s\u3000]/g, '').trim();
 }
 
