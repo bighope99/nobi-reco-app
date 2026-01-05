@@ -38,7 +38,7 @@ export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null
   // app_metadataからカスタムクレームを取得
   // getClaims()の戻り値は{ claims: JwtPayload, ... }形式だが、
   // 実際のJWTペイロードはclaims.claimsではなく、claims自体にapp_metadataが含まれる
-  const payload = claims as any;
+  const payload = (claims as any)?.claims ?? claims;
   const role = payload?.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
   const company_id = payload?.app_metadata?.company_id as string;
   const current_facility_id = payload?.app_metadata?.current_facility_id as string | null;
