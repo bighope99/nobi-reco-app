@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 
-interface ChildPayload {
+export interface ChildPayload {
   child_id?: string;
   basic_info?: {
     family_name?: string;
@@ -43,7 +43,7 @@ interface ChildPayload {
   };
 }
 
-async function saveChild(
+export async function saveChild(
   payload: ChildPayload,
   facilityId: string,
   supabase: any,
@@ -87,6 +87,7 @@ async function saveChild(
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
+    parent_name: contact?.parent_name || null,
     parent_phone: contact?.parent_phone || '',
     parent_email: contact?.parent_email || '',
     allergies: care_info?.allergies || null,
