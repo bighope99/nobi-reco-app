@@ -1,6 +1,8 @@
 "use client"
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { Button } from '@/components/ui/button';
 
 import {
   AlertTriangle,
@@ -698,19 +700,25 @@ export default function ChildcareDashboard() {
                           </span>
                           <span className="text-xs text-slate-500 whitespace-nowrap">{child.class_name}</span>
                         </div>
-                        <button className="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition-all" onClick={() => console.log(`記録: ${child.name}`)}>
+                        <Link
+                          href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
+                          className="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition-all"
+                          aria-label={`${child.name}の個別記録を作成`}
+                        >
                           <ChevronRight size={18} />
-                        </button>
+                        </Link>
                       </div>
                     ))
                   )}
                 </div>
 
                 <div className="p-3 border-t border-gray-100 bg-gray-50 rounded-b-lg mt-auto">
-                  <button className="w-full py-2 text-xs text-slate-600 hover:text-indigo-600 font-medium transition-colors flex items-center justify-center gap-2 border border-gray-200 rounded bg-white hover:bg-indigo-50">
-                    <MoreHorizontal size={14} />
-                    全児童の記録状況
-                  </button>
+                  <Button variant="outline" className="w-full text-xs font-medium text-slate-600 hover:text-indigo-600" asChild>
+                    <Link href="/records/status" className="flex items-center justify-center gap-2">
+                      <MoreHorizontal size={14} />
+                      全児童の記録状況
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>

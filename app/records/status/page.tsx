@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
+import Link from "next/link"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { FileText, ChevronLeft, Calendar, ChevronRight, ChevronDown, Search, Filter, History, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react"
 
@@ -435,9 +436,12 @@ export default function StatusPage() {
                                                     <button className="text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors" title="履歴">
                                                         <History className="w-4 h-4" />
                                                     </button>
-                                                    <button className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all">
+                                                    <Link
+                                                        href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
+                                                        className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all"
+                                                    >
                                                         作成
-                                                    </button>
+                                                    </Link>
                                                 </div>
                                             </td>
                                         </tr>

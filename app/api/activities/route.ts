@@ -4,6 +4,45 @@ import { getUserSession } from '@/lib/auth/session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
+const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
+const SIGNED_URL_EXPIRES_IN = 300;
+
+const signActivityPhotos = async (
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  facilityId: string,
+  photos: any
+) => {
+  if (!Array.isArray(photos)) return photos || [];
+
+  const signedPhotos = await Promise.all(
+    photos.map(async (photo) => {
+      if (!photo || typeof photo !== 'object') return photo;
+      const filePath = photo.file_path;
+      if (typeof filePath !== 'string' || !filePath.startsWith(`${facilityId}/`)) {
+        return photo;
+      }
+
+      const { data: signed, error } = await supabase.storage
+        .from(ACTIVITY_PHOTO_BUCKET)
+        .createSignedUrl(filePath, SIGNED_URL_EXPIRES_IN);
+
+      if (error || !signed) {
+        console.error('Failed to sign activity photo URL:', error);
+        return photo;
+      }
+
+      return {
+        ...photo,
+        url: signed.signedUrl,
+        thumbnail_url: signed.signedUrl,
+        expires_in: SIGNED_URL_EXPIRES_IN,
+      };
+    })
+  );
+
+  return signedPhotos;
+};
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -46,6 +85,8 @@ export async function GET(request: NextRequest) {
         content,
         snack,
         photos,
+        class_id,
+        mentioned_children,
         created_at,
         updated_at,
         m_classes!inner (
@@ -102,18 +143,20 @@ export async function GET(request: NextRequest) {
     }
 
     // データを整形
-    const formattedActivities = (activities || []).map((activity: any) => ({
+    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => ({
       activity_id: activity.id,
       activity_date: activity.activity_date,
       title: activity.title || '無題',
       content: activity.content,
       snack: activity.snack,
-      photos: activity.photos || [],
+      photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
+      class_id: activity.class_id,
       class_name: activity.m_classes?.name || '',
+      mentioned_children: activity.mentioned_children || [],
       created_by: activity.m_users?.name || '',
       created_at: activity.created_at,
       individual_record_count: observationCounts[activity.id] || 0,
-    }));
+    })));
 
     return NextResponse.json({
       success: true,
@@ -157,7 +200,7 @@ export async function POST(request: NextRequest) {
 
     const facility_id = userSession.current_facility_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, child_ids } = body;
+    const { activity_date, class_id, title, content, snack, child_ids, photos } = body;
 
     if (!activity_date || !class_id || !content) {
       return NextResponse.json(
@@ -165,6 +208,35 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (photos && !Array.isArray(photos)) {
+      return NextResponse.json(
+        { success: false, error: 'photos must be an array' },
+        { status: 400 }
+      );
+    }
+
+    if (Array.isArray(photos) && photos.length > 6) {
+      return NextResponse.json(
+        { success: false, error: '写真は最大6枚までです' },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPhotos = Array.isArray(photos)
+      ? photos
+          .map((photo: any) => {
+            if (!photo || typeof photo.url !== 'string') return null;
+            return {
+              url: photo.url,
+              caption: typeof photo.caption === 'string' ? photo.caption : null,
+              thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
+              file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
+              file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
+            };
+          })
+          .filter(Boolean)
+      : null;
 
     // 活動記録を作成
     const { data: activity, error: activityError } = await supabase
@@ -176,6 +248,7 @@ export async function POST(request: NextRequest) {
         title: title || '活動記録',
         content,
         snack,
+        photos: normalizedPhotos,
         created_by: session.user.id,
       })
       .select()

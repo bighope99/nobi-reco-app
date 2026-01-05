@@ -175,6 +175,66 @@ const metadata = await getAuthenticatedUserMetadata();
 
 **詳細**: `docs/jwt-custom-claims-setup.md` を参照
 
+#### 観察記録タグ更新関数（`update_observation_tags`）
+
+```sql
+CREATE OR REPLACE FUNCTION update_observation_tags(
+  p_observation_id UUID,
+  p_tag_ids TEXT[],
+  p_is_auto_tagged BOOLEAN DEFAULT true
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM _record_tag WHERE observation_id = p_observation_id;
+
+  IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
+    INSERT INTO _record_tag (observation_id, tag_id, is_auto_tagged, confidence_score)
+    SELECT p_observation_id, unnest(p_tag_ids), p_is_auto_tagged, NULL;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE EXCEPTION 'Failed to update observation tags for observation_id %: %',
+      p_observation_id, SQLERRM;
+END;
+$$;
+```
+
+**説明**:
+- 観察記録（`r_observation`）のタグを原子的（アトミック）に更新
+- 既存のタグを削除してから新しいタグを挿入（トランザクション内で実行）
+- エラー発生時は自動的にロールバックされ、データ整合性を保証
+- AI解析結果のタグ更新時に使用
+
+**使用例**:
+```sql
+-- 観察記録にタグ「social_skills」「leadership」を追加
+SELECT update_observation_tags(
+  'observation-uuid-here',
+  ARRAY['social_skills', 'leadership'],
+  true  -- AI自動タグ付け
+);
+
+-- タグを全て削除（空配列を渡す）
+SELECT update_observation_tags(
+  'observation-uuid-here',
+  ARRAY[]::TEXT[],
+  true
+);
+```
+
+**API側での使用例**:
+```typescript
+const { error } = await supabase.rpc('update_observation_tags', {
+  p_observation_id: observationId,
+  p_tag_ids: ['social_skills', 'leadership'],
+  p_is_auto_tagged: true,
+});
+```
+
 ---
 
 ## 3. ENUM型定義
@@ -510,7 +570,8 @@ CREATE TABLE IF NOT EXISTS r_activity (
   title VARCHAR(200),                            -- タイトル（例: 公園で外遊び）
   content TEXT NOT NULL,                         -- 活動内容（本文）
   snack TEXT,                                    -- おやつ
-  
+  mentioned_children TEXT[],                     -- メンションされた子供の暗号化トークンの配列
+
   -- 写真（JSONBで複数枚保存）
   photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
   
@@ -534,6 +595,7 @@ CREATE INDEX idx_activity_class_id ON r_activity(class_id) WHERE deleted_at IS N
 CREATE INDEX idx_activity_date ON r_activity(activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_created_by ON r_activity(created_by);
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
 ```
 
 ---
@@ -552,6 +614,12 @@ CREATE TABLE IF NOT EXISTS r_observation (
   -- 観察内容
   content TEXT NOT NULL,                         -- 観察内容（本文）
   is_fact BOOLEAN DEFAULT true,                  -- 事実か所感か（AIで判定）
+  
+  -- AI解析結果
+  objective TEXT,                                -- AI解析で分離された客観/事実部分
+  subjective TEXT,                               -- AI解析で分離された主観/所感部分
+  ai_analyzed_at TIMESTAMP WITH TIME ZONE,      -- AI解析実行日時
+  is_ai_analyzed BOOLEAN DEFAULT false,          -- AI解析が実行されたかどうか
   
   -- 写真
   photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
@@ -1178,6 +1246,17 @@ CREATE POLICY facility_access ON r_activity
 
 **詳細**: `docs/api/08_dashboard_api.md` 参照
 
+### AI解析結果保存機能（2025年12月）
+
+#### `r_observation`テーブルの変更
+- **追加**: `objective TEXT` - AI解析で分離された客観/事実部分
+- **追加**: `subjective TEXT` - AI解析で分離された主観/所感部分
+- **追加**: `ai_analyzed_at TIMESTAMP WITH TIME ZONE` - AI解析実行日時
+- **追加**: `is_ai_analyzed BOOLEAN DEFAULT false` - AI解析が実行されたかどうか
+- **理由**: 
+  - `/records/personal/new` でAI解析結果（objective/subjective）を保存するため
+  - 元の `content` は保持しつつ、AI解析で分離された客観/主観を別カラムで管理
+  - タグは既存の `_record_tag` テーブルにリレーションで保存（変更なし）
 ### メールアドレス制約の削除（2025年12月31日）
 
 #### `m_users`テーブルの変更
