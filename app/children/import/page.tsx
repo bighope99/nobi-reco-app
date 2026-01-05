@@ -521,11 +521,11 @@ export default function ChildImportPage() {
                         電話番号単位で承認（表示は保護者名）
                       </span>
                     </div>
-                    {previewResult.sibling_candidates.length === 0 ? (
+                    {(previewResult.sibling_candidates ?? []).length === 0 ? (
                       <p className="text-sm text-muted-foreground">兄弟候補はありません。</p>
                     ) : (
                       <div className="space-y-3">
-                        {previewResult.sibling_candidates.map((candidate) => (
+                        {(previewResult.sibling_candidates ?? []).map((candidate) => (
                           <div
                             key={candidate.phone_key}
                             className="rounded-lg border bg-background/80 p-4 space-y-2"
