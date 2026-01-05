@@ -68,5 +68,6 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ]
+  ],
+  "env": {"ENABLE_TOOL_SEARCH": "true"}
 }

@@ -390,20 +390,16 @@ export default function StudentList() {
 
     return (
         <StaffLayout title="園児管理">
-            <div className="min-h-screen bg-gray-50 text-slate-900 font-sans" >
+            <div className="min-h-screen text-slate-900 font-sans" >
                 <style>
                     {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
                 </style>
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+                <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
                     {/* Header Area */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6" >
                         <div>
-                            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2" >
-                                <Baby className="text-indigo-500" />
-                                児童台帳
-                            </h1>
                             <p className="text-sm text-slate-500 mt-1" >
                                 {loading ? '読み込み中...' : `全 ${totalCount} 名の児童情報を管理 （${activeTab === 'active' ? '所属中' : '退所済み'} 表示中）`}
                             </p>
@@ -581,7 +577,7 @@ export default function StudentList() {
                                                     onClick={() => window.location.href = `/children/${student.id}/edit`}
                                                 >
                                                     {/* Status Toggle */}
-                                                    <td className="px-6 py-4 text-center" >
+                                                    <td className="px-2 py-4 text-center" >
                                                         <button
                                                             onClick={
                                                                 (e) => {
@@ -600,7 +596,7 @@ export default function StudentList() {
                                                     </td>
 
                                                     {/* Name */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-3 py-4" >
                                                         <div>
                                                             <div className="flex items-center gap-2" >
                                                                 <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
@@ -619,22 +615,22 @@ export default function StudentList() {
                                                     </td>
 
                                                     {/* Grade */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-2 py-4" >
                                                         <span className="text-sm font-medium text-slate-700" > {student.gradeLabel || '-'} </span>
                                                     </td>
 
                                                     {/* Class */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-3 py-4" >
                                                         <span className="text-sm text-slate-600" > {student.className} </span>
                                                     </td>
 
                                                     {/* Contract Type */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-2 py-4" >
                                                         {getContractBadge(student.contractType)}
                                                     </td>
 
                                                     {/* Siblings */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-3 py-4" >
                                                         {
                                                             student.siblings.length > 0 ? (
                                                                 <div className="flex items-center gap-1 text-sm text-slate-600" >
@@ -649,7 +645,7 @@ export default function StudentList() {
                                                     </td>
 
                                                     {/* Allergy (Max 2 lines) */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-2 py-4" >
                                                         {
                                                             student.hasAllergy ? (
                                                                 <div
@@ -664,7 +660,7 @@ export default function StudentList() {
                                                     </td>
 
                                                     {/* Parent Contact */}
-                                                    <td className="px-6 py-4" >
+                                                    <td className="px-3 py-4" >
                                                         <div className="flex items-center gap-3" >
                                                             <button
                                                                 className="p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
@@ -683,7 +679,7 @@ export default function StudentList() {
                                                     </td>
 
                                                     {/* QR Download */}
-                                                    <td className="px-6 py-4 text-center" >
+                                                    <td className="px-1 py-4 text-center" >
                                                         <button
                                                             className={`inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${qrGeneratingId === student.id || batchGenerating
                                                                 ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
@@ -696,17 +692,13 @@ export default function StudentList() {
                                                             disabled={qrGeneratingId === student.id || batchGenerating}
                                                             title="児童のQRコードをPDFで出力"
                                                         >
-                                                            {qrGeneratingId === student.id ? (
-                                                                <Loader2 size={14} className="animate-spin" />
-                                                            ) : (
-                                                                <QrCode size={14} />
-                                                            )}
+
                                                             PDF出力
                                                         </button>
                                                     </td>
 
                                                     {/* Action */}
-                                                    <td className="px-6 py-4 text-right" >
+                                                    <td className="px-4 py-2 text-right" >
                                                         <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
                                                     </td>
                                                 </tr>
