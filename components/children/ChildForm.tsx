@@ -315,7 +315,10 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       const response = await fetch('/api/children/search-siblings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.parent_phone }),
+        body: JSON.stringify({
+          phone: formData.parent_phone,
+          child_id: isEditMode ? childId : undefined, // 編集モードの場合は本人のIDを送信
+        }),
       });
 
       const result = await response.json();
@@ -793,11 +796,16 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
 
                 {/* 緊急連絡先リスト */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <h3 className="text-sm font-bold text-slate-800">緊急連絡先リスト（優先順）</h3>
-                    <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
-                      <Plus size={14} /> 追加する
-                    </button>
+                  <div className="border-b border-slate-100 pb-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-slate-800">緊急連絡先リスト（優先順）</h3>
+                      <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
+                        <Plus size={14} /> 追加する
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1.5">
+                      上記の保護者に連絡がつかない場合の連絡先を登録します（祖父母、親戚、緊急時連絡先など）
+                    </p>
                   </div>
 
                   {emergencyContacts.map((contact, index) => (
