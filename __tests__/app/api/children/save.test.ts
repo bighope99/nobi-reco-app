@@ -72,6 +72,71 @@ const createSupabaseMock = (childId = 'child-1', guardianId = 'guardian-1'): Sup
   };
 };
 
+type SupabaseUpdateMock = {
+  from: jest.Mock;
+  __childSelect: jest.Mock;
+  __childUpdate: jest.Mock;
+  __childGuardianSelect: jest.Mock;
+  __childGuardianDelete: jest.Mock;
+};
+
+const createSupabaseUpdateMock = (childId = 'child-1'): SupabaseUpdateMock => {
+  const childSelect = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        is: jest.fn().mockReturnValue({
+          single: jest.fn().mockResolvedValue({
+            data: { id: childId },
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  });
+
+  const childUpdate = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
+          data: {
+            id: childId,
+            family_name: 'encrypted',
+            given_name: 'encrypted',
+            family_name_kana: 'encrypted',
+            given_name_kana: 'encrypted',
+            enrollment_date: '2024-01-01',
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-02T00:00:00Z',
+          },
+          error: null,
+        }),
+      }),
+    }),
+  });
+
+  const childGuardianSelect = jest.fn();
+  const childGuardianDelete = jest.fn();
+
+  const from = jest.fn((table: string) => {
+    switch (table) {
+      case 'm_children':
+        return { select: childSelect, update: childUpdate };
+      case '_child_guardian':
+        return { select: childGuardianSelect, delete: childGuardianDelete };
+      default:
+        return {};
+    }
+  });
+
+  return {
+    from,
+    __childSelect: childSelect,
+    __childUpdate: childUpdate,
+    __childGuardianSelect: childGuardianSelect,
+    __childGuardianDelete: childGuardianDelete,
+  };
+};
+
 describe('saveChild PII暗号化', () => {
   const originalKey = process.env.PII_ENCRYPTION_KEY;
 
@@ -159,5 +224,33 @@ describe('saveChild PII暗号化', () => {
     expect(decryptPII(guardianInsertValues.given_name)).toBe('優子');
     expect(decryptPII(guardianInsertValues.phone)).toBe(normalizedParentPhone);
     expect(decryptPII(guardianInsertValues.email)).toBe(payload.contact?.parent_email);
+  });
+
+  it('保護者情報が空欄の更新では既存の紐付けを削除しないこと', async () => {
+    const supabase = createSupabaseUpdateMock();
+    const payload: ChildPayload = {
+      basic_info: {
+        family_name: '佐藤',
+        given_name: '花子',
+        birth_date: '2019-06-01',
+      },
+      affiliation: {
+        enrolled_at: '2024-04-01',
+      },
+      contact: {
+        parent_name: '',
+        parent_phone: '',
+      },
+    };
+
+    await saveChild(payload, 'facility-1', supabase, 'child-1');
+
+    const updateValues = supabase.__childUpdate.mock.calls[0][0];
+    expect(updateValues.parent_name).toBeUndefined();
+    expect(updateValues.parent_phone).toBeUndefined();
+    expect(updateValues.parent_email).toBeUndefined();
+
+    expect(supabase.__childGuardianSelect).not.toHaveBeenCalled();
+    expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
   });
 });

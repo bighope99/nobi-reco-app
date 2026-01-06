@@ -82,15 +82,28 @@ export async function saveChild(
   }
 
   const shouldSaveParentLegacy = !options?.skipParentLegacy;
+  const hasParentName = !!contact?.parent_name?.trim();
+  const hasParentPhone = !!contact?.parent_phone?.trim();
+  const hasParentEmail = !!contact?.parent_email?.trim();
   const normalizedParentPhone = contact?.parent_phone ? normalizePhone(contact.parent_phone) : null;
   const fitColumnLength = (value: string | null, maxLength: number): string | null => {
     if (!value) return null;
     return value.length <= maxLength ? value : null;
   };
 
-  const legacyParentName = shouldSaveParentLegacy ? encryptPII(contact?.parent_name || null) : null;
-  const legacyParentPhone = shouldSaveParentLegacy ? encryptPII(normalizedParentPhone) : null;
-  const legacyParentEmail = shouldSaveParentLegacy ? encryptPII(contact?.parent_email || null) : null;
+  const legacyParentName = shouldSaveParentLegacy && hasParentName
+    ? encryptPII(contact?.parent_name?.trim() || null)
+    : null;
+  const legacyParentPhone = shouldSaveParentLegacy && hasParentPhone
+    ? encryptPII(normalizedParentPhone)
+    : null;
+  const legacyParentEmail = shouldSaveParentLegacy && hasParentEmail
+    ? encryptPII(contact?.parent_email?.trim() || null)
+    : null;
+
+  const legacyParentNameValue = fitColumnLength(legacyParentName, 100);
+  const legacyParentPhoneValue = fitColumnLength(legacyParentPhone, 20);
+  const legacyParentEmailValue = fitColumnLength(legacyParentEmail, 255);
 
   const childValues: any = {
     facility_id: facilityId,
@@ -108,9 +121,15 @@ export async function saveChild(
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
-    parent_name: fitColumnLength(legacyParentName, 100),
-    parent_phone: fitColumnLength(legacyParentPhone, 20),
-    parent_email: fitColumnLength(legacyParentEmail, 255),
+    parent_name: isUpdate
+      ? legacyParentNameValue ?? undefined
+      : legacyParentNameValue ?? null,
+    parent_phone: isUpdate
+      ? legacyParentPhoneValue ?? undefined
+      : legacyParentPhoneValue ?? null,
+    parent_email: isUpdate
+      ? legacyParentEmailValue ?? undefined
+      : legacyParentEmailValue ?? null,
     allergies: encryptPII(care_info?.allergies || null),
     child_characteristics: encryptPII(care_info?.child_characteristics || null),
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
@@ -121,6 +140,11 @@ export async function saveChild(
   let result;
   if (isUpdate) {
     childValues.updated_at = new Date().toISOString();
+    Object.keys(childValues).forEach((key) => {
+      if (childValues[key] === undefined) {
+        delete childValues[key];
+      }
+    });
     const { data: updatedChild, error: updateError } = await supabase
       .from('m_children')
       .update(childValues)
@@ -181,8 +205,13 @@ export async function saveChild(
     }
   }
 
+  const hasValidEmergencyContacts = !!contact?.emergency_contacts?.some(
+    (ec) => ec.name?.trim() && ec.phone?.trim()
+  );
+  const shouldSyncGuardians = hasParentName || hasValidEmergencyContacts;
+
   // 保護者情報の保存処理（アップサートアプローチ）
-  if (contact?.parent_name || contact?.emergency_contacts) {
+  if (shouldSyncGuardians) {
     // 更新時は既存のリンクを取得して、不要なリンクを削除するために使用
     let existingGuardianIds: string[] = [];
     if (isUpdate) {
@@ -200,7 +229,7 @@ export async function saveChild(
 
     // 主たる保護者の保存処理（非同期関数として定義）
     const processPrimaryGuardian = async (): Promise<string | null> => {
-      if (!contact.parent_name) return null;
+      if (!contact.parent_name?.trim()) return null;
 
       // 名前から姓と名に分割（スペース区切り）
       const nameParts = contact.parent_name.trim().split(/\s+/);
