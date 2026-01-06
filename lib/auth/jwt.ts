@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import type { JwtPayload } from '@supabase/supabase-js';
 
 /**
  * JWTメタデータの型定義
@@ -22,23 +23,25 @@ export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null
 
   // getClaimsで署名検証済みのカスタムクレームを取得
   const {
-    data: claims,
-    error: claimsError,
+    data,
+    error,
   } = await supabase.auth.getClaims();
 
-  if (claimsError) {
-    console.error('Failed to get JWT claims:', claimsError.message);
+  if (error || !data) {
+    if (error) {
+      console.error('Failed to get JWT claims:', error.message);
+    }
     return null;
   }
 
+  // getClaims()の戻り値は{ claims: JwtPayload }形式
+  const claims = data.claims;
   if (!claims) {
     return null;
   }
 
-  // app_metadataからカスタムクレームを取得
-  // getClaims()の戻り値は{ claims: JwtPayload, ... }形式だが、
-  // 実際のJWTペイロードはclaims.claimsではなく、claims自体にapp_metadataが含まれる
-  const payload = claims as any;
+  // JWTペイロードを適切な型として使用
+  const payload: JwtPayload = claims;
   const role = payload?.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
   const company_id = payload?.app_metadata?.company_id as string;
   const current_facility_id = payload?.app_metadata?.current_facility_id as string | null;

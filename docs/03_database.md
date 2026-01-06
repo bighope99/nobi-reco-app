@@ -433,11 +433,12 @@ CREATE TABLE IF NOT EXISTS m_children (
   photo_permission_share BOOLEAN DEFAULT false,  -- 他の保護者に共有OK
   
   -- 保護者情報（DEPRECATED: m_guardians + _child_guardian を使用）
-  parent_name VARCHAR(100),                      -- 保護者名（非推奨）
-  parent_email VARCHAR(255),                     -- 保護者メールアドレス（非推奨）
-  parent_phone VARCHAR(20),                      -- 保護者電話番号（非推奨）
-  emergency_contact_name VARCHAR(100),           -- 緊急連絡先名（非推奨）
-  emergency_contact_phone VARCHAR(20),           -- 緊急連絡先電話番号（非推奨）
+  -- ⚠️ 2026年1月移行済み。今後は m_guardians + _child_guardian テーブルを使用すること。
+  parent_name VARCHAR(100),                      -- 保護者名（非推奨・読み取り専用）
+  parent_email VARCHAR(255),                     -- 保護者メールアドレス（非推奨・読み取り専用）
+  parent_phone VARCHAR(20),                      -- 保護者電話番号（非推奨・読み取り専用）
+  emergency_contact_name VARCHAR(100),           -- 緊急連絡先名（非推奨・読み取り専用）
+  emergency_contact_phone VARCHAR(20),           -- 緊急連絡先電話番号（非推奨・読み取り専用）
   sibling_id UUID REFERENCES m_children(id),     -- 兄弟姉妹の紐づけ（DEPRECATED: _child_sibling を使用）
   
   -- レポート設定
@@ -550,6 +551,22 @@ CREATE INDEX idx_guardians_email ON m_guardians(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_guardians_name_search ON m_guardians
   USING gin(to_tsvector('japanese', family_name || ' ' || given_name));
 ```
+
+### 保護者情報の管理方針（2026年1月更新）
+
+**氏名の格納方法**:
+- `family_name`: 「佐藤 太郎」（姓名まとめて格納）
+- `given_name`: '' （空文字列、スキーマ互換性のため保持）
+- `family_name_kana`, `given_name_kana`: 空文字列（オプション）
+
+**緊急連絡先の管理**:
+- 主たる保護者: `is_primary = true`（`_child_guardian`テーブル）
+- 緊急連絡先（祖父母等）: `is_emergency_contact = true`（`_child_guardian`テーブル）
+- 1人の児童に複数の保護者を紐づけ可能
+
+**移行方針**:
+- `m_children`テーブルの保護者関連カラム（`parent_name`, `parent_email`, `parent_phone`, `emergency_contact_name`, `emergency_contact_phone`）は非推奨（2026年1月移行済み）
+- 新規登録・更新は必ず`m_guardians` + `_child_guardian`を使用すること
 
 ---
 
@@ -1002,6 +1019,24 @@ CREATE TABLE IF NOT EXISTS _child_sibling (
 CREATE INDEX idx_child_sibling_child_id ON _child_sibling(child_id);
 CREATE INDEX idx_child_sibling_sibling_id ON _child_sibling(sibling_id);
 ```
+
+### 兄弟紐づけの運用方針（2026年1月更新）
+
+**`relationship` カラムの扱い**:
+- デフォルト値: '兄弟'（固定）
+- ユーザー要件により、詳細な関係性（兄/姉/弟/妹）は管理しない
+- 将来的な拡張のためカラムは保持
+
+**双方向リレーション**:
+- 兄弟紐づけ時に自動的に双方向のレコードを作成
+- `child_id` と `sibling_id` を入れ替えた2つのレコードが存在
+- 例: 太郎と花子が兄弟の場合、以下の2レコードが作成される
+  - `(child_id: 太郎, sibling_id: 花子, relationship: '兄弟')`
+  - `(child_id: 花子, sibling_id: 太郎, relationship: '兄弟')`
+
+**移行方針**:
+- `m_children.sibling_id`カラムは非推奨（2026年1月移行済み）
+- 新規登録・更新は必ず`_child_sibling`テーブルを使用すること
 
 ---
 
