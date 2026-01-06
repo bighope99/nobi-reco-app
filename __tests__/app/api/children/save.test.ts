@@ -149,8 +149,7 @@ describe('saveChild PII暗号化', () => {
     expect(insertedValues.parent_name).not.toBe(payload.contact?.parent_name);
     expect(decryptPII(insertedValues.parent_name)).toBe(payload.contact?.parent_name);
 
-    expect(insertedValues.parent_phone).not.toBe(normalizedParentPhone);
-    expect(decryptPII(insertedValues.parent_phone)).toBe(normalizedParentPhone);
+    expect(insertedValues.parent_phone).toBeNull();
 
     expect(insertedValues.parent_email).not.toBe(payload.contact?.parent_email);
     expect(decryptPII(insertedValues.parent_email)).toBe(payload.contact?.parent_email);

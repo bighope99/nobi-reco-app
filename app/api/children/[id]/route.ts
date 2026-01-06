@@ -113,6 +113,16 @@ export async function GET(
       m_guardians: decryptGuardian(ec.m_guardians),
     }));
 
+    const formatName = (
+      parts: Array<string | null | undefined>,
+      emptyValue: string | null = null
+    ): string | null => {
+      const cleaned = parts
+        .map(part => (typeof part === 'string' ? part.trim() : ''))
+        .filter(Boolean);
+      return cleaned.length > 0 ? cleaned.join(' ') : emptyValue;
+    };
+
     // データ整形
     const response = {
       success: true,
@@ -141,12 +151,21 @@ export async function GET(
         },
         contact: {
           parent_name: decryptedPrimaryGuardian
-            ? `${decryptedPrimaryGuardian.m_guardians.family_name} ${decryptedPrimaryGuardian.m_guardians.given_name}`.trim()
+            ? formatName(
+                [
+                  decryptedPrimaryGuardian.m_guardians.family_name,
+                  decryptedPrimaryGuardian.m_guardians.given_name,
+                ],
+                null
+              )
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
           parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(childData.parent_email) || null,
           emergency_contacts: decryptedEmergencyContacts.map((ec: any) => ({
-            name: `${ec.m_guardians.family_name} ${ec.m_guardians.given_name}`.trim(),
+            name: formatName(
+              [ec.m_guardians.family_name, ec.m_guardians.given_name],
+              ''
+            ) || '',
             relation: ec.relationship,
             phone: ec.m_guardians.phone,
           })),
@@ -165,7 +184,7 @@ export async function GET(
           const decryptedGivenName = decryptOrFallback(s.m_children.given_name);
           return {
             child_id: s.m_children.id,
-            name: `${decryptedFamilyName} ${decryptedGivenName}`,
+            name: formatName([decryptedFamilyName, decryptedGivenName], ''),
             relationship: s.relationship,
           };
         }),

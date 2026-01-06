@@ -83,6 +83,15 @@ export async function saveChild(
 
   const shouldSaveParentLegacy = !options?.skipParentLegacy;
   const normalizedParentPhone = contact?.parent_phone ? normalizePhone(contact.parent_phone) : null;
+  const fitColumnLength = (value: string | null, maxLength: number): string | null => {
+    if (!value) return null;
+    return value.length <= maxLength ? value : null;
+  };
+
+  const legacyParentName = shouldSaveParentLegacy ? encryptPII(contact?.parent_name || null) : null;
+  const legacyParentPhone = shouldSaveParentLegacy ? encryptPII(normalizedParentPhone) : null;
+  const legacyParentEmail = shouldSaveParentLegacy ? encryptPII(contact?.parent_email || null) : null;
+
   const childValues: any = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
@@ -99,9 +108,9 @@ export async function saveChild(
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
-    parent_name: shouldSaveParentLegacy ? encryptPII(contact?.parent_name || null) : null,
-    parent_phone: shouldSaveParentLegacy ? encryptPII(normalizedParentPhone) : null,
-    parent_email: shouldSaveParentLegacy ? encryptPII(contact?.parent_email || null) : null,
+    parent_name: fitColumnLength(legacyParentName, 100),
+    parent_phone: fitColumnLength(legacyParentPhone, 20),
+    parent_email: fitColumnLength(legacyParentEmail, 255),
     allergies: encryptPII(care_info?.allergies || null),
     child_characteristics: encryptPII(care_info?.child_characteristics || null),
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
@@ -463,6 +472,16 @@ export async function saveChild(
     return decrypted !== null ? decrypted : encrypted;
   };
 
+  const formatName = (
+    parts: Array<string | null | undefined>,
+    emptyValue: string | null = null
+  ): string | null => {
+    const cleaned = parts
+      .map(part => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean);
+    return cleaned.length > 0 ? cleaned.join(' ') : emptyValue;
+  };
+
   const decryptedFamilyName = decryptOrFallback(result.family_name);
   const decryptedGivenName = decryptOrFallback(result.given_name);
   const decryptedFamilyNameKana = decryptOrFallback(result.family_name_kana);
@@ -472,8 +491,8 @@ export async function saveChild(
     success: true,
     data: {
       child_id: result.id,
-      name: `${decryptedFamilyName} ${decryptedGivenName}`.trim(),
-      kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`.trim(),
+      name: formatName([decryptedFamilyName, decryptedGivenName], '') || '',
+      kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana], '') || '',
       enrollment_date: result.enrollment_date,
       created_at: result.created_at,
       updated_at: result.updated_at,
