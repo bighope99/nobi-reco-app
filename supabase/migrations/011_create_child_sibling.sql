@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS _child_sibling (
 );
 
 -- インデックス作成
-CREATE INDEX idx_child_sibling_child_id ON _child_sibling(child_id);
-CREATE INDEX idx_child_sibling_sibling_id ON _child_sibling(sibling_id);
+CREATE INDEX IF NOT EXISTS idx_child_sibling_child_id ON _child_sibling(child_id);
+CREATE INDEX IF NOT EXISTS idx_child_sibling_sibling_id ON _child_sibling(sibling_id);
 
 -- コメント追加
 COMMENT ON TABLE _child_sibling IS '子ども-兄弟姉妹紐付けテーブル（双方向リレーション）';

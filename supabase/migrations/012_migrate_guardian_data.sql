@@ -49,7 +49,7 @@ BEGIN
       RETURNING id INTO v_guardian_id;
     END IF;
 
-    -- 子ども-保護者紐付けを作成（重複を避ける）
+    -- 同じ電話番号を持つすべての子どもを保護者に紐付け
     INSERT INTO _child_guardian (
       child_id,
       guardian_id,
@@ -58,16 +58,21 @@ BEGIN
       is_emergency_contact
     )
     SELECT
-      child_record.child_id,
+      mc.id,
       v_guardian_id,
       '保護者',
       true,
       true
-    WHERE NOT EXISTS (
-      SELECT 1 FROM _child_guardian cg
-      WHERE cg.child_id = child_record.child_id
-        AND cg.guardian_id = v_guardian_id
-    );
+    FROM m_children mc
+    WHERE mc.facility_id = child_record.facility_id
+      AND mc.parent_phone = child_record.parent_phone
+      AND mc.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM _child_guardian cg
+        WHERE cg.child_id = mc.id
+          AND cg.guardian_id = v_guardian_id
+      );
+  END LOOP;
 
   END LOOP;
 
