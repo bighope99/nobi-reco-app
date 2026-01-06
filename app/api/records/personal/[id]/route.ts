@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { decryptPII } from '@/utils/crypto/piiEncryption';
 
 export async function GET(
   request: NextRequest,
@@ -66,9 +67,18 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+      if (!encrypted) return null;
+      const decrypted = decryptPII(encrypted);
+      return decrypted !== null ? decrypted : encrypted;
+    };
+
+    const decryptedFamilyName = decryptOrFallback(child.family_name);
+    const decryptedGivenName = decryptOrFallback(child.given_name);
     const childName =
       child.nickname ||
-      [child.family_name, child.given_name].filter(Boolean).join(' ') ||
+      [decryptedFamilyName, decryptedGivenName].filter(Boolean).join(' ') ||
       '';
     const tagFlags = (data.record_tags || []).reduce<Record<string, boolean>>((acc, item) => {
       if (item?.tag_id) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
 import { createQrPayload, createQrPdf, createZip, formatFileSegment } from '@/lib/qr/card-generator'
+import { decryptPII } from '@/utils/crypto/piiEncryption'
 
 interface BatchRequestBody {
   child_ids?: string[]
@@ -58,9 +59,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Children not found' }, { status: 404 })
     }
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+      if (!encrypted) return null;
+      const decrypted = decryptPII(encrypted);
+      return decrypted !== null ? decrypted : encrypted;
+    };
+
     const generatedAt = new Date()
     const entries = childrenData.map((child: any) => {
-      const childName = `${child.family_name} ${child.given_name}`.trim()
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const childName = `${decryptedFamilyName} ${decryptedGivenName}`.trim()
       const { payload } = createQrPayload(child.id, facilityId)
       const pdfBuffer = createQrPdf({
         childName,

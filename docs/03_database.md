@@ -848,6 +848,87 @@ CREATE INDEX idx_s_school_schedules_grades
 
 ---
 
+### 6.4 PII検索用ハッシュテーブル（`s_pii_search_index`）
+
+```sql
+CREATE TABLE IF NOT EXISTS s_pii_search_index (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- エンティティ情報
+  entity_type VARCHAR(20) NOT NULL,  -- 'child' or 'guardian'
+  entity_id UUID NOT NULL,            -- m_children.id or m_guardians.id
+  
+  -- 検索タイプ
+  search_type VARCHAR(20) NOT NULL,   -- 'phone', 'email', 'name', 'name_kana'
+  
+  -- 検索用データ
+  search_hash VARCHAR(64),            -- SHA-256ハッシュ（電話番号・メールアドレス用、64文字）
+  normalized_value TEXT,              -- 正規化された値（名前の部分一致検索用）
+  
+  -- タイムスタンプ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- 制約
+  CONSTRAINT unique_entity_search UNIQUE(entity_type, entity_id, search_type),
+  
+  -- チェック制約: search_hash と normalized_value のどちらかは必須
+  CONSTRAINT check_search_data CHECK (
+    (search_hash IS NOT NULL) OR (normalized_value IS NOT NULL)
+  )
+);
+
+-- インデックス
+-- 1. 電話番号・メールアドレスの完全一致検索用（search_hash）
+CREATE INDEX idx_pii_search_hash 
+  ON s_pii_search_index(search_hash) 
+  WHERE search_hash IS NOT NULL;
+
+-- 2. 名前の部分一致検索用（normalized_value、GINインデックスで日本語検索を高速化）
+CREATE INDEX idx_pii_search_normalized_value 
+  ON s_pii_search_index USING gin(to_tsvector('japanese', normalized_value))
+  WHERE normalized_value IS NOT NULL;
+
+-- 3. エンティティ削除時の検索用（entity_type, entity_id）
+CREATE INDEX idx_pii_search_entity 
+  ON s_pii_search_index(entity_type, entity_id);
+
+-- 4. 検索パフォーマンス向上用（entity_type, search_type, search_hash）
+CREATE INDEX idx_pii_search_type_hash 
+  ON s_pii_search_index(entity_type, search_type, search_hash)
+  WHERE search_hash IS NOT NULL;
+
+-- 5. 名前検索のパフォーマンス向上用（entity_type, search_type, normalized_value）
+CREATE INDEX idx_pii_search_type_normalized 
+  ON s_pii_search_index(entity_type, search_type, normalized_value)
+  WHERE normalized_value IS NOT NULL;
+```
+
+**説明**:
+- 暗号化されたPIIフィールドの検索を可能にするためのインデックステーブル
+- **電話番号・メールアドレス**: `search_hash`（SHA-256ハッシュ）で完全一致検索
+- **名前・フリガナ**: `normalized_value`（正規化された値）で部分一致検索（`ilike`）
+- エンティティ（児童・保護者）の保存・更新時に自動的に更新される
+- 検索時はこのテーブルから`entity_id`を取得し、本体テーブルから詳細情報を取得
+
+**使用例**:
+```sql
+-- 電話番号で保護者を検索
+SELECT entity_id FROM s_pii_search_index
+WHERE entity_type = 'guardian'
+  AND search_type = 'phone'
+  AND search_hash = 'abc123...'  -- 正規化された電話番号のSHA-256ハッシュ
+LIMIT 1;
+
+-- 名前で児童を部分一致検索
+SELECT entity_id FROM s_pii_search_index
+WHERE entity_type = 'child'
+  AND search_type = 'name'
+  AND normalized_value ILIKE '%田中%';
+```
+
+---
+
 ## 7. 履歴・ログテーブル
 
 ### 7.1 出欠実績ログ（`h_attendance`）

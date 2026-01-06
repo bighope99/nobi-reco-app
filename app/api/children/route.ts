@@ -3,6 +3,8 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { handleChildSave } from './save/route';
+import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { searchByName } from '@/utils/pii/searchIndex';
 
 // GET /api/children - 子ども一覧取得
 export async function GET(request: NextRequest) {
@@ -88,8 +90,34 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('_child_class.class_id', class_id);
     }
 
+    // 名前検索は検索用ハッシュテーブル経由
+    let searchChildIds: string[] | null = null;
     if (search) {
-      childrenQuery = childrenQuery.or(`family_name.ilike.%${search}%,given_name.ilike.%${search}%,family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
+      // 名前とフリガナの両方で検索
+      const [nameIds, kanaIds] = await Promise.all([
+        searchByName(supabase, 'child', 'name', search),
+        searchByName(supabase, 'child', 'name_kana', search),
+      ]);
+      searchChildIds = [...new Set([...nameIds, ...kanaIds])];
+      
+      if (searchChildIds.length === 0) {
+        // 検索結果がない場合は空の結果を返す
+        return NextResponse.json({
+          success: true,
+          data: {
+            children: [],
+            total: 0,
+            summary: {
+              total: 0,
+              enrolled: 0,
+              withdrawn: 0,
+              has_allergy: 0,
+            },
+          },
+        });
+      }
+      
+      childrenQuery = childrenQuery.in('id', searchChildIds);
     }
 
     if (has_allergy !== null) {
@@ -163,15 +191,32 @@ export async function GET(request: NextRequest) {
       `)
       .in('child_id', childIds);
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+      if (!encrypted) return null;
+      const decrypted = decryptPII(encrypted);
+      return decrypted !== null ? decrypted : encrypted; // 復号化失敗時は平文として扱う
+    };
+
     // データ整形
     const children = childrenData.map((child: any) => {
       // クラス情報（現在所属中のクラスのみ）
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
 
-      // 保護者情報の整形
+      // 保護者情報の整形（復号化）
       const guardians = child._child_guardian || [];
       const primaryGuardian = guardians.find((g: any) => g.is_primary);
+      const decryptedPrimaryGuardian = primaryGuardian ? {
+        ...primaryGuardian,
+        m_guardians: {
+          ...primaryGuardian.m_guardians,
+          family_name: decryptOrFallback(primaryGuardian.m_guardians.family_name),
+          given_name: decryptOrFallback(primaryGuardian.m_guardians.given_name),
+          phone: decryptOrFallback(primaryGuardian.m_guardians.phone),
+          email: decryptOrFallback(primaryGuardian.m_guardians.email),
+        },
+      } : null;
 
       // 年齢計算
       const birthDate = new Date(child.birth_date);
@@ -181,25 +226,34 @@ export async function GET(request: NextRequest) {
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
 
-      // 兄弟情報
+      // 兄弟情報（復号化）
       const childSiblings = (siblingsData || [])
         .filter((s: any) => s.child_id === child.id)
         .map((s: any) => {
           const siblingInfo = s.m_children;
           const siblingCurrentClass = siblingInfo?._child_class?.find((cc: any) => cc.is_current);
           const siblingClass = siblingCurrentClass?.m_classes;
+          const decryptedFamilyName = decryptOrFallback(siblingInfo?.family_name);
+          const decryptedGivenName = decryptOrFallback(siblingInfo?.given_name);
           return {
             child_id: siblingInfo?.id,
-            name: `${siblingInfo?.family_name} ${siblingInfo?.given_name}`,
+            name: `${decryptedFamilyName} ${decryptedGivenName}`,
             age_group: siblingClass?.age_group || '',
             relationship: s.relationship,
           };
         });
 
+      // 児童情報を復号化
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+      const decryptedAllergies = decryptOrFallback(child.allergies);
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: `${decryptedFamilyName} ${decryptedGivenName}`,
+        kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
         gender: child.gender,
         birth_date: child.birth_date,
         age,
@@ -213,15 +267,15 @@ export async function GET(request: NextRequest) {
         enrollment_type: child.enrollment_type,
         enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
         withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
-        parent_name: primaryGuardian
-          ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
+        parent_name: decryptedPrimaryGuardian
+          ? `${decryptedPrimaryGuardian.m_guardians.family_name} ${decryptedPrimaryGuardian.m_guardians.given_name}`.trim()
           : null,
-        parent_phone: primaryGuardian?.m_guardians.phone || child.parent_phone || null,
-        parent_email: primaryGuardian?.m_guardians.email || child.parent_email || null,
+        parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(child.parent_phone) || null,
+        parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(child.parent_email) || null,
         siblings: childSiblings,
         has_sibling: childSiblings.length > 0,
-        has_allergy: !!child.allergies,
-        allergy_detail: child.allergies,
+        has_allergy: !!decryptedAllergies,
+        allergy_detail: decryptedAllergies,
         photo_allowed: child.photo_permission_public,
         report_allowed: child.report_name_permission,
         created_at: child.created_at,

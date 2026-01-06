@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { decryptPII } from '@/utils/crypto/piiEncryption';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
@@ -200,13 +201,25 @@ export async function GET(
       content: obs.content.substring(0, 100) + (obs.content.length > 100 ? '...' : ''),
     }));
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+      if (!encrypted) return null;
+      const decrypted = decryptPII(encrypted);
+      return decrypted !== null ? decrypted : encrypted;
+    };
+
+    const decryptedFamilyName = decryptOrFallback(child.family_name);
+    const decryptedGivenName = decryptOrFallback(child.given_name);
+    const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+    const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+
     return NextResponse.json({
       success: true,
       data: {
         child_info: {
           child_id: child.id,
-          name: `${child.family_name} ${child.given_name}`,
-          kana: `${child.family_name_kana} ${child.given_name_kana}`,
+          name: `${decryptedFamilyName} ${decryptedGivenName}`,
+          kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
           age,
           birth_date: child.birth_date,
           class_name: classData?.name || '',

@@ -4,6 +4,8 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { saveChild } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
+import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { searchByPhone } from '@/utils/pii/searchIndex';
 
 async function fetchExistingSiblingRows(
   supabase: any,
@@ -12,6 +14,16 @@ async function fetchExistingSiblingRows(
 ): Promise<ExistingSiblingRow[]> {
   if (normalizedPhoneSet.size === 0) return [];
 
+  // 検索用ハッシュテーブルから電話番号で検索
+  const allGuardianIds: string[] = [];
+  for (const phone of normalizedPhoneSet) {
+    const guardianIds = await searchByPhone(supabase, 'guardian', phone);
+    allGuardianIds.push(...guardianIds);
+  }
+
+  if (allGuardianIds.length === 0) return [];
+
+  // 該当する保護者を取得
   const { data: guardians, error } = await supabase
     .from('m_guardians')
     .select(
@@ -31,29 +43,42 @@ async function fetchExistingSiblingRows(
       )
     `
     )
-    .eq('facility_id', facilityId);
+    .eq('facility_id', facilityId)
+    .in('id', [...new Set(allGuardianIds)]);
 
   if (error) {
     console.error('Failed to fetch guardians for siblings:', error);
     return [];
   }
 
+  // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+  const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+    if (!encrypted) return null;
+    const decrypted = decryptPII(encrypted);
+    return decrypted !== null ? decrypted : encrypted;
+  };
+
   const existingRows: ExistingSiblingRow[] = [];
   (guardians || []).forEach((guardian: any) => {
-    const phoneKey = normalizePhone(guardian.phone || '');
+    const decryptedPhone = decryptOrFallback(guardian.phone);
+    const phoneKey = normalizePhone(decryptedPhone || '');
     if (!phoneKey || !normalizedPhoneSet.has(phoneKey)) return;
 
-    const guardianName = `${guardian.family_name || ''} ${guardian.given_name || ''}`.trim();
+    const decryptedFamilyName = decryptOrFallback(guardian.family_name);
+    const decryptedGivenName = decryptOrFallback(guardian.given_name);
+    const guardianName = `${decryptedFamilyName || ''} ${decryptedGivenName || ''}`.trim();
     const links = guardian._child_guardian || [];
     links.forEach((link: any) => {
       const child = link.m_children;
       if (!child || child.deleted_at) return;
-      const childName = `${child.family_name || ''} ${child.given_name || ''}`.trim();
+      const decryptedChildFamilyName = decryptOrFallback(child.family_name);
+      const decryptedChildGivenName = decryptOrFallback(child.given_name);
+      const childName = `${decryptedChildFamilyName || ''} ${decryptedChildGivenName || ''}`.trim();
       existingRows.push({
         child_id: child.id,
         child_name: childName,
         guardian_name: guardianName,
-        phone: guardian.phone || '',
+        phone: decryptedPhone || '',
       });
     });
   });
