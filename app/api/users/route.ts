@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
           .from('_user_class')
           .select(
             `
-            is_main,
+            class_role,
             m_classes!inner (
               id,
               name
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
           classAssignments?.map((ca: any) => ({
             class_id: ca.m_classes.id,
             class_name: ca.m_classes.name,
-            is_main: ca.is_main,
+            is_main: ca.class_role === 'main',
           })) || [];
 
         return {
@@ -317,7 +317,13 @@ export async function POST(request: NextRequest) {
       const classAssignments = body.assigned_classes.map((assignment: any) => ({
         user_id: newUser.id,
         class_id: assignment.class_id,
-        is_main: assignment.is_main || false,
+        class_role:
+          assignment.class_role ??
+          (assignment.is_main === undefined
+            ? null
+            : assignment.is_main
+              ? 'main'
+              : 'sub'),
         start_date: assignment.start_date || newUser.hire_date,
         is_current: true,
       }));
