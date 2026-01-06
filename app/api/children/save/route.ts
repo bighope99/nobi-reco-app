@@ -82,14 +82,15 @@ export async function saveChild(
   }
 
   const shouldSaveParentLegacy = !options?.skipParentLegacy;
+  const normalizedParentPhone = contact?.parent_phone ? normalizePhone(contact.parent_phone) : null;
   const childValues: any = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
-    // PIIフィールドを暗号化（氏名・フリガナは平文保持）
-    family_name: basic_info.family_name,
-    given_name: basic_info.given_name,
-    family_name_kana: basic_info.family_name_kana || '',
-    given_name_kana: basic_info.given_name_kana || '',
+    // PIIフィールドを暗号化（氏名・フリガナ・保護者情報）
+    family_name: encryptPII(basic_info.family_name),
+    given_name: encryptPII(basic_info.given_name),
+    family_name_kana: encryptPII(basic_info.family_name_kana || null),
+    given_name_kana: encryptPII(basic_info.given_name_kana || null),
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,
@@ -98,9 +99,9 @@ export async function saveChild(
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
-    parent_name: shouldSaveParentLegacy ? (contact?.parent_name || null) : null,
-    parent_phone: null,
-    parent_email: null,
+    parent_name: shouldSaveParentLegacy ? encryptPII(contact?.parent_name || null) : null,
+    parent_phone: shouldSaveParentLegacy ? encryptPII(normalizedParentPhone) : null,
+    parent_email: shouldSaveParentLegacy ? encryptPII(contact?.parent_email || null) : null,
     allergies: encryptPII(care_info?.allergies || null),
     child_characteristics: encryptPII(care_info?.child_characteristics || null),
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
@@ -456,12 +457,23 @@ export async function saveChild(
     }
   }
 
+  const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+    if (!encrypted) return null;
+    const decrypted = decryptPII(encrypted);
+    return decrypted !== null ? decrypted : encrypted;
+  };
+
+  const decryptedFamilyName = decryptOrFallback(result.family_name);
+  const decryptedGivenName = decryptOrFallback(result.given_name);
+  const decryptedFamilyNameKana = decryptOrFallback(result.family_name_kana);
+  const decryptedGivenNameKana = decryptOrFallback(result.given_name_kana);
+
   const response = {
     success: true,
     data: {
       child_id: result.id,
-      name: `${result.family_name} ${result.given_name}`,
-      kana: `${result.family_name_kana} ${result.given_name_kana}`,
+      name: `${decryptedFamilyName} ${decryptedGivenName}`.trim(),
+      kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`.trim(),
       enrollment_date: result.enrollment_date,
       created_at: result.created_at,
       updated_at: result.updated_at,
