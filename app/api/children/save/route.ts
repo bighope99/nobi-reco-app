@@ -85,11 +85,11 @@ export async function saveChild(
   const childValues: any = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
-    // PIIフィールドを暗号化
-    family_name: encryptPII(basic_info.family_name),
-    given_name: encryptPII(basic_info.given_name),
-    family_name_kana: encryptPII(basic_info.family_name_kana || ''),
-    given_name_kana: encryptPII(basic_info.given_name_kana || ''),
+    // PIIフィールドを暗号化（氏名・フリガナは平文保持）
+    family_name: basic_info.family_name,
+    given_name: basic_info.given_name,
+    family_name_kana: basic_info.family_name_kana || '',
+    given_name_kana: basic_info.given_name_kana || '',
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,
@@ -99,8 +99,8 @@ export async function saveChild(
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
     parent_name: shouldSaveParentLegacy ? (contact?.parent_name || null) : null,
-    parent_phone: shouldSaveParentLegacy ? encryptPII(contact?.parent_phone || '') : '',
-    parent_email: shouldSaveParentLegacy ? encryptPII(contact?.parent_email || '') : '',
+    parent_phone: null,
+    parent_email: null,
     allergies: encryptPII(care_info?.allergies || null),
     child_characteristics: encryptPII(care_info?.child_characteristics || null),
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),

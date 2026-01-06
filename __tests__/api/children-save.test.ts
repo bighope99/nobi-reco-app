@@ -13,6 +13,7 @@ describe('saveChild', () => {
   it('stores parent_name on child records for backward compatibility', async () => {
     const insertQuery: any = {
       insert: jest.fn(() => insertQuery),
+      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
       select: jest.fn(() => insertQuery),
       single: jest.fn().mockResolvedValue({
         data: {
@@ -30,8 +31,18 @@ describe('saveChild', () => {
       }),
     };
 
+    const searchIndexQuery: any = {
+      select: jest.fn(() => searchIndexQuery),
+      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
+      delete: jest.fn(() => searchIndexQuery),
+      eq: jest.fn(() => searchIndexQuery),
+      then: (resolve: (value: { data: unknown[]; error: null }) => void) =>
+        Promise.resolve(resolve({ data: [], error: null })),
+    };
+
     const mockSupabase: any = {
       from: jest.fn((table: string) => {
+        if (table === 's_pii_search_index') return searchIndexQuery;
         if (table === 'm_children') return insertQuery;
         return insertQuery;
       }),
@@ -57,11 +68,12 @@ describe('saveChild', () => {
 
     const response = await saveChild(payload, 'facility-1', mockSupabase);
 
-    expect(insertQuery.insert).toHaveBeenCalledWith(
+    const childInsertPayload = insertQuery.insert.mock.calls[0][0];
+    expect(childInsertPayload).toEqual(
       expect.objectContaining({
         parent_name: '山田 太郎',
-        parent_phone: '090-1234-5678',
-        parent_email: 'taro@example.com',
+        parent_phone: null,
+        parent_email: null,
       })
     );
     expect(response.status).toBe(201);
@@ -114,6 +126,10 @@ describe('saveChild', () => {
         data: null,
         error: null,
       }),
+      upsert: jest.fn().mockResolvedValue({
+        data: null,
+        error: null,
+      }),
     };
 
     const childClassInsertQuery: any = {
@@ -123,9 +139,19 @@ describe('saveChild', () => {
       }),
     };
 
+    const searchIndexQuery: any = {
+      select: jest.fn(() => searchIndexQuery),
+      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
+      delete: jest.fn(() => searchIndexQuery),
+      eq: jest.fn(() => searchIndexQuery),
+      then: (resolve: (value: { data: unknown[]; error: null }) => void) =>
+        Promise.resolve(resolve({ data: [], error: null })),
+    };
+
     let guardianCallCount = 0;
     const mockSupabase: any = {
       from: jest.fn((table: string) => {
+        if (table === 's_pii_search_index') return searchIndexQuery;
         if (table === 'm_children') return childInsertQuery;
         if (table === 'm_guardians') {
           // First call is for primary guardian, subsequent calls are for emergency contacts
@@ -172,49 +198,60 @@ describe('saveChild', () => {
     expect(mockSupabase.from).toHaveBeenCalledWith('m_guardians');
     
     // Verify primary guardian creation
-    expect(guardianInsertQuery.insert).toHaveBeenCalledWith(
+    const primaryGuardianPayload = guardianInsertQuery.insert.mock.calls[0][0];
+    expect(primaryGuardianPayload).toEqual(
       expect.objectContaining({
         facility_id: 'facility-1',
-        family_name: '山田',
-        given_name: '太郎',
-        phone: '090-1234-5678',
-        email: 'taro@example.com',
+        family_name: expect.any(String),
+        given_name: expect.any(String),
+        phone: expect.any(String),
+        email: expect.any(String),
       })
     );
+    expect(primaryGuardianPayload.family_name).not.toBe('山田');
+    expect(primaryGuardianPayload.given_name).not.toBe('太郎');
+    expect(primaryGuardianPayload.phone).not.toBe('090-1234-5678');
+    expect(primaryGuardianPayload.email).not.toBe('taro@example.com');
 
     // Verify emergency contact guardian creation
-    expect(emergencyGuardianInsertQuery.insert).toHaveBeenCalledWith(
+    const emergencyGuardianPayload = emergencyGuardianInsertQuery.insert.mock.calls[0][0];
+    expect(emergencyGuardianPayload).toEqual(
       expect.objectContaining({
         facility_id: 'facility-1',
-        family_name: '佐藤',
-        given_name: '次郎',
-        phone: '090-8765-4321',
+        family_name: expect.any(String),
+        given_name: expect.any(String),
+        phone: expect.any(String),
       })
     );
+    expect(emergencyGuardianPayload.family_name).not.toBe('佐藤');
+    expect(emergencyGuardianPayload.given_name).not.toBe('次郎');
+    expect(emergencyGuardianPayload.phone).not.toBe('090-8765-4321');
 
     // Verify _child_guardian was called
     expect(mockSupabase.from).toHaveBeenCalledWith('_child_guardian');
 
     // Verify primary guardian linking
-    expect(childGuardianInsertQuery.insert).toHaveBeenCalledWith(
+    expect(childGuardianInsertQuery.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         child_id: 'child-1',
         guardian_id: 'guardian-1',
         relationship: '保護者',
         is_primary: true,
         is_emergency_contact: true,
-      })
+      }),
+      expect.any(Object)
     );
 
     // Verify emergency contact linking
-    expect(childGuardianInsertQuery.insert).toHaveBeenCalledWith(
+    expect(childGuardianInsertQuery.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         child_id: 'child-1',
         guardian_id: 'guardian-2',
         relationship: '叔父',
         is_primary: false,
         is_emergency_contact: true,
-      })
+      }),
+      expect.any(Object)
     );
 
     expect(response.status).toBe(201);
