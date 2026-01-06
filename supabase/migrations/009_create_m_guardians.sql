@@ -33,7 +33,8 @@ CREATE INDEX IF NOT EXISTS idx_guardians_email ON m_guardians(email) WHERE delet
 
 -- フルテキスト検索用インデックス（名前検索）
 CREATE INDEX IF NOT EXISTS idx_guardians_name_search ON m_guardians
-  USING gin(to_tsvector('japanese', family_name));
+  USING gin(to_tsvector('japanese', family_name))
+  WHERE deleted_at IS NULL;
 
 -- コメント追加
 COMMENT ON TABLE m_guardians IS '保護者マスタテーブル';
