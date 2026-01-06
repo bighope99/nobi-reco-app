@@ -106,15 +106,19 @@ describe('saveChild PII暗号化', () => {
 
     const insertedValues = supabase.__childInsert.mock.calls[0][0];
 
+    expect(insertedValues.family_name.length).toBeLessThanOrEqual(50);
     expect(insertedValues.family_name).not.toBe(payload.basic_info?.family_name);
     expect(decryptPII(insertedValues.family_name)).toBe(payload.basic_info?.family_name);
 
+    expect(insertedValues.given_name.length).toBeLessThanOrEqual(50);
     expect(insertedValues.given_name).not.toBe(payload.basic_info?.given_name);
     expect(decryptPII(insertedValues.given_name)).toBe(payload.basic_info?.given_name);
 
+    expect(insertedValues.family_name_kana.length).toBeLessThanOrEqual(50);
     expect(insertedValues.family_name_kana).not.toBe(payload.basic_info?.family_name_kana);
     expect(decryptPII(insertedValues.family_name_kana)).toBe(payload.basic_info?.family_name_kana);
 
+    expect(insertedValues.given_name_kana.length).toBeLessThanOrEqual(50);
     expect(insertedValues.given_name_kana).not.toBe(payload.basic_info?.given_name_kana);
     expect(decryptPII(insertedValues.given_name_kana)).toBe(payload.basic_info?.given_name_kana);
   });

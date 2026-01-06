@@ -1,8 +1,10 @@
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 16;
-const AUTH_TAG_LENGTH = 16;
+const LEGACY_IV_LENGTH = 16;
+const LEGACY_AUTH_TAG_LENGTH = 16;
+const IV_LENGTH = 12;
+const AUTH_TAG_LENGTH = 12;
 
 /**
  * 暗号化キーを取得
@@ -53,18 +55,20 @@ export function encryptPII(plaintext: string | null | undefined): string | null 
     const key = getEncryptionKey();
     const iv = crypto.randomBytes(IV_LENGTH);
 
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
 
-    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
+    const encryptedBuffer = Buffer.concat([
+      cipher.update(plaintext, 'utf8'),
+      cipher.final(),
+    ]);
 
     const authTag = cipher.getAuthTag();
 
-    // Format: iv:authTag:encrypted
-    const combined = `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+    // Format: iv + authTag + encrypted (binary)
+    const combined = Buffer.concat([iv, authTag, encryptedBuffer]);
 
     // URL-safe Base64エンコード
-    return Buffer.from(combined).toString('base64url');
+    return combined.toString('base64url');
   } catch (error) {
     console.error('Failed to encrypt PII:', error instanceof Error ? error.message : error);
     throw error;
@@ -97,31 +101,49 @@ export function decryptPII(encrypted: string | null | undefined): string | null 
 
     const key = getEncryptionKey();
 
-    // Base64url デコード
-    const combined = Buffer.from(encrypted, 'base64url').toString('utf8');
+    const combinedBuffer = Buffer.from(encrypted, 'base64url');
+    const legacyDecoded = combinedBuffer.toString('utf8');
 
-    // Format: iv:authTag:encrypted
-    const parts = combined.split(':');
-    if (parts.length !== 3) {
+    const legacyMatch = legacyDecoded.split(':');
+    if (
+      legacyMatch.length === 3 &&
+      legacyMatch.every((part) => /^[0-9a-f]+$/i.test(part))
+    ) {
+      const [ivHex, authTagHex, encryptedData] = legacyMatch;
+      const iv = Buffer.from(ivHex, 'hex');
+      const authTag = Buffer.from(authTagHex, 'hex');
+
+      if (iv.length !== LEGACY_IV_LENGTH || authTag.length !== LEGACY_AUTH_TAG_LENGTH) {
+        return null;
+      }
+
+      const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+      decipher.setAuthTag(authTag);
+
+      let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    }
+
+    if (combinedBuffer.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
       return null;
     }
 
-    const [ivHex, authTagHex, encryptedData] = parts;
+    const iv = combinedBuffer.subarray(0, IV_LENGTH);
+    const authTag = combinedBuffer.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+    const encryptedData = combinedBuffer.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
 
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-
-    if (iv.length !== IV_LENGTH || authTag.length !== AUTH_TAG_LENGTH) {
-      return null;
-    }
-
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, {
+      authTagLength: AUTH_TAG_LENGTH,
+    });
     decipher.setAuthTag(authTag);
 
-    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    const decryptedBuffer = Buffer.concat([
+      decipher.update(encryptedData),
+      decipher.final(),
+    ]);
 
-    return decrypted;
+    return decryptedBuffer.toString('utf8');
   } catch (error) {
     // 復号化エラー（改ざん、不正な文字列、既存の平文データなど）
     // 後方互換性のため、エラーをスローせずnullを返す
