@@ -217,10 +217,24 @@ export async function POST(request: NextRequest) {
     }
 
     const approvedKeysRaw = formData.get('approved_phone_keys');
-    const approvedPhoneKeys =
-      typeof approvedKeysRaw === 'string' && approvedKeysRaw.trim().length > 0
-        ? (JSON.parse(approvedKeysRaw) as string[])
-        : [];
+    let approvedPhoneKeys: string[] = [];
+    
+    if (typeof approvedKeysRaw === 'string' && approvedKeysRaw.trim().length > 0) {
+      try {
+        approvedPhoneKeys = JSON.parse(approvedKeysRaw) as string[];
+        if (!Array.isArray(approvedPhoneKeys)) {
+          return NextResponse.json(
+            { success: false, error: 'approved_phone_keys must be a JSON array' },
+            { status: 400 }
+          );
+        }
+      } catch (error) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid JSON format for approved_phone_keys' },
+          { status: 400 }
+        );
+      }
+    }
 
     if (approvedPhoneKeys.length > 0) {
       const approvedSet = new Set(approvedPhoneKeys);
@@ -254,7 +268,7 @@ export async function POST(request: NextRequest) {
       if (siblingInserts.length > 0) {
         const { error: siblingError } = await supabase
           .from('_child_sibling')
-          .insert(siblingInserts);
+          .upsert(siblingInserts, { onConflict: 'child_id,sibling_id' });
         if (siblingError) {
           console.error('Failed to create sibling links:', siblingError);
         }

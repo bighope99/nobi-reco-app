@@ -82,15 +82,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 既存の紐付けがあるかチェック
-    const { data: existingLink } = await supabase
+    // 既存の紐付けがあるかチェック（双方向を確認）
+    // 前方方向 (child_id → sibling_id) または逆方向 (sibling_id → child_id) のいずれかが存在するか
+    const { data: existingLinks } = await supabase
       .from('_child_sibling')
       .select('id')
-      .eq('child_id', child_id)
-      .eq('sibling_id', sibling_id)
-      .single();
+      .or(`and(child_id.eq.${child_id},sibling_id.eq.${sibling_id}),and(child_id.eq.${sibling_id},sibling_id.eq.${child_id})`);
 
-    if (existingLink) {
+    if (existingLinks && existingLinks.length > 0) {
       return NextResponse.json(
         { error: 'Sibling relationship already exists' },
         { status: 409 }
