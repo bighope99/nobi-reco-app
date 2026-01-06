@@ -258,7 +258,15 @@ function parseBoolean(value: string, defaultValue: boolean): boolean {
 }
 
 export function normalizePhone(value: string): string {
-  return value.replace(/[-‐‑–—―ー－\s\u3000]/g, '').trim();
+  // First, convert full-width digits (０-９) to half-width (0-9)
+  let normalized = value.replace(/[０-９]/g, (char) => {
+    return String.fromCharCode(char.charCodeAt(0) - 0xfee0);
+  });
+  
+  // Then remove separators (spaces, hyphens, full-width hyphen/dash, etc.)
+  normalized = normalized.replace(/[-‐‑–—―ー－\s\u3000]/g, '').trim();
+  
+  return normalized;
 }
 
 function parseCsvRecords(text: string): string[][] {

@@ -60,6 +60,6 @@ describe('children import csv helpers', () => {
 
     const result = buildChildPayload(row, { school_id: null, class_id: null });
 
-    expect(result.payload?.contact?.parent_phone).toBe('０９０１２３４５６７８');
+    expect(result.payload?.contact?.parent_phone).toBe('09012345678');
   });
 });

@@ -4,7 +4,7 @@ import { normalizePhone } from '@/lib/children/import-csv';
 describe('import sibling candidates', () => {
   it('normalizes phone by removing hyphens and spaces', () => {
     expect(normalizePhone('090-1234 5678')).toBe('09012345678');
-    expect(normalizePhone('０９０ー１２３４－５６７８')).toBe('０９０１２３４５６７８');
+    expect(normalizePhone('０９０ー１２３４－５６７８')).toBe('09012345678');
   });
 
   it('builds sibling candidate groups from incoming and existing rows', () => {
