@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { normalizePhone } from '@/lib/children/import-csv';
 
 export interface ChildPayload {
   child_id?: string;
@@ -180,18 +181,21 @@ export async function saveChild(
       const familyName = nameParts[0] || contact.parent_name;
       const givenName = nameParts.slice(1).join(' ') || '';
 
-      // 既存の保護者を検索（電話番号またはメールアドレスで）
+      // 電話番号を正規化
+      const normalizedPhone = contact.parent_phone ? normalizePhone(contact.parent_phone) : null;
+
+      // 既存の保護者を検索（正規化された電話番号またはメールアドレスで）
       let guardianId: string | null = null;
       
-      if (contact.parent_phone || contact.parent_email) {
+      if (normalizedPhone || contact.parent_email) {
         let query = supabase
           .from('m_guardians')
           .select('id')
           .eq('facility_id', facilityId)
           .is('deleted_at', null);
         
-        if (contact.parent_phone) {
-          query = query.eq('phone', contact.parent_phone);
+        if (normalizedPhone) {
+          query = query.eq('phone', normalizedPhone);
         } else if (contact.parent_email) {
           query = query.eq('email', contact.parent_email);
         }
@@ -207,7 +211,7 @@ export async function saveChild(
             .update({
               family_name: familyName,
               given_name: givenName,
-              phone: contact.parent_phone || null,
+              phone: normalizedPhone,
               email: contact.parent_email || null,
               updated_at: new Date().toISOString(),
             })
@@ -223,7 +227,7 @@ export async function saveChild(
             facility_id: facilityId,
             family_name: familyName,
             given_name: givenName,
-            phone: contact.parent_phone || null,
+            phone: normalizedPhone,
             email: contact.parent_email || null,
           })
           .select('id')
@@ -269,14 +273,17 @@ export async function saveChild(
       const familyName = nameParts[0] || emergencyContact.name;
       const givenName = nameParts.slice(1).join(' ') || '';
 
-      // 既存の保護者を検索（電話番号で）
+      // 電話番号を正規化
+      const normalizedPhone = normalizePhone(emergencyContact.phone);
+
+      // 既存の保護者を検索（正規化された電話番号で）
       let emergencyGuardianId: string | null = null;
       
       const { data: existingEmergencyGuardian } = await supabase
         .from('m_guardians')
         .select('id')
         .eq('facility_id', facilityId)
-        .eq('phone', emergencyContact.phone)
+        .eq('phone', normalizedPhone)
         .is('deleted_at', null)
         .maybeSingle();
       
@@ -289,7 +296,7 @@ export async function saveChild(
           .update({
             family_name: familyName,
             given_name: givenName,
-            phone: emergencyContact.phone,
+            phone: normalizedPhone,
             updated_at: new Date().toISOString(),
           })
           .eq('id', emergencyGuardianId);
@@ -303,7 +310,7 @@ export async function saveChild(
             facility_id: facilityId,
             family_name: familyName,
             given_name: givenName,
-            phone: emergencyContact.phone,
+            phone: normalizedPhone,
           })
           .select('id')
           .single();
