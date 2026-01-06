@@ -14,6 +14,11 @@ describe('saveChild', () => {
     const insertQuery: any = {
       insert: jest.fn(() => insertQuery),
       select: jest.fn(() => insertQuery),
+      eq: jest.fn(() => insertQuery),
+      is: jest.fn(() => insertQuery),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      update: jest.fn(() => insertQuery),
+      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
       single: jest.fn().mockResolvedValue({
         data: {
           id: 'child-1',
@@ -90,27 +95,31 @@ describe('saveChild', () => {
     const guardianInsertQuery: any = {
       insert: jest.fn(() => guardianInsertQuery),
       select: jest.fn(() => guardianInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'guardian-1',
-        },
-        error: null,
-      }),
-    };
-
-    const emergencyGuardianInsertQuery: any = {
-      insert: jest.fn(() => emergencyGuardianInsertQuery),
-      select: jest.fn(() => emergencyGuardianInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'guardian-2',
-        },
-        error: null,
-      }),
+      eq: jest.fn(() => guardianInsertQuery),
+      is: jest.fn(() => guardianInsertQuery),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      update: jest.fn(() => guardianInsertQuery),
+      single: jest.fn()
+        .mockResolvedValueOnce({
+          data: {
+            id: 'guardian-1',
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            id: 'guardian-2',
+          },
+          error: null,
+        }),
     };
 
     const childGuardianInsertQuery: any = {
       insert: jest.fn().mockResolvedValue({
+        data: null,
+        error: null,
+      }),
+      upsert: jest.fn().mockResolvedValue({
         data: null,
         error: null,
       }),
@@ -123,17 +132,11 @@ describe('saveChild', () => {
       }),
     };
 
-    let guardianCallCount = 0;
     const mockSupabase: any = {
       from: jest.fn((table: string) => {
         if (table === 'm_children') return childInsertQuery;
         if (table === 'm_guardians') {
-          // First call is for primary guardian, subsequent calls are for emergency contacts
-          if (guardianCallCount === 0) {
-            guardianCallCount++;
-            return guardianInsertQuery;
-          }
-          return emergencyGuardianInsertQuery;
+          return guardianInsertQuery;
         }
         if (table === '_child_guardian') return childGuardianInsertQuery;
         if (table === '_child_class') return childClassInsertQuery;
@@ -177,18 +180,18 @@ describe('saveChild', () => {
         facility_id: 'facility-1',
         family_name: '山田',
         given_name: '太郎',
-        phone: '090-1234-5678',
+        phone: '09012345678',
         email: 'taro@example.com',
       })
     );
 
     // Verify emergency contact guardian creation
-    expect(emergencyGuardianInsertQuery.insert).toHaveBeenCalledWith(
+    expect(guardianInsertQuery.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         facility_id: 'facility-1',
         family_name: '佐藤',
         given_name: '次郎',
-        phone: '090-8765-4321',
+        phone: '09087654321',
       })
     );
 
@@ -196,25 +199,27 @@ describe('saveChild', () => {
     expect(mockSupabase.from).toHaveBeenCalledWith('_child_guardian');
 
     // Verify primary guardian linking
-    expect(childGuardianInsertQuery.insert).toHaveBeenCalledWith(
+    expect(childGuardianInsertQuery.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         child_id: 'child-1',
         guardian_id: 'guardian-1',
         relationship: '保護者',
         is_primary: true,
         is_emergency_contact: true,
-      })
+      }),
+      expect.any(Object)
     );
 
     // Verify emergency contact linking
-    expect(childGuardianInsertQuery.insert).toHaveBeenCalledWith(
+    expect(childGuardianInsertQuery.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         child_id: 'child-1',
         guardian_id: 'guardian-2',
         relationship: '叔父',
         is_primary: false,
         is_emergency_contact: true,
-      })
+      }),
+      expect.any(Object)
     );
 
     expect(response.status).toBe(201);
