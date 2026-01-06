@@ -189,7 +189,7 @@ export default function ChildImportPage() {
         throw new Error(json.error || "インポートに失敗しました")
       }
 
-      setImportResult(null)
+      setImportResult(json.data)
       setSelectedFacilityId("")
       setSelectedSchoolId("")
       setSelectedClassId("")
