@@ -2,19 +2,18 @@ import { NextRequest } from 'next/server';
 import { POST } from '../route';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
-import jwt from 'jsonwebtoken';
+import { createHmac } from 'crypto';
 
 jest.mock('@/utils/supabase/server');
 jest.mock('@/lib/auth/session');
-jest.mock('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 describe('/api/attendance/checkin POST', () => {
   let mockSupabase: any;
+  const qrSecret = 'test-qr-secret';
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.QR_SIGNATURE_SECRET = qrSecret;
 
     mockSupabase = {
       from: jest.fn().mockReturnThis(),
@@ -125,14 +124,31 @@ describe('/api/attendance/checkin POST', () => {
       });
     });
 
-    it('無効なトークンの場合は401を返す', async () => {
-      (jwt.verify as jest.Mock).mockImplementation(() => {
-        throw new Error('Invalid token');
+    it('無効な署名の場合は401を返す', async () => {
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
+        data: {
+          id: 'child-123',
+          facility_id: 'facility-123',
+          family_name: '田中',
+          given_name: '太郎',
+          _child_class: [
+            {
+              class: {
+                id: 'class-123',
+                name: 'ひまわり組',
+              },
+            },
+          ],
+        },
+        error: null,
       });
 
+      const invalidSignature = createHmac('sha256', 'invalid-secret')
+        .update(`child-123facility-123invalid-secret`)
+        .digest('hex');
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'invalid-token', child_id: 'child-123' }),
+        body: JSON.stringify({ token: invalidSignature, child_id: 'child-123' }),
       });
 
       const response = await POST(request);
@@ -140,19 +156,38 @@ describe('/api/attendance/checkin POST', () => {
 
       expect(response.status).toBe(401);
       expect(data.success).toBe(false);
-      expect(data.error).toBe('Invalid or expired token');
+      expect(data.error).toBe('Invalid signature');
     });
 
     it('施設IDが一致しない場合は403を返す', async () => {
-      (jwt.verify as jest.Mock).mockReturnValue({
-        facility_id: 'different-facility',
-        issued_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 3600000).toISOString(),
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
+        data: {
+          id: 'child-123',
+          facility_id: 'facility-123',
+          family_name: '田中',
+          given_name: '太郎',
+          _child_class: [
+            {
+              class: {
+                id: 'class-123',
+                name: 'ひまわり組',
+              },
+            },
+          ],
+        },
+        error: null,
       });
 
+      const signature = createHmac('sha256', qrSecret)
+        .update(`child-123facility-123${qrSecret}`)
+        .digest('hex');
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'test-token', child_id: 'child-123' }),
+        body: JSON.stringify({
+          token: signature,
+          child_id: 'child-123',
+          facility_id: 'different-facility',
+        }),
       });
 
       const response = await POST(request);
@@ -160,7 +195,7 @@ describe('/api/attendance/checkin POST', () => {
 
       expect(response.status).toBe(403);
       expect(data.success).toBe(false);
-      expect(data.error).toBe('Facility mismatch');
+      expect(data.error).toBe('Facility ID mismatch');
     });
   });
 
@@ -170,20 +205,21 @@ describe('/api/attendance/checkin POST', () => {
         user_id: 'user-123',
         current_facility_id: 'facility-123',
       });
-
-      (jwt.verify as jest.Mock).mockReturnValue({
-        facility_id: 'facility-123',
-        issued_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 3600000).toISOString(),
-      });
     });
 
     it('子どもが見つからない場合は404を返す', async () => {
-      mockSupabase.single.mockResolvedValue({ data: null, error: { message: 'Not found' } });
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'Not found' },
+      });
+
+      const signature = createHmac('sha256', qrSecret)
+        .update(`child-123facility-123${qrSecret}`)
+        .digest('hex');
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'test-token', child_id: 'child-123' }),
+        body: JSON.stringify({ token: signature, child_id: 'child-123' }),
       });
 
       const response = await POST(request);
@@ -191,7 +227,7 @@ describe('/api/attendance/checkin POST', () => {
 
       expect(response.status).toBe(404);
       expect(data.success).toBe(false);
-      expect(data.error).toBe('Child not found');
+      expect(data.error).toBe('Child not found or access denied');
     });
   });
 
@@ -201,19 +237,14 @@ describe('/api/attendance/checkin POST', () => {
         user_id: 'user-123',
         current_facility_id: 'facility-123',
       });
-
-      (jwt.verify as jest.Mock).mockReturnValue({
-        facility_id: 'facility-123',
-        issued_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 3600000).toISOString(),
-      });
     });
 
-    it('既にチェックイン済みの場合は409を返す', async () => {
-      mockSupabase.single
+    it('既にチェックイン済みの場合は200を返す', async () => {
+      mockSupabase.maybeSingle
         .mockResolvedValueOnce({
           data: {
             id: 'child-123',
+            facility_id: 'facility-123',
             family_name: '田中',
             given_name: '太郎',
             _child_class: [
@@ -238,18 +269,23 @@ describe('/api/attendance/checkin POST', () => {
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'test-token', child_id: 'child-123' }),
+        body: JSON.stringify({
+          token: createHmac('sha256', qrSecret)
+            .update(`child-123facility-123${qrSecret}`)
+            .digest('hex'),
+          child_id: 'child-123',
+        }),
       });
 
       const response = await POST(request);
       const data = await response.json();
 
-      expect(response.status).toBe(409);
-      expect(data.success).toBe(false);
-      expect(data.error).toBe('Already checked in today');
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
       expect(data.data).toHaveProperty('child_id', 'child-123');
       expect(data.data).toHaveProperty('child_name', '田中 太郎');
       expect(data.data).toHaveProperty('class_name', 'ひまわり組');
+      expect(data.data).toHaveProperty('already_checked_in', true);
     });
   });
 
@@ -259,22 +295,17 @@ describe('/api/attendance/checkin POST', () => {
         user_id: 'user-123',
         current_facility_id: 'facility-123',
       });
-
-      (jwt.verify as jest.Mock).mockReturnValue({
-        facility_id: 'facility-123',
-        issued_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 3600000).toISOString(),
-      });
     });
 
     it('正常にチェックインできる', async () => {
       const now = new Date();
       const today = now.toISOString().split('T')[0];
 
-      mockSupabase.single
+      mockSupabase.maybeSingle
         .mockResolvedValueOnce({
           data: {
             id: 'child-123',
+            facility_id: 'facility-123',
             family_name: '田中',
             given_name: '太郎',
             _child_class: [
@@ -289,25 +320,30 @@ describe('/api/attendance/checkin POST', () => {
           error: null,
         })
         .mockResolvedValueOnce({
-          data: {
-            id: 'attendance-123',
-            child_id: 'child-123',
-            facility_id: 'facility-123',
-            checked_in_at: now.toISOString(),
-            check_in_method: 'qr',
-            created_at: now.toISOString(),
-          },
+          data: null,
           error: null,
         });
 
-      mockSupabase.maybeSingle.mockResolvedValue({
-        data: null,
+      mockSupabase.single.mockResolvedValueOnce({
+        data: {
+          id: 'attendance-123',
+          child_id: 'child-123',
+          facility_id: 'facility-123',
+          checked_in_at: now.toISOString(),
+          check_in_method: 'qr',
+          created_at: now.toISOString(),
+        },
         error: null,
       });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'test-token', child_id: 'child-123' }),
+        body: JSON.stringify({
+          token: createHmac('sha256', qrSecret)
+            .update(`child-123facility-123${qrSecret}`)
+            .digest('hex'),
+          child_id: 'child-123',
+        }),
       });
 
       const response = await POST(request);
@@ -325,10 +361,11 @@ describe('/api/attendance/checkin POST', () => {
     it('チェックイン時にh_attendanceテーブルに正しいデータを挿入する', async () => {
       const now = new Date();
 
-      mockSupabase.single
+      mockSupabase.maybeSingle
         .mockResolvedValueOnce({
           data: {
             id: 'child-123',
+            facility_id: 'facility-123',
             family_name: '田中',
             given_name: '太郎',
             _child_class: [
@@ -343,25 +380,30 @@ describe('/api/attendance/checkin POST', () => {
           error: null,
         })
         .mockResolvedValueOnce({
-          data: {
-            id: 'attendance-123',
-            child_id: 'child-123',
-            facility_id: 'facility-123',
-            checked_in_at: now.toISOString(),
-            check_in_method: 'qr',
-            created_at: now.toISOString(),
-          },
+          data: null,
           error: null,
         });
 
-      mockSupabase.maybeSingle.mockResolvedValue({
-        data: null,
+      mockSupabase.single.mockResolvedValueOnce({
+        data: {
+          id: 'attendance-123',
+          child_id: 'child-123',
+          facility_id: 'facility-123',
+          checked_in_at: now.toISOString(),
+          check_in_method: 'qr',
+          created_at: now.toISOString(),
+        },
         error: null,
       });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'test-token', child_id: 'child-123' }),
+        body: JSON.stringify({
+          token: createHmac('sha256', qrSecret)
+            .update(`child-123facility-123${qrSecret}`)
+            .digest('hex'),
+          child_id: 'child-123',
+        }),
       });
 
       await POST(request);
@@ -382,19 +424,14 @@ describe('/api/attendance/checkin POST', () => {
         user_id: 'user-123',
         current_facility_id: 'facility-123',
       });
-
-      (jwt.verify as jest.Mock).mockReturnValue({
-        facility_id: 'facility-123',
-        issued_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 3600000).toISOString(),
-      });
     });
 
     it('データベースエラー時は500を返す', async () => {
-      mockSupabase.single
+      mockSupabase.maybeSingle
         .mockResolvedValueOnce({
           data: {
             id: 'child-123',
+            facility_id: 'facility-123',
             family_name: '田中',
             given_name: '太郎',
             _child_class: [
@@ -409,7 +446,7 @@ describe('/api/attendance/checkin POST', () => {
           error: null,
         });
 
-      mockSupabase.maybeSingle.mockResolvedValue({
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
         data: null,
         error: null,
       });
@@ -421,7 +458,12 @@ describe('/api/attendance/checkin POST', () => {
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
-        body: JSON.stringify({ token: 'test-token', child_id: 'child-123' }),
+        body: JSON.stringify({
+          token: createHmac('sha256', qrSecret)
+            .update(`child-123facility-123${qrSecret}`)
+            .digest('hex'),
+          child_id: 'child-123',
+        }),
       });
 
       const response = await POST(request);

@@ -54,8 +54,11 @@ export async function GET(
       .single();
 
     if (fetchError || !data) {
+      if (fetchError) {
+        console.error('Observation fetch error:', fetchError);
+      }
       return NextResponse.json(
-        { success: false, error: fetchError?.message || 'データが見つかりませんでした' },
+        { success: false, error: 'データが見つかりませんでした' },
         { status: 404 },
       );
     }

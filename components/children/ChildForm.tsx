@@ -408,8 +408,19 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       : (isEditMode ? formData.birth_date : '');
 
     // Validation
-    if (!formData.family_name || !formData.given_name || !birthDate || !formData.school_id || !formData.enrolled_at) {
-      setError('必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）');
+    const requiresSchool = schools.length > 0;
+    if (
+      !formData.family_name ||
+      !formData.given_name ||
+      !birthDate ||
+      (requiresSchool && !formData.school_id) ||
+      !formData.enrolled_at
+    ) {
+      setError(
+        requiresSchool
+          ? '必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）'
+          : '必須項目を入力してください（氏名、生年月日、入所開始日は必須です）'
+      );
       return;
     }
 
@@ -661,7 +672,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       </div>
                     </FieldGroup>
 
-                    <FieldGroup label="通学している学校" required className="sm:col-span-2">
+                    <FieldGroup label="通学している学校" required={schools.length > 0} className="sm:col-span-2">
                       <Select
                         value={formData.school_id}
                         onChange={(e: any) => setFormData({ ...formData, school_id: e.target.value })}
@@ -673,7 +684,11 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           </option>
                         ))}
                       </Select>
-                      <p className="text-xs text-slate-400 mt-1">※学校が登録されていない場合は、先に学校マスタから登録してください</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {schools.length > 0
+                          ? '※学校が登録されていない場合は、先に学校マスタから登録してください'
+                          : '※学校マスタが未登録のため、未選択のまま保存できます'}
+                      </p>
                     </FieldGroup>
 
                     <FieldGroup label="学年調整" className="sm:col-span-2">
@@ -1024,4 +1039,3 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     </div>
   );
 }
-

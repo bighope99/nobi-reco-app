@@ -18,6 +18,32 @@ beforeEach(() => {
         json: async () => ({ success: true, data: tagData }),
       } as unknown as Response;
     }
+    if (url === '/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200') {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            children: [
+              {
+                child_id: '1',
+                name: 'テスト児童',
+                class_name: 'さくら組',
+              },
+            ],
+          },
+        }),
+      } as unknown as Response;
+    }
+    if (url.startsWith('/api/records/personal/child/')) {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { recent_observations: [] },
+        }),
+      } as unknown as Response;
+    }
     if (url === '/api/records/personal/ai') {
       return {
         ok: true,
@@ -27,6 +53,19 @@ beforeEach(() => {
             objective: '今日は積み木で高い塔を作っていました。',
             subjective: '',
             flags: {},
+          },
+        }),
+      } as unknown as Response;
+    }
+    if (url === '/api/records/personal') {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            id: 'obs-1',
+            observation_date: '2025-01-03',
+            content: '今日は積み木で高い塔を作っていました。集中して取り組んでいました。',
           },
         }),
       } as unknown as Response;
@@ -63,6 +102,12 @@ describe('ObservationEditor new', () => {
     tagData = [{ id: 'tag-1', name: '自立', description: null, color: null, sort_order: 1 }];
 
     render(<ObservationEditor mode="new" initialChildId="1" />);
+
+    fireEvent.change(screen.getByLabelText('本文'), {
+      target: { value: '今日は積み木で高い塔を作っていました。' },
+    });
+
+    fireEvent.click(screen.getByTestId('observation-save'));
 
     expect(await screen.findByText('自立')).toBeInTheDocument();
   });
