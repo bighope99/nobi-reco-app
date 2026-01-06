@@ -482,7 +482,7 @@ export async function saveChild(
     });
 
     // 更新時：不要になったリンクを削除（孤立した保護者レコードは残るが、リンクは削除）
-    if (isUpdate && existingGuardianIds.length > 0) {
+    if (isUpdate && existingGuardianIds.length > 0 && newGuardianIds.length > 0) {
       const guardianIdsToRemove = existingGuardianIds.filter(id => !newGuardianIds.includes(id));
       
       if (guardianIdsToRemove.length > 0) {

@@ -76,11 +76,16 @@ type SupabaseUpdateMock = {
   from: jest.Mock;
   __childSelect: jest.Mock;
   __childUpdate: jest.Mock;
+  __guardianInsert: jest.Mock;
+  __childGuardianUpsert: jest.Mock;
   __childGuardianSelect: jest.Mock;
   __childGuardianDelete: jest.Mock;
 };
 
-const createSupabaseUpdateMock = (childId = 'child-1'): SupabaseUpdateMock => {
+const createSupabaseUpdateMock = (
+  childId = 'child-1',
+  options: { guardianInsertError?: boolean } = {}
+): SupabaseUpdateMock => {
   const childSelect = jest.fn().mockReturnValue({
     eq: jest.fn().mockReturnValue({
       eq: jest.fn().mockReturnValue({
@@ -93,6 +98,17 @@ const createSupabaseUpdateMock = (childId = 'child-1'): SupabaseUpdateMock => {
       }),
     }),
   });
+
+  const guardianInsert = jest.fn().mockReturnValue({
+    select: jest.fn().mockReturnValue({
+      single: jest.fn().mockResolvedValue({
+        data: options.guardianInsertError ? null : { id: 'guardian-1' },
+        error: options.guardianInsertError ? new Error('insert failed') : null,
+      }),
+    }),
+  });
+
+  const childGuardianUpsert = jest.fn().mockResolvedValue({ error: null });
 
   const childUpdate = jest.fn().mockReturnValue({
     eq: jest.fn().mockReturnValue({
@@ -114,15 +130,19 @@ const createSupabaseUpdateMock = (childId = 'child-1'): SupabaseUpdateMock => {
     }),
   });
 
-  const childGuardianSelect = jest.fn();
+  const childGuardianSelect = jest.fn().mockReturnValue({
+    eq: jest.fn().mockResolvedValue({ data: [{ guardian_id: 'guardian-1' }] }),
+  });
   const childGuardianDelete = jest.fn();
 
   const from = jest.fn((table: string) => {
     switch (table) {
       case 'm_children':
         return { select: childSelect, update: childUpdate };
+      case 'm_guardians':
+        return { insert: guardianInsert };
       case '_child_guardian':
-        return { select: childGuardianSelect, delete: childGuardianDelete };
+        return { select: childGuardianSelect, delete: childGuardianDelete, upsert: childGuardianUpsert };
       default:
         return {};
     }
@@ -132,6 +152,8 @@ const createSupabaseUpdateMock = (childId = 'child-1'): SupabaseUpdateMock => {
     from,
     __childSelect: childSelect,
     __childUpdate: childUpdate,
+    __guardianInsert: guardianInsert,
+    __childGuardianUpsert: childGuardianUpsert,
     __childGuardianSelect: childGuardianSelect,
     __childGuardianDelete: childGuardianDelete,
   };
@@ -252,5 +274,29 @@ describe('saveChild PII暗号化', () => {
 
     expect(supabase.__childGuardianSelect).not.toHaveBeenCalled();
     expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
+  });
+
+  it('保護者保存に失敗した更新でも既存の紐付けを削除しないこと', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = createSupabaseUpdateMock('child-1', { guardianInsertError: true });
+    const payload: ChildPayload = {
+      basic_info: {
+        family_name: '佐藤',
+        given_name: '花子',
+        birth_date: '2019-06-01',
+      },
+      affiliation: {
+        enrolled_at: '2024-04-01',
+      },
+      contact: {
+        parent_name: '田中 花子',
+        parent_phone: '090-1111-2222',
+      },
+    };
+
+    await saveChild(payload, 'facility-1', supabase, 'child-1');
+
+    expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });
