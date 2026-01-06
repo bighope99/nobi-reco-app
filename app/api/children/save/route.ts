@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { normalizePhone } from '@/lib/children/import-csv';
+import { encryptPII, decryptPII } from '@/utils/crypto/piiEncryption';
+import {
+  updateSearchIndex,
+  searchByPhone,
+  searchByEmail,
+  deleteSearchIndex,
+} from '@/utils/pii/searchIndex';
 
 export interface ChildPayload {
   child_id?: string;
@@ -78,10 +85,11 @@ export async function saveChild(
   const childValues: any = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
-    family_name: basic_info.family_name,
-    given_name: basic_info.given_name,
-    family_name_kana: basic_info.family_name_kana || '',
-    given_name_kana: basic_info.given_name_kana || '',
+    // PIIフィールドを暗号化
+    family_name: encryptPII(basic_info.family_name),
+    given_name: encryptPII(basic_info.given_name),
+    family_name_kana: encryptPII(basic_info.family_name_kana || ''),
+    given_name_kana: encryptPII(basic_info.given_name_kana || ''),
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,
@@ -91,11 +99,11 @@ export async function saveChild(
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
     parent_name: shouldSaveParentLegacy ? (contact?.parent_name || null) : null,
-    parent_phone: shouldSaveParentLegacy ? (contact?.parent_phone || '') : '',
-    parent_email: shouldSaveParentLegacy ? (contact?.parent_email || '') : '',
-    allergies: care_info?.allergies || null,
-    child_characteristics: care_info?.child_characteristics || null,
-    parent_characteristics: care_info?.parent_characteristics || null,
+    parent_phone: shouldSaveParentLegacy ? encryptPII(contact?.parent_phone || '') : '',
+    parent_email: shouldSaveParentLegacy ? encryptPII(contact?.parent_email || '') : '',
+    allergies: encryptPII(care_info?.allergies || null),
+    child_characteristics: encryptPII(care_info?.child_characteristics || null),
+    parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
     photo_permission_public: permissions?.photo_permission_public !== false,
     photo_permission_share: permissions?.photo_permission_share !== false,
   };
@@ -127,6 +135,14 @@ export async function saveChild(
       return NextResponse.json({ error: 'Failed to create child' }, { status: 500 });
     }
     result = childData;
+  }
+
+  // 検索用ハッシュテーブルを更新（児童情報）
+  if (result.id) {
+    await Promise.all([
+      updateSearchIndex(supabase, 'child', result.id, 'name', basic_info.family_name && basic_info.given_name ? `${basic_info.family_name} ${basic_info.given_name}` : null),
+      updateSearchIndex(supabase, 'child', result.id, 'name_kana', basic_info.family_name_kana && basic_info.given_name_kana ? `${basic_info.family_name_kana} ${basic_info.given_name_kana}` : null),
+    ]);
   }
 
   // クラス紐付け処理
@@ -184,51 +200,65 @@ export async function saveChild(
       // 電話番号を正規化
       const normalizedPhone = contact.parent_phone ? normalizePhone(contact.parent_phone) : null;
 
-      // 既存の保護者を検索（正規化された電話番号またはメールアドレスで）
+      // 既存の保護者を検索（検索用ハッシュテーブル経由）
       let guardianId: string | null = null;
       
       if (normalizedPhone || contact.parent_email) {
-        let query = supabase
-          .from('m_guardians')
-          .select('id')
-          .eq('facility_id', facilityId)
-          .is('deleted_at', null);
+        let entityIds: string[] = [];
         
         if (normalizedPhone) {
-          query = query.eq('phone', normalizedPhone);
+          entityIds = await searchByPhone(supabase, 'guardian', normalizedPhone);
         } else if (contact.parent_email) {
-          query = query.eq('email', contact.parent_email);
+          entityIds = await searchByEmail(supabase, 'guardian', contact.parent_email);
         }
         
-        const { data: existingGuardian } = await query.maybeSingle();
-        
-        if (existingGuardian) {
-          guardianId = existingGuardian.id;
-          
-          // 既存の保護者情報を更新（名前が変更されている可能性があるため）
-          await supabase
+        // 検索結果から該当する保護者を確認（facility_idでフィルタリング）
+        if (entityIds.length > 0) {
+          const { data: existingGuardians } = await supabase
             .from('m_guardians')
-            .update({
-              family_name: familyName,
-              given_name: givenName,
-              phone: normalizedPhone,
-              email: contact.parent_email || null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', guardianId);
+            .select('id')
+            .eq('facility_id', facilityId)
+            .in('id', entityIds)
+            .is('deleted_at', null)
+            .limit(1);
+          
+          if (existingGuardians && existingGuardians.length > 0) {
+            guardianId = existingGuardians[0].id;
+            
+            // 既存の保護者情報を更新（名前が変更されている可能性があるため）
+            // PIIフィールドを暗号化
+            await supabase
+              .from('m_guardians')
+              .update({
+                family_name: encryptPII(familyName),
+                given_name: encryptPII(givenName),
+                phone: encryptPII(normalizedPhone),
+                email: encryptPII(contact.parent_email || null),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', guardianId);
+            
+            // 検索用ハッシュテーブルを更新
+            await Promise.all([
+              updateSearchIndex(supabase, 'guardian', guardianId, 'phone', normalizedPhone),
+              updateSearchIndex(supabase, 'guardian', guardianId, 'email', contact.parent_email || null),
+              updateSearchIndex(supabase, 'guardian', guardianId, 'name', familyName && givenName ? `${familyName} ${givenName}` : null),
+            ]);
+          }
         }
       }
 
       // 既存の保護者が見つからなかった場合は新規作成
       if (!guardianId) {
+        // PIIフィールドを暗号化
         const { data: guardianData, error: guardianError } = await supabase
           .from('m_guardians')
           .insert({
             facility_id: facilityId,
-            family_name: familyName,
-            given_name: givenName,
-            phone: normalizedPhone,
-            email: contact.parent_email || null,
+            family_name: encryptPII(familyName),
+            given_name: encryptPII(givenName),
+            phone: encryptPII(normalizedPhone),
+            email: encryptPII(contact.parent_email || null),
           })
           .select('id')
           .single();
@@ -238,6 +268,22 @@ export async function saveChild(
           return null;
         } else {
           guardianId = guardianData.id;
+          
+          // 検索用ハッシュテーブルを更新
+          const guardianName = familyName && givenName ? `${familyName} ${givenName}` : null;
+          const updatePromises = [];
+          if (normalizedPhone) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId, 'phone', normalizedPhone));
+          }
+          if (contact.parent_email) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId, 'email', contact.parent_email));
+          }
+          if (guardianName) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId, 'name', guardianName));
+          }
+          if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+          }
         }
       }
 
@@ -276,41 +322,60 @@ export async function saveChild(
       // 電話番号を正規化
       const normalizedPhone = normalizePhone(emergencyContact.phone);
 
-      // 既存の保護者を検索（正規化された電話番号で）
+      // 既存の保護者を検索（検索用ハッシュテーブル経由）
       let emergencyGuardianId: string | null = null;
       
-      const { data: existingEmergencyGuardian } = await supabase
-        .from('m_guardians')
-        .select('id')
-        .eq('facility_id', facilityId)
-        .eq('phone', normalizedPhone)
-        .is('deleted_at', null)
-        .maybeSingle();
+      const entityIds = await searchByPhone(supabase, 'guardian', normalizedPhone);
       
-      if (existingEmergencyGuardian) {
-        emergencyGuardianId = existingEmergencyGuardian.id;
-        
-        // 既存の保護者情報を更新
-        await supabase
+      if (entityIds.length > 0) {
+        // 検索結果から該当する保護者を確認（facility_idでフィルタリング）
+        const { data: existingEmergencyGuardians } = await supabase
           .from('m_guardians')
-          .update({
-            family_name: familyName,
-            given_name: givenName,
-            phone: normalizedPhone,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', emergencyGuardianId);
+          .select('id')
+          .eq('facility_id', facilityId)
+          .in('id', entityIds)
+          .is('deleted_at', null)
+          .limit(1);
+        
+        if (existingEmergencyGuardians && existingEmergencyGuardians.length > 0) {
+          emergencyGuardianId = existingEmergencyGuardians[0].id;
+          
+          // 既存の保護者情報を更新（PIIフィールドを暗号化）
+          await supabase
+            .from('m_guardians')
+            .update({
+              family_name: encryptPII(familyName),
+              given_name: encryptPII(givenName),
+              phone: encryptPII(normalizedPhone),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', emergencyGuardianId);
+          
+          // 検索用ハッシュテーブルを更新
+          const emergencyGuardianName = familyName && givenName ? `${familyName} ${givenName}` : null;
+          const updatePromises = [];
+          if (normalizedPhone) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId, 'phone', normalizedPhone));
+          }
+          if (emergencyGuardianName) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId, 'name', emergencyGuardianName));
+          }
+          if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+          }
+        }
       }
 
       // 既存の保護者が見つからなかった場合は新規作成
       if (!emergencyGuardianId) {
+        // PIIフィールドを暗号化
         const { data: emergencyGuardianData, error: emergencyGuardianError } = await supabase
           .from('m_guardians')
           .insert({
             facility_id: facilityId,
-            family_name: familyName,
-            given_name: givenName,
-            phone: normalizedPhone,
+            family_name: encryptPII(familyName),
+            given_name: encryptPII(givenName),
+            phone: encryptPII(normalizedPhone),
           })
           .select('id')
           .single();
@@ -320,6 +385,19 @@ export async function saveChild(
           return null;
         } else {
           emergencyGuardianId = emergencyGuardianData.id;
+          
+          // 検索用ハッシュテーブルを更新
+          const emergencyGuardianName = familyName && givenName ? `${familyName} ${givenName}` : null;
+          const updatePromises = [];
+          if (normalizedPhone) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId, 'phone', normalizedPhone));
+          }
+          if (emergencyGuardianName) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId, 'name', emergencyGuardianName));
+          }
+          if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+          }
         }
       }
 

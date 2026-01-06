@@ -271,10 +271,23 @@ export async function GET(request: NextRequest) {
         status = 'absent';
       }
 
+      // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+      const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+        if (!encrypted) return null;
+        const decrypted = decryptPII(encrypted);
+        return decrypted !== null ? decrypted : encrypted;
+      };
+
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+      const decryptedParentPhone = decryptOrFallback(child.parent_phone);
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: `${decryptedFamilyName} ${decryptedGivenName}`,
+        kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
@@ -289,7 +302,7 @@ export async function GET(request: NextRequest) {
         scheduled_end_time: formatTimeToMinutes(null),
         actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
         actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
-        guardian_phone: child.parent_phone || null,
+        guardian_phone: decryptedParentPhone,
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
       };
