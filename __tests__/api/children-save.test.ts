@@ -72,12 +72,10 @@ describe('saveChild', () => {
     expect(childInsertPayload).toEqual(
       expect.objectContaining({
         parent_name: '山田 太郎',
-        parent_phone: expect.any(String),
-        parent_email: expect.any(String),
+        parent_phone: null,
+        parent_email: null,
       })
     );
-    expect(childInsertPayload.parent_phone).not.toBe('090-1234-5678');
-    expect(childInsertPayload.parent_email).not.toBe('taro@example.com');
     expect(response.status).toBe(201);
   });
 
