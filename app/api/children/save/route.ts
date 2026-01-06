@@ -82,14 +82,37 @@ export async function saveChild(
   }
 
   const shouldSaveParentLegacy = !options?.skipParentLegacy;
+  const hasParentName = !!contact?.parent_name?.trim();
+  const hasParentPhone = !!contact?.parent_phone?.trim();
+  const hasParentEmail = !!contact?.parent_email?.trim();
+  const normalizedParentPhone = contact?.parent_phone ? normalizePhone(contact.parent_phone) : null;
+  const fitColumnLength = (value: string | null, maxLength: number): string | null => {
+    if (!value) return null;
+    return value.length <= maxLength ? value : null;
+  };
+
+  const legacyParentName = shouldSaveParentLegacy && hasParentName
+    ? encryptPII(contact?.parent_name?.trim() || null)
+    : null;
+  const legacyParentPhone = shouldSaveParentLegacy && hasParentPhone
+    ? encryptPII(normalizedParentPhone)
+    : null;
+  const legacyParentEmail = shouldSaveParentLegacy && hasParentEmail
+    ? encryptPII(contact?.parent_email?.trim() || null)
+    : null;
+
+  const legacyParentNameValue = fitColumnLength(legacyParentName, 100);
+  const legacyParentPhoneValue = fitColumnLength(legacyParentPhone, 20);
+  const legacyParentEmailValue = fitColumnLength(legacyParentEmail, 255);
+
   const childValues: any = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
-    // PIIフィールドを暗号化（氏名・フリガナは平文保持）
-    family_name: basic_info.family_name,
-    given_name: basic_info.given_name,
-    family_name_kana: basic_info.family_name_kana || '',
-    given_name_kana: basic_info.given_name_kana || '',
+    // PIIフィールドを暗号化（氏名・フリガナ・保護者情報）
+    family_name: encryptPII(basic_info.family_name),
+    given_name: encryptPII(basic_info.given_name),
+    family_name_kana: encryptPII(basic_info.family_name_kana || null),
+    given_name_kana: encryptPII(basic_info.given_name_kana || null),
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,
@@ -98,9 +121,15 @@ export async function saveChild(
     enrollment_type: affiliation.enrollment_type || 'regular',
     enrolled_at: affiliation.enrolled_at ? new Date(affiliation.enrolled_at).toISOString() : new Date().toISOString(),
     withdrawn_at: affiliation.withdrawn_at ? new Date(affiliation.withdrawn_at).toISOString() : null,
-    parent_name: shouldSaveParentLegacy ? (contact?.parent_name || null) : null,
-    parent_phone: null,
-    parent_email: null,
+    parent_name: isUpdate
+      ? legacyParentNameValue ?? undefined
+      : legacyParentNameValue ?? null,
+    parent_phone: isUpdate
+      ? legacyParentPhoneValue ?? undefined
+      : legacyParentPhoneValue ?? null,
+    parent_email: isUpdate
+      ? legacyParentEmailValue ?? undefined
+      : legacyParentEmailValue ?? null,
     allergies: encryptPII(care_info?.allergies || null),
     child_characteristics: encryptPII(care_info?.child_characteristics || null),
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
@@ -111,6 +140,11 @@ export async function saveChild(
   let result;
   if (isUpdate) {
     childValues.updated_at = new Date().toISOString();
+    Object.keys(childValues).forEach((key) => {
+      if (childValues[key] === undefined) {
+        delete childValues[key];
+      }
+    });
     const { data: updatedChild, error: updateError } = await supabase
       .from('m_children')
       .update(childValues)
@@ -171,8 +205,13 @@ export async function saveChild(
     }
   }
 
+  const hasValidEmergencyContacts = !!contact?.emergency_contacts?.some(
+    (ec) => ec.name?.trim() && ec.phone?.trim()
+  );
+  const shouldSyncGuardians = hasParentName || hasValidEmergencyContacts;
+
   // 保護者情報の保存処理（アップサートアプローチ）
-  if (contact?.parent_name || contact?.emergency_contacts) {
+  if (shouldSyncGuardians) {
     // 更新時は既存のリンクを取得して、不要なリンクを削除するために使用
     let existingGuardianIds: string[] = [];
     if (isUpdate) {
@@ -190,7 +229,7 @@ export async function saveChild(
 
     // 主たる保護者の保存処理（非同期関数として定義）
     const processPrimaryGuardian = async (): Promise<string | null> => {
-      if (!contact.parent_name) return null;
+      if (!contact.parent_name?.trim()) return null;
 
       // 名前から姓と名に分割（スペース区切り）
       const nameParts = contact.parent_name.trim().split(/\s+/);
@@ -443,7 +482,7 @@ export async function saveChild(
     });
 
     // 更新時：不要になったリンクを削除（孤立した保護者レコードは残るが、リンクは削除）
-    if (isUpdate && existingGuardianIds.length > 0) {
+    if (isUpdate && existingGuardianIds.length > 0 && newGuardianIds.length > 0) {
       const guardianIdsToRemove = existingGuardianIds.filter(id => !newGuardianIds.includes(id));
       
       if (guardianIdsToRemove.length > 0) {
@@ -456,12 +495,33 @@ export async function saveChild(
     }
   }
 
+  const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
+    if (!encrypted) return null;
+    const decrypted = decryptPII(encrypted);
+    return decrypted !== null ? decrypted : encrypted;
+  };
+
+  const formatName = (
+    parts: Array<string | null | undefined>,
+    emptyValue: string | null = null
+  ): string | null => {
+    const cleaned = parts
+      .map(part => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean);
+    return cleaned.length > 0 ? cleaned.join(' ') : emptyValue;
+  };
+
+  const decryptedFamilyName = decryptOrFallback(result.family_name);
+  const decryptedGivenName = decryptOrFallback(result.given_name);
+  const decryptedFamilyNameKana = decryptOrFallback(result.family_name_kana);
+  const decryptedGivenNameKana = decryptOrFallback(result.given_name_kana);
+
   const response = {
     success: true,
     data: {
       child_id: result.id,
-      name: `${result.family_name} ${result.given_name}`,
-      kana: `${result.family_name_kana} ${result.given_name_kana}`,
+      name: formatName([decryptedFamilyName, decryptedGivenName], '') || '',
+      kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana], '') || '',
       enrollment_date: result.enrollment_date,
       created_at: result.created_at,
       updated_at: result.updated_at,

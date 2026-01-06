@@ -198,6 +198,16 @@ export async function GET(request: NextRequest) {
       return decrypted !== null ? decrypted : encrypted; // 復号化失敗時は平文として扱う
     };
 
+    const formatName = (
+      parts: Array<string | null | undefined>,
+      emptyValue: string | null = null
+    ): string | null => {
+      const cleaned = parts
+        .map(part => (typeof part === 'string' ? part.trim() : ''))
+        .filter(Boolean);
+      return cleaned.length > 0 ? cleaned.join(' ') : emptyValue;
+    };
+
     // データ整形
     const children = childrenData.map((child: any) => {
       // クラス情報（現在所属中のクラスのみ）
@@ -237,7 +247,7 @@ export async function GET(request: NextRequest) {
           const decryptedGivenName = decryptOrFallback(siblingInfo?.given_name);
           return {
             child_id: siblingInfo?.id,
-            name: `${decryptedFamilyName} ${decryptedGivenName}`,
+            name: formatName([decryptedFamilyName, decryptedGivenName], ''),
             age_group: siblingClass?.age_group || '',
             relationship: s.relationship,
           };
@@ -252,8 +262,8 @@ export async function GET(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${decryptedFamilyName} ${decryptedGivenName}`,
-        kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName], ''),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana], ''),
         gender: child.gender,
         birth_date: child.birth_date,
         age,
@@ -268,7 +278,13 @@ export async function GET(request: NextRequest) {
         enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
         withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
         parent_name: decryptedPrimaryGuardian
-          ? `${decryptedPrimaryGuardian.m_guardians.family_name} ${decryptedPrimaryGuardian.m_guardians.given_name}`.trim()
+          ? formatName(
+              [
+                decryptedPrimaryGuardian.m_guardians.family_name,
+                decryptedPrimaryGuardian.m_guardians.given_name,
+              ],
+              null
+            )
           : null,
         parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(child.parent_phone) || null,
         parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(child.parent_email) || null,
