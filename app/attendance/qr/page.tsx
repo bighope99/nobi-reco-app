@@ -32,7 +32,6 @@ interface CheckInResult {
 
 export default function QRAttendanceScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
   const codeReaderRef = useRef<BrowserQRCodeReader | null>(null)
   const controlsRef = useRef<{ stop: () => void } | null>(null)
 
@@ -51,11 +50,18 @@ export default function QRAttendanceScannerPage() {
       controlsRef.current = null
     }
 
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
+    const videoElement = videoRef.current
+    const srcObject = videoElement?.srcObject
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
+    if (srcObject) {
+      if (typeof MediaStream !== "undefined" && srcObject instanceof MediaStream) {
+        srcObject.getTracks().forEach((track) => track.stop())
+      } else if ("getTracks" in srcObject) {
+        srcObject.getTracks().forEach((track) => track.stop())
+      }
+      if (videoElement) {
+        videoElement.srcObject = null
+      }
     }
 
     codeReaderRef.current = null
@@ -145,32 +151,15 @@ export default function QRAttendanceScannerPage() {
         codeReaderRef.current = new BrowserQRCodeReader()
       }
 
-      // カメラストリームを取得してビデオ要素に設定
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+      const controls = await codeReaderRef.current.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
         },
-        audio: false,
-      })
-
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
-
-      try {
-        await videoRef.current.play()
-      } catch (playError) {
-        console.error("Video play error", playError)
-        throw new Error("カメラ映像の再生に失敗しました。ブラウザの権限設定を確認してください。")
-      }
-
-      setScanStatus("scanning")
-
-      // ZXingでQRコードを読み取り開始
-      // undefinedを渡すとデフォルトのカメラ（背面カメラ優先）を使用
-      const controls = await codeReaderRef.current.decodeFromVideoDevice(
-        undefined,
         videoRef.current,
         (result, error) => {
           if (result) {
@@ -183,6 +172,7 @@ export default function QRAttendanceScannerPage() {
       )
 
       controlsRef.current = controls
+      setScanStatus("scanning")
     } catch (error) {
       console.error("Camera start error", error)
       if (error instanceof DOMException && error.name === "NotAllowedError") {
