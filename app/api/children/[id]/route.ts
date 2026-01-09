@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { handleChildSave } from '../save/route';
+import { decryptNameField, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 // GET /api/children/:id - 子ども詳細取得
 export async function GET(
@@ -82,6 +83,7 @@ export async function GET(
     const guardians = childData._child_guardian || [];
     const primaryGuardian = guardians.find((g: any) => g.is_primary);
     const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
+    const parentName = primaryGuardian ? getDecryptedFullName(primaryGuardian.m_guardians) : null;
 
     // データ整形
     const response = {
@@ -89,10 +91,10 @@ export async function GET(
       data: {
         child_id: childData.id,
         basic_info: {
-          family_name: childData.family_name,
-          given_name: childData.given_name,
-          family_name_kana: childData.family_name_kana,
-          given_name_kana: childData.given_name_kana,
+          family_name: decryptNameField(childData.family_name),
+          given_name: decryptNameField(childData.given_name),
+          family_name_kana: decryptNameField(childData.family_name_kana),
+          given_name_kana: decryptNameField(childData.given_name_kana),
           nickname: childData.nickname,
           gender: childData.gender,
           birth_date: childData.birth_date,
@@ -111,12 +113,12 @@ export async function GET(
         },
         contact: {
           parent_name: primaryGuardian
-            ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
+            ? parentName || null
             : childData.parent_name || null, // 後方互換性のためフォールバック
           parent_phone: primaryGuardian?.m_guardians.phone || childData.parent_phone || null,
           parent_email: primaryGuardian?.m_guardians.email || childData.parent_email || null,
           emergency_contacts: emergencyContacts.map((ec: any) => ({
-            name: `${ec.m_guardians.family_name} ${ec.m_guardians.given_name}`.trim(),
+            name: getDecryptedFullName(ec.m_guardians),
             relation: ec.relationship,
             phone: ec.m_guardians.phone,
           })),
@@ -132,7 +134,7 @@ export async function GET(
         },
         siblings: (siblingsData || []).map((s: any) => ({
           child_id: s.m_children.id,
-          name: `${s.m_children.family_name} ${s.m_children.given_name}`,
+          name: getDecryptedFullName(s.m_children),
           relationship: s.relationship,
         })),
         created_at: childData.created_at,

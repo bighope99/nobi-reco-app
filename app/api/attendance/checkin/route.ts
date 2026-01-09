@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { getQrSignatureSecret } from '@/lib/qr/secrets';
+import { getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 export async function POST(request: NextRequest) {
   try {
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
         success: true,
         data: {
           child_id,
-          child_name: `${child.family_name} ${child.given_name}`,
+          child_name: getDecryptedFullName(child),
           class_name: className,
           checked_in_at: existing.checked_in_at,
           attendance_date: today,
@@ -206,7 +207,7 @@ export async function POST(request: NextRequest) {
             success: true,
             data: {
               child_id,
-              child_name: `${child.family_name} ${child.given_name}`,
+              child_name: getDecryptedFullName(child),
               class_name: className,
               checked_in_at: existingAttendance.checked_in_at,
               attendance_date: today,
@@ -227,7 +228,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         child_id,
-        child_name: `${child.family_name} ${child.given_name}`,
+        child_name: getDecryptedFullName(child),
         class_name: className,
         checked_in_at: attendance.checked_in_at,
         attendance_date: today,

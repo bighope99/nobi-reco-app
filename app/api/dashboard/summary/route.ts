@@ -11,6 +11,7 @@ import {
   type LateArrivalAlert,
   getMinutesDiff,
 } from '@/lib/alerts/late-arrival';
+import { getDecryptedFullKana, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 export async function GET(request: NextRequest) {
   try {
@@ -273,8 +274,8 @@ export async function GET(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: getDecryptedFullName(child),
+        kana: getDecryptedFullKana(child),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',

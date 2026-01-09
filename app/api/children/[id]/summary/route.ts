@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { getDecryptedFullKana, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 export async function GET(
   request: NextRequest,
@@ -205,8 +206,8 @@ export async function GET(
       data: {
         child_info: {
           child_id: child.id,
-          name: `${child.family_name} ${child.given_name}`,
-          kana: `${child.family_name_kana} ${child.given_name_kana}`,
+          name: getDecryptedFullName(child),
+          kana: getDecryptedFullKana(child),
           age,
           birth_date: child.birth_date,
           class_name: classData?.name || '',

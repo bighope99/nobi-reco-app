@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { handleChildSave } from './save/route';
+import { getDecryptedFullKana, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 // GET /api/children - 子ども一覧取得
 export async function GET(request: NextRequest) {
@@ -172,6 +173,9 @@ export async function GET(request: NextRequest) {
       // 保護者情報の整形
       const guardians = child._child_guardian || [];
       const primaryGuardian = guardians.find((g: any) => g.is_primary);
+      const childName = getDecryptedFullName(child);
+      const childKana = getDecryptedFullKana(child);
+      const parentName = primaryGuardian ? getDecryptedFullName(primaryGuardian.m_guardians) : null;
 
       // 年齢計算
       const birthDate = new Date(child.birth_date);
@@ -190,7 +194,7 @@ export async function GET(request: NextRequest) {
           const siblingClass = siblingCurrentClass?.m_classes;
           return {
             child_id: siblingInfo?.id,
-            name: `${siblingInfo?.family_name} ${siblingInfo?.given_name}`,
+            name: siblingInfo ? getDecryptedFullName(siblingInfo) : '',
             age_group: siblingClass?.age_group || '',
             relationship: s.relationship,
           };
@@ -198,8 +202,8 @@ export async function GET(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: childName,
+        kana: childKana,
         gender: child.gender,
         birth_date: child.birth_date,
         age,
@@ -213,9 +217,7 @@ export async function GET(request: NextRequest) {
         enrollment_type: child.enrollment_type,
         enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
         withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
-        parent_name: primaryGuardian
-          ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
-          : null,
+        parent_name: parentName || null,
         parent_phone: primaryGuardian?.m_guardians.phone || child.parent_phone || null,
         parent_email: primaryGuardian?.m_guardians.email || child.parent_email || null,
         siblings: childSiblings,
