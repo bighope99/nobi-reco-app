@@ -71,6 +71,15 @@ interface ActivitiesData {
   has_more: boolean
 }
 
+interface ActivityObservation {
+  observation_id: string
+  child_id: string
+  child_name: string
+  observation_date: string
+  content: string
+  created_at: string
+}
+
 // AiObservationResult型は共通ファイルからimport済み
 
 export default function ActivityRecordClient() {
@@ -107,6 +116,11 @@ export default function ActivityRecordClient() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [savingObservationId, setSavingObservationId] = useState<string | null>(null)
   const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null)
+  const [activityObservations, setActivityObservations] = useState<ActivityObservation[]>([])
+  const [isLoadingObservations, setIsLoadingObservations] = useState(false)
+  const [observationsError, setObservationsError] = useState<string | null>(null)
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
+  const [showObservationsModal, setShowObservationsModal] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
@@ -517,6 +531,13 @@ export default function ActivityRecordClient() {
     setAiAnalysisError(null)
   }
 
+  const closeObservationsModal = () => {
+    setShowObservationsModal(false)
+    setActivityObservations([])
+    setObservationsError(null)
+    setSelectedActivityId(null)
+  }
+
   const handleSaveObservation = async (result: AiObservationResult) => {
     setSavingObservationId(result.draft_id)
 
@@ -600,6 +621,30 @@ export default function ActivityRecordClient() {
     setMentionTokens(new Map())
     setPhotos([])
     setPhotoUploadError(null)
+  }
+
+  const handleOpenObservations = async (activity: Activity) => {
+    setSelectedActivityId(activity.activity_id)
+    setShowObservationsModal(true)
+    setActivityObservations([])
+    setObservationsError(null)
+    setIsLoadingObservations(true)
+
+    try {
+      const response = await fetch(`/api/activities/${activity.activity_id}/observations`)
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "個別記録の取得に失敗しました")
+      }
+
+      setActivityObservations(result.data?.observations || [])
+    } catch (err) {
+      console.error("Failed to fetch observations:", err)
+      setObservationsError(err instanceof Error ? err.message : "個別記録の取得に失敗しました")
+    } finally {
+      setIsLoadingObservations(false)
+    }
   }
 
   const handleMentionPickerSelect = (mention: MentionSuggestion) => {
@@ -1091,9 +1136,20 @@ export default function ActivityRecordClient() {
                         <span className="text-xs text-muted-foreground">
                           {activity.individual_record_count}件の個別記録
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          作成: {activity.created_by}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenObservations(activity)}
+                            disabled={activity.individual_record_count === 0}
+                          >
+                            個別記録を開く
+                          </Button>
+                          <span className="text-xs text-muted-foreground">
+                            作成: {activity.created_by}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -1166,6 +1222,51 @@ export default function ActivityRecordClient() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">分析結果がありません。</p>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showObservationsModal} onOpenChange={(open) => !open && closeObservationsModal()}>
+          <DialogContent className="max-h-[85vh] w-full max-w-3xl overflow-y-auto">
+            <DialogHeader className="mb-4 flex flex-row items-center justify-between">
+              <DialogTitle>個別記録一覧</DialogTitle>
+              <Button variant="ghost" size="icon" onClick={closeObservationsModal}>
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogHeader>
+            {observationsError && <p className="text-sm text-red-500">{observationsError}</p>}
+            {isLoadingObservations ? (
+              <p>読み込み中...</p>
+            ) : activityObservations.length ? (
+              <div className="space-y-4">
+                {activityObservations.map((observation) => (
+                  <Card key={observation.observation_id}>
+                    <CardContent className="space-y-2 pt-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            {observation.child_name} ・ {observation.observation_date}
+                          </p>
+                          <p className="text-sm whitespace-pre-line">{observation.content}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            router.push(`/records/personal/${observation.observation_id}/edit`)
+                          }
+                        >
+                          開く
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {selectedActivityId ? "個別記録はまだありません。" : "活動記録を選択してください。"}
+              </p>
             )}
           </DialogContent>
         </Dialog>
