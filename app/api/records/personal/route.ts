@@ -24,10 +24,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { child_id, observation_date, content, ai_action, ai_opinion, tag_flags } = body;
+    const { child_id, observation_date, content, ai_action, ai_opinion, tag_flags, activity_id } = body;
     const objective = typeof ai_action === 'string' ? ai_action.trim() : '';
     const subjective = typeof ai_opinion === 'string' ? ai_opinion.trim() : '';
     const hasAiResult = Boolean(objective || subjective);
+
+    // activity_idの正規化（空文字列はnullに変換）
+    const normalizedActivityId = activity_id && typeof activity_id === 'string' && activity_id.trim() !== ''
+      ? activity_id
+      : null;
 
     // バリデーション
     if (!child_id || !observation_date || !content) {
@@ -60,6 +65,7 @@ export async function POST(request: NextRequest) {
         child_id,
         observation_date,
         content,
+        activity_id: normalizedActivityId,
         objective: objective || null,
         subjective: subjective || null,
         is_ai_analyzed: hasAiResult,
