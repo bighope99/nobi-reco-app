@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { getDecryptedFullKana, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 export async function GET(request: NextRequest) {
   try {
@@ -212,8 +213,8 @@ export async function GET(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: getDecryptedFullName(child),
+        kana: getDecryptedFullKana(child),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',

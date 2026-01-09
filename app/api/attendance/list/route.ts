@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate, weekdayJpMap } from '../utils/attendance';
+import { getDecryptedFullKana, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 export async function GET(request: NextRequest) {
   try {
@@ -158,8 +159,8 @@ export async function GET(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: getDecryptedFullName(child),
+        kana: getDecryptedFullKana(child),
         class_id: classData?.id || null,
         class_name: classData?.name || '',
         age_group: classData?.age_group || '',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { getDecryptedFullKana, getDecryptedFullName } from '@/utils/crypto/childNameDecrypt';
 
 /**
  * GET /api/classes/:id
@@ -150,8 +151,8 @@ export async function GET(
 
             return {
               id: child.id,
-              name: `${child.family_name} ${child.given_name}`,
-              name_kana: `${child.family_name_kana} ${child.given_name_kana}`,
+              name: getDecryptedFullName(child),
+              name_kana: getDecryptedFullKana(child),
               birth_date: child.birth_date,
               grade,
               grade_label: gradeLabel,
