@@ -24,10 +24,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { child_id, observation_date, content, ai_action, ai_opinion, tag_flags } = body;
+    const { child_id, observation_date, content, ai_action, ai_opinion, tag_flags, activity_id } = body;
     const objective = typeof ai_action === 'string' ? ai_action.trim() : '';
     const subjective = typeof ai_opinion === 'string' ? ai_opinion.trim() : '';
     const hasAiResult = Boolean(objective || subjective);
+    const activityId = typeof activity_id === 'string' ? activity_id : null;
 
     // バリデーション
     if (!child_id || !observation_date || !content) {
@@ -38,12 +39,24 @@ export async function POST(request: NextRequest) {
     }
 
     // 子どもが現在の施設に所属しているか確認
-    const { data: childData, error: childError } = await supabase
+    const childQuery = supabase
       .from('m_children')
       .select('facility_id')
       .eq('id', child_id)
       .is('deleted_at', null)
       .single();
+
+    const activityQuery = activityId
+      ? supabase
+          .from('r_activity')
+          .select('facility_id')
+          .eq('id', activityId)
+          .is('deleted_at', null)
+          .single()
+      : Promise.resolve({ data: null, error: null });
+
+    const [{ data: childData, error: childError }, { data: activityData, error: activityError }] =
+      await Promise.all([childQuery, activityQuery]);
 
     if (childError || !childData) {
       return NextResponse.json({ success: false, error: '子どもが見つかりません' }, { status: 404 });
@@ -53,6 +66,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'この子どもの記録を作成する権限がありません' }, { status: 403 });
     }
 
+    if (activityId) {
+      if (activityError || !activityData) {
+        return NextResponse.json({ success: false, error: '活動記録が見つかりません' }, { status: 404 });
+      }
+
+      if (activityData.facility_id !== session.current_facility_id) {
+        return NextResponse.json({ success: false, error: 'この活動記録の個別記録を作成する権限がありません' }, { status: 403 });
+      }
+    }
+
     // 観察記録を作成
     const { data: observationData, error: insertError } = await supabase
       .from('r_observation')
@@ -60,6 +83,7 @@ export async function POST(request: NextRequest) {
         child_id,
         observation_date,
         content,
+        activity_id: activityId,
         objective: objective || null,
         subjective: subjective || null,
         is_ai_analyzed: hasAiResult,

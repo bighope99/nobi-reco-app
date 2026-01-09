@@ -43,6 +43,7 @@ interface Activity {
   created_at: string
   individual_record_count: number
   mentioned_children?: string[]
+  derived_observations?: DerivedObservation[]
 }
 
 interface ActivityPhoto {
@@ -51,6 +52,12 @@ interface ActivityPhoto {
   thumbnail_url?: string | null
   file_id?: string
   file_path?: string
+}
+
+interface DerivedObservation {
+  observation_id: string
+  child_id: string
+  child_name: string
 }
 
 interface MentionSuggestion {
@@ -549,6 +556,7 @@ export default function ActivityRecordClient() {
           ai_action: aiResult.data?.objective ?? '',
           ai_opinion: aiResult.data?.subjective ?? '',
           tag_flags: aiResult.data?.flags ?? {},
+          ...(editingActivityId ? { activity_id: editingActivityId } : {}),
         }),
       })
 
@@ -1087,13 +1095,29 @@ export default function ActivityRecordClient() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <span className="text-xs text-muted-foreground">
-                          {activity.individual_record_count}件の個別記録
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          作成: {activity.created_by}
-                        </span>
+                      <div className="pt-2 border-t space-y-2">
+                        {activity.derived_observations?.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {activity.derived_observations.map((observation) => (
+                              <Button
+                                key={observation.observation_id}
+                                size="sm"
+                                variant="outline"
+                                aria-label={observation.child_name || "名称未設定"}
+                                onClick={() =>
+                                  router.push(`/records/personal/${observation.observation_id}/edit`)
+                                }
+                              >
+                                {observation.child_name}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="flex items-center justify-end">
+                          <span className="text-xs text-muted-foreground">
+                            作成: {activity.created_by}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </CardContent>

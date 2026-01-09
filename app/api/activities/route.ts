@@ -124,39 +124,79 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 各活動の観察記録数を取得
-    const activityIds = activities?.map(a => a.id) || [];
-    let observationCounts: { [key: string]: number } = {};
+    // 各活動の観察記録を取得
+    const activityIds = activities?.map((activity) => activity.id) || [];
+    const derivedObservationsMap = new Map<
+      string,
+      { observation_id: string; child_id: string; child_name: string }[]
+    >();
 
     if (activityIds.length > 0) {
-      const { data: observations } = await supabase
+      const { data: observations, error: observationError } = await supabase
         .from('r_observation')
-        .select('activity_id')
+        .select(
+          `
+          id,
+          activity_id,
+          child_id,
+          m_children (
+            family_name,
+            given_name
+          )
+        `
+        )
         .in('activity_id', activityIds)
         .is('deleted_at', null);
 
+      if (observationError) {
+        console.error('Observation fetch error:', observationError);
+        return NextResponse.json(
+          { success: false, error: 'Database error' },
+          { status: 500 }
+        );
+      }
+
       if (observations) {
-        observations.forEach((obs: any) => {
-          observationCounts[obs.activity_id] = (observationCounts[obs.activity_id] || 0) + 1;
+        observations.forEach((observation: any) => {
+          if (!observation.activity_id) return;
+          const names = [
+            observation.m_children?.family_name,
+            observation.m_children?.given_name,
+          ].filter(Boolean);
+          const childName = names.join('');
+          const list = derivedObservationsMap.get(observation.activity_id) || [];
+          list.push({
+            observation_id: observation.id,
+            child_id: observation.child_id,
+            child_name: childName,
+          });
+          derivedObservationsMap.set(observation.activity_id, list);
         });
       }
     }
 
     // データを整形
-    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => ({
-      activity_id: activity.id,
-      activity_date: activity.activity_date,
-      title: activity.title || '無題',
-      content: activity.content,
-      snack: activity.snack,
-      photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
-      class_id: activity.class_id,
-      class_name: activity.m_classes?.name || '',
-      mentioned_children: activity.mentioned_children || [],
-      created_by: activity.m_users?.name || '',
-      created_at: activity.created_at,
-      individual_record_count: observationCounts[activity.id] || 0,
-    })));
+    const formattedActivities = await Promise.all(
+      (activities || []).map(async (activity: any) => {
+        const derivedObservations = derivedObservationsMap.get(activity.id) || [];
+
+        return {
+          activity_id: activity.id,
+          activity_date: activity.activity_date,
+          title: activity.title || '無題',
+          content: activity.content,
+          snack: activity.snack,
+          photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
+          class_id: activity.class_id,
+          class_name: activity.m_classes?.name || '',
+          mentioned_children: activity.mentioned_children || [],
+          created_by: activity.m_users?.name || '',
+          created_at: activity.created_at,
+          individual_record_count: derivedObservations.length,
+          derived_observations: derivedObservations,
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
