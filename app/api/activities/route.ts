@@ -133,7 +133,9 @@ export async function GET(request: NextRequest) {
     }> } = {};
 
     if (activityIds.length > 0) {
-      const { data: observations } = await supabase
+      console.log('=== DEBUG: Activity IDs ===', activityIds);
+
+      const { data: observations, error: obsError } = await supabase
         .from('r_observation')
         .select(`
           id,
@@ -147,6 +149,10 @@ export async function GET(request: NextRequest) {
         `)
         .in('activity_id', activityIds)
         .is('deleted_at', null);
+
+      console.log('=== DEBUG: Observations Count ===', observations?.length || 0);
+      console.log('=== DEBUG: Observations Sample ===', observations?.[0]);
+      console.log('=== DEBUG: Observations Error ===', obsError);
 
       if (observations) {
         observations.forEach((obs: any) => {
@@ -188,6 +194,15 @@ export async function GET(request: NextRequest) {
         individual_records: individualRecords,
       };
     }));
+
+    console.log('=== DEBUG: Formatted Activities Sample ===', {
+      total: formattedActivities.length,
+      first: formattedActivities[0] ? {
+        activity_id: formattedActivities[0].activity_id,
+        individual_record_count: formattedActivities[0].individual_record_count,
+        individual_records: formattedActivities[0].individual_records,
+      } : null,
+    });
 
     return NextResponse.json({
       success: true,
