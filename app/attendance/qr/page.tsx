@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Camera, Check, Loader2, TriangleAlert, VideoOff } from "lucide-react"
+import { Camera, Check, Loader2, RefreshCcw, TriangleAlert, VideoOff } from "lucide-react"
 import { BrowserQRCodeReader } from "@zxing/browser"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
@@ -17,6 +17,7 @@ interface AttendanceQrPayload {
 }
 
 type ScanStatus = "idle" | "starting" | "scanning" | "stopped"
+type CameraFacingMode = "environment" | "user"
 
 interface CheckInResult {
   success: boolean
@@ -39,6 +40,8 @@ export default function QRAttendanceScannerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
+  const [facingMode, setFacingMode] = useState<CameraFacingMode>("environment")
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false)
 
   const stopScanner = useCallback(async () => {
     if (controlsRef.current) {
@@ -73,6 +76,34 @@ export default function QRAttendanceScannerPage() {
       stopScanner()
     }
   }, [stopScanner])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAvailableCameras = async () => {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        return
+      }
+
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        if (!isMounted) return
+        const videoInputs = devices.filter((device) => device.kind === "videoinput")
+        setHasMultipleCameras(videoInputs.length > 1)
+      } catch (error) {
+        console.error("Failed to enumerate media devices", error)
+        if (isMounted) {
+          setHasMultipleCameras(false)
+        }
+      }
+    }
+
+    checkAvailableCameras()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const parsePayload = (raw: string): AttendanceQrPayload | null => {
     try {
@@ -129,7 +160,7 @@ export default function QRAttendanceScannerPage() {
     }
   }
 
-  const startScanner = useCallback(async () => {
+  const startScanner = useCallback(async (mode: CameraFacingMode = facingMode) => {
     setErrorMessage(null)
     setScanStatus("starting")
 
@@ -154,7 +185,7 @@ export default function QRAttendanceScannerPage() {
       const controls = await codeReaderRef.current.decodeFromConstraints(
         {
           video: {
-            facingMode: { ideal: "environment" },
+            facingMode: { ideal: mode },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
@@ -187,7 +218,16 @@ export default function QRAttendanceScannerPage() {
       await stopScanner()
       setScanStatus("idle")
     }
-  }, [stopScanner])
+  }, [facingMode, stopScanner])
+
+  const handleToggleCamera = async () => {
+    const nextMode: CameraFacingMode = facingMode === "environment" ? "user" : "environment"
+    setFacingMode(nextMode)
+
+    if (isScanning) {
+      await startScanner(nextMode)
+    }
+  }
 
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
@@ -224,9 +264,9 @@ export default function QRAttendanceScannerPage() {
 
               {/* コントロールボタン */}
               {!checkInResult && (
-                <div className="flex justify-center gap-4">
+                <div className="flex flex-wrap justify-center gap-4">
                   <Button
-                    onClick={startScanner}
+                    onClick={() => startScanner()}
                     disabled={isScanning || isCheckingIn}
                     size="lg"
                     className="text-lg"
@@ -241,6 +281,17 @@ export default function QRAttendanceScannerPage() {
                       </>
                     )}
                   </Button>
+                  {hasMultipleCameras && (
+                    <Button
+                      variant="outline"
+                      onClick={handleToggleCamera}
+                      disabled={isCheckingIn}
+                      size="lg"
+                      className="text-lg"
+                    >
+                      <RefreshCcw className="mr-2 h-5 w-5" /> カメラを切り替え
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={stopScanner}
