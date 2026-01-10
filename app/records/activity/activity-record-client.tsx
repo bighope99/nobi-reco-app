@@ -30,6 +30,12 @@ import {
 } from "@/lib/drafts/aiDraftCookie"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 
+interface IndividualRecord {
+  observation_id: string
+  child_id: string
+  child_name: string
+}
+
 interface Activity {
   activity_id: string
   activity_date: string
@@ -42,6 +48,7 @@ interface Activity {
   created_by: string
   created_at: string
   individual_record_count: number
+  individual_records: IndividualRecord[]
   mentioned_children?: string[]
 }
 
@@ -546,6 +553,7 @@ export default function ActivityRecordClient() {
           child_id: result.child_id,
           observation_date: result.observation_date,
           content: result.content,
+          activity_id: editingActivityId || null,
           ai_action: aiResult.data?.objective ?? '',
           ai_opinion: aiResult.data?.subjective ?? '',
           tag_flags: aiResult.data?.flags ?? {},
@@ -1088,9 +1096,26 @@ export default function ActivityRecordClient() {
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t">
-                        <span className="text-xs text-muted-foreground">
-                          {activity.individual_record_count}件の個別記録
-                        </span>
+                        <div className="flex flex-col gap-2 flex-1">
+                          <span className="text-xs text-muted-foreground">
+                            {activity.individual_record_count}件の個別記録
+                          </span>
+                          {activity.individual_records && activity.individual_records.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {activity.individual_records.map((record) => (
+                                <Button
+                                  key={record.observation_id}
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs hover:bg-primary/10"
+                                  onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
+                                >
+                                  {record.child_name}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <span className="text-xs text-muted-foreground">
                           作成: {activity.created_by}
                         </span>

@@ -124,39 +124,85 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 各活動の観察記録数を取得
+    // 各活動の観察記録を取得（子ども情報もJOIN）
     const activityIds = activities?.map(a => a.id) || [];
-    let observationCounts: { [key: string]: number } = {};
+    const observationsByActivity: { [key: string]: Array<{
+      observation_id: string;
+      child_id: string;
+      child_name: string;
+    }> } = {};
 
     if (activityIds.length > 0) {
-      const { data: observations } = await supabase
+      console.log('=== DEBUG: Activity IDs ===', activityIds);
+
+      const { data: observations, error: obsError } = await supabase
         .from('r_observation')
-        .select('activity_id')
+        .select(`
+          id,
+          activity_id,
+          child_id,
+          m_children!inner (
+            family_name,
+            given_name,
+            nickname
+          )
+        `)
         .in('activity_id', activityIds)
         .is('deleted_at', null);
 
+      console.log('=== DEBUG: Observations Count ===', observations?.length || 0);
+      console.log('=== DEBUG: Observations Sample ===', observations?.[0]);
+      console.log('=== DEBUG: Observations Error ===', obsError);
+
       if (observations) {
         observations.forEach((obs: any) => {
-          observationCounts[obs.activity_id] = (observationCounts[obs.activity_id] || 0) + 1;
+          if (!observationsByActivity[obs.activity_id]) {
+            observationsByActivity[obs.activity_id] = [];
+          }
+
+          // 子ども名の取得（nicknameを優先、なければ姓名）
+          const child = Array.isArray(obs.m_children) ? obs.m_children[0] : obs.m_children;
+          const childName = child?.nickname ||
+                            [child?.family_name, child?.given_name].filter(Boolean).join(' ') ||
+                            '不明';
+
+          observationsByActivity[obs.activity_id].push({
+            observation_id: obs.id,
+            child_id: obs.child_id,
+            child_name: childName,
+          });
         });
       }
     }
 
     // データを整形
-    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => ({
-      activity_id: activity.id,
-      activity_date: activity.activity_date,
-      title: activity.title || '無題',
-      content: activity.content,
-      snack: activity.snack,
-      photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
-      class_id: activity.class_id,
-      class_name: activity.m_classes?.name || '',
-      mentioned_children: activity.mentioned_children || [],
-      created_by: activity.m_users?.name || '',
-      created_at: activity.created_at,
-      individual_record_count: observationCounts[activity.id] || 0,
-    })));
+    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => {
+      const individualRecords = observationsByActivity[activity.id] || [];
+      return {
+        activity_id: activity.id,
+        activity_date: activity.activity_date,
+        title: activity.title || '無題',
+        content: activity.content,
+        snack: activity.snack,
+        photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
+        class_id: activity.class_id,
+        class_name: activity.m_classes?.name || '',
+        mentioned_children: activity.mentioned_children || [],
+        created_by: activity.m_users?.name || '',
+        created_at: activity.created_at,
+        individual_record_count: individualRecords.length,
+        individual_records: individualRecords,
+      };
+    }));
+
+    console.log('=== DEBUG: Formatted Activities Sample ===', {
+      total: formattedActivities.length,
+      first: formattedActivities[0] ? {
+        activity_id: formattedActivities[0].activity_id,
+        individual_record_count: formattedActivities[0].individual_record_count,
+        individual_records: formattedActivities[0].individual_records,
+      } : null,
+    });
 
     return NextResponse.json({
       success: true,
