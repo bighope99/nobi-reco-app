@@ -66,6 +66,18 @@ export async function GET(request: NextRequest) {
             name,
             age_group
           )
+        ),
+        _child_guardian (
+          relationship,
+          is_primary,
+          is_emergency_contact,
+          m_guardians (
+            id,
+            family_name,
+            given_name,
+            phone,
+            email
+          )
         )
       `)
       .eq('facility_id', facility_id)
@@ -157,6 +169,10 @@ export async function GET(request: NextRequest) {
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
 
+      // 保護者情報の整形
+      const guardians = child._child_guardian || [];
+      const primaryGuardian = guardians.find((g: any) => g.is_primary);
+
       // 年齢計算
       const birthDate = new Date(child.birth_date);
       const today = new Date();
@@ -197,9 +213,11 @@ export async function GET(request: NextRequest) {
         enrollment_type: child.enrollment_type,
         enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
         withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
-        parent_name: null, // TODO: 保護者テーブルから取得
-        parent_phone: child.parent_phone,
-        parent_email: child.parent_email,
+        parent_name: primaryGuardian
+          ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
+          : null,
+        parent_phone: primaryGuardian?.m_guardians.phone || child.parent_phone || null,
+        parent_email: primaryGuardian?.m_guardians.email || child.parent_email || null,
         siblings: childSiblings,
         has_sibling: childSiblings.length > 0,
         has_allergy: !!child.allergies,

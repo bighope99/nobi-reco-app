@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     // リクエストボディ取得
     const body = await request.json();
-    const { phone } = body;
+    const { phone, child_id } = body;
 
     // バリデーション
     if (!phone) {
@@ -65,8 +65,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 電話番号でフィルタリング（parent_phoneまたはnormalized形式で一致）
+    // ※編集モードの場合は本人を除外
     const candidates = (childrenData || []).filter((child: any) => {
       if (!child.parent_phone) return false;
+      if (child_id && child.id === child_id) return false; // 本人を除外
       const childPhone = child.parent_phone.replace(/[-\s]/g, '');
       return childPhone === normalizedPhone;
     }).map((child: any) => {

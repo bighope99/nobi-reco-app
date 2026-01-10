@@ -194,7 +194,17 @@ export default function ClassDetailPage() {
       const result = await response.json();
 
       if (result.success) {
-        setAllChildren(result.data.children || []);
+        const mappedChildren = (result.data.children || []).map((child: any) => ({
+          id: child.child_id ?? child.id,
+          name: child.name,
+          name_kana: child.kana ?? child.name_kana ?? '',
+          age: child.age,
+          grade: child.grade ?? null,
+          grade_label: child.grade_label ?? null,
+          birth_date: child.birth_date,
+          enrollment_status: child.enrollment_status,
+        }));
+        setAllChildren(mappedChildren);
       }
     } catch (error) {
       console.error('Error fetching children:', error);
@@ -213,6 +223,7 @@ export default function ClassDetailPage() {
           name: classData.name,
           age_group: classData.age_group,
           capacity: classData.capacity,
+          facility_id: classData.facility_id,
           room_number: classData.room_number,
           color_code: classData.color_code,
           display_order: classData.display_order,

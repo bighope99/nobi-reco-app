@@ -168,15 +168,7 @@ export async function POST(request: NextRequest) {
         phone: body.phone,
         email: body.email,
         postal_code: body.postal_code,
-        fax: body.fax,
-        website: body.website,
-        director_name: body.director_name,
         capacity: body.capacity,
-        established_date: body.established_date,
-        license_number: body.license_number,
-        opening_time: body.opening_time,
-        closing_time: body.closing_time,
-        business_days: body.business_days,
         is_active: true,
       })
       .select()
