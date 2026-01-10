@@ -27,7 +27,7 @@ export function StaffLayout({ children, title, subtitle }: StaffLayoutProps) {
           subtitle={subtitle}
           onMenuClick={() => setIsSidebarOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto bg-background p-4 sm:p-6">{children}</main>
+        <main id="staff-layout-main" className="flex-1 overflow-y-auto bg-background p-4 sm:p-6 scroll-smooth">{children}</main>
       </div>
     </div>
   )

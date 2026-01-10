@@ -296,19 +296,47 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   useEffect(() => {
     const handleScroll = () => {
       const sections = ['basic', 'affiliation', 'family', 'care'];
+      const scrollContainer = document.getElementById('staff-layout-main');
+      
+      if (!scrollContainer) return;
+      
+      // コンテナの上端位置を取得（ヘッダー分のオフセットを考慮）
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const offset = 100; // 判定位置のオフセット
+
       for (const section of sections) {
         const element = document.getElementById(section);
         if (element) {
           const rect = element.getBoundingClientRect();
-          if (rect.top >= 0 && rect.top <= 300) {
+          // 要素の上端がコンテナの上端付近に来たらアクティブとみなす
+          // rect.top is relative to viewport, containerRect.top is also relative to viewport
+          // We want to check if the element is near the top of the container
+          const relativeTop = rect.top - containerRect.top;
+          
+          if (relativeTop >= -100 && relativeTop <= 300) {
             setActiveSection(section);
+            // Don't break here, we want to find the last one that matches or find the first one?
+            // Usually scroll spy highlights the one currently filling the view.
+            // If we break, we find the first one. 
+            // If we define "active" as "top is near the top of container", break is fine.
             break;
           }
         }
       }
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    
+    const scrollContainer = document.getElementById('staff-layout-main');
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll);
+      // Initial check
+      handleScroll();
+    }
+    
+    return () => {
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+      }
+    };
   }, []);
 
   // 兄弟検索ロジック
