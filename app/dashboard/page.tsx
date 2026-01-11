@@ -227,9 +227,9 @@ export default function ChildcareDashboard() {
       // Priority 0: Safety Alerts are ALWAYS Top
       const getAlertPriority = (c: Child) => {
         if (c.status === 'checked_in' && c.is_scheduled_today && c.scheduled_end_time &&
-            getMinutesDiff(dashboardData.current_time, c.scheduled_end_time) >= 30) return 1;
+          getMinutesDiff(dashboardData.current_time, c.scheduled_end_time) >= 30) return 1;
         if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time &&
-            getMinutesDiff(dashboardData.current_time, c.scheduled_start_time) > 0) return 2;
+          getMinutesDiff(dashboardData.current_time, c.scheduled_start_time) > 0) return 2;
         if (c.status === 'checked_in' && !c.is_scheduled_today) return 3;
         return 99;
       };
@@ -378,12 +378,12 @@ export default function ChildcareDashboard() {
 
   return (
     <StaffLayout title="ダッシュボード">
-      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
+      <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-[1600px] mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
           {/* Header */}
           <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6 border-b border-gray-200 pb-4 sm:pb-6">
@@ -405,9 +405,9 @@ export default function ChildcareDashboard() {
             </div>
           </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1">
 
-            <div className="lg:col-span-8 flex flex-col gap-6">
+            <div className="flex flex-col gap-6">
 
               {/* KPI Section */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -529,7 +529,7 @@ export default function ChildcareDashboard() {
 
               {/* Attendance List */}
               <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden flex flex-col flex-1">
-                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div className="px-5 py-3 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
                   <div className="flex items-center gap-3 w-full sm:w-auto">
                     <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-md px-2 py-1.5">
                       <Filter size={14} className="text-slate-500" />

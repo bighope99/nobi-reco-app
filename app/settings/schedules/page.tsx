@@ -393,12 +393,12 @@ export default function ScheduleSettingsPage() {
 
   return (
     <StaffLayout title="スケジュール設定">
-      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans pb-24">
+      <div className="min-h-screen text-slate-900 font-sans pb-24">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-6xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -468,175 +468,172 @@ export default function ScheduleSettingsPage() {
               {/* Schools List */}
               <div className="space-y-6">
                 {schools.map((school) => (
-              <section
-                key={school.id}
-                className={`bg-white rounded-xl border shadow-sm transition-all ${
-                  editingSchool === school.id
-                    ? 'border-indigo-200 ring-2 ring-indigo-50'
-                    : 'border-gray-200'
-                }`}
-              >
-                {/* School Header */}
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-lg ${editingSchool === school.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                      <School size={20} />
+                  <section
+                    key={school.id}
+                    className={`bg-white rounded-xl border shadow-sm transition-all ${editingSchool === school.id
+                      ? 'border-indigo-200 ring-2 ring-indigo-50'
+                      : 'border-gray-200'
+                      }`}
+                  >
+                    {/* School Header */}
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-lg ${editingSchool === school.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          <School size={20} />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold text-slate-800">{school.name}</h2>
+                          <p className="text-sm text-slate-500 mt-0.5">
+                            {school.schedules.length}つのスケジュール設定
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEditingSchool(editingSchool === school.id ? null : school.id)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="編集"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleRemoveSchool(school.id)}
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="削除"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-800">{school.name}</h2>
-                      <p className="text-sm text-slate-500 mt-0.5">
-                        {school.schedules.length}つのスケジュール設定
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setEditingSchool(editingSchool === school.id ? null : school.id)}
-                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                      title="編集"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleRemoveSchool(school.id)}
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      title="削除"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
 
-                {/* Schedules List */}
-                <div className="p-6">
-                  {editingSchool === school.id && (
-                    <button
-                      onClick={() => handleAddSchedule(school.id)}
-                      className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm"
-                    >
-                      <Plus size={18} />
-                      スケジュールを追加
-                    </button>
-                  )}
+                    {/* Schedules List */}
+                    <div className="p-6">
+                      {editingSchool === school.id && (
+                        <button
+                          onClick={() => handleAddSchedule(school.id)}
+                          className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm"
+                        >
+                          <Plus size={18} />
+                          スケジュールを追加
+                        </button>
+                      )}
 
-                  <div className="space-y-4">
-                    {school.schedules.map((schedule) => (
-                      <div
-                        key={schedule.scheduleId}
-                        className={`p-4 rounded-lg border transition-all ${
-                          editingSchool === school.id
-                            ? 'bg-slate-50 border-slate-200'
-                            : 'bg-white border-slate-100'
-                        }`}
-                      >
-                        {editingSchool === school.id ? (
-                          <div className="space-y-4">
-                            {/* Grade Selection */}
-                            <div>
-                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">学年選択 (複数選択可)</label>
-                              <div className="flex flex-wrap gap-2">
-                                {grades.map((grade) => (
-                                  <button
-                                    key={grade.id}
-                                    onClick={() => handleToggleGrade(school.id, schedule.scheduleId, grade.id)}
-                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
-                                      schedule.gradeIds.includes(grade.id)
-                                        ? 'bg-indigo-600 text-white border-indigo-600'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300 hover:bg-indigo-50'
-                                    }`}
-                                  >
-                                    {schedule.gradeIds.includes(grade.id) && (
-                                      <Check size={14} className="inline mr-1" />
-                                    )}
-                                    {grade.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Weekday Times */}
-                            <div>
-                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 block">曜日ごとの登校時刻</label>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                                {weekdays.map((day) => (
-                                  <div key={day.id} className="flex flex-col gap-1">
-                                    <label className="text-xs text-slate-500 font-medium">{day.fullLabel}</label>
-                                    <div className="flex items-center gap-2">
-                                      <Clock size={14} className="text-slate-400 shrink-0" />
-                                      <Input
-                                        type="time"
-                                        value={schedule.weekdayTimes[day.id] || ''}
-                                        onChange={(e: any) =>
-                                          handleUpdateWeekdayTime(school.id, schedule.scheduleId, day.id, e.target.value)
-                                        }
-                                        className="text-sm py-1.5"
-                                      />
-                                    </div>
+                      <div className="space-y-4">
+                        {school.schedules.map((schedule) => (
+                          <div
+                            key={schedule.scheduleId}
+                            className={`p-4 rounded-lg border transition-all ${editingSchool === school.id
+                              ? 'bg-slate-50 border-slate-200'
+                              : 'bg-white border-slate-100'
+                              }`}
+                          >
+                            {editingSchool === school.id ? (
+                              <div className="space-y-4">
+                                {/* Grade Selection */}
+                                <div>
+                                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">学年選択 (複数選択可)</label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {grades.map((grade) => (
+                                      <button
+                                        key={grade.id}
+                                        onClick={() => handleToggleGrade(school.id, schedule.scheduleId, grade.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${schedule.gradeIds.includes(grade.id)
+                                          ? 'bg-indigo-600 text-white border-indigo-600'
+                                          : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300 hover:bg-indigo-50'
+                                          }`}
+                                      >
+                                        {schedule.gradeIds.includes(grade.id) && (
+                                          <Check size={14} className="inline mr-1" />
+                                        )}
+                                        {grade.label}
+                                      </button>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
-                              <p className="text-xs text-slate-500 mt-2">
-                                ※ 時刻を空欄にすると、その曜日は未設定になります
-                              </p>
-                            </div>
+                                </div>
 
-                            {/* Delete Button */}
-                            <div className="flex justify-end pt-2">
-                              <button
-                                onClick={() => handleRemoveSchedule(school.id, schedule.scheduleId)}
-                                className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
-                              >
-                                <Trash2 size={16} />
-                                このスケジュールを削除
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-4">
-                            <div className="p-2 bg-white rounded-lg border border-slate-200">
-                              <Users size={20} className="text-indigo-600" />
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-bold text-slate-800 text-sm mb-2">
-                                {getGradeNames(schedule.gradeIds)}
-                              </h3>
-                              <div className="space-y-1">
-                                {Object.entries(schedule.weekdayTimes)
-                                  .filter(([_, time]) => time)
-                                  .map(([dayId, time]) => {
-                                    const day = weekdays.find(w => w.id === dayId);
-                                    return (
-                                      <p key={dayId} className="text-xs text-slate-500 flex items-center gap-2">
-                                        <span className="w-12 font-medium text-slate-600">{day?.fullLabel}</span>
-                                        <Clock size={12} />
-                                        <span>{time}</span>
-                                      </p>
-                                    );
-                                  })}
-                                {Object.values(schedule.weekdayTimes).every(time => !time) && (
-                                  <p className="text-xs text-slate-400">曜日未設定</p>
-                                )}
+                                {/* Weekday Times */}
+                                <div>
+                                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 block">曜日ごとの登校時刻</label>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                    {weekdays.map((day) => (
+                                      <div key={day.id} className="flex flex-col gap-1">
+                                        <label className="text-xs text-slate-500 font-medium">{day.fullLabel}</label>
+                                        <div className="flex items-center gap-2">
+                                          <Clock size={14} className="text-slate-400 shrink-0" />
+                                          <Input
+                                            type="time"
+                                            value={schedule.weekdayTimes[day.id] || ''}
+                                            onChange={(e: any) =>
+                                              handleUpdateWeekdayTime(school.id, schedule.scheduleId, day.id, e.target.value)
+                                            }
+                                            className="text-sm py-1.5"
+                                          />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-2">
+                                    ※ 時刻を空欄にすると、その曜日は未設定になります
+                                  </p>
+                                </div>
+
+                                {/* Delete Button */}
+                                <div className="flex justify-end pt-2">
+                                  <button
+                                    onClick={() => handleRemoveSchedule(school.id, schedule.scheduleId)}
+                                    className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
+                                  >
+                                    <Trash2 size={16} />
+                                    このスケジュールを削除
+                                  </button>
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="flex items-center gap-4">
+                                <div className="p-2 bg-white rounded-lg border border-slate-200">
+                                  <Users size={20} className="text-indigo-600" />
+                                </div>
+                                <div className="flex-1">
+                                  <h3 className="font-bold text-slate-800 text-sm mb-2">
+                                    {getGradeNames(schedule.gradeIds)}
+                                  </h3>
+                                  <div className="space-y-1">
+                                    {Object.entries(schedule.weekdayTimes)
+                                      .filter(([_, time]) => time)
+                                      .map(([dayId, time]) => {
+                                        const day = weekdays.find(w => w.id === dayId);
+                                        return (
+                                          <p key={dayId} className="text-xs text-slate-500 flex items-center gap-2">
+                                            <span className="w-12 font-medium text-slate-600">{day?.fullLabel}</span>
+                                            <Clock size={12} />
+                                            <span>{time}</span>
+                                          </p>
+                                        );
+                                      })}
+                                    {Object.values(schedule.weekdayTimes).every(time => !time) && (
+                                      <p className="text-xs text-slate-400">曜日未設定</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {school.schedules.length === 0 && (
+                          <div className="text-center py-8 text-slate-400">
+                            <Users size={48} className="mx-auto mb-3 opacity-50" />
+                            <p>スケジュール設定がありません</p>
+                            {editingSchool === school.id && (
+                              <p className="text-sm mt-1">上の「スケジュールを追加」ボタンから追加してください</p>
+                            )}
                           </div>
                         )}
                       </div>
-                    ))}
-
-                    {school.schedules.length === 0 && (
-                      <div className="text-center py-8 text-slate-400">
-                        <Users size={48} className="mx-auto mb-3 opacity-50" />
-                        <p>スケジュール設定がありません</p>
-                        {editingSchool === school.id && (
-                          <p className="text-sm mt-1">上の「スケジュールを追加」ボタンから追加してください</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-            ))}
-          </div>
+                    </div>
+                  </section>
+                ))}
+              </div>
 
               {/* Empty State */}
               {schools.length === 0 && (

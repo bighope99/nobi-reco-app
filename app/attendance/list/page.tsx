@@ -212,6 +212,8 @@ export default function AttendanceListPage() {
     return <span className={presentation.className}>{presentation.label}</span>
   }
 
+import { Button } from "@/components/ui/button"
+
   const StatusActionButton = ({
     child,
     onMarkStatus,
@@ -227,25 +229,26 @@ export default function AttendanceListPage() {
 
     if (presentation.label === '出席予定') {
       return (
-        <button
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={() => onMarkStatus(child.child_id, 'absent')}
           disabled={isLoading}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
         >
           {isLoading ? '処理中...' : '欠席にする'}
-        </button>
+        </Button>
       )
     }
 
     if (presentation.label === '欠席予定') {
       return (
-        <button
+        <Button
+          size="sm"
           onClick={() => onMarkStatus(child.child_id, 'present')}
           disabled={isLoading}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
         >
           {isLoading ? '処理中...' : '出席にする'}
-        </button>
+        </Button>
       )
     }
 
@@ -312,12 +315,12 @@ export default function AttendanceListPage() {
 
   return (
     <StaffLayout title="出席予定一覧">
-      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
+      <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
           {actionError && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -327,10 +330,6 @@ export default function AttendanceListPage() {
 
           {/* Header with Date Selector */}
           <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 pb-6">
-            <div className="flex items-center gap-2">
-              <Calendar size={18} className="text-slate-500 sm:w-5 sm:h-5" />
-              <h1 className="text-lg sm:text-xl font-bold text-slate-800">出席予定一覧</h1>
-            </div>
 
             {/* Date Navigation */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

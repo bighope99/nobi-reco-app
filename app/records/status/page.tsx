@@ -7,47 +7,47 @@ import { FileText, ChevronLeft, Calendar, ChevronRight, ChevronDown, Search, Fil
 
 // --- Types ---
 interface Child {
-  child_id: string;
-  name: string;
-  kana: string;
-  class_id: string | null;
-  class_name: string;
-  age_group: string;
-  grade: number | null;
-  grade_label: string;
-  photo_url: string | null;
-  last_record_date: string | null;
-  is_recorded_today: boolean;
-  monthly: {
-    attendance_count: number;
-    record_count: number;
-    record_rate: number;
-    daily_status: string[];
-  };
-  yearly: {
-    attendance_count: number;
-    record_count: number;
-    record_rate: number;
-  };
+    child_id: string;
+    name: string;
+    kana: string;
+    class_id: string | null;
+    class_name: string;
+    age_group: string;
+    grade: number | null;
+    grade_label: string;
+    photo_url: string | null;
+    last_record_date: string | null;
+    is_recorded_today: boolean;
+    monthly: {
+        attendance_count: number;
+        record_count: number;
+        record_rate: number;
+        daily_status: string[];
+    };
+    yearly: {
+        attendance_count: number;
+        record_count: number;
+        record_rate: number;
+    };
 }
 
 interface RecordsData {
-  period: {
-    year: number;
-    month: number;
-    start_date: string;
-    end_date: string;
-    days_in_month: number;
-  };
-  children: Child[];
-  summary: {
-    total_children: number;
-    warning_children: number;
-    average_record_rate: number;
-  };
-  filters: {
-    classes: Array<{ class_id: string; class_name: string }>;
-  };
+    period: {
+        year: number;
+        month: number;
+        start_date: string;
+        end_date: string;
+        days_in_month: number;
+    };
+    children: Child[];
+    summary: {
+        total_children: number;
+        warning_children: number;
+        average_record_rate: number;
+    };
+    filters: {
+        classes: Array<{ class_id: string; class_name: string }>;
+    };
 }
 
 // --- Helper Components ---
@@ -246,87 +246,88 @@ export default function StatusPage() {
 
     return (
         <StaffLayout title="全児童 月間記録管理">
-            {/* Title */}
-            <div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                    <span>ホーム</span>
-                    <span className="text-slate-300">/</span>
-                    <span>日誌・記録管理</span>
-                </div>
-                <h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                    <FileText className="w-6 h-6 text-indigo-600" />
-                    全児童 月間記録管理
-                </h1>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3 mt-4">
-                <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-                    <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
-                        <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <div className="flex items-center text-sm font-bold text-slate-700 px-3">
-                        <Calendar className="w-4 h-4 mr-2 text-indigo-500" />
-                        {year}年 {month}月
+            <div className="max-w-[1600px] mx-auto">
+                {/* Title */}
+                <div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                        <span>ホーム</span>
+                        <span className="text-slate-300">/</span>
+                        <span>日誌・記録管理</span>
                     </div>
-                    <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
-                        <ChevronRight className="w-4 h-4" />
+                    <h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                        <FileText className="w-6 h-6 text-indigo-600" />
+                        全児童 月間記録管理
+                    </h1>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3 mt-4">
+                    <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <div className="flex items-center text-sm font-bold text-slate-700 px-3">
+                            <Calendar className="w-4 h-4 mr-2 text-indigo-500" />
+                            {year}年 {month}月
+                        </div>
+                        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        <span className="hidden sm:inline">一括作成</span>
                     </button>
                 </div>
 
-                <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    <span className="hidden sm:inline">一括作成</span>
-                </button>
-            </div>
+                {/* Filter Bar */}
+                <div className="py-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center gap-4 mt-4">
+                    <div className="relative min-w-[140px]">
+                        <select
+                            className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            value={selectedClass}
+                            onChange={(e) => setSelectedClass(e.target.value)}
+                        >
+                            <option value="all">全クラス</option>
+                            {recordsData.filters.classes.map(cls => (
+                                <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
 
-            {/* Filter Bar */}
-            <div className="py-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center gap-4 mt-4">
-                <div className="relative min-w-[140px]">
-                    <select
-                        className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={selectedClass}
-                        onChange={(e) => setSelectedClass(e.target.value)}
-                    >
-                        <option value="all">全クラス</option>
-                        {recordsData.filters.classes.map(cls => (
-                            <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
-                        ))}
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-
-                <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="児童名・かな検索"
-                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-
-                <div className="flex-1"></div>
-
-                <label className={`flex items-center gap-3 px-3 py-2 rounded-md border cursor-pointer transition-all select-none ${warningOnly ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
-                    <div className="relative">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                         <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={warningOnly}
-                            onChange={() => setWarningOnly(!warningOnly)}
+                            type="text"
+                            placeholder="児童名・かな検索"
+                            className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
                         />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-500"></div>
                     </div>
-                    <span className={`text-sm font-medium ${warningOnly ? 'text-rose-700' : 'text-slate-600'}`}>
-                        記録率要注意のみ表示
-                    </span>
-                </label>
-            </div>
 
-            {/* --- Main Table Section --- */}
-            <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <div className="flex-1"></div>
+
+                    <label className={`flex items-center gap-3 px-3 py-2 rounded-md border cursor-pointer transition-all select-none ${warningOnly ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                        <div className="relative">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={warningOnly}
+                                onChange={() => setWarningOnly(!warningOnly)}
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-500"></div>
+                        </div>
+                        <span className={`text-sm font-medium ${warningOnly ? 'text-rose-700' : 'text-slate-600'}`}>
+                            記録率要注意のみ表示
+                        </span>
+                    </label>
+                </div>
+
+                {/* --- Main Table Section --- */}
+
 
                 {/* Table Stats */}
                 <div className="mb-4 flex items-center justify-between text-sm text-slate-500">
@@ -466,7 +467,7 @@ export default function StatusPage() {
                         </table>
                     </div>
                 </div>
-            </main>
+            </div>
         </StaffLayout>
     )
 }

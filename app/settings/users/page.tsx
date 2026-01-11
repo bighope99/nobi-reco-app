@@ -223,20 +223,16 @@ export default function UsersSettingsPage() {
 
   return (
     <StaffLayout title="職員管理">
-      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
+      <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                <Users className="text-indigo-500" />
-                職員管理
-              </h1>
               <p className="text-sm text-slate-500 mt-1">
                 {loading ? '読み込み中...' : `全 ${users.length} 名の職員を管理`}
               </p>
@@ -320,9 +316,6 @@ export default function UsersSettingsPage() {
                           {/* Name */}
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                                {user.name.charAt(0)}
-                              </div>
                               <div>
                                 <p className="font-bold text-slate-800">{user.name}</p>
                               </div>
