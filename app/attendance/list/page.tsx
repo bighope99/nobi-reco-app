@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { Button } from "@/components/ui/button"
 import {
   Calendar,
   ChevronLeft,
@@ -211,8 +212,6 @@ export default function AttendanceListPage() {
 
     return <span className={presentation.className}>{presentation.label}</span>
   }
-
-import { Button } from "@/components/ui/button"
 
   const StatusActionButton = ({
     child,
