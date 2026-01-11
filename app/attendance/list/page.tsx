@@ -212,6 +212,8 @@ export default function AttendanceListPage() {
     return <span className={presentation.className}>{presentation.label}</span>
   }
 
+import { Button } from "@/components/ui/button"
+
   const StatusActionButton = ({
     child,
     onMarkStatus,
@@ -227,25 +229,26 @@ export default function AttendanceListPage() {
 
     if (presentation.label === '出席予定') {
       return (
-        <button
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={() => onMarkStatus(child.child_id, 'absent')}
           disabled={isLoading}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
         >
           {isLoading ? '処理中...' : '欠席にする'}
-        </button>
+        </Button>
       )
     }
 
     if (presentation.label === '欠席予定') {
       return (
-        <button
+        <Button
+          size="sm"
           onClick={() => onMarkStatus(child.child_id, 'present')}
           disabled={isLoading}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
         >
           {isLoading ? '処理中...' : '出席にする'}
-        </button>
+        </Button>
       )
     }
 
