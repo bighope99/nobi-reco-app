@@ -10,7 +10,7 @@ interface Activity {
   title: string
   content: string
   snack: string | null
-  photos: any[]
+  photos: unknown[]
   class_name: string
   created_by: string
   created_at: string
@@ -21,6 +21,16 @@ interface ActivitiesData {
   activities: Activity[]
   total: number
   has_more: boolean
+}
+
+function isValidActivitiesData(data: unknown): data is ActivitiesData {
+  if (!data || typeof data !== 'object') return false
+  const obj = data as Record<string, unknown>
+  return (
+    Array.isArray(obj.activities) &&
+    typeof obj.total === 'number' &&
+    typeof obj.has_more === 'boolean'
+  )
 }
 
 export default function ActivityRecordPage() {
@@ -41,8 +51,10 @@ export default function ActivityRecordPage() {
           throw new Error(result.error || 'Failed to fetch activities')
         }
 
-        if (result.success) {
+        if (result.success && isValidActivitiesData(result.data)) {
           setActivitiesData(result.data)
+        } else if (result.success) {
+          throw new Error('Invalid response structure from API')
         }
       } catch (err) {
         console.error('Failed to fetch activities:', err)
