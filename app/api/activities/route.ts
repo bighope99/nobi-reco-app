@@ -132,6 +132,32 @@ export async function GET(request: NextRequest) {
       child_name: string;
     }> } = {};
 
+    // mentioned_children の子ども名を解決するためのマップを作成
+    const allMentionedChildIds = new Set<string>();
+    activities?.forEach((activity: any) => {
+      if (Array.isArray(activity.mentioned_children)) {
+        activity.mentioned_children.forEach((childId: string) => {
+          allMentionedChildIds.add(childId);
+        });
+      }
+    });
+
+    const mentionedChildrenNamesMap = new Map<string, string>();
+    if (allMentionedChildIds.size > 0) {
+      const { data: mentionedChildren, error: mentionedChildrenError } = await supabase
+        .from('m_children')
+        .select('id, display_name')
+        .in('id', Array.from(allMentionedChildIds));
+
+      if (mentionedChildrenError) {
+        console.error('Failed to fetch mentioned children names:', mentionedChildrenError);
+      } else if (mentionedChildren) {
+        mentionedChildren.forEach((child: { id: string; display_name: string }) => {
+          mentionedChildrenNamesMap.set(child.id, child.display_name);
+        });
+      }
+    }
+
     if (activityIds.length > 0) {
       console.log('=== DEBUG: Activity IDs ===', activityIds);
 
@@ -188,6 +214,16 @@ export async function GET(request: NextRequest) {
         class_id: activity.class_id,
         class_name: activity.m_classes?.name || '',
         mentioned_children: activity.mentioned_children || [],
+        mentioned_children_names: (activity.mentioned_children || []).reduce(
+          (acc: Record<string, string>, childId: string) => {
+            const name = mentionedChildrenNamesMap.get(childId);
+            if (name) {
+              acc[childId] = name;
+            }
+            return acc;
+          },
+          {} as Record<string, string>
+        ),
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,

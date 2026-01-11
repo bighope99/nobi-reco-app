@@ -35,6 +35,7 @@ import {
   persistAiDraftsToCookie,
 } from "@/lib/drafts/aiDraftCookie"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
+import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap } from "@/lib/mention/mentionFormatter"
 
 interface IndividualRecord {
   observation_id: string
@@ -56,6 +57,7 @@ interface Activity {
   individual_record_count: number
   individual_records: IndividualRecord[]
   mentioned_children?: string[]
+  mentioned_children_names?: Record<string, string>
 }
 
 interface ActivityPhoto {
@@ -521,6 +523,10 @@ export default function ActivityRecordClient() {
     setSaveMessage(null)
 
     try {
+      // 保存用にメンションをプレースホルダー形式に変換
+      const nameToIdMap = buildNameToIdMap(selectedMentions)
+      const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
+
       const response = await fetch('/api/activities', {
         method: 'POST',
         headers: {
@@ -529,7 +535,7 @@ export default function ActivityRecordClient() {
         body: JSON.stringify({
           class_id: selectedClass,
           activity_date: activityDate,
-          content: activityContent,
+          content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
         }),
@@ -564,6 +570,10 @@ export default function ActivityRecordClient() {
     setSaveMessage(null)
 
     try {
+      // 更新用にメンションをプレースホルダー形式に変換
+      const nameToIdMap = buildNameToIdMap(selectedMentions)
+      const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
+
       const response = await fetch(`/api/activities/${editingActivityId}`, {
         method: 'PATCH',
         headers: {
@@ -572,7 +582,7 @@ export default function ActivityRecordClient() {
         body: JSON.stringify({
           class_id: selectedClass,
           activity_date: activityDate,
-          content: activityContent,
+          content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
         }),
@@ -601,17 +611,82 @@ export default function ActivityRecordClient() {
     }
   }
 
-  const handleEdit = (activity: Activity) => {
+  const handleEdit = async (activity: Activity) => {
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
-    setActivityContent(activity.content)
+    // @[child_id] 形式を @表示名 形式に変換して表示
+    const idToNameMap = new Map(Object.entries(activity.mentioned_children_names || {}))
+    const displayContent = convertToDisplayNames(activity.content, idToNameMap)
+    setActivityContent(displayContent)
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
     setOriginalMentionedChildren(activity.mentioned_children || [])
+
+    // 写真を復元
     const mappedPhotos = (activity.photos || [])
       .map((photo) => (typeof photo === 'string' ? { url: photo } : photo))
       .filter(Boolean) as ActivityPhoto[]
     setPhotos(mappedPhotos)
+
+    // メンション復元: クラスの児童リストから名前情報を取得
+    if (activity.mentioned_children && activity.mentioned_children.length > 0) {
+      // クラスが異なる場合は児童リストを再取得する必要があるため、APIから取得
+      let children = classChildren
+      if (activity.class_id && activity.class_id !== selectedClass) {
+        try {
+          const response = await fetch(`/api/children?class_id=${activity.class_id}`)
+          const result = await response.json()
+          if (response.ok && result.success) {
+            children = (result.data?.children || []).map((child: any) => ({
+              child_id: child.child_id,
+              name: child.name,
+              kana: child.kana,
+              nickname: child.nickname,
+              grade: child.grade,
+              class_name: child.class_name,
+              photo_url: child.photo_url,
+              display_name: child.nickname || child.name,
+              unique_key: child.child_id,
+            })) as MentionSuggestion[]
+          }
+        } catch (err) {
+          console.error('Failed to fetch children for mention restoration:', err)
+        }
+      }
+
+      // mentioned_children からメンション情報を復元
+      const childMap = new Map<string, MentionSuggestion>()
+      children.forEach((child) => childMap.set(child.child_id, child))
+
+      const restoredMentions: MentionSuggestion[] = []
+      const newTokens = new Map<string, string>()
+
+      activity.mentioned_children.forEach((childId) => {
+        const child = childMap.get(childId)
+        if (child) {
+          restoredMentions.push(child)
+          newTokens.set(child.unique_key, `@[${childId}]`)
+        } else {
+          // 児童リストに存在しない場合は最小限の情報で復元
+          const fallbackMention: MentionSuggestion = {
+            child_id: childId,
+            name: childId,
+            kana: '',
+            display_name: childId,
+            unique_key: childId,
+          }
+          restoredMentions.push(fallbackMention)
+          newTokens.set(childId, `@[${childId}]`)
+        }
+      })
+
+      setSelectedMentions(restoredMentions)
+      setMentionTokens(newTokens)
+    } else {
+      // メンションがない場合はクリア
+      setSelectedMentions([])
+      setMentionTokens(new Map())
+    }
   }
 
   const handleDelete = async (activityId: string) => {
@@ -911,6 +986,13 @@ export default function ActivityRecordClient() {
       .replace(/\n\n/gim, "<br/><br/>")
       .replace(/\n/gim, "<br/>")
 
+  // 表示用にcontentを変換（@[child_id]を表示名に変換）
+  const getDisplayContent = (activity: Activity) => {
+    if (!activity.mentioned_children_names) return activity.content
+    const idToNameMap = new Map(Object.entries(activity.mentioned_children_names))
+    return convertToDisplayNames(activity.content, idToNameMap)
+  }
+
   const formatAnalysisContentForResult = (
     result: AiObservationResult,
     content: string
@@ -1048,7 +1130,8 @@ export default function ActivityRecordClient() {
                 <PopoverContent
                   align="start"
                   side="bottom"
-                  sideOffset={32}
+                  sideOffset={8}
+                  avoidCollisions={false}
                   className="w-64 max-h-[300px] p-2"
                   onOpenAutoFocus={(e) => e.preventDefault()}
                 >
@@ -1168,16 +1251,18 @@ export default function ActivityRecordClient() {
 
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex flex-wrap gap-3 flex-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isAiLoading || !activityContent.trim()}
-                  onClick={handleAnalyze}
-                  className="flex-1 sm:flex-none"
-                >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  AI分析
-                </Button>
+                {!isEditMode && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isAiLoading || !activityContent.trim()}
+                    onClick={handleAnalyze}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    AI分析
+                  </Button>
+                )}
                 {isEditMode ? (
                   <>
                     <Button type="button" onClick={handleUpdate} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
@@ -1240,7 +1325,7 @@ export default function ActivityRecordClient() {
                           <div className="text-sm leading-relaxed mt-2">
                             <div
                               dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(convertToMarkdown(activity.content)),
+                                __html: DOMPurify.sanitize(convertToMarkdown(getDisplayContent(activity))),
                               }}
                             />
                           </div>

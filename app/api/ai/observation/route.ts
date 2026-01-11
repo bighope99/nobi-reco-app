@@ -14,6 +14,14 @@ type ChildInfo = {
 const escapeRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * プレースホルダー形式 @[uuid] を @child:uuid に変換
+ * フロントエンドから送信される @[child_id] 形式をAI分析用の形式に変換する
+ */
+const convertPlaceholdersForAI = (content: string): string => {
+  return content.replace(/@\[([a-f0-9-]{36})\]/g, '@child:$1');
+};
+
 const replaceMentionTokens = (
   content: string,
   replacements: Array<{ name: string; childId: string }>
@@ -90,7 +98,10 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const sanitizedContent = replaceMentionTokens(content, replacements);
+    // 1. まずプレースホルダー形式 @[uuid] を変換
+    // 2. 次に表示名形式 @田中太郎 を変換
+    const contentWithPlaceholders = convertPlaceholdersForAI(content);
+    const sanitizedContent = replaceMentionTokens(contentWithPlaceholders, replacements);
 
     const analysisResults = [];
     const errors = [];
