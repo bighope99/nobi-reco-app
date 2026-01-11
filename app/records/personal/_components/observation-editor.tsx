@@ -238,12 +238,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const draftId = searchParams?.get('draftId');
   const paramChildId = searchParams?.get('childId')?.trim() || '';
   const paramChildName = searchParams?.get('childName')?.trim() || '';
+  const paramActivityId = searchParams?.get('activityId')?.trim() || '';
   const { user } = useAuth();
   const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
   const [showReassignDialog, setShowReassignDialog] = useState(false);
   const [selectedNewChild, setSelectedNewChild] = useState('');
   const [selectedChildId, setSelectedChildId] = useState('');
+  const [activityId, setActivityId] = useState<string | null>(null);
   const [lockedChildName, setLockedChildName] = useState('');
   const [reassignReason, setReassignReason] = useState('');
   const [loading, setLoading] = useState(false);
@@ -357,6 +359,26 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     if (!paramChildName) return;
     setLockedChildName(paramChildName);
   }, [paramChildName]);
+
+  // activity_idをURLパラメータまたはドラフトから取得
+  useEffect(() => {
+    if (!isNew) return;
+
+    // 優先順位: URLパラメータ > ドラフト
+    if (paramActivityId) {
+      setActivityId(paramActivityId);
+      return;
+    }
+
+    // ドラフトからactivity_idを取得
+    if (draftId) {
+      const drafts = loadAiDraftsFromCookie();
+      const draft = drafts.find((d) => d.draft_id === draftId);
+      if (draft?.activity_id) {
+        setActivityId(draft.activity_id);
+      }
+    }
+  }, [isNew, paramActivityId, draftId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -881,6 +903,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           child_id: selectedChildId,
           observation_date: observationDate,
           content: text,
+          activity_id: activityId || null,
           ai_action: aiResult.ai_action,
           ai_opinion: aiResult.ai_opinion,
           tag_flags: aiResult.flags,
@@ -923,7 +946,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         if (typeof window !== 'undefined') {
           const lastSaved = {
             draft_id: draftId,
-            activity_id: null,
+            activity_id: activityId,
             child_id: selectedChildId,
             child_display_name: resolvedChildName,
             observation_date: result.data.observation_date ?? new Date().toISOString().split('T')[0],

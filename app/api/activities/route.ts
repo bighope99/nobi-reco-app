@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
 
     const facility_id = userSession.current_facility_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, child_ids, photos } = body;
+    const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
     if (!activity_date || !class_id || !content) {
       return NextResponse.json(
@@ -295,6 +295,7 @@ export async function POST(request: NextRequest) {
         content,
         snack,
         photos: normalizedPhotos,
+        mentioned_children: mentioned_children || [],
         created_by: session.user.id,
       })
       .select()
@@ -310,7 +311,7 @@ export async function POST(request: NextRequest) {
 
     // LangChainで個別記録を生成（簡素化版：入力をそのまま返す）
     const observations = [];
-    if (child_ids && child_ids.length > 0) {
+    if (mentioned_children && mentioned_children.length > 0) {
       // Initialize LangChain
       const model = new ChatOpenAI({
         modelName: 'gpt-4o-mini',
@@ -328,7 +329,7 @@ export async function POST(request: NextRequest) {
       const prompt = PromptTemplate.fromTemplate(template);
       const chain = prompt.pipe(model);
 
-      for (const child_id of child_ids) {
+      for (const child_id of mentioned_children) {
         try {
           // Call LangChain (minimal implementation)
           const result = await chain.invoke({ content });
