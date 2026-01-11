@@ -315,7 +315,7 @@ import { Button } from "@/components/ui/button"
 
   return (
     <StaffLayout title="出席予定一覧">
-      <div className="min-h-screentext-slate-900 font-sans">
+      <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
