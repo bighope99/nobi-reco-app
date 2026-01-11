@@ -15,6 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -22,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Mic, Sparkles, X, Edit2, Trash2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import DOMPurify from "dompurify"
 import {
   type AiObservationDraft as AiObservationResult,
@@ -98,6 +104,8 @@ export default function ActivityRecordClient() {
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [selectedMentions, setSelectedMentions] = useState<MentionSuggestion[]>([])
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null)
   const [mentionTokens, setMentionTokens] = useState<Map<string, string>>(new Map())
   const [isLoadingClasses, setIsLoadingClasses] = useState(false)
   const [classOptions, setClassOptions] = useState<
@@ -132,6 +140,8 @@ export default function ActivityRecordClient() {
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
+  const MENTION_TRIGGERS = ['@', '＠']
+  const mentionTriggerRef = useRef<'textarea' | 'button'>('button')
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -298,13 +308,63 @@ export default function ActivityRecordClient() {
 
   const handleContentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const value = event.target.value
+    const cursorPos = event.target.selectionStart
     setActivityContent(value)
     updateMentionedChildren(value)
 
-    // @を入力したらメンションピッカーを開く
-    if (value.endsWith('@')) {
+    // @検出：開始位置を記録
+    if (MENTION_TRIGGERS.includes(value.slice(-1))) {
+      setMentionStartIndex(cursorPos - 1)
+      mentionTriggerRef.current = 'textarea'
       setShowMentionPicker(true)
       setMentionSearchQuery('')
+      setSelectedIndex(0)
+      return
+    }
+
+    // メンション中：@以降の文字を検索クエリに
+    if (showMentionPicker && mentionStartIndex !== null) {
+      const query = value.slice(mentionStartIndex + 1, cursorPos)
+      setMentionSearchQuery(query)
+      setSelectedIndex(0)
+    }
+  }
+
+  const closeMentionPicker = () => {
+    setShowMentionPicker(false)
+    setMentionSearchQuery('')
+    setMentionStartIndex(null)
+    setSelectedIndex(0)
+  }
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!showMentionPicker) return
+
+    const filteredChildren = filterSuggestions(classChildren, mentionSearchQuery)
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setSelectedIndex(prev =>
+          prev < filteredChildren.length - 1 ? prev + 1 : 0
+        )
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setSelectedIndex(prev =>
+          prev > 0 ? prev - 1 : filteredChildren.length - 1
+        )
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (filteredChildren[selectedIndex]) {
+          handleMentionSelect(filteredChildren[selectedIndex])
+        }
+        break
+      case 'Escape':
+        e.preventDefault()
+        closeMentionPicker()
+        break
     }
   }
 
@@ -673,26 +733,29 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
   }
 
-  const handleMentionPickerSelect = (mention: MentionSuggestion) => {
+  const handleMentionSelect = (mention: MentionSuggestion) => {
     // 既に選択済みの場合は追加しない
     if (selectedMentions.find((m) => m.unique_key === mention.unique_key)) {
-      setShowMentionPicker(false)
+      closeMentionPicker()
       return
     }
 
     const token = `@${mention.display_name} `
 
-    // @を入力して開いた場合は、最後の@を置き換える
-    if (activityContent.endsWith('@')) {
-      setActivityContent((prev) => prev.slice(0, -1) + token)
+    if (mentionStartIndex !== null) {
+      // @〜カーソル位置を置換
+      const cursorPos = textareaRef.current?.selectionStart ?? activityContent.length
+      const before = activityContent.slice(0, mentionStartIndex)
+      const after = activityContent.slice(cursorPos)
+      setActivityContent(before + token + after)
     } else {
-      setActivityContent((prev) => prev + token)
+      // ボタンから開いた場合（フォールバック）
+      setActivityContent(prev => prev + token)
     }
 
     setSelectedMentions((prev) => [...prev, mention])
     setMentionTokens((prev) => new Map(prev).set(mention.unique_key, token.trim()))
-    setShowMentionPicker(false)
-    setMentionSearchQuery('')
+    closeMentionPicker()
   }
 
   const handlePhotoSelect = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -928,7 +991,22 @@ export default function ActivityRecordClient() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setShowMentionPicker(true)}
+                  onClick={() => {
+                    // @を末尾に挿入
+                    const newContent = activityContent + '@'
+                    setActivityContent(newContent)
+                    // mentionStartIndexを設定
+                    setMentionStartIndex(newContent.length - 1)
+                    mentionTriggerRef.current = 'button'
+                    setShowMentionPicker(true)
+                    setMentionSearchQuery('')
+                    setSelectedIndex(0)
+                    // フォーカスしてカーソルを末尾に
+                    setTimeout(() => {
+                      textareaRef.current?.focus()
+                      textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
+                    }, 0)
+                  }}
                   disabled={!selectedClass || classChildren.length === 0}
                 >
                   <span className="mr-1">@</span>
@@ -946,16 +1024,64 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
 
-              <Textarea
-                ref={textareaRef}
-                id="activityContent"
-                rows={12}
-                value={activityContent}
-                onChange={handleContentChange}
-                maxLength={ACTIVITY_CONTENT_MAX}
-                placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
-                className="min-h-[300px]"
-              />
+              <Popover
+                open={showMentionPicker}
+                onOpenChange={(open) => {
+                  if (!open) closeMentionPicker()
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <div className="sr-only" aria-hidden="true" />
+                </PopoverTrigger>
+                <Textarea
+                  ref={textareaRef}
+                  id="activityContent"
+                  rows={12}
+                  value={activityContent}
+                  onChange={handleContentChange}
+                  onKeyDown={handleTextareaKeyDown}
+                  maxLength={ACTIVITY_CONTENT_MAX}
+                  placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+                  className="min-h-[300px]"
+                />
+
+                <PopoverContent
+                  align="start"
+                  side="bottom"
+                  sideOffset={32}
+                  className="w-64 max-h-[300px] p-2"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                >
+                  {mentionLoading ? (
+                    <p className="text-center py-4 text-sm text-muted-foreground">読み込み中...</p>
+                  ) : classChildren.length > 0 ? (
+                    <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto">
+                      {filterSuggestions(classChildren, mentionSearchQuery).map((child, index) => {
+                        const isHighlighted = index === selectedIndex
+                        return (
+                          <button
+                            key={child.unique_key}
+                            type="button"
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-md text-sm",
+                              isHighlighted ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                            )}
+                            onClick={() => handleMentionSelect(child)}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                          >
+                            <div className="font-medium">{child.display_name}</div>
+                            <div className="text-xs opacity-70">{child.class_name}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center py-4 text-sm text-muted-foreground">
+                      児童が見つかりません
+                    </p>
+                  )}
+                </PopoverContent>
+              </Popover>
               {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
             </div>
 
@@ -1259,53 +1385,6 @@ export default function ActivityRecordClient() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={showMentionPicker} onOpenChange={(open) => {
-          setShowMentionPicker(open)
-          if (!open) setMentionSearchQuery('')
-        }}>
-          <DialogContent className="max-h-[85vh] w-full max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>児童を選択</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div className="relative">
-                <Input
-                  type="text"
-                  placeholder="児童名で検索..."
-                  value={mentionSearchQuery}
-                  onChange={(e) => setMentionSearchQuery(e.target.value)}
-                  className="w-full"
-                  autoFocus
-                />
-              </div>
-              {mentionLoading ? (
-                <p className="text-center py-8">読み込み中...</p>
-              ) : classChildren.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[55vh] overflow-y-auto">
-                  {filterSuggestions(classChildren, mentionSearchQuery).map((child) => {
-                    const isSelected = selectedMentions.some((m) => m.unique_key === child.unique_key)
-                    return (
-                      <Button
-                        key={child.unique_key}
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        className="h-auto py-3 px-4 flex flex-col items-start"
-                        onClick={() => handleMentionPickerSelect(child)}
-                      >
-                        <div className="font-medium text-sm">{child.display_name}</div>
-                        <div className="text-xs text-muted-foreground">{child.class_name}</div>
-                      </Button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">
-                  児童が見つかりません。クラスを選択してください。
-                </p>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </StaffLayout>
   )
