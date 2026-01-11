@@ -26,9 +26,9 @@ yarn-error.log*
 .vercel
 .cursor
 .serena
-.claude
 .ui_file
 .mcp.json
+.work
 setting.local.json
 
 # typescript
