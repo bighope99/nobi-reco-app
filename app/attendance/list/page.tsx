@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { Button } from "@/components/ui/button"
 import {
   Calendar,
   ChevronLeft,
   ChevronRight,
   Filter,
   Users,
-  UserCheck,
   UserX,
   Clock,
   AlertCircle,
@@ -31,6 +31,133 @@ interface ChildAttendance {
   checked_out_at: string | null
   check_in_method: string | null
   is_unexpected: boolean
+}
+
+interface StatusPresentation {
+  label: string
+  className: string
+}
+
+// Helper function to check if a date is in the past
+const isPastDate = (dateString: string): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const target = new Date(dateString)
+  target.setHours(0, 0, 0, 0)
+
+  return target < today
+}
+
+// Get status presentation based on child attendance data
+const getStatusPresentation = (child: ChildAttendance, currentDate: string): StatusPresentation | null => {
+  if (child.is_unexpected) {
+    return {
+      label: '予定外登園',
+      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200',
+    }
+  }
+
+  if (child.status === 'present') {
+    return {
+      label: '出席',
+      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200',
+    }
+  }
+
+  if (child.status === 'late') {
+    return {
+      label: '遅刻',
+      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200',
+    }
+  }
+
+  if (child.status === 'absent') {
+    const isPast = isPastDate(currentDate)
+
+    if (!child.is_expected) {
+      return {
+        label: '欠席予定',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
+      }
+    }
+
+    return {
+      label: isPast ? '欠席' : '出席予定',
+      className: isPast
+        ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
+        : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+    }
+  }
+
+  if (child.status === 'not_arrived') {
+    if (child.is_expected) {
+      return {
+        label: '未到着',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+      }
+    }
+
+    return {
+      label: '欠席予定',
+      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
+    }
+  }
+
+  return null
+}
+
+// Status badge component
+const StatusBadge = ({ child, currentDate }: { child: ChildAttendance; currentDate: string }) => {
+  const presentation = getStatusPresentation(child, currentDate)
+
+  if (!presentation) return null
+
+  return <span className={presentation.className}>{presentation.label}</span>
+}
+
+// Status action button component
+const StatusActionButton = ({
+  child,
+  currentDate,
+  onMarkStatus,
+  isLoading,
+}: {
+  child: ChildAttendance
+  currentDate: string
+  onMarkStatus: (childId: string, status: 'absent' | 'present') => void
+  isLoading: boolean
+}) => {
+  const presentation = getStatusPresentation(child, currentDate)
+
+  if (!presentation) return null
+
+  if (presentation.label === '出席予定') {
+    return (
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={() => onMarkStatus(child.child_id, 'absent')}
+        disabled={isLoading}
+      >
+        {isLoading ? '処理中...' : '欠席にする'}
+      </Button>
+    )
+  }
+
+  if (presentation.label === '欠席予定') {
+    return (
+      <Button
+        size="sm"
+        onClick={() => onMarkStatus(child.child_id, 'present')}
+        disabled={isLoading}
+      >
+        {isLoading ? '処理中...' : '出席にする'}
+      </Button>
+    )
+  }
+
+  return null
 }
 
 interface AttendanceData {
@@ -98,16 +225,6 @@ export default function AttendanceListPage() {
     fetchAttendance()
   }, [fetchAttendance])
 
-  const isPastDate = (dateString: string) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const target = new Date(dateString)
-    target.setHours(0, 0, 0, 0)
-
-    return target < today
-  }
-
   // 日付操作関数
   const changeDate = (days: number) => {
     const currentDate = new Date(selectedDate)
@@ -146,111 +263,8 @@ export default function AttendanceListPage() {
       : attendanceData.children.filter(c => c.class_id === filterClass)
     : []
 
-  const getStatusPresentation = (child: ChildAttendance) => {
-    if (child.is_unexpected) {
-      return {
-        label: '予定外登園',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200',
-      }
-    }
-
-    if (child.status === 'present') {
-      return {
-        label: '出席',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200',
-      }
-    }
-
-    if (child.status === 'late') {
-      return {
-        label: '遅刻',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200',
-      }
-    }
-
-    if (child.status === 'absent') {
-      const isPast = isPastDate(attendanceData?.date || selectedDate)
-
-      if (!child.is_expected) {
-        return {
-          label: '欠席予定',
-          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
-        }
-      }
-
-      return {
-        label: isPast ? '欠席' : '出席予定',
-        className: isPast
-          ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
-          : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
-      }
-    }
-
-    if (child.status === 'not_arrived') {
-      if (child.is_expected) {
-        return {
-          label: '未到着',
-          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
-        }
-      }
-
-      return {
-        label: '欠席予定',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
-      }
-    }
-
-    return null
-  }
-
-  // ステータスバッジコンポーネント
-  const StatusBadge = ({ child }: { child: ChildAttendance }) => {
-    const presentation = getStatusPresentation(child)
-
-    if (!presentation) return null
-
-    return <span className={presentation.className}>{presentation.label}</span>
-  }
-
-  const StatusActionButton = ({
-    child,
-    onMarkStatus,
-    isLoading,
-  }: {
-    child: ChildAttendance
-    onMarkStatus: (childId: string, status: 'absent' | 'present') => void
-    isLoading: boolean
-  }) => {
-    const presentation = getStatusPresentation(child)
-
-    if (!presentation) return null
-
-    if (presentation.label === '出席予定') {
-      return (
-        <button
-          onClick={() => onMarkStatus(child.child_id, 'absent')}
-          disabled={isLoading}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
-        >
-          {isLoading ? '処理中...' : '欠席にする'}
-        </button>
-      )
-    }
-
-    if (presentation.label === '欠席予定') {
-      return (
-        <button
-          onClick={() => onMarkStatus(child.child_id, 'present')}
-          disabled={isLoading}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed rounded-md transition-colors shadow-sm"
-        >
-          {isLoading ? '処理中...' : '出席にする'}
-        </button>
-      )
-    }
-
-    return null
-  }
+  // Current date for status presentation (use attendance data date if available, otherwise selected date)
+  const currentDate = attendanceData?.date || selectedDate
 
   const handleStatusChange = async (childId: string, nextStatus: 'absent' | 'present') => {
     setActionError(null)
@@ -312,12 +326,12 @@ export default function AttendanceListPage() {
 
   return (
     <StaffLayout title="出席予定一覧">
-      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
+      <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
         </style>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
 
           {actionError && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -327,10 +341,6 @@ export default function AttendanceListPage() {
 
           {/* Header with Date Selector */}
           <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 pb-6">
-            <div className="flex items-center gap-2">
-              <Calendar size={18} className="text-slate-500 sm:w-5 sm:h-5" />
-              <h1 className="text-lg sm:text-xl font-bold text-slate-800">出席予定一覧</h1>
-            </div>
 
             {/* Date Navigation */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -479,10 +489,11 @@ export default function AttendanceListPage() {
                         <div className="text-slate-700">{child.class_name}</div>
                         <div className="text-xs text-slate-500">{child.grade_label || '-'}</div>
                       </td>
-                      <td className="px-5 py-3"><StatusBadge child={child} /></td>
+                      <td className="px-5 py-3"><StatusBadge child={child} currentDate={currentDate} /></td>
                       <td className="px-5 py-3 text-center">
                         <StatusActionButton
                           child={child}
+                          currentDate={currentDate}
                           onMarkStatus={handleStatusChange}
                           isLoading={Boolean(actionLoading[child.child_id])}
                         />
@@ -526,12 +537,13 @@ export default function AttendanceListPage() {
                           <span>{child.grade_label || '-'}</span>
                         </div>
                       </div>
-                      <StatusBadge child={child} />
+                      <StatusBadge child={child} currentDate={currentDate} />
                     </div>
 
                     <div className="mb-3">
                       <StatusActionButton
                         child={child}
+                        currentDate={currentDate}
                         onMarkStatus={handleStatusChange}
                         isLoading={Boolean(actionLoading[child.child_id])}
                       />
