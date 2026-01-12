@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { normalizePhotos } from '@/lib/utils/photos';
+import { findInvalidUUIDs } from '@/lib/utils/validation';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
+
+// Content validation constants
+const MAX_CONTENT_LENGTH = 10000;
+const MAX_TITLE_LENGTH = 100;
 
 type RouteContext = {
   params: Promise<{
@@ -42,6 +47,22 @@ export async function PATCH(
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
+    // Content length validation
+    if (content !== undefined && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
+
+    // Title length validation
+    if (title !== undefined && typeof title === 'string' && title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Title exceeds maximum length of ${MAX_TITLE_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
+
     // 活動記録の存在確認と権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
       .from('r_activity')
@@ -73,7 +94,6 @@ export async function PATCH(
     }
 
     // mentioned_children のバリデーション
-    const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (mentioned_children !== undefined) {
       if (!Array.isArray(mentioned_children)) {
         return NextResponse.json(
@@ -82,7 +102,7 @@ export async function PATCH(
         );
       }
       if (mentioned_children.length > 0) {
-        const invalidIds = mentioned_children.filter((id: string) => !UUID_PATTERN.test(id));
+        const invalidIds = findInvalidUUIDs(mentioned_children);
         if (invalidIds.length > 0) {
           return NextResponse.json(
             { success: false, error: 'Invalid child IDs in mentioned_children' },
@@ -92,7 +112,42 @@ export async function PATCH(
       }
     }
 
+    // mentioned_children が facility に所属しているか確認
+    if (mentioned_children && Array.isArray(mentioned_children) && mentioned_children.length > 0) {
+      const { data: mentionedChildrenData, error: mentionedChildrenError } = await supabase
+        .from('m_children')
+        .select('id')
+        .in('id', mentioned_children)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null);
+
+      if (mentionedChildrenError || !mentionedChildrenData || mentionedChildrenData.length !== mentioned_children.length) {
+        return NextResponse.json(
+          { success: false, error: 'One or more child IDs are invalid or do not belong to this facility' },
+          { status: 400 }
+        );
+      }
+    }
+
     const normalizedPhotos = normalizePhotos(photos) ?? undefined;
+
+    // class_id が指定されている場合、facility に所属しているか確認
+    if (class_id) {
+      const { data: classData, error: classError } = await supabase
+        .from('m_classes')
+        .select('id')
+        .eq('id', class_id)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null)
+        .single();
+
+      if (classError || !classData) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid class_id or class does not belong to this facility' },
+          { status: 400 }
+        );
+      }
+    }
 
     // 更新データの準備
     const updateData: any = {

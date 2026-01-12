@@ -67,6 +67,17 @@ describe('POST /api/records/personal - activity_id機能', () => {
         }),
       };
 
+      // アクティビティ検証のモック
+      const mockActivityQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { facility_id: 'facility-123' },
+          error: null,
+        }),
+      };
+
       // 観察記録挿入のモック（挿入されたデータをキャプチャ）
       let insertedData: any = null;
       const mockObservationInsert = {
@@ -92,6 +103,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
+        if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
         return {};
@@ -148,6 +160,17 @@ describe('POST /api/records/personal - activity_id機能', () => {
         }),
       };
 
+      // アクティビティ検証のモック（activity_id=nullなので呼ばれないが、念のため）
+      const mockActivityQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { facility_id: 'facility-123' },
+          error: null,
+        }),
+      };
+
       // 観察記録挿入のモック
       let insertedData: any = null;
       const mockObservationInsert = {
@@ -172,6 +195,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
+        if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
         return {};
@@ -225,6 +249,17 @@ describe('POST /api/records/personal - activity_id機能', () => {
         }),
       };
 
+      // アクティビティ検証のモック（activity_id未指定なので呼ばれないが、念のため）
+      const mockActivityQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { facility_id: 'facility-123' },
+          error: null,
+        }),
+      };
+
       // 観察記録挿入のモック
       let insertedData: any = null;
       const mockObservationInsert = {
@@ -249,6 +284,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
+        if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
         return {};
@@ -302,6 +338,17 @@ describe('POST /api/records/personal - activity_id機能', () => {
         }),
       };
 
+      // アクティビティ検証のモック
+      const mockActivityQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { facility_id: 'facility-123' },
+          error: null,
+        }),
+      };
+
       let insertedData: any = null;
       const mockObservationInsert = {
         insert: jest.fn((data) => {
@@ -325,6 +372,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
+        if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
         return {};
@@ -369,6 +417,17 @@ describe('POST /api/records/personal - activity_id機能', () => {
         }),
       };
 
+      // アクティビティ検証のモック（空文字列はnullに正規化されるので呼ばれないが、念のため）
+      const mockActivityQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { facility_id: 'facility-123' },
+          error: null,
+        }),
+      };
+
       let insertedData: any = null;
       const mockObservationInsert = {
         insert: jest.fn((data) => {
@@ -392,6 +451,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
+        if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
         return {};

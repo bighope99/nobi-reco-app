@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 
+// Content validation constants
+const MAX_CONTENT_LENGTH = 5000;
+
 /**
  * 新規観察記録を作成するAPIエンドポイント
  * POST /api/records/personal
@@ -34,11 +37,36 @@ export async function POST(request: NextRequest) {
       ? activity_id
       : null;
 
+    // activity_id が指定されている場合は、その activity が現在の facility に所属しているか確認
+    if (normalizedActivityId) {
+      const { data: activityData, error: activityError } = await supabase
+        .from('r_activity')
+        .select('facility_id')
+        .eq('id', normalizedActivityId)
+        .is('deleted_at', null)
+        .single();
+
+      if (activityError || !activityData || activityData.facility_id !== session.current_facility_id) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid activity_id or activity does not belong to this facility' },
+          { status: 400 }
+        );
+      }
+    }
+
     // バリデーション
     if (!child_id || !observation_date || !content) {
       return NextResponse.json(
         { success: false, error: '必須項目が不足しています (child_id, observation_date, content)' },
         { status: 400 },
+      );
+    }
+
+    // Content length validation
+    if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
+        { status: 400 }
       );
     }
 

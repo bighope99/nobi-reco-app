@@ -3,9 +3,15 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { normalizePhotos } from '@/lib/utils/photos';
+import { findInvalidUUIDs } from '@/lib/utils/validation';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
+
+// Content validation constants
+const MAX_CONTENT_LENGTH = 10000;
+const MAX_TITLE_LENGTH = 100;
 
 const signActivityPhotos = async (
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -268,10 +274,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Content length validation
+    if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
+
+    // Title length validation
+    if (title && typeof title === 'string' && title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Title exceeds maximum length of ${MAX_TITLE_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
+
     // mentioned_children のUUID形式検証
-    const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (mentioned_children && Array.isArray(mentioned_children) && mentioned_children.length > 0) {
-      const invalidIds = mentioned_children.filter((id: string) => !UUID_PATTERN.test(id));
+      const invalidIds = findInvalidUUIDs(mentioned_children);
       if (invalidIds.length > 0) {
         return NextResponse.json(
           { success: false, error: 'Invalid child IDs in mentioned_children' },

@@ -144,6 +144,11 @@ export default function ActivityRecordClient() {
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
   const MENTION_TRIGGERS = ['@', '＠']
   const mentionTriggerRef = useRef<'textarea' | 'button'>('button')
+  const DOMPURIFY_CONFIG = {
+    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'br', 'strong', 'em', 'span'],
+    ALLOWED_ATTR: ['class'],
+    KEEP_CONTENT: true,
+  }
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -1325,7 +1330,7 @@ export default function ActivityRecordClient() {
                           <div className="text-sm leading-relaxed mt-2">
                             <div
                               dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(convertToMarkdown(getDisplayContent(activity))),
+                                __html: DOMPurify.sanitize(convertToMarkdown(getDisplayContent(activity)), DOMPURIFY_CONFIG),
                               }}
                             />
                           </div>

@@ -103,14 +103,11 @@ export async function POST(request: NextRequest) {
     const contentWithPlaceholders = convertPlaceholdersForAI(content);
     const sanitizedContent = replaceMentionTokens(contentWithPlaceholders, replacements);
 
-    const analysisResults = [];
-    const errors = [];
-
-    for (const childId of mentionedChildren) {
+    // AI分析を並列実行してパフォーマンスを向上
+    const analysisPromises = mentionedChildren.map(async (childId: string) => {
       const child = childMap.get(childId);
       if (!child) {
-        errors.push({ child_id: childId, error: 'Child not found' });
-        continue;
+        return { error: 'Child not found', child_id: childId };
       }
 
       const fullName = `${child.family_name ?? ''} ${child.given_name ?? ''}`.trim();
@@ -118,23 +115,42 @@ export async function POST(request: NextRequest) {
 
       try {
         const extracted = await extractChildContent(sanitizedContent, childId, childId);
-        analysisResults.push({
-          draft_id: randomUUID(),
-          activity_id: activityId,
-          child_id: childId,
-          child_display_name: displayName,
-          observation_date: activityDate,
-          content: extracted,
-          status: 'pending' as const,
-        });
+        return {
+          success: true,
+          result: {
+            draft_id: randomUUID(),
+            activity_id: activityId,
+            child_id: childId,
+            child_display_name: displayName,
+            observation_date: activityDate,
+            content: extracted,
+            status: 'pending' as const,
+          },
+        };
       } catch (error) {
         console.error(`AI extraction failed for child ${childId}:`, error);
-        errors.push({
-          child_id: childId,
+        return {
+          success: false,
           error: error instanceof Error ? error.message : 'AI extraction failed',
-        });
+          child_id: childId,
+        };
       }
-    }
+    });
+
+    const results = await Promise.all(analysisPromises);
+
+    const analysisResults = results
+      .filter((r): r is { success: true; result: any } => 'success' in r && r.success)
+      .map((r) => r.result);
+
+    const errors = results
+      .filter((r): r is { success: false; error: string; child_id: string } =>
+        'success' in r ? !r.success : 'error' in r
+      )
+      .map((r) => ({
+        child_id: r.child_id,
+        error: r.error,
+      }));
 
     return NextResponse.json({
       success: true,

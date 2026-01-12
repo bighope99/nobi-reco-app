@@ -1,20 +1,18 @@
 /**
  * handleSaveObservation - activity_id優先度のテスト
  *
- * TDD Red Phase:
+ * 実装状態: 修正済み (2026-01-12)
+ * 実装ファイル: app/records/activity/activity-record-client.tsx (Line 754)
+ * 実装コード: activity_id: result.activity_id ?? editingActivityId ?? null
+ *
  * このテストは、handleSaveObservation関数が:
  * 1. result.activity_idを優先的に使用すること
  * 2. result.activity_idがnullの場合、editingActivityIdにフォールバックすること
  * 3. 両方nullの場合、nullを送信すること
- * 4. 両方に値がある場合、result.activity_idを優先すること（現在のコードでは失敗）
+ * 4. 両方に値がある場合、result.activity_idを優先すること
+ * 5. エッジケース（空文字列など）を適切に処理すること
  *
  * を確認します。
- *
- * 現在のコード（バグ）:
- *   activity_id: editingActivityId || null
- *
- * 期待するコード:
- *   activity_id: result.activity_id ?? editingActivityId ?? null
  */
 
 import { AiObservationDraft } from '@/lib/drafts/aiDraftCookie';
@@ -50,38 +48,11 @@ describe('handleSaveObservation - activity_id優先度', () => {
 
   /**
    * handleSaveObservationのシミュレーション関数
-   * 現在のバグのある実装を再現（editingActivityIdを優先）
+   * 実装済みの正しいロジックを再現
+   *
+   * 優先順位: result.activity_id → editingActivityId → null
    */
-  const simulateCurrentHandleSaveObservation = async (
-    result: AiObservationDraft,
-    editingActivityId: string | null,
-    aiResult: { objective: string; subjective: string; flags: Record<string, boolean> }
-  ) => {
-    // 現在のバグのある実装: editingActivityIdを使用
-    const response = await fetch('/api/records/personal', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        child_id: result.child_id,
-        observation_date: result.observation_date,
-        content: result.content,
-        activity_id: editingActivityId || null, // BUG: result.activity_idを無視
-        ai_action: aiResult.objective,
-        ai_opinion: aiResult.subjective,
-        tag_flags: aiResult.flags,
-      }),
-    });
-
-    return response;
-  };
-
-  /**
-   * handleSaveObservationの期待される実装
-   * result.activity_idを優先
-   */
-  const simulateExpectedHandleSaveObservation = async (
+  const simulateHandleSaveObservation = async (
     result: AiObservationDraft,
     editingActivityId: string | null,
     aiResult: { objective: string; subjective: string; flags: Record<string, boolean> }
@@ -95,7 +66,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
         child_id: result.child_id,
         observation_date: result.observation_date,
         content: result.content,
-        activity_id: result.activity_id ?? editingActivityId ?? null, // FIXED: result.activity_idを優先
+        activity_id: result.activity_id ?? editingActivityId ?? null,
         ai_action: aiResult.objective,
         ai_opinion: aiResult.subjective,
         tag_flags: aiResult.flags,
@@ -142,7 +113,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
       });
 
       // Act
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
       // Assert
       const sentActivityId = getActivityIdFromRequest(global.fetch as jest.Mock);
@@ -175,7 +146,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
       });
 
       // Act
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
       // Assert
       const sentActivityId = getActivityIdFromRequest(global.fetch as jest.Mock);
@@ -208,7 +179,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
       });
 
       // Act
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
       // Assert
       const sentActivityId = getActivityIdFromRequest(global.fetch as jest.Mock);
@@ -216,8 +187,8 @@ describe('handleSaveObservation - activity_id優先度', () => {
     });
   });
 
-  describe('TDD Red Phase: 現在のコードで失敗するテスト', () => {
-    it('両方に値がある場合、result.activity_idを優先すべき（現在のコードでは失敗）', async () => {
+  describe('両方に値がある場合の優先順位', () => {
+    it('result.activity_idとeditingActivityIdの両方に値がある場合、result.activity_idを優先すること', async () => {
       // Arrange
       const result: AiObservationDraft = {
         draft_id: 'draft-123',
@@ -240,48 +211,12 @@ describe('handleSaveObservation - activity_id優先度', () => {
         json: async () => ({ success: true, data: { id: 'obs-123' } }),
       });
 
-      // Act - 現在のバグのある実装
-      await simulateCurrentHandleSaveObservation(result, editingActivityId, aiResult);
+      // Act
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
-      // Assert - 現在のコードでは失敗する
+      // Assert
       const sentActivityId = getActivityIdFromRequest(global.fetch as jest.Mock);
-
-      // 現在のコードの挙動: editingActivityIdを使用（バグ）
-      expect(sentActivityId).toBe('activity-from-editing'); // 現在の挙動
-
-      // 期待する挙動: result.activity_idを優先すべき
-      expect(sentActivityId).not.toBe('activity-from-result'); // これが失敗の原因
-    });
-
-    it('修正後の実装では、両方に値がある場合にresult.activity_idを優先すること', async () => {
-      // Arrange
-      const result: AiObservationDraft = {
-        draft_id: 'draft-123',
-        activity_id: 'activity-from-result',
-        child_id: 'child-456',
-        child_display_name: 'テスト太郎',
-        observation_date: '2026-01-10',
-        content: 'テスト内容',
-        status: 'pending',
-      };
-      const editingActivityId = 'activity-from-editing';
-      const aiResult = {
-        objective: '客観的事実',
-        subjective: '主観的解釈',
-        flags: {},
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, data: { id: 'obs-123' } }),
-      });
-
-      // Act - 期待される実装
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
-
-      // Assert - 期待される挙動
-      const sentActivityId = getActivityIdFromRequest(global.fetch as jest.Mock);
-      expect(sentActivityId).toBe('activity-from-result'); // result.activity_idを優先
+      expect(sentActivityId).toBe('activity-from-result');
     });
   });
 
@@ -310,7 +245,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
       });
 
       // Act
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
       // Assert
       // ?? 演算子は null/undefined のみチェックするため、空文字列は優先される
@@ -342,7 +277,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
       });
 
       // Act
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
       // Assert
       // null ?? '' ?? null = ''
@@ -376,7 +311,7 @@ describe('handleSaveObservation - activity_id優先度', () => {
       });
 
       // Act
-      await simulateExpectedHandleSaveObservation(result, editingActivityId, aiResult);
+      await simulateHandleSaveObservation(result, editingActivityId, aiResult);
 
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
