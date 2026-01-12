@@ -76,9 +76,9 @@ export function getCaretScreenPosition(
 
     // スクロール位置を考慮した画面座標を計算
     const top =
-      rect.top + coordinates.top - textarea.scrollTop + window.scrollY;
+      rect.top + coordinates.top - textarea.scrollTop;
     const left =
-      rect.left + coordinates.left - textarea.scrollLeft + window.scrollX;
+      rect.left + coordinates.left - textarea.scrollLeft;
 
     // 行の高さを取得（フォントサイズから推定）
     const computedStyle = window.getComputedStyle(textarea);

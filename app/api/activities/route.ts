@@ -279,6 +279,21 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      // mentioned_children の存在確認と施設所属確認
+      const { data: mentionedChildrenData, error: mentionedChildrenError } = await supabase
+        .from('m_children')
+        .select('id')
+        .in('id', mentioned_children)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null);
+
+      if (mentionedChildrenError || !mentionedChildrenData || mentionedChildrenData.length !== mentioned_children.length) {
+        return NextResponse.json(
+          { success: false, error: 'One or more child IDs are invalid or do not belong to this facility' },
+          { status: 400 }
+        );
+      }
     }
 
     // class_id の施設所属確認
