@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { normalizePhotos } from '@/lib/utils/photos';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -49,24 +50,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
-      return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
-      );
-    }
-
-    const facility_id = userSession.current_facility_id;
+    const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
     const class_id = searchParams.get('class_id');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -159,8 +151,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (activityIds.length > 0) {
-      console.log('=== DEBUG: Activity IDs ===', activityIds);
-
       const { data: observations, error: obsError } = await supabase
         .from('r_observation')
         .select(`
@@ -175,10 +165,6 @@ export async function GET(request: NextRequest) {
         `)
         .in('activity_id', activityIds)
         .is('deleted_at', null);
-
-      console.log('=== DEBUG: Observations Count ===', observations?.length || 0);
-      console.log('=== DEBUG: Observations Sample ===', observations?.[0]);
-      console.log('=== DEBUG: Observations Error ===', obsError);
 
       if (observations) {
         observations.forEach((obs: any) => {
@@ -231,15 +217,6 @@ export async function GET(request: NextRequest) {
       };
     }));
 
-    console.log('=== DEBUG: Formatted Activities Sample ===', {
-      total: formattedActivities.length,
-      first: formattedActivities[0] ? {
-        activity_id: formattedActivities[0].activity_id,
-        individual_record_count: formattedActivities[0].individual_record_count,
-        individual_records: formattedActivities[0].individual_records,
-      } : null,
-    });
-
     return NextResponse.json({
       success: true,
       data: {
@@ -263,24 +240,25 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    // ユーザーIDの取得
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
-    const facility_id = userSession.current_facility_id;
+    const facility_id = metadata.current_facility_id;
+    const user_id = user.id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
@@ -289,6 +267,36 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'activity_date, class_id, and content are required' },
         { status: 400 }
       );
+    }
+
+    // mentioned_children のUUID形式検証
+    const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (mentioned_children && Array.isArray(mentioned_children) && mentioned_children.length > 0) {
+      const invalidIds = mentioned_children.filter((id: string) => !UUID_PATTERN.test(id));
+      if (invalidIds.length > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid child IDs in mentioned_children' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // class_id の施設所属確認
+    if (class_id) {
+      const { data: classData, error: classError } = await supabase
+        .from('m_classes')
+        .select('id')
+        .eq('id', class_id)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null)
+        .single();
+
+      if (classError || !classData) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid class_id or class does not belong to this facility' },
+          { status: 400 }
+        );
+      }
     }
 
     if (photos && !Array.isArray(photos)) {
@@ -305,20 +313,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedPhotos = Array.isArray(photos)
-      ? photos
-          .map((photo: any) => {
-            if (!photo || typeof photo.url !== 'string') return null;
-            return {
-              url: photo.url,
-              caption: typeof photo.caption === 'string' ? photo.caption : null,
-              thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
-              file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
-              file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
-            };
-          })
-          .filter(Boolean)
-      : null;
+    const normalizedPhotos = normalizePhotos(photos);
 
     // 活動記録を作成
     const { data: activity, error: activityError } = await supabase
@@ -332,7 +327,7 @@ export async function POST(request: NextRequest) {
         snack,
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],
-        created_by: session.user.id,
+        created_by: user_id,
       })
       .select()
       .single();
@@ -345,8 +340,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // LangChainで個別記録を生成（簡素化版：入力をそのまま返す）
-    const observations = [];
+    // LangChainで個別記録を生成（並列処理版）
+    const observations: Array<{ child_id: string; content: string }> = [];
     if (mentioned_children && mentioned_children.length > 0) {
       // Initialize LangChain
       const model = new ChatOpenAI({
@@ -365,14 +360,15 @@ export async function POST(request: NextRequest) {
       const prompt = PromptTemplate.fromTemplate(template);
       const chain = prompt.pipe(model);
 
-      for (const child_id of mentioned_children) {
+      // 並列処理: 全ての子どもに対して同時にLangChain呼び出しとDB挿入を実行
+      const observationPromises = mentioned_children.map(async (child_id: string) => {
         try {
           // Call LangChain (minimal implementation)
           const result = await chain.invoke({ content });
           const observationContent = result.content || content;
 
           // Insert observation record
-          const { error: obsError } = await supabase
+          const { data, error: obsError } = await supabase
             .from('r_observation')
             .insert({
               child_id,
@@ -380,17 +376,32 @@ export async function POST(request: NextRequest) {
               activity_id: activity.id,
               recorded_at: new Date().toISOString(),
               content: observationContent,
-              created_by: session.user.id,
-            });
+              created_by: user_id,
+            })
+            .select()
+            .single();
 
-          if (!obsError) {
-            observations.push({ child_id, content: observationContent });
+          if (obsError) {
+            console.error('Observation insert error:', obsError);
+            return { success: false, child_id, error: obsError };
           }
+
+          return { success: true, child_id, content: observationContent, data };
         } catch (error) {
           console.error('LangChain error for child:', child_id, error);
-          // Continue with next child even if one fails
+          return { success: false, child_id, error };
         }
-      }
+      });
+
+      // 全ての処理が完了するまで待機
+      const results = await Promise.all(observationPromises);
+
+      // 成功した観察記録のみを抽出
+      results.forEach((result) => {
+        if (result.success) {
+          observations.push({ child_id: result.child_id, content: result.content });
+        }
+      });
     }
 
     return NextResponse.json({
