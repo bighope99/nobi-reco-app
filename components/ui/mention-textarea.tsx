@@ -46,6 +46,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaPr
           requestAnimationFrame(() => {
             textarea.setSelectionRange(mentionStart, mentionStart);
           });
+          return; // Prevent parent onKeyDown from being invoked after mention deletion
         }
       }
 
