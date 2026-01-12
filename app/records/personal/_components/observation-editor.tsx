@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { MentionTextarea } from '@/components/ui/mention-textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -488,6 +489,31 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       ai_opinion: nextOpinion,
     }));
   }, [aiEditForm.ai_action, aiEditForm.ai_opinion, nameByIdMap, toDisplayText]);
+
+  // nameByIdMapが構築された時点でaiEditFormを再変換
+  useEffect(() => {
+    if (nameByIdMap.size === 0) return;
+
+    setAiEditForm((prev) => {
+      // child:形式が含まれない場合はスキップ
+      if (!prev.ai_action.includes('child:') && !prev.ai_opinion.includes('child:')) {
+        return prev;
+      }
+
+      const nextAction = toDisplayText(prev.ai_action);
+      const nextOpinion = toDisplayText(prev.ai_opinion);
+
+      if (nextAction === prev.ai_action && nextOpinion === prev.ai_opinion) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ai_action: nextAction,
+        ai_opinion: nextOpinion,
+      };
+    });
+  }, [nameByIdMap.size, toDisplayText]);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -1142,7 +1168,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         {editText.length}/{OBSERVATION_BODY_MAX}文字
                       </span>
                     </div>
-                    <Textarea
+                    <MentionTextarea
                       id="observation_body"
                       autoFocus
                       className="min-h-[200px]"
@@ -1203,7 +1229,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
-                      <Textarea
+                      <MentionTextarea
                         id="ai_action"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_action}
@@ -1221,7 +1247,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
-                      <Textarea
+                      <MentionTextarea
                         id="ai_opinion"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_opinion}
