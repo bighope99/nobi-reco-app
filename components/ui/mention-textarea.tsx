@@ -8,7 +8,8 @@ interface MentionTextareaProps extends React.ComponentProps<typeof Textarea> {
 }
 
 export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaProps>(
-  ({ mentionPattern = /@[^\s@、。,.!?]+/, onKeyDown, onChange, ...props }, ref) => {
+  // 日本語の姓名（スペース1つを含む）に対応: @姓 名 形式
+  ({ mentionPattern = /@[^\s@、。,.!?]+(?:\s[^\s@、。,.!?]+)?/, onKeyDown, onChange, ...props }, ref) => {
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Backspace') {

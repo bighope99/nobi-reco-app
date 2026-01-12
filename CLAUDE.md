@@ -48,6 +48,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **Auth in API**: Use `getAuthenticatedUserMetadata()` from `@/lib/auth/jwt`
 - **TypeScript**: Strict types, avoid `any`
 - **Components**: Server Components by default, `use client` only when needed
+- **Dependencies**: 新しいパッケージの追加は最小限に。既存の依存関係で実現できないか検討すること
 
 # Agent Guidelines
 **原則**: サブエージェントに委譲し、並列処理を活用する
