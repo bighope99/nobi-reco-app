@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { normalizePhotos } from '@/lib/utils/photos';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -20,24 +21,24 @@ export async function PATCH(
     const { id: activityId } = await context.params;
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    const facility_id = metadata.current_facility_id;
+
+    // ユーザーID取得（updated_byに使用）
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'User not found' },
+        { status: 401 }
       );
     }
-
-    const facility_id = userSession.current_facility_id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
@@ -71,24 +72,11 @@ export async function PATCH(
       );
     }
 
-    const normalizedPhotos = Array.isArray(photos)
-      ? photos
-          .map((photo: any) => {
-            if (!photo || typeof photo.url !== 'string') return null;
-            return {
-              url: photo.url,
-              caption: typeof photo.caption === 'string' ? photo.caption : null,
-              thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
-              file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
-              file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
-            };
-          })
-          .filter(Boolean)
-      : undefined;
+    const normalizedPhotos = normalizePhotos(photos) ?? undefined;
 
     // 更新データの準備
     const updateData: any = {
-      updated_by: session.user.id,
+      updated_by: user.id,
       updated_at: new Date().toISOString(),
     };
 
@@ -144,24 +132,24 @@ export async function DELETE(
     const { id: activityId } = await context.params;
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    const facility_id = metadata.current_facility_id;
+
+    // ユーザーID取得（updated_byに使用）
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'User not found' },
+        { status: 401 }
       );
     }
-
-    const facility_id = userSession.current_facility_id;
 
     // 活動記録の存在確認と権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
@@ -184,7 +172,7 @@ export async function DELETE(
       .from('r_activity')
       .update({
         deleted_at: new Date().toISOString(),
-        updated_by: session.user.id,
+        updated_by: user.id,
       })
       .eq('id', activityId);
 
