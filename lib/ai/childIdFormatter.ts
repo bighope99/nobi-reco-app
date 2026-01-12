@@ -4,7 +4,8 @@ export const replaceChildIdsWithNames = (text: string, nameById: Map<string, str
   if (!text) return text;
   return text.replace(/@?child:([^\s、。,.!?]+)/g, (match, id) => {
     const name = nameById.get(id);
-    return name || match;
+    // 名前が見つかった場合は @name 形式で返す（MentionTextareaの一括削除対応）
+    return name ? `@${name}` : match;
   });
 };
 
@@ -16,6 +17,8 @@ export const replaceChildNamesWithIds = (text: string, nameById: Map<string, str
   let next = text;
   entries.forEach(([id, name]) => {
     const escapedName = escapeRegex(name);
+    // @name 形式と name 形式の両方を child:id に変換
+    next = next.replace(new RegExp(`@${escapedName}`, 'g'), `child:${id}`);
     next = next.replace(new RegExp(escapedName, 'g'), `child:${id}`);
   });
   return next;
