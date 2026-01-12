@@ -348,12 +348,71 @@ export default function ActivityRecordClient() {
   const handleAnalyze = async () => {
     setIsAiLoading(true)
     setAiAnalysisError(null)
+    setSaveError(null)
+    setSaveMessage(null)
 
     try {
       if (selectedMentions.length === 0) {
         throw new Error('メンションされた児童がありません')
       }
 
+      // 1. 先に活動記録を保存（編集モードの場合は更新）
+      let savedActivityId: string | null = editingActivityId
+
+      if (isEditMode && editingActivityId) {
+        // 編集モードの場合は更新
+        const updateResponse = await fetch(`/api/activities/${editingActivityId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            class_id: selectedClass,
+            activity_date: activityDate,
+            content: activityContent,
+            mentioned_children: selectedMentions.map((child) => child.child_id),
+            photos,
+          }),
+        })
+
+        const updateResult = await updateResponse.json()
+
+        if (!updateResponse.ok || !updateResult.success) {
+          throw new Error(updateResult.error || '活動記録の更新に失敗しました')
+        }
+
+        setSaveMessage('活動記録を更新しました')
+      } else {
+        // 新規保存
+        const saveResponse = await fetch('/api/activities', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            class_id: selectedClass,
+            activity_date: activityDate,
+            content: activityContent,
+            mentioned_children: selectedMentions.map((child) => child.child_id),
+            photos,
+          }),
+        })
+
+        const saveResult = await saveResponse.json()
+
+        if (!saveResponse.ok || !saveResult.success) {
+          throw new Error(saveResult.error || '活動記録の保存に失敗しました')
+        }
+
+        savedActivityId = saveResult.data?.activity_id
+        setSaveMessage('活動記録を保存しました')
+
+        // 新規保存後は編集モードに切り替え
+        setEditingActivityId(savedActivityId)
+        setIsEditMode(true)
+      }
+
+      // 2. AI分析を実行
       const response = await fetch('/api/ai/observation', {
         method: 'POST',
         headers: {
@@ -364,19 +423,23 @@ export default function ActivityRecordClient() {
           content: activityContent,
           activity_date: activityDate,
           mentioned_children: selectedMentions.map((child) => child.child_id),
+          activity_id: savedActivityId, // 保存した活動記録IDを紐付け
         }),
       })
 
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '分析に失敗しました')
+        throw new Error(result.error || 'AI分析に失敗しました')
       }
 
       const analysisResults = result.data?.analysis_results || []
       setAiAnalysisResults(analysisResults)
       setShowAnalysisModal(true)
       persistAiDraftsToCookie(analysisResults)
+
+      // 活動記録一覧を更新
+      fetchActivities()
     } catch (err) {
       console.error('Failed to analyze:', err)
       setAiAnalysisError(err instanceof Error ? err.message : '分析に失敗しました')
@@ -800,6 +863,7 @@ export default function ActivityRecordClient() {
     if (result.draft_id) params.set("draftId", result.draft_id)
     if (result.child_id) params.set("childId", result.child_id)
     if (result.child_display_name) params.set("childName", result.child_display_name)
+    if (result.activity_id) params.set("activityId", result.activity_id)
     const query = params.toString()
     return query ? `/records/personal/new?${query}` : "/records/personal/new"
   }
