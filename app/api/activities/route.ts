@@ -5,6 +5,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -149,8 +150,11 @@ export async function GET(request: NextRequest) {
       if (mentionedChildrenError) {
         console.error('Failed to fetch mentioned children names:', mentionedChildrenError);
       } else if (mentionedChildren) {
-        mentionedChildren.forEach((child: { id: string; family_name: string; given_name: string; nickname: string | null }) => {
-          const displayName = child.nickname || `${child.family_name}${child.given_name}`;
+        mentionedChildren.forEach((child: { id: string; family_name: string | null; given_name: string | null; nickname: string | null }) => {
+          const displayName = child.nickname || formatName([
+            decryptOrFallback(child.family_name),
+            decryptOrFallback(child.given_name),
+          ]);
           mentionedChildrenNamesMap.set(child.id, displayName);
         });
       }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 export async function GET(
   request: NextRequest,
@@ -53,8 +54,11 @@ export async function GET(
       .single();
 
     if (fetchError || !data) {
+      if (fetchError) {
+        console.error('Observation fetch error:', fetchError);
+      }
       return NextResponse.json(
-        { success: false, error: fetchError?.message || 'データが見つかりませんでした' },
+        { success: false, error: 'データが見つかりませんでした' },
         { status: 404 },
       );
     }
@@ -66,9 +70,14 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+  
+
+    const decryptedFamilyName = decryptOrFallback(child.family_name);
+    const decryptedGivenName = decryptOrFallback(child.given_name);
     const childName =
       child.nickname ||
-      [child.family_name, child.given_name].filter(Boolean).join(' ') ||
+      [decryptedFamilyName, decryptedGivenName].filter(Boolean).join(' ') ||
       '';
     const tagFlags = (data.record_tags || []).reduce<Record<string, boolean>>((acc, item) => {
       if (item?.tag_id) {

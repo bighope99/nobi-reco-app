@@ -323,16 +323,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   }, [observation, isEditing, toDisplayText]);
 
   useEffect(() => {
-    if (isNew) {
-      setObservation(null);
-      setEditText('');
-      setIsEditing(true);
-      setAiEditForm({
-        ai_action: '',
-        ai_opinion: '',
-        flags: buildDefaultTagFlags(observationTags),
-      });
-    }
+    if (!isNew) return;
+    setObservation(null);
+    setEditText('');
+    setIsEditing(true);
+    setAiEditForm({
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultTagFlags(observationTags),
+    });
+  }, [isNew]);
+
+  useEffect(() => {
+    if (!isNew) return;
+    setAiEditForm((prev) => ({
+      ...prev,
+      flags: buildDefaultTagFlags(observationTags),
+    }));
   }, [isNew, observationTags]);
 
   useEffect(() => {

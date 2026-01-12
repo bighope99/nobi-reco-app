@@ -49,6 +49,30 @@ interface MockSupabaseClient {
   from: jest.Mock<MockSelectQuery | MockInsertQuery, [string]>;
 }
 
+const createSelectQuery = (): MockSelectQuery => {
+  const query = {} as MockSelectQuery;
+  query.select = jest.fn().mockReturnValue(query);
+  query.eq = jest.fn().mockReturnValue(query);
+  query.maybeSingle = jest.fn();
+  return query;
+};
+
+const createSelectQueryWithFilters = (): MockSelectQueryWithFilters => {
+  const query = createSelectQuery() as MockSelectQueryWithFilters;
+  query.gte = jest.fn().mockReturnValue(query);
+  query.lte = jest.fn().mockReturnValue(query);
+  query.order = jest.fn().mockReturnValue(query);
+  return query;
+};
+
+const createInsertQuery = (): MockInsertQuery => {
+  const query = {} as MockInsertQuery;
+  query.insert = jest.fn().mockReturnValue(query);
+  query.select = jest.fn().mockReturnValue(query);
+  query.single = jest.fn();
+  return query;
+};
+
 describe('POST /api/attendance/checkin', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
   const mockedGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
@@ -98,56 +122,44 @@ describe('POST /api/attendance/checkin', () => {
       };
 
       // Mock child query
-      const childQuery: MockSelectQuery = {
-        select: jest.fn<MockSelectQuery, [string]>().mockReturnValue(childQuery),
-        eq: jest.fn<MockSelectQuery, [string, unknown]>().mockReturnValue(childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: childId,
-            facility_id: facilityId,
-            family_name: 'Test',
-            given_name: 'Child',
-            _child_class: [
-              {
-                is_current: true,
-                class: {
-                  id: 'class-1',
-                  name: 'さくら組',
-                },
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: childId,
+          facility_id: facilityId,
+          family_name: 'Test',
+          given_name: 'Child',
+          _child_class: [
+            {
+              is_current: true,
+              class: {
+                id: 'class-1',
+                name: 'さくら組',
               },
-            ],
-          },
-          error: null,
-        }),
-      };
+            },
+          ],
+        },
+        error: null,
+      });
 
       // Mock attendance check query
-      const attendanceCheckQuery: MockSelectQueryWithFilters = {
-        select: jest.fn<MockSelectQueryWithFilters, [string]>().mockReturnValue(attendanceCheckQuery),
-        eq: jest.fn<MockSelectQueryWithFilters, [string, unknown]>().mockReturnValue(attendanceCheckQuery),
-        gte: jest.fn<MockSelectQueryWithFilters, [string, string]>().mockReturnValue(attendanceCheckQuery),
-        lte: jest.fn<MockSelectQueryWithFilters, [string, string]>().mockReturnValue(attendanceCheckQuery),
-        order: jest.fn<MockSelectQueryWithFilters, [string, { ascending: boolean }]>().mockReturnValue(attendanceCheckQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: null,
-          error: null,
-        }),
-      };
+      const attendanceCheckQuery = createSelectQueryWithFilters();
+      attendanceCheckQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
       // Mock attendance insert query
-      const attendanceInsertQuery: MockInsertQuery = {
-        insert: jest.fn<MockInsertQuery, [Record<string, unknown>]>().mockReturnValue(attendanceInsertQuery),
-        select: jest.fn<MockInsertQuery, [string]>().mockReturnValue(attendanceInsertQuery),
-        single: jest.fn().mockResolvedValue({
-          data: {
-            id: 'attendance-1',
-            child_id: childId,
-            facility_id: facilityId,
-            checked_in_at: new Date().toISOString(),
-          },
-          error: null,
-        }),
-      };
+      const attendanceInsertQuery = createInsertQuery();
+      attendanceInsertQuery.single.mockResolvedValue({
+        data: {
+          id: 'attendance-1',
+          child_id: childId,
+          facility_id: facilityId,
+          checked_in_at: new Date().toISOString(),
+        },
+        error: null,
+      });
 
       // Use mockReturnValueOnce for deterministic sequencing
       const mockSupabase: MockSupabaseClient = {
@@ -202,7 +214,7 @@ describe('POST /api/attendance/checkin', () => {
       // Assert h_attendance insert query structure
       expect(attendanceInsertQuery.insert).toHaveBeenCalledWith(
         expect.objectContaining({
-          child_id,
+          child_id: childId,
           facility_id: facilityId,
           check_in_method: 'qr',
         })
@@ -295,20 +307,17 @@ describe('POST /api/attendance/checkin', () => {
         }),
       };
 
-      const childQuery: any = {
-        select: jest.fn(() => childQuery),
-        eq: jest.fn(() => childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: childId,
-            facility_id: facilityId,
-            family_name: 'Test',
-            given_name: 'Child',
-            _child_class: [],
-          },
-          error: null,
-        }),
-      };
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: childId,
+          facility_id: facilityId,
+          family_name: 'Test',
+          given_name: 'Child',
+          _child_class: [],
+        },
+        error: null,
+      });
 
       const mockSupabase = {
         auth: authQuery,
@@ -366,46 +375,34 @@ describe('POST /api/attendance/checkin', () => {
         }),
       };
 
-      const childQuery: MockSelectQuery = {
-        select: jest.fn<MockSelectQuery, [string]>().mockReturnValue(childQuery),
-        eq: jest.fn<MockSelectQuery, [string, unknown]>().mockReturnValue(childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: childId,
-            facility_id: facilityId,
-            family_name: 'Test',
-            given_name: 'Child',
-            _child_class: [],
-          },
-          error: null,
-        }),
-      };
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: childId,
+          facility_id: facilityId,
+          family_name: 'Test',
+          given_name: 'Child',
+          _child_class: [],
+        },
+        error: null,
+      });
 
-      const attendanceCheckQuery: MockSelectQueryWithFilters = {
-        select: jest.fn<MockSelectQueryWithFilters, [string]>().mockReturnValue(attendanceCheckQuery),
-        eq: jest.fn<MockSelectQueryWithFilters, [string, unknown]>().mockReturnValue(attendanceCheckQuery),
-        gte: jest.fn<MockSelectQueryWithFilters, [string, string]>().mockReturnValue(attendanceCheckQuery),
-        lte: jest.fn<MockSelectQueryWithFilters, [string, string]>().mockReturnValue(attendanceCheckQuery),
-        order: jest.fn<MockSelectQueryWithFilters, [string, { ascending: boolean }]>().mockReturnValue(attendanceCheckQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: null,
-          error: null,
-        }),
-      };
+      const attendanceCheckQuery = createSelectQueryWithFilters();
+      attendanceCheckQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
-      const attendanceInsertQuery: MockInsertQuery = {
-        insert: jest.fn<MockInsertQuery, [Record<string, unknown>]>().mockReturnValue(attendanceInsertQuery),
-        select: jest.fn<MockInsertQuery, [string]>().mockReturnValue(attendanceInsertQuery),
-        single: jest.fn().mockResolvedValue({
-          data: {
-            id: 'attendance-1',
-            child_id: childId,
-            facility_id: facilityId,
-            checked_in_at: new Date().toISOString(),
-          },
-          error: null,
-        }),
-      };
+      const attendanceInsertQuery = createInsertQuery();
+      attendanceInsertQuery.single.mockResolvedValue({
+        data: {
+          id: 'attendance-1',
+          child_id: childId,
+          facility_id: facilityId,
+          checked_in_at: new Date().toISOString(),
+        },
+        error: null,
+      });
 
       // Use mockReturnValueOnce for deterministic sequencing
       const mockSupabase: MockSupabaseClient = {
@@ -437,7 +434,7 @@ describe('POST /api/attendance/checkin', () => {
       // Assert attendance insert was called with correct parameters
       expect(attendanceInsertQuery.insert).toHaveBeenCalledWith(
         expect.objectContaining({
-          child_id,
+          child_id: childId,
           facility_id: facilityId,
           check_in_method: 'qr',
         })
@@ -673,20 +670,17 @@ describe('POST /api/attendance/checkin', () => {
         }),
       };
 
-      const childQuery: any = {
-        select: jest.fn(() => childQuery),
-        eq: jest.fn(() => childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: childId,
-            facility_id: userFacilityId, // Child belongs to user's facility
-            family_name: 'Test',
-            given_name: 'Child',
-            _child_class: [],
-          },
-          error: null,
-        }),
-      };
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: childId,
+          facility_id: userFacilityId, // Child belongs to user's facility
+          family_name: 'Test',
+          given_name: 'Child',
+          _child_class: [],
+        },
+        error: null,
+      });
 
       const mockSupabase = {
         auth: authQuery,
@@ -712,7 +706,7 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.error).toBe('Facility ID mismatch');
     });
 
-    it('should return 409 when attendance check query returns an existing record for today', async () => {
+    it('should return 200 when attendance check query returns an existing record for today', async () => {
       const childId = 'child-123';
       const facilityId = 'facility-456';
       const userId = 'user-789';
@@ -744,44 +738,35 @@ describe('POST /api/attendance/checkin', () => {
         }),
       };
 
-      const childQuery: any = {
-        select: jest.fn(() => childQuery),
-        eq: jest.fn(() => childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: childId,
-            facility_id: facilityId,
-            family_name: 'Test',
-            given_name: 'Child',
-            _child_class: [
-              {
-                is_current: true,
-                class: {
-                  id: 'class-1',
-                  name: 'さくら組',
-                },
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: childId,
+          facility_id: facilityId,
+          family_name: 'Test',
+          given_name: 'Child',
+          _child_class: [
+            {
+              is_current: true,
+              class: {
+                id: 'class-1',
+                name: 'さくら組',
               },
-            ],
-          },
-          error: null,
-        }),
-      };
+            },
+          ],
+        },
+        error: null,
+      });
 
       // Mock attendance check returning existing record
-      const attendanceCheckQuery: any = {
-        select: jest.fn(() => attendanceCheckQuery),
-        eq: jest.fn(() => attendanceCheckQuery),
-        gte: jest.fn(() => attendanceCheckQuery),
-        lte: jest.fn(() => attendanceCheckQuery),
-        order: jest.fn(() => attendanceCheckQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: 'attendance-existing',
-            checked_in_at: new Date().toISOString(),
-          },
-          error: null,
-        }),
-      };
+      const attendanceCheckQuery = createSelectQueryWithFilters();
+      attendanceCheckQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: 'attendance-existing',
+          checked_in_at: new Date().toISOString(),
+        },
+        error: null,
+      });
 
       const mockSupabase = {
         auth: authQuery,
@@ -805,12 +790,12 @@ describe('POST /api/attendance/checkin', () => {
       const response = await POST(request);
       const json = await response.json();
 
-      expect(response.status).toBe(409);
-      expect(json.success).toBe(false);
-      expect(json.error).toBe('Already checked in today');
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
       expect(json.data?.child_id).toBe(childId);
       expect(json.data?.child_name).toBe('Test Child');
       expect(json.data?.class_name).toBe('さくら組');
+      expect(json.data?.already_checked_in).toBe(true);
     });
 
     it('should return 500 when Supabase queries return error objects', async () => {
@@ -846,14 +831,11 @@ describe('POST /api/attendance/checkin', () => {
       };
 
       // Mock child query returning error
-      const childQuery: any = {
-        select: jest.fn(() => childQuery),
-        eq: jest.fn(() => childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'db error' },
-        }),
-      };
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: { message: 'db error' },
+      });
 
       const mockSupabase = {
         auth: authQuery,
@@ -911,43 +893,31 @@ describe('POST /api/attendance/checkin', () => {
         }),
       };
 
-      const childQuery: any = {
-        select: jest.fn(() => childQuery),
-        eq: jest.fn(() => childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: {
-            id: childId,
-            facility_id: facilityId,
-            family_name: 'Test',
-            given_name: 'Child',
-            _child_class: [],
-          },
-          error: null,
-        }),
-      };
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: {
+          id: childId,
+          facility_id: facilityId,
+          family_name: 'Test',
+          given_name: 'Child',
+          _child_class: [],
+        },
+        error: null,
+      });
 
       // Mock attendance check returning no existing record
-      const attendanceCheckQuery: any = {
-        select: jest.fn(() => attendanceCheckQuery),
-        eq: jest.fn(() => attendanceCheckQuery),
-        gte: jest.fn(() => attendanceCheckQuery),
-        lte: jest.fn(() => attendanceCheckQuery),
-        order: jest.fn(() => attendanceCheckQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: null,
-          error: null,
-        }),
-      };
+      const attendanceCheckQuery = createSelectQueryWithFilters();
+      attendanceCheckQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
       // Mock attendance insert returning error
-      const attendanceInsertQuery: any = {
-        insert: jest.fn(() => attendanceInsertQuery),
-        select: jest.fn(() => attendanceInsertQuery),
-        single: jest.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'db error' },
-        }),
-      };
+      const attendanceInsertQuery = createInsertQuery();
+      attendanceInsertQuery.single.mockResolvedValue({
+        data: null,
+        error: { message: 'db error' },
+      });
 
       const mockSupabase = {
         auth: authQuery,
@@ -1012,14 +982,11 @@ describe('POST /api/attendance/checkin', () => {
       };
 
       // Mock child query returning null data and null error (child not found)
-      const childQuery: any = {
-        select: jest.fn(() => childQuery),
-        eq: jest.fn(() => childQuery),
-        maybeSingle: jest.fn().mockResolvedValue({
-          data: null,
-          error: null,
-        }),
-      };
+      const childQuery = createSelectQuery();
+      childQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
       const mockSupabase = {
         auth: authQuery,

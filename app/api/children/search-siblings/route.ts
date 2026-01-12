@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { searchByPhone } from '@/utils/pii/searchIndex';
+import { normalizePhone } from '@/lib/children/import-csv';
 
 // POST /api/children/search-siblings - 兄弟検索（電話番号ベース）
 export async function POST(request: NextRequest) {
@@ -30,10 +33,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
     }
 
-    // 電話番号の正規化（ハイフンを削除）
-    const normalizedPhone = phone.replace(/[-\s]/g, '');
+    // 電話番号の正規化
+    const normalizedPhone = normalizePhone(phone);
 
-    // 同じ電話番号を持つ児童を検索
+    // 検索用ハッシュテーブルから電話番号で検索
+    const childIds = await searchByPhone(supabase, 'child', normalizedPhone);
+    
+    if (childIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          found: false,
+          candidates: [],
+          total_found: 0,
+        },
+      });
+    }
+
+    // 該当する児童を取得
     const { data: childrenData, error: childrenError } = await supabase
       .from('m_children')
       .select(`
@@ -57,6 +74,7 @@ export async function POST(request: NextRequest) {
       `)
       .eq('facility_id', facility_id)
       .eq('_child_class.is_current', true)
+      .in('id', childIds)
       .is('deleted_at', null);
 
     if (childrenError) {
@@ -64,14 +82,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to search children' }, { status: 500 });
     }
 
-    // 電話番号でフィルタリング（parent_phoneまたはnormalized形式で一致）
-    // ※編集モードの場合は本人を除外
-    const candidates = (childrenData || []).filter((child: any) => {
-      if (!child.parent_phone) return false;
-      if (child_id && child.id === child_id) return false; // 本人を除外
-      const childPhone = child.parent_phone.replace(/[-\s]/g, '');
-      return childPhone === normalizedPhone;
-    }).map((child: any) => {
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+  
+
+    // フィルタリング（編集モードの場合は本人を除外）
+    const candidates = (childrenData || [])
+      .filter((child: any) => {
+        if (child_id && child.id === child_id) return false; // 本人を除外
+        return true;
+      })
+      .map((child: any) => {
       const classInfo = child._child_class[0]?.m_classes;
 
       // 年齢計算
@@ -79,10 +99,16 @@ export async function POST(request: NextRequest) {
       const today = new Date();
       const age = Math.floor((today.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 
+      // PIIフィールドを復号化
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         birth_date: child.birth_date,
         age,
         class_name: classInfo?.name || '',

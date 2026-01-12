@@ -266,9 +266,7 @@ describe('/api/records/activity DELETE', () => {
                 error: null,
               }),
               update: jest.fn(() => ({
-                eq: jest.fn().mockReturnThis(),
-                select: jest.fn().mockReturnThis(),
-                single: jest.fn().mockResolvedValue({
+                eq: jest.fn().mockResolvedValue({
                   data: null,
                   error: { message: 'Database error' },
                 }),

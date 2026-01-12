@@ -34,3 +34,5 @@ setting.local.json
 
 # typescript
 *.tsbuildinfo
+# Test coverage
+coverage/
