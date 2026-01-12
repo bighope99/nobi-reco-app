@@ -246,6 +246,7 @@ export async function PUT(
     }
 
     // 施設アクセス権限チェック
+    let facilityIds: string[] = [];
     if (userData.role === 'facility_admin') {
       const { data: userFacilities } = await supabase
         .from('_user_facility')
@@ -253,7 +254,7 @@ export async function PUT(
         .eq('user_id', user.id)
         .eq('is_current', true);
 
-      const facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
+      facilityIds = userFacilities?.map((uf) => uf.facility_id) || [];
       if (!facilityIds.includes(classData.facility_id)) {
         return NextResponse.json(
           { success: false, error: 'Class not found' },
@@ -263,6 +264,16 @@ export async function PUT(
     }
 
     const body = await request.json();
+    const requestedFacilityId = body.facility_id ?? classData.facility_id;
+
+    if (userData.role === 'facility_admin') {
+      if (!facilityIds.includes(requestedFacilityId)) {
+        return NextResponse.json(
+          { success: false, error: 'Facility access denied' },
+          { status: 403 }
+        );
+      }
+    }
 
     // 更新データ準備
     const updateData: any = {
@@ -272,6 +283,7 @@ export async function PUT(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.age_group !== undefined) updateData.age_group = body.age_group;
     if (body.capacity !== undefined) updateData.capacity = body.capacity;
+    if (body.facility_id !== undefined) updateData.facility_id = body.facility_id;
     if (body.room_number !== undefined) updateData.room_number = body.room_number;
     if (body.color_code !== undefined) updateData.color_code = body.color_code;
     if (body.display_order !== undefined) updateData.display_order = body.display_order;

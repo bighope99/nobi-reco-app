@@ -128,7 +128,13 @@ export async function PUT(
         const classAssignments = body.assigned_classes.map((assignment: any) => ({
           user_id: targetUserId,
           class_id: assignment.class_id,
-          is_main: assignment.is_main || false,
+          class_role:
+            assignment.class_role ??
+            (assignment.is_main === undefined
+              ? null
+              : assignment.is_main
+                ? 'main'
+                : 'sub'),
           start_date: assignment.start_date || new Date().toISOString().split('T')[0],
           is_current: true,
         }));

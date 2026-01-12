@@ -500,8 +500,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-600 pb-24">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen font-sans text-slate-600 pb-24">
+      <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
           {/* Side Navigation (Sticky) */}

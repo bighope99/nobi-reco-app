@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Camera, Check, Loader2, TriangleAlert, VideoOff } from "lucide-react"
+import { Camera, Check, Loader2, RefreshCcw, TriangleAlert, VideoOff } from "lucide-react"
 import { BrowserQRCodeReader } from "@zxing/browser"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
@@ -17,6 +17,7 @@ interface AttendanceQrPayload {
 }
 
 type ScanStatus = "idle" | "starting" | "scanning" | "stopped"
+type CameraFacingMode = "environment" | "user"
 
 interface CheckInResult {
   success: boolean
@@ -32,7 +33,6 @@ interface CheckInResult {
 
 export default function QRAttendanceScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
   const codeReaderRef = useRef<BrowserQRCodeReader | null>(null)
   const controlsRef = useRef<{ stop: () => void } | null>(null)
 
@@ -40,6 +40,8 @@ export default function QRAttendanceScannerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
+  const [facingMode, setFacingMode] = useState<CameraFacingMode>("environment")
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false)
 
   const stopScanner = useCallback(async () => {
     if (controlsRef.current) {
@@ -51,11 +53,18 @@ export default function QRAttendanceScannerPage() {
       controlsRef.current = null
     }
 
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
+    const videoElement = videoRef.current
+    const srcObject = videoElement?.srcObject
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
+    if (srcObject) {
+      if (typeof MediaStream !== "undefined" && srcObject instanceof MediaStream) {
+        srcObject.getTracks().forEach((track) => track.stop())
+      } else if ("getTracks" in srcObject) {
+        srcObject.getTracks().forEach((track) => track.stop())
+      }
+      if (videoElement) {
+        videoElement.srcObject = null
+      }
     }
 
     codeReaderRef.current = null
@@ -67,6 +76,34 @@ export default function QRAttendanceScannerPage() {
       stopScanner()
     }
   }, [stopScanner])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAvailableCameras = async () => {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        return
+      }
+
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        if (!isMounted) return
+        const videoInputs = devices.filter((device) => device.kind === "videoinput")
+        setHasMultipleCameras(videoInputs.length > 1)
+      } catch (error) {
+        console.error("Failed to enumerate media devices", error)
+        if (isMounted) {
+          setHasMultipleCameras(false)
+        }
+      }
+    }
+
+    checkAvailableCameras()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const parsePayload = (raw: string): AttendanceQrPayload | null => {
     try {
@@ -123,7 +160,7 @@ export default function QRAttendanceScannerPage() {
     }
   }
 
-  const startScanner = useCallback(async () => {
+  const startScanner = useCallback(async (mode: CameraFacingMode = facingMode) => {
     setErrorMessage(null)
     setScanStatus("starting")
 
@@ -145,32 +182,15 @@ export default function QRAttendanceScannerPage() {
         codeReaderRef.current = new BrowserQRCodeReader()
       }
 
-      // カメラストリームを取得してビデオ要素に設定
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+      const controls = await codeReaderRef.current.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: mode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
         },
-        audio: false,
-      })
-
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
-
-      try {
-        await videoRef.current.play()
-      } catch (playError) {
-        console.error("Video play error", playError)
-        throw new Error("カメラ映像の再生に失敗しました。ブラウザの権限設定を確認してください。")
-      }
-
-      setScanStatus("scanning")
-
-      // ZXingでQRコードを読み取り開始
-      // undefinedを渡すとデフォルトのカメラ（背面カメラ優先）を使用
-      const controls = await codeReaderRef.current.decodeFromVideoDevice(
-        undefined,
         videoRef.current,
         (result, error) => {
           if (result) {
@@ -183,6 +203,7 @@ export default function QRAttendanceScannerPage() {
       )
 
       controlsRef.current = controls
+      setScanStatus("scanning")
     } catch (error) {
       console.error("Camera start error", error)
       if (error instanceof DOMException && error.name === "NotAllowedError") {
@@ -197,7 +218,16 @@ export default function QRAttendanceScannerPage() {
       await stopScanner()
       setScanStatus("idle")
     }
-  }, [stopScanner])
+  }, [facingMode, stopScanner])
+
+  const handleToggleCamera = async () => {
+    const nextMode: CameraFacingMode = facingMode === "environment" ? "user" : "environment"
+    setFacingMode(nextMode)
+
+    if (isScanning) {
+      await startScanner(nextMode)
+    }
+  }
 
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
@@ -234,9 +264,9 @@ export default function QRAttendanceScannerPage() {
 
               {/* コントロールボタン */}
               {!checkInResult && (
-                <div className="flex justify-center gap-4">
+                <div className="flex flex-wrap justify-center gap-4">
                   <Button
-                    onClick={startScanner}
+                    onClick={() => startScanner()}
                     disabled={isScanning || isCheckingIn}
                     size="lg"
                     className="text-lg"
@@ -251,6 +281,17 @@ export default function QRAttendanceScannerPage() {
                       </>
                     )}
                   </Button>
+                  {hasMultipleCameras && (
+                    <Button
+                      variant="outline"
+                      onClick={handleToggleCamera}
+                      disabled={isCheckingIn}
+                      size="lg"
+                      className="text-lg"
+                    >
+                      <RefreshCcw className="mr-2 h-5 w-5" /> カメラを切り替え
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={stopScanner}

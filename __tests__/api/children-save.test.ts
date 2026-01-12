@@ -15,6 +15,11 @@ describe('saveChild', () => {
       insert: jest.fn(() => insertQuery),
       upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
       select: jest.fn(() => insertQuery),
+      eq: jest.fn(() => insertQuery),
+      is: jest.fn(() => insertQuery),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      update: jest.fn(() => insertQuery),
+      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
       single: jest.fn().mockResolvedValue({
         data: {
           id: 'child-1',
@@ -102,12 +107,23 @@ describe('saveChild', () => {
     const guardianInsertQuery: any = {
       insert: jest.fn(() => guardianInsertQuery),
       select: jest.fn(() => guardianInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'guardian-1',
-        },
-        error: null,
-      }),
+      eq: jest.fn(() => guardianInsertQuery),
+      is: jest.fn(() => guardianInsertQuery),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      update: jest.fn(() => guardianInsertQuery),
+      single: jest.fn()
+        .mockResolvedValueOnce({
+          data: {
+            id: 'guardian-1',
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            id: 'guardian-2',
+          },
+          error: null,
+        }),
     };
 
     const emergencyGuardianInsertQuery: any = {
@@ -148,18 +164,12 @@ describe('saveChild', () => {
         Promise.resolve(resolve({ data: [], error: null })),
     };
 
-    let guardianCallCount = 0;
     const mockSupabase: any = {
       from: jest.fn((table: string) => {
         if (table === 's_pii_search_index') return searchIndexQuery;
         if (table === 'm_children') return childInsertQuery;
         if (table === 'm_guardians') {
-          // First call is for primary guardian, subsequent calls are for emergency contacts
-          if (guardianCallCount === 0) {
-            guardianCallCount++;
-            return guardianInsertQuery;
-          }
-          return emergencyGuardianInsertQuery;
+          return guardianInsertQuery;
         }
         if (table === '_child_guardian') return childGuardianInsertQuery;
         if (table === '_child_class') return childClassInsertQuery;
