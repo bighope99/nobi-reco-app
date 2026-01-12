@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
           id,
           activity_id,
           child_id,
-          m_children!inner (
+          m_children (
             family_name,
             given_name,
             nickname
@@ -258,17 +258,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ユーザーIDの取得
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const facility_id = metadata.current_facility_id;
-    const user_id = user.id;
+    const user_id = metadata.user_id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
@@ -412,9 +403,8 @@ export async function POST(request: NextRequest) {
             .from('r_observation')
             .insert({
               child_id,
-              facility_id,
               activity_id: activity.id,
-              recorded_at: new Date().toISOString(),
+              observation_date: activity_date,
               content: observationContent,
               created_by: user_id,
             })
