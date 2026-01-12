@@ -34,6 +34,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - OpenAI GPT-4o-mini
 
 # Key References
+
 | Topic | Reference |
 |-------|-----------|
 | Database Schema | `docs/03_database.md` (single source of truth) |
@@ -51,6 +52,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **Dependencies**: 新しいパッケージの追加は最小限に。既存の依存関係で実現できないか検討すること
 
 # Agent Guidelines
+
 **原則**: サブエージェントに委譲し、並列処理を活用する
 
 | Task | Agent |

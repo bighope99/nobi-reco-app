@@ -35,15 +35,8 @@ export async function PATCH(
     }
 
     const facility_id = metadata.current_facility_id;
+    const user_id = metadata.user_id;
 
-    // ユーザーID取得（updated_byに使用）
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 401 }
-      );
-    }
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
@@ -151,7 +144,7 @@ export async function PATCH(
 
     // 更新データの準備
     const updateData: any = {
-      updated_by: user.id,
+      updated_by: user_id,
       updated_at: new Date().toISOString(),
     };
 
@@ -216,15 +209,7 @@ export async function DELETE(
     }
 
     const facility_id = metadata.current_facility_id;
-
-    // ユーザーID取得（updated_byに使用）
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 401 }
-      );
-    }
+    const user_id = metadata.user_id;
 
     // 活動記録の存在確認と権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
@@ -247,7 +232,7 @@ export async function DELETE(
       .from('r_activity')
       .update({
         deleted_at: new Date().toISOString(),
-        updated_by: user.id,
+        updated_by: user_id,
       })
       .eq('id', activityId);
 

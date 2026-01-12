@@ -143,14 +143,15 @@ export async function GET(request: NextRequest) {
     if (allMentionedChildIds.size > 0) {
       const { data: mentionedChildren, error: mentionedChildrenError } = await supabase
         .from('m_children')
-        .select('id, display_name')
+        .select('id, family_name, given_name, nickname')
         .in('id', Array.from(allMentionedChildIds));
 
       if (mentionedChildrenError) {
         console.error('Failed to fetch mentioned children names:', mentionedChildrenError);
       } else if (mentionedChildren) {
-        mentionedChildren.forEach((child: { id: string; display_name: string }) => {
-          mentionedChildrenNamesMap.set(child.id, child.display_name);
+        mentionedChildren.forEach((child: { id: string; family_name: string; given_name: string; nickname: string | null }) => {
+          const displayName = child.nickname || `${child.family_name}${child.given_name}`;
+          mentionedChildrenNamesMap.set(child.id, displayName);
         });
       }
     }
@@ -162,7 +163,7 @@ export async function GET(request: NextRequest) {
           id,
           activity_id,
           child_id,
-          m_children!inner (
+          m_children (
             family_name,
             given_name,
             nickname
@@ -253,17 +254,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ユーザーIDの取得
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const facility_id = metadata.current_facility_id;
-    const user_id = user.id;
+    const user_id = metadata.user_id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
 
@@ -407,9 +399,8 @@ export async function POST(request: NextRequest) {
             .from('r_observation')
             .insert({
               child_id,
-              facility_id,
               activity_id: activity.id,
-              recorded_at: new Date().toISOString(),
+              observation_date: activity_date,
               content: observationContent,
               created_by: user_id,
             })
