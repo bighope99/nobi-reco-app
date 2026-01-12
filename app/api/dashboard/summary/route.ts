@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
-import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import {
   LATE_ARRIVAL_THRESHOLD_MINUTES,
   OVERDUE_DEPARTURE_THRESHOLD_MINUTES,
@@ -201,8 +201,8 @@ export async function GET(request: NextRequest) {
     const guardianPhoneMap = new Map<string, string | null>();
     for (const link of guardianLinksResult.data || []) {
       if (!link?.child_id) continue;
-      const encryptedPhone = link.guardian?.phone as string | null | undefined;
-      const decryptedPhone = encryptedPhone ? decryptPII(encryptedPhone) ?? encryptedPhone : null;
+      const encryptedPhone = (link.guardian as { phone?: string } | undefined | null)?.phone ?? null;
+      const decryptedPhone = decryptOrFallback(encryptedPhone);
       if (!guardianPhoneMap.has(link.child_id) || link.is_primary) {
         guardianPhoneMap.set(link.child_id, decryptedPhone);
       }
@@ -305,11 +305,7 @@ export async function GET(request: NextRequest) {
       }
 
       // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-      const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
-        if (!encrypted) return null;
-        const decrypted = decryptPII(encrypted);
-        return decrypted !== null ? decrypted : encrypted;
-      };
+    
 
       const decryptedFamilyName = decryptOrFallback(child.family_name);
       const decryptedGivenName = decryptOrFallback(child.given_name);

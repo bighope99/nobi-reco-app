@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
-import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 export async function GET(
   request: NextRequest,
@@ -71,11 +71,7 @@ export async function GET(
     }
 
     // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
-      if (!encrypted) return null;
-      const decrypted = decryptPII(encrypted);
-      return decrypted !== null ? decrypted : encrypted;
-    };
+  
 
     const decryptedFamilyName = decryptOrFallback(child.family_name);
     const decryptedGivenName = decryptOrFallback(child.given_name);

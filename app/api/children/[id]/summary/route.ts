@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
-import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
@@ -71,7 +71,7 @@ export async function GET(
 
     // クラス情報を取得
     const childClass = Array.isArray(child._child_class) ? child._child_class[0] : child._child_class;
-    const classData = childClass?.m_classes;
+    const classData = childClass?.m_classes as { id?: string; name?: string } | undefined;
 
     // 過去3ヶ月の期間を設定
     const endDate = new Date();
@@ -202,11 +202,7 @@ export async function GET(
     }));
 
     // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
-      if (!encrypted) return null;
-      const decrypted = decryptPII(encrypted);
-      return decrypted !== null ? decrypted : encrypted;
-    };
+  
 
     const decryptedFamilyName = decryptOrFallback(child.family_name);
     const decryptedGivenName = decryptOrFallback(child.given_name);

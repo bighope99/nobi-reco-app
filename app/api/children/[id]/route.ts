@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { handleChildSave } from '../save/route';
-import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 // GET /api/children/:id - 子ども詳細取得
 export async function GET(
@@ -84,12 +84,6 @@ export async function GET(
     const primaryGuardian = guardians.find((g: any) => g.is_primary);
     const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
 
-    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-    const decryptOrFallback = (encrypted: string | null | undefined, fallback: string | null = null): string | null => {
-      if (!encrypted) return fallback;
-      const decrypted = decryptPII(encrypted);
-      return decrypted !== null ? decrypted : encrypted; // 復号化失敗時は平文として扱う
-    };
 
     // 保護者情報の復号化
     const decryptGuardian = (guardian: any) => {
@@ -113,15 +107,7 @@ export async function GET(
       m_guardians: decryptGuardian(ec.m_guardians),
     }));
 
-    const formatName = (
-      parts: Array<string | null | undefined>,
-      emptyValue: string | null = null
-    ): string | null => {
-      const cleaned = parts
-        .map(part => (typeof part === 'string' ? part.trim() : ''))
-        .filter(Boolean);
-      return cleaned.length > 0 ? cleaned.join(' ') : emptyValue;
-    };
+  
 
     // データ整形
     const response = {

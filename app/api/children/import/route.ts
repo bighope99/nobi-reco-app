@@ -4,7 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { saveChild } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
-import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { searchByPhone } from '@/utils/pii/searchIndex';
 
 async function fetchExistingSiblingRows(
@@ -52,11 +52,6 @@ async function fetchExistingSiblingRows(
   }
 
   // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-  const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
-    if (!encrypted) return null;
-    const decrypted = decryptPII(encrypted);
-    return decrypted !== null ? decrypted : encrypted;
-  };
 
   const existingRows: ExistingSiblingRow[] = [];
   (guardians || []).forEach((guardian: any) => {

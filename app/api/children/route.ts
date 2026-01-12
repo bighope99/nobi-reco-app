@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { handleChildSave } from './save/route';
-import { decryptPII } from '@/utils/crypto/piiEncryption';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { searchByName } from '@/utils/pii/searchIndex';
 
 // GET /api/children - 子ども一覧取得
@@ -192,21 +192,9 @@ export async function GET(request: NextRequest) {
       .in('child_id', childIds);
 
     // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-    const decryptOrFallback = (encrypted: string | null | undefined): string | null => {
-      if (!encrypted) return null;
-      const decrypted = decryptPII(encrypted);
-      return decrypted !== null ? decrypted : encrypted; // 復号化失敗時は平文として扱う
-    };
+  
 
-    const formatName = (
-      parts: Array<string | null | undefined>,
-      emptyValue: string | null = null
-    ): string | null => {
-      const cleaned = parts
-        .map(part => (typeof part === 'string' ? part.trim() : ''))
-        .filter(Boolean);
-      return cleaned.length > 0 ? cleaned.join(' ') : emptyValue;
-    };
+  
 
     // データ整形
     const children = childrenData.map((child: any) => {
