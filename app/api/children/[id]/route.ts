@@ -38,6 +38,18 @@ export async function GET(
             name,
             age_group
           )
+        ),
+        _child_guardian (
+          relationship,
+          is_primary,
+          is_emergency_contact,
+          m_guardians (
+            id,
+            family_name,
+            given_name,
+            phone,
+            email
+          )
         )
       `)
       .eq('id', child_id)
@@ -66,6 +78,11 @@ export async function GET(
 
     const classInfo = childData._child_class.find((c: any) => c.is_current)?.m_classes;
 
+    // 保護者情報の整形
+    const guardians = childData._child_guardian || [];
+    const primaryGuardian = guardians.find((g: any) => g.is_primary);
+    const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
+
     // データ整形
     const response = {
       success: true,
@@ -93,8 +110,16 @@ export async function GET(
           age_group: classInfo?.age_group || '',
         },
         contact: {
-          parent_phone: childData.parent_phone,
-          parent_email: childData.parent_email,
+          parent_name: primaryGuardian
+            ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
+            : childData.parent_name || null, // 後方互換性のためフォールバック
+          parent_phone: primaryGuardian?.m_guardians.phone || childData.parent_phone || null,
+          parent_email: primaryGuardian?.m_guardians.email || childData.parent_email || null,
+          emergency_contacts: emergencyContacts.map((ec: any) => ({
+            name: `${ec.m_guardians.family_name} ${ec.m_guardians.given_name}`.trim(),
+            relation: ec.relationship,
+            phone: ec.m_guardians.phone,
+          })),
         },
         care_info: {
           allergies: childData.allergies,

@@ -156,6 +156,88 @@ const { role, company_id, current_facility_id } = metadata;
 - **Performance**: Ensure fast load times and responsive interactions.
 - **Security**: Implement RLS in Supabase and proper validation in API routes.
 
+# Agent Utilization Guidelines
+
+## 基本方針
+**できる限りサブエージェントを活用する**ことを推奨します。エージェントは専門分野に特化しており、効率的かつ高品質な実装を実現します。
+
+## エージェント活用の原則
+
+### 1. 積極的な委譲
+複雑なタスクや専門性が求められる作業は、適切なエージェントに委譲する:
+- **実装コード**: `code-implementer` エージェント
+- **フロントエンド**: `frontend-implementer` エージェント
+- **データベーススキーマ**: `supabase-schema-manager` エージェント
+- **ドキュメント**: `docs-updater` エージェント
+- **コードベース探索**: `Explore` エージェント
+- **実装計画**: `Plan` エージェント
+
+### 2. 並列処理の活用
+依存関係がないタスクは、複数のエージェントで並列処理する:
+
+```typescript
+// ✅ GOOD: 並列エージェント実行
+// 単一メッセージで複数のTaskツール呼び出し
+Task(docs-updater) + Task(code-implementer) + Task(frontend-implementer)
+```
+
+**メリット**:
+- 処理時間の大幅短縮
+- 各エージェントが専門分野に集中
+- 一貫性のある実装品質
+
+### 3. エージェント選択ガイド
+
+| タスク種別 | 使用エージェント | 例 |
+|-----------|----------------|-----|
+| API実装・バグ修正 | `code-implementer` | 新規エンドポイント作成、ビジネスロジック実装 |
+| フロントエンド実装 | `frontend-implementer` | コンポーネント作成、UIデザイン修正 |
+| データベース設計 | `supabase-schema-manager` | マイグレーション作成、SQL関数実装 |
+| ドキュメント更新 | `docs-updater` | 仕様書更新、README修正 |
+| コードベース調査 | `Explore` | ファイル構成理解、関連コード探索 |
+| 実装方針設計 | `Plan` | アーキテクチャ判断、実装計画策定 |
+| コミット作成 | `git-commit-helper` | 変更のステージング、コミットメッセージ生成 |
+| PR作成 | `github-pr-creator` | Pull Request作成、レビュー依頼 |
+
+### 4. 並列処理の判断基準
+
+**並列処理すべき場合**:
+- データベーススキーマ更新 + ドキュメント更新 + API実装
+- フロントエンド実装 + バックエンド実装（APIが独立している場合）
+- 複数の独立した機能追加
+
+**順次処理すべき場合**:
+- 後続タスクが前のタスクの結果に依存する
+- 実装方針を確認してから実装に進む（Plan → code-implementer）
+
+### 5. エージェント活用の実践例
+
+```markdown
+例1: 新機能実装
+1. Plan エージェント: 実装方針設計
+2. 並列実行:
+   - supabase-schema-manager: DB設計
+   - docs-updater: ドキュメント更新
+3. 並列実行:
+   - code-implementer: API実装
+   - frontend-implementer: UI実装
+4. git-commit-helper: コミット作成
+
+例2: バグ修正
+1. Explore エージェント: 問題箇所特定
+2. code-implementer: 修正実装
+3. git-commit-helper: コミット作成
+```
+
+## エージェント活用のメリット
+
+1. **品質向上**: 専門エージェントによる一貫した実装パターン
+2. **効率化**: 並列処理による時間短縮
+3. **保守性**: 標準化されたコーディング規約の遵守
+4. **ドキュメント**: 自動的な文書化とコメント追加
+
+**重要**: 単純なタスクでも、エージェント活用を検討することで、長期的な品質とメンテナンス性が向上します。
+
 # Performance Optimization Rules
 
 ## Supabaseクエリの並列化
