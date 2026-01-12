@@ -25,12 +25,22 @@ export async function updateSearchIndex(
   }
   if (!value || value.trim() === '') {
     // 値が空の場合はインデックスを削除
-    await supabase
+    const { error } = await supabase
       .from('s_pii_search_index')
       .delete()
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
       .eq('search_type', searchType);
+
+    if (error) {
+      console.error('Failed to delete search index (empty value):', {
+        entityType,
+        entityId,
+        searchType,
+        error: error.message,
+      });
+      throw new Error(`Search index deletion failed: ${error.message}`);
+    }
     return;
   }
 
@@ -56,17 +66,27 @@ export async function updateSearchIndex(
 
   if (!searchHash && !normalizedValue) {
     // どちらも生成できない場合はインデックスを削除
-    await supabase
+    const { error } = await supabase
       .from('s_pii_search_index')
       .delete()
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
       .eq('search_type', searchType);
+
+    if (error) {
+      console.error('Failed to delete search index (no hash/value):', {
+        entityType,
+        entityId,
+        searchType,
+        error: error.message,
+      });
+      throw new Error(`Search index deletion failed: ${error.message}`);
+    }
     return;
   }
 
   // インデックスを更新（upsert）
-  await supabase
+  const { error } = await supabase
     .from('s_pii_search_index')
     .upsert(
       {
@@ -81,6 +101,16 @@ export async function updateSearchIndex(
         onConflict: 'entity_type,entity_id,search_type',
       }
     );
+
+  if (error) {
+    console.error('Failed to upsert search index:', {
+      entityType,
+      entityId,
+      searchType,
+      error: error.message,
+    });
+    throw new Error(`Search index upsert failed: ${error.message}`);
+  }
 }
 
 /**
@@ -216,9 +246,18 @@ export async function deleteSearchIndex(
   entityType: EntityType,
   entityId: string
 ): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from('s_pii_search_index')
     .delete()
     .eq('entity_type', entityType)
     .eq('entity_id', entityId);
+
+  if (error) {
+    console.error('Failed to delete search index:', {
+      entityType,
+      entityId,
+      error: error.message,
+    });
+    throw new Error(`Search index deletion failed: ${error.message}`);
+  }
 }

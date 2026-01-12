@@ -315,8 +315,8 @@ export async function GET(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${decryptedFamilyName} ${decryptedGivenName}`,
-        kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',

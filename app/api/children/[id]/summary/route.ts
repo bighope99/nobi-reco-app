@@ -214,8 +214,8 @@ export async function GET(
       data: {
         child_info: {
           child_id: child.id,
-          name: `${decryptedFamilyName} ${decryptedGivenName}`,
-          kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
+          name: formatName([decryptedFamilyName, decryptedGivenName]),
+          kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
           age,
           birth_date: child.birth_date,
           class_name: classData?.name || '',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -210,10 +211,16 @@ export async function GET(request: NextRequest) {
         ? Math.round((yearlyRecordCount / yearlyAttendanceCount) * 100 * 10) / 10
         : 0;
 
+      // PIIフィールドを復号化
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',

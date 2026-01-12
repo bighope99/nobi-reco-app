@@ -85,8 +85,8 @@ export async function GET(request: NextRequest) {
       const decryptedGivenName = decryptOrFallback(child.given_name);
       const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
       const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
-      const name = `${decryptedFamilyName} ${decryptedGivenName}`
-      const kana = `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`
+      const name = formatName([decryptedFamilyName, decryptedGivenName])
+      const kana = formatName([decryptedFamilyNameKana, decryptedGivenNameKana])
       const grade = calculateGrade(child.birth_date, child.grade_add)
       const gradeLabel = formatGradeLabel(grade)
       const className = (child._child_class?.[0]?.m_classes as { name?: string } | undefined)?.name || ''

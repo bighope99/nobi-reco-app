@@ -107,8 +107,8 @@ export async function POST(request: NextRequest) {
 
       return {
         child_id: child.id,
-        name: `${decryptedFamilyName} ${decryptedGivenName}`,
-        kana: `${decryptedFamilyNameKana} ${decryptedGivenNameKana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         birth_date: child.birth_date,
         age,
         class_name: classInfo?.name || '',
