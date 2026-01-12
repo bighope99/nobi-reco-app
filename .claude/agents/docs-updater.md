@@ -1,7 +1,7 @@
 ---
 name: docs-updater
 description: Use this agent when project specifications or documentation need to be updated due to feature changes, API modifications, database schema updates, or any other changes that affect the existing documentation in the docs/ directory. This includes updating specification documents, API documentation, database schemas in docs/03_database.md, and any other technical documentation that must reflect current system state.\n\nExamples:\n\n<example>\nContext: A new API endpoint has been implemented and the API documentation needs to be updated.\nuser: "新しいAPIエンドポイント /api/children/bulk-import を実装しました。ドキュメントを更新してください。"\nassistant: "docs配下のAPIドキュメントを更新する必要がありますね。docs-updaterエージェントを使用してドキュメントを更新します。"\n<Task tool call to docs-updater agent>\n</example>\n\n<example>\nContext: Database schema has been modified with a new table.\nuser: "m_notificationsテーブルを追加しました。docs/03_database.mdを更新してください。"\nassistant: "データベーススキーマのドキュメント更新が必要ですね。docs-updaterエージェントにドキュメント更新を依頼します。"\n<Task tool call to docs-updater agent>\n</example>\n\n<example>\nContext: After implementing a feature, the assistant proactively updates documentation.\nuser: "出席管理機能のステータス値を変更しました。'present'から'attended'に変更。"\nassistant: "ステータス値の変更を実装しました。この変更に伴い、関連するドキュメントも更新する必要があります。docs-updaterエージェントを使用してドキュメントを更新します。"\n<Task tool call to docs-updater agent>\n</example>\n\n<example>\nContext: Multiple documentation files need updating after a major feature change.\nuser: "認証フローを変更しました。JWT認証からSession認証に変更したので、関連ドキュメントをすべて更新してください。"\nassistant: "認証フローの変更に伴い、複数のドキュメントを更新する必要がありますね。docs-updaterエージェントに包括的なドキュメント更新を依頼します。"\n<Task tool call to docs-updater agent>\n</example>
-model: sonnet
+model: opus
 color: cyan
 ---
 
