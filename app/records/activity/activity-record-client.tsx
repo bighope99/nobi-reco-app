@@ -32,6 +32,17 @@ import {
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap } from "@/lib/mention/mentionFormatter"
 import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from "@/types/activity"
+import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/security/sanitize"
+import {
+  MAX_EVENT_NAME_LENGTH,
+  MAX_SPECIAL_NOTES_LENGTH,
+  MAX_SNACK_LENGTH,
+  MAX_SCHEDULE_CONTENT_LENGTH,
+  MAX_ROLE_LENGTH,
+  MAX_MEAL_MENU_LENGTH,
+  MAX_MEAL_ITEMS_LENGTH,
+  MAX_MEAL_NOTES_LENGTH,
+} from "@/lib/validation/activityValidation"
 
 interface IndividualRecord {
   observation_id: string
@@ -459,7 +470,15 @@ export default function ActivityRecordClient() {
           throw new Error(result.error || "児童の取得に失敗しました")
         }
 
-        const children = (result.data?.children || []).map((child: any) => ({
+        const children = (result.data?.children || []).map((child: {
+          child_id: string;
+          name: string;
+          kana: string;
+          nickname?: string;
+          grade?: string;
+          class_name?: string;
+          photo_url?: string | null;
+        }) => ({
           child_id: child.child_id,
           name: child.name,
           kana: child.kana,
@@ -505,6 +524,21 @@ export default function ActivityRecordClient() {
       // mealが空かどうかを判定
       const mealData = meal && meal.menu ? meal : null
 
+      // Sanitize all fields before sending to API
+      const sanitizedEventName = sanitizeText(eventName);
+      const sanitizedSpecialNotes = sanitizeText(specialNotes);
+      const sanitizedSnack = sanitizeText(snack);
+      const sanitizedDailySchedule = dailySchedule.length > 0
+        ? sanitizeArrayFields(dailySchedule, ['content'])
+        : null;
+      const sanitizedRoleAssignments = roleAssignments.filter(r => r.user_id && r.role).length > 0
+        ? sanitizeArrayFields(
+            roleAssignments.filter(r => r.user_id && r.role),
+            ['role']
+          )
+        : null;
+      const sanitizedMeal = sanitizeObjectFields(mealData, ['menu', 'items_to_bring', 'notes']);
+
       if (isEditMode && editingActivityId) {
         // 編集モードの場合は更新
         const updateResponse = await fetch(`/api/activities/${editingActivityId}`, {
@@ -518,15 +552,13 @@ export default function ActivityRecordClient() {
             content: activityContent,
             mentioned_children: selectedMentions.map((child) => child.child_id),
             photos,
-            // 新規フィールド
-            event_name: eventName || null,
-            daily_schedule: dailySchedule.length > 0 ? dailySchedule : null,
-            role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
-              ? roleAssignments.filter(r => r.user_id && r.role)
-              : null,
-            snack: snack || null,
-            meal: mealData,
-            special_notes: specialNotes || null,
+            // 新規フィールド（サニタイズ済み）
+            event_name: sanitizedEventName,
+            daily_schedule: sanitizedDailySchedule,
+            role_assignments: sanitizedRoleAssignments,
+            snack: sanitizedSnack,
+            meal: sanitizedMeal,
+            special_notes: sanitizedSpecialNotes,
           }),
         })
 
@@ -550,15 +582,13 @@ export default function ActivityRecordClient() {
             content: activityContent,
             mentioned_children: selectedMentions.map((child) => child.child_id),
             photos,
-            // 新規フィールド
-            event_name: eventName || null,
-            daily_schedule: dailySchedule.length > 0 ? dailySchedule : null,
-            role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
-              ? roleAssignments.filter(r => r.user_id && r.role)
-              : null,
-            snack: snack || null,
-            meal: mealData,
-            special_notes: specialNotes || null,
+            // 新規フィールド（サニタイズ済み）
+            event_name: sanitizedEventName,
+            daily_schedule: sanitizedDailySchedule,
+            role_assignments: sanitizedRoleAssignments,
+            snack: sanitizedSnack,
+            meal: sanitizedMeal,
+            special_notes: sanitizedSpecialNotes,
           }),
         })
 
@@ -625,6 +655,21 @@ export default function ActivityRecordClient() {
       // mealが空かどうかを判定
       const mealData = meal && meal.menu ? meal : null
 
+      // Sanitize all fields before sending to API
+      const sanitizedEventName = sanitizeText(eventName);
+      const sanitizedSpecialNotes = sanitizeText(specialNotes);
+      const sanitizedSnack = sanitizeText(snack);
+      const sanitizedDailySchedule = dailySchedule.length > 0
+        ? sanitizeArrayFields(dailySchedule, ['content'])
+        : null;
+      const sanitizedRoleAssignments = roleAssignments.filter(r => r.user_id && r.role).length > 0
+        ? sanitizeArrayFields(
+            roleAssignments.filter(r => r.user_id && r.role),
+            ['role']
+          )
+        : null;
+      const sanitizedMeal = sanitizeObjectFields(mealData, ['menu', 'items_to_bring', 'notes']);
+
       const response = await fetch('/api/activities', {
         method: 'POST',
         headers: {
@@ -636,15 +681,13 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
-          // 新規フィールド
-          event_name: eventName || null,
-          daily_schedule: dailySchedule.length > 0 ? dailySchedule : null,
-          role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
-            ? roleAssignments.filter(r => r.user_id && r.role)
-            : null,
-          snack: snack || null,
-          meal: mealData,
-          special_notes: specialNotes || null,
+          // 新規フィールド（サニタイズ済み）
+          event_name: sanitizedEventName,
+          daily_schedule: sanitizedDailySchedule,
+          role_assignments: sanitizedRoleAssignments,
+          snack: sanitizedSnack,
+          meal: sanitizedMeal,
+          special_notes: sanitizedSpecialNotes,
         }),
       })
 
@@ -691,6 +734,21 @@ export default function ActivityRecordClient() {
       // mealが空かどうかを判定
       const mealData = meal && meal.menu ? meal : null
 
+      // Sanitize all fields before sending to API
+      const sanitizedEventName = sanitizeText(eventName);
+      const sanitizedSpecialNotes = sanitizeText(specialNotes);
+      const sanitizedSnack = sanitizeText(snack);
+      const sanitizedDailySchedule = dailySchedule.length > 0
+        ? sanitizeArrayFields(dailySchedule, ['content'])
+        : null;
+      const sanitizedRoleAssignments = roleAssignments.filter(r => r.user_id && r.role).length > 0
+        ? sanitizeArrayFields(
+            roleAssignments.filter(r => r.user_id && r.role),
+            ['role']
+          )
+        : null;
+      const sanitizedMeal = sanitizeObjectFields(mealData, ['menu', 'items_to_bring', 'notes']);
+
       const response = await fetch(`/api/activities/${editingActivityId}`, {
         method: 'PATCH',
         headers: {
@@ -702,15 +760,13 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
-          // 新規フィールド
-          event_name: eventName || null,
-          daily_schedule: dailySchedule.length > 0 ? dailySchedule : null,
-          role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
-            ? roleAssignments.filter(r => r.user_id && r.role)
-            : null,
-          snack: snack || null,
-          meal: mealData,
-          special_notes: specialNotes || null,
+          // 新規フィールド（サニタイズ済み）
+          event_name: sanitizedEventName,
+          daily_schedule: sanitizedDailySchedule,
+          role_assignments: sanitizedRoleAssignments,
+          snack: sanitizedSnack,
+          meal: sanitizedMeal,
+          special_notes: sanitizedSpecialNotes,
         }),
       })
 
@@ -778,7 +834,15 @@ export default function ActivityRecordClient() {
           const response = await fetch(`/api/children?class_id=${activity.class_id}`)
           const result = await response.json()
           if (response.ok && result.success) {
-            children = (result.data?.children || []).map((child: any) => ({
+            children = (result.data?.children || []).map((child: {
+              child_id: string;
+              name: string;
+              kana: string;
+              nickname?: string;
+              grade?: string;
+              class_name?: string;
+              photo_url?: string | null;
+            }) => ({
               child_id: child.child_id,
               name: child.name,
               kana: child.kana,
@@ -1222,6 +1286,7 @@ export default function ActivityRecordClient() {
                 value={eventName}
                 onChange={(e) => setEventName(e.target.value)}
                 placeholder="例: 運動会、遠足、誕生日会"
+                maxLength={MAX_EVENT_NAME_LENGTH}
               />
             </div>
 
@@ -1296,6 +1361,7 @@ export default function ActivityRecordClient() {
                         }}
                         placeholder="活動内容"
                         className="flex-1"
+                        maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
                       />
                       <Button
                         type="button"
@@ -1366,6 +1432,7 @@ export default function ActivityRecordClient() {
                       }}
                       placeholder="役割（例: 主担当、配膳）"
                       className="flex-1"
+                      maxLength={MAX_ROLE_LENGTH}
                     />
                     <Button
                       type="button"
@@ -1392,6 +1459,7 @@ export default function ActivityRecordClient() {
                 value={snack}
                 onChange={(e) => setSnack(e.target.value)}
                 placeholder="例: りんご、クッキー"
+                maxLength={MAX_SNACK_LENGTH}
               />
             </div>
 
@@ -1411,6 +1479,7 @@ export default function ActivityRecordClient() {
                       notes: prev?.notes,
                     }))}
                     placeholder="例: カレーライス、サラダ"
+                    maxLength={MAX_MEAL_MENU_LENGTH}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1425,6 +1494,7 @@ export default function ActivityRecordClient() {
                       notes: prev?.notes,
                     }))}
                     placeholder="例: フォーク、スプーン"
+                    maxLength={MAX_MEAL_ITEMS_LENGTH}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1439,6 +1509,7 @@ export default function ActivityRecordClient() {
                       notes: e.target.value,
                     }))}
                     placeholder="例: アレルギー対応済み"
+                    maxLength={MAX_MEAL_NOTES_LENGTH}
                   />
                 </div>
               </div>
@@ -1636,6 +1707,7 @@ export default function ActivityRecordClient() {
                 value={specialNotes}
                 onChange={(e) => setSpecialNotes(e.target.value)}
                 placeholder="その他、気になったことや共有事項があれば記入してください"
+                maxLength={MAX_SPECIAL_NOTES_LENGTH}
               />
             </div>
 

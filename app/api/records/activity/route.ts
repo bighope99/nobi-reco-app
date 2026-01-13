@@ -3,32 +3,8 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { decryptChildId } from '@/utils/crypto/childIdEncryption';
 import { extractChildContent } from '@/lib/ai/contentExtractor';
-
-/**
- * 型定義: 1日の流れの項目
- */
-type DailyScheduleItem = {
-  time: string;
-  content: string;
-};
-
-/**
- * 型定義: 役割分担
- */
-type RoleAssignment = {
-  user_id: string;
-  user_name: string;
-  role: string;
-};
-
-/**
- * 型定義: ごはん情報
- */
-type Meal = {
-  menu: string;
-  items_to_bring?: string;
-  notes?: string;
-};
+import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
+import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 
 /**
  * 活動記録を保存し、メンションされた子供の個別記録を自動生成
@@ -113,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const normalizedPhotos = Array.isArray(photos)
       ? photos
-          .map((photo: any) => {
+          .map((photo: Record<string, unknown>) => {
             if (!photo || typeof photo.url !== 'string') return null;
             return {
               url: photo.url,
@@ -125,6 +101,24 @@ export async function POST(request: NextRequest) {
           })
           .filter(Boolean)
       : null;
+
+    // 新規フィールドのバリデーション
+    const extendedFieldsResult = validateActivityExtendedFields({
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      meal,
+    });
+
+    if (!extendedFieldsResult.valid) {
+      return NextResponse.json(
+        { error: extendedFieldsResult.error },
+        { status: 400 }
+      );
+    }
+
+    const validatedFields = extendedFieldsResult.data;
 
     const ensureActivityRecord = async () => {
       if (activity_id) {
@@ -150,11 +144,11 @@ export async function POST(request: NextRequest) {
           class_id: class_id || null,
           mentioned_children,
           updated_at: new Date().toISOString(),
-          event_name: event_name || null,
-          daily_schedule: daily_schedule || null,
-          role_assignments: role_assignments || null,
-          special_notes: special_notes || null,
-          meal: meal || null,
+          event_name: validatedFields.event_name,
+          daily_schedule: validatedFields.daily_schedule,
+          role_assignments: validatedFields.role_assignments,
+          special_notes: validatedFields.special_notes,
+          meal: validatedFields.meal,
         }
 
         if (Array.isArray(photos)) {
@@ -184,11 +178,11 @@ export async function POST(request: NextRequest) {
         content,
         mentioned_children,
         created_by: session.user_id,
-        event_name: event_name || null,
-        daily_schedule: daily_schedule || null,
-        role_assignments: role_assignments || null,
-        special_notes: special_notes || null,
-        meal: meal || null,
+        event_name: validatedFields.event_name,
+        daily_schedule: validatedFields.daily_schedule,
+        role_assignments: validatedFields.role_assignments,
+        special_notes: validatedFields.special_notes,
+        meal: validatedFields.meal,
       }
 
       if (Array.isArray(photos)) {
@@ -430,6 +424,24 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // 新規フィールドのバリデーション
+    const extendedFieldsResult = validateActivityExtendedFields({
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      meal,
+    });
+
+    if (!extendedFieldsResult.valid) {
+      return NextResponse.json(
+        { error: extendedFieldsResult.error },
+        { status: 400 }
+      );
+    }
+
+    const validatedFields = extendedFieldsResult.data;
+
     // 1. 既存の活動記録を取得して権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
       .from('r_activity')
@@ -463,11 +475,11 @@ export async function PUT(request: NextRequest) {
         class_id: class_id || null,
         mentioned_children,
         updated_at: new Date().toISOString(),
-        event_name: event_name || null,
-        daily_schedule: daily_schedule || null,
-        role_assignments: role_assignments || null,
-        special_notes: special_notes || null,
-        meal: meal || null,
+        event_name: validatedFields.event_name,
+        daily_schedule: validatedFields.daily_schedule,
+        role_assignments: validatedFields.role_assignments,
+        special_notes: validatedFields.special_notes,
+        meal: validatedFields.meal,
       })
       .eq('id', activity_id)
       .select()
