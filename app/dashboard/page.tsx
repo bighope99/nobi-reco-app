@@ -721,18 +721,18 @@ export default function ChildcareDashboard() {
 
             <div className="lg:col-span-4 h-full flex flex-col gap-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col items-center justify-center gap-2">
+                <Link href="/records/activity" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col items-center justify-center gap-2">
                   <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform">
                     <FileText size={20} />
                   </div>
                   <span className="text-sm font-bold text-slate-700">日誌記録</span>
-                </button>
-                <button className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group flex flex-col items-center justify-center gap-2">
+                </Link>
+                <Link href="/attendance/list" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group flex flex-col items-center justify-center gap-2">
                   <div className="p-2 bg-emerald-50 text-emerald-600 rounded-full group-hover:scale-110 transition-transform">
                     <Activity size={20} />
                   </div>
-                  <span className="text-sm font-bold text-slate-700">成長レポート</span>
-                </button>
+                  <span className="text-sm font-bold text-slate-700">出席生徒</span>
+                </Link>
               </div>
 
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col lg:sticky lg:top-6">
