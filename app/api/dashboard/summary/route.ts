@@ -32,10 +32,20 @@ export async function GET(request: NextRequest) {
 
     const facility_id = userSession.current_facility_id;
 
-    // クエリパラメータ取得
+    // クエリパラメータ取得（入力検証付き）
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const class_id = searchParams.get('class_id') || null;
+
+    // 日付のバリデーション（YYYY-MM-DD形式）
+    const dateParam = searchParams.get('date');
+    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+      ? dateParam
+      : new Date().toISOString().split('T')[0];
+
+    // class_idのバリデーション（UUID形式）
+    const classIdParam = searchParams.get('class_id');
+    const class_id = classIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(classIdParam)
+      ? classIdParam
+      : null;
 
     // 現在時刻
     const now = new Date();

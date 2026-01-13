@@ -40,31 +40,51 @@ export async function POST(request: NextRequest) {
     const attendanceDate = today.toISOString().split('T')[0];
     const { start, end } = buildDateRange(attendanceDate);
 
-    const { data: dailyRecord, error: dailyError } = await supabase
-      .from('r_daily_attendance')
-      .select('*')
-      .eq('child_id', child_id)
-      .eq('attendance_date', attendanceDate)
+    // child_idが施設に所属しているか検証
+    const { data: childValidation, error: childError } = await supabase
+      .from('m_children')
+      .select('id')
+      .eq('id', child_id)
+      .eq('facility_id', facilityId)
+      .is('deleted_at', null)
       .maybeSingle();
+
+    if (childError || !childValidation) {
+      return NextResponse.json({
+        success: false,
+        error: 'Child not found or access denied'
+      }, { status: 403 });
+    }
+
+    // 並列でデータ取得
+    const [
+      { data: dailyRecord, error: dailyError },
+      { data: openAttendance, error: attendanceFetchError }
+    ] = await Promise.all([
+      supabase
+        .from('r_daily_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('attendance_date', attendanceDate)
+        .maybeSingle(),
+      supabase
+        .from('h_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('facility_id', facilityId)
+        .gte('checked_in_at', start)
+        .lte('checked_in_at', end)
+        .is('checked_out_at', null)
+        .maybeSingle()
+    ]);
 
     if (dailyError) {
       console.error('Daily attendance fetch error:', dailyError);
-      return NextResponse.json({ success: false, error: 'Failed to fetch daily attendance' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
     }
-
-    const { data: openAttendance, error: attendanceFetchError } = await supabase
-      .from('h_attendance')
-      .select('*')
-      .eq('child_id', child_id)
-      .eq('facility_id', facilityId)
-      .gte('checked_in_at', start)
-      .lte('checked_in_at', end)
-      .is('checked_out_at', null)
-      .maybeSingle();
-
     if (attendanceFetchError) {
       console.error('Attendance fetch error:', attendanceFetchError);
-      return NextResponse.json({ success: false, error: 'Failed to fetch attendance logs' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
     }
 
     const upsertDailyAttendance = async (status: 'scheduled' | 'absent' | 'irregular') => {
@@ -99,13 +119,17 @@ export async function POST(request: NextRequest) {
 
     const actionType = action as AttendanceAction;
     const resolvedTimestamp = (() => {
+      const now = new Date();
       if (action_timestamp) {
         const parsed = new Date(action_timestamp);
-        if (!Number.isNaN(parsed.getTime())) {
+        const diffMinutes = Math.abs(now.getTime() - parsed.getTime()) / 60000;
+
+        // ±5分以内のみ許可
+        if (!isNaN(parsed.getTime()) && diffMinutes <= 5) {
           return parsed.toISOString();
         }
       }
-      return new Date().toISOString();
+      return now.toISOString();
     })();
 
     if (actionType === 'check_in') {

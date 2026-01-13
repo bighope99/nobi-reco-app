@@ -99,6 +99,7 @@ export default function ChildcareDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>('status');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
 
   // データ取得
   const fetchDashboardData = useCallback(async () => {
@@ -135,6 +136,11 @@ export default function ChildcareDashboard() {
 
   // --- Actions ---
   const postAttendanceAction = async (action: string, childId: string, actionTimestamp?: string) => {
+    // レースコンディション防止: 処理中なら早期リターン
+    if (pendingActions.has(childId)) return;
+
+    setPendingActions(prev => new Set(prev).add(childId));
+
     // 楽観的更新: ローカルステートを先に更新
     const previousData = dashboardData;
 
@@ -201,6 +207,13 @@ export default function ChildcareDashboard() {
       setDashboardData(previousData);
       console.error('Attendance action error:', err);
       setError(err instanceof Error ? err.message : '出欠処理に失敗しました');
+    } finally {
+      // 処理完了後にpendingから削除
+      setPendingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(childId);
+        return newSet;
+      });
     }
   };
 
@@ -352,16 +365,17 @@ export default function ChildcareDashboard() {
   };
 
   const ActionButtons = ({ child }: { child: Child }) => {
-    const loginButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded shadow-sm transition-colors whitespace-nowrap";
-    const absentButtonClass = "flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded shadow-sm transition-colors whitespace-nowrap";
+    const isPending = pendingActions.has(child.child_id);
+    const loginButtonClass = `flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded shadow-sm transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-500`;
+    const absentButtonClass = `flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded shadow-sm transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white`;
 
     if (child.status === 'absent' && child.is_scheduled_today) {
       return (
         <div className="flex gap-2">
-          <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
+          <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass} disabled={isPending}>
             <LogIn size={14} /> 登所
           </button>
-          <button onClick={() => handleMarkAbsent(child.child_id)} className={absentButtonClass}>
+          <button onClick={() => handleMarkAbsent(child.child_id)} className={absentButtonClass} disabled={isPending}>
             <UserX size={14} /> 欠席
           </button>
         </div>
@@ -371,10 +385,10 @@ export default function ChildcareDashboard() {
     if (child.status === 'absent' && !child.is_scheduled_today) {
       return (
         <div className="flex gap-2">
-          <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
+          <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass} disabled={isPending}>
             <LogIn size={14} /> 登所
           </button>
-          <button onClick={() => handleAddSchedule(child.child_id)} className={absentButtonClass}>
+          <button onClick={() => handleAddSchedule(child.child_id)} className={absentButtonClass} disabled={isPending}>
             <CalendarPlus size={14} /> 予定追加
           </button>
         </div>
@@ -383,7 +397,7 @@ export default function ChildcareDashboard() {
 
     if (child.status === 'checked_in') {
       return (
-        <button onClick={() => handleCheckOut(child.child_id)} className="text-xs text-slate-400 hover:text-slate-600 underline">
+        <button onClick={() => handleCheckOut(child.child_id)} className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline" disabled={isPending}>
           帰宅
         </button>
       );
@@ -541,10 +555,10 @@ export default function ChildcareDashboard() {
                         <button onClick={() => alert(`発信: ${child.guardian_phone || '電話番号未登録'}`)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-red-700 border border-red-200 rounded-md font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-1 whitespace-nowrap">
                           <Phone size={14} /> 連絡
                         </button>
-                        <button onClick={() => handleMarkAbsent(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-bold text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">
+                        <button onClick={() => handleMarkAbsent(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-slate-600 border border-slate-300 rounded-md font-bold text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed" disabled={pendingActions.has(child.child_id)}>
                           <UserX size={14} /> 欠席
                         </button>
-                        <button onClick={() => handleCheckIn(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-blue-500 text-white border border-blue-600 rounded-md font-bold text-sm hover:bg-blue-600 flex items-center justify-center gap-1 whitespace-nowrap">
+                        <button onClick={() => handleCheckIn(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-blue-500 text-white border border-blue-600 rounded-md font-bold text-sm hover:bg-blue-600 flex items-center justify-center gap-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed" disabled={pendingActions.has(child.child_id)}>
                           <LogIn size={14} /> 到着
                         </button>
                       </div>
@@ -566,7 +580,7 @@ export default function ChildcareDashboard() {
                           <div className="text-sm text-amber-800 mt-1">本日の出席予定登録がありませんが、登所されています。</div>
                         </div>
                       </div>
-                      <button onClick={() => handleConfirmUnexpected(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-amber-700 border border-amber-300 rounded-md font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 whitespace-nowrap">
+                      <button onClick={() => handleConfirmUnexpected(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-amber-700 border border-amber-300 rounded-md font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed" disabled={pendingActions.has(child.child_id)}>
                         <CheckCircle2 size={14} /> 確認
                       </button>
                     </div>

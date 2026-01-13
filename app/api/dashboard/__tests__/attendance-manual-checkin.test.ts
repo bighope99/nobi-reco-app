@@ -65,6 +65,16 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       const mockUpdate = jest.fn().mockReturnValue({ eq: mockEq });
       const mockInsert = jest.fn().mockResolvedValue({ error: null });
 
+      const childrenMock = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: { id: childId },
+          error: null,
+        }),
+      };
+
       const dailyAttendanceMock = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
@@ -103,6 +113,7 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
           }),
         },
         from: jest.fn().mockImplementation((table: string) => {
+          if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
           if (table === 'h_attendance') return attendanceMock;
           return {};
@@ -138,6 +149,16 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       const mockDailyInsert = jest.fn().mockResolvedValue({ error: null });
       const mockAttendanceInsert = jest.fn().mockResolvedValue({ error: null });
 
+      const childrenMock = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: { id: childId },
+          error: null,
+        }),
+      };
+
       const dailyAttendanceMock = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
@@ -169,6 +190,7 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
           }),
         },
         from: jest.fn().mockImplementation((table: string) => {
+          if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
           if (table === 'h_attendance') return attendanceMock;
           return {};
@@ -207,6 +229,16 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       const mockDailyInsert = jest.fn().mockResolvedValue({ error: null });
       const mockAttendanceInsert = jest.fn().mockResolvedValue({ error: null });
 
+      const childrenMock = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: { id: childId },
+          error: null,
+        }),
+      };
+
       const dailyAttendanceMock = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
@@ -238,6 +270,7 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
           }),
         },
         from: jest.fn().mockImplementation((table: string) => {
+          if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
           if (table === 'h_attendance') return attendanceMock;
           return {};
@@ -270,6 +303,16 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       const mockDailyInsert = jest.fn().mockResolvedValue({ error: null });
       const mockAttendanceInsert = jest.fn().mockResolvedValue({ error: null });
 
+      const childrenMock = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: { id: childId },
+          error: null,
+        }),
+      };
+
       const dailyAttendanceMock = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
@@ -301,6 +344,7 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
           }),
         },
         from: jest.fn().mockImplementation((table: string) => {
+          if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
           if (table === 'h_attendance') return attendanceMock;
           return {};
@@ -338,6 +382,17 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
           }),
         },
         from: jest.fn().mockImplementation((table: string) => {
+          if (table === 'm_children') {
+            return {
+              select: jest.fn().mockReturnThis(),
+              eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: { id: childId },
+                error: null,
+              }),
+            };
+          }
           if (table === 'r_daily_attendance') {
             return {
               select: jest.fn().mockReturnThis(),
@@ -441,6 +496,48 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       expect(response.status).toBe(401);
       expect(json.success).toBe(false);
       expect(json.error).toBe('Unauthorized');
+    });
+
+    it('should return 403 if child_id does not belong to facility', async () => {
+      // Arrange: Child not found in facility
+      const mockSupabase = {
+        auth: {
+          getSession: jest.fn().mockResolvedValue({
+            data: { session: { user: { id: userId } } },
+            error: null,
+          }),
+        },
+        from: jest.fn().mockImplementation((table: string) => {
+          if (table === 'm_children') {
+            return {
+              select: jest.fn().mockReturnThis(),
+              eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: null, // Child not found in facility
+                error: null,
+              }),
+            };
+          }
+          return {};
+        }),
+      };
+
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      const request = buildRequest({
+        action: 'check_in',
+        child_id: 'invalid-child-id',
+      });
+
+      // Act
+      const response = await POST(request);
+      const json = await response.json();
+
+      // Assert
+      expect(response.status).toBe(403);
+      expect(json.success).toBe(false);
+      expect(json.error).toBe('Child not found or access denied');
     });
   });
 });
