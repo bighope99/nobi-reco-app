@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
+import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -143,6 +144,25 @@ export async function PATCH(
       }
     }
 
+    // 新規フィールドのバリデーション
+    const extendedFieldsResult = validateActivityExtendedFields({
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      snack,
+      meal,
+    });
+
+    if (!extendedFieldsResult.valid) {
+      return NextResponse.json(
+        { success: false, error: extendedFieldsResult.error },
+        { status: 400 }
+      );
+    }
+
+    const validatedFields = extendedFieldsResult.data;
+
     // 更新データの準備
     const updateData: any = {
       updated_by: user_id,
@@ -153,14 +173,14 @@ export async function PATCH(
     if (class_id !== undefined) updateData.class_id = class_id;
     if (title !== undefined) updateData.title = title;
     if (content !== undefined) updateData.content = content;
-    if (snack !== undefined) updateData.snack = snack;
+    if (snack !== undefined) updateData.snack = validatedFields.snack;
     if (mentioned_children !== undefined) updateData.mentioned_children = mentioned_children;
     if (normalizedPhotos !== undefined) updateData.photos = normalizedPhotos;
-    if (event_name !== undefined) updateData.event_name = event_name;
-    if (daily_schedule !== undefined) updateData.daily_schedule = daily_schedule;
-    if (role_assignments !== undefined) updateData.role_assignments = role_assignments;
-    if (special_notes !== undefined) updateData.special_notes = special_notes;
-    if (meal !== undefined) updateData.meal = meal;
+    if (event_name !== undefined) updateData.event_name = validatedFields.event_name;
+    if (daily_schedule !== undefined) updateData.daily_schedule = validatedFields.daily_schedule;
+    if (role_assignments !== undefined) updateData.role_assignments = validatedFields.role_assignments;
+    if (special_notes !== undefined) updateData.special_notes = validatedFields.special_notes;
+    if (meal !== undefined) updateData.meal = validatedFields.meal;
 
     // 活動記録を更新
     const { data: updatedActivity, error: updateError } = await supabase

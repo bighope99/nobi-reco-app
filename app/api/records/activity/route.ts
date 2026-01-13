@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       daily_schedule,
       role_assignments,
       special_notes,
+      snack,
       meal,
     } = body;
 
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
       daily_schedule,
       role_assignments,
       special_notes,
+      snack,
       meal,
     });
 
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
           daily_schedule: validatedFields.daily_schedule,
           role_assignments: validatedFields.role_assignments,
           special_notes: validatedFields.special_notes,
+          snack: validatedFields.snack,
           meal: validatedFields.meal,
         }
 
@@ -182,6 +185,7 @@ export async function POST(request: NextRequest) {
         daily_schedule: validatedFields.daily_schedule,
         role_assignments: validatedFields.role_assignments,
         special_notes: validatedFields.special_notes,
+        snack: validatedFields.snack,
         meal: validatedFields.meal,
       }
 
@@ -392,6 +396,7 @@ export async function PUT(request: NextRequest) {
       daily_schedule,
       role_assignments,
       special_notes,
+      snack,
       meal,
     } = body;
 
@@ -430,6 +435,7 @@ export async function PUT(request: NextRequest) {
       daily_schedule,
       role_assignments,
       special_notes,
+      snack,
       meal,
     });
 
@@ -479,6 +485,7 @@ export async function PUT(request: NextRequest) {
         daily_schedule: validatedFields.daily_schedule,
         role_assignments: validatedFields.role_assignments,
         special_notes: validatedFields.special_notes,
+        snack: validatedFields.snack,
         meal: validatedFields.meal,
       })
       .eq('id', activity_id)
