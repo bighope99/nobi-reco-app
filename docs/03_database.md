@@ -579,10 +579,10 @@ CREATE TABLE IF NOT EXISTS r_activity (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   facility_id UUID NOT NULL REFERENCES m_facilities(id),
   class_id UUID REFERENCES m_classes(id),        -- クラス単位の活動の場合
-  
+
   -- 記録日時
   activity_date DATE NOT NULL,                   -- 活動日（今日の日付）
-  
+
   -- 活動内容
   title VARCHAR(200),                            -- タイトル（例: 公園で外遊び）
   content TEXT NOT NULL,                         -- 活動内容（本文）
@@ -591,15 +591,22 @@ CREATE TABLE IF NOT EXISTS r_activity (
 
   -- 写真（JSONBで複数枚保存）
   photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
-  
+
+  -- イベント・日程情報
+  event_name TEXT,                               -- 今日の行事・イベント名
+  daily_schedule JSONB,                          -- 1日の流れ（JSONBスキーマ参照）
+  role_assignments JSONB,                        -- 役割分担（JSONBスキーマ参照）
+  special_notes TEXT,                            -- 特記事項（全体を通しての出来事）
+  meal JSONB,                                    -- ごはん情報（JSONBスキーマ参照）
+
   -- 記録者情報
   created_by UUID NOT NULL REFERENCES m_users(id),
   updated_by UUID REFERENCES m_users(id),
-  
+
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
   last_edited_at TIMESTAMP WITH TIME ZONE,       -- 最後の編集日時
-  
+
   -- 共通カラム
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -613,6 +620,43 @@ CREATE INDEX idx_activity_date ON r_activity(activity_date) WHERE deleted_at IS 
 CREATE INDEX idx_activity_created_by ON r_activity(created_by);
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
+```
+
+**JSONBカラムのスキーマ定義**:
+
+| カラム | スキーマ | 説明 |
+|--------|----------|------|
+| `daily_schedule` | `[{time: string, content: string}, ...]` | 1日の流れを時刻順に記録 |
+| `role_assignments` | `[{user_id: string, user_name: string, role: string}, ...]` | 職員の役割分担 |
+| `meal` | `{menu: string, items_to_bring: string, notes: string}` | ごはん情報 |
+
+**daily_schedule の例**:
+```json
+[
+  {"time": "09:00", "content": "朝の会"},
+  {"time": "10:00", "content": "外遊び"},
+  {"time": "12:00", "content": "昼食"},
+  {"time": "14:00", "content": "おやつ"},
+  {"time": "15:00", "content": "自由時間"}
+]
+```
+
+**role_assignments の例**:
+```json
+[
+  {"user_id": "uuid-1", "user_name": "田中", "role": "配膳"},
+  {"user_id": "uuid-2", "user_name": "佐藤", "role": "見守り"},
+  {"user_id": "uuid-3", "user_name": "山田", "role": "片付け"}
+]
+```
+
+**meal の例**:
+```json
+{
+  "menu": "カレーライス",
+  "items_to_bring": "お箸、スプーン",
+  "notes": "アレルギー対応食あり"
+}
 ```
 
 ---
@@ -1452,8 +1496,26 @@ CREATE POLICY facility_access ON r_activity
 - マイグレーション管理外で作成されたテーブルを事後的に文書化
 - 今後のスキーマ変更は必ずマイグレーションファイル経由で実施し、Supabaseに適用すること
 
+### 活動記録テーブルの拡張（2026年1月13日）
+
+#### `r_activity`テーブルの変更
+- **追加**: `event_name TEXT` - 今日の行事・イベント名
+- **追加**: `daily_schedule JSONB` - 1日の流れ
+- **追加**: `role_assignments JSONB` - 職員の役割分担
+- **追加**: `special_notes TEXT` - 特記事項（全体を通しての出来事）
+- **追加**: `meal JSONB` - ごはん情報
+
+**理由**:
+- 活動記録に日々の業務運営情報を追加し、より詳細な記録を可能にするため
+- イベント名、1日のスケジュール、職員の役割分担、食事情報を構造化して保存
+
+**JSONBスキーマ**:
+- `daily_schedule`: `[{time: string, content: string}, ...]`
+- `role_assignments`: `[{user_id: string, user_name: string, role: string}, ...]`
+- `meal`: `{menu: string, items_to_bring: string, notes: string}`
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2026年1月4日（データベーススキーマの確認と文書化）
+**最終更新**: 2026年1月13日（活動記録テーブルの拡張）
 **管理者**: プロジェクトリーダー

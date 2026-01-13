@@ -6,6 +6,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -85,6 +86,11 @@ export async function GET(request: NextRequest) {
         photos,
         class_id,
         mentioned_children,
+        event_name,
+        daily_schedule,
+        role_assignments,
+        special_notes,
+        meal,
         created_at,
         updated_at,
         m_classes!inner (
@@ -220,6 +226,11 @@ export async function GET(request: NextRequest) {
           },
           {} as Record<string, string>
         ),
+        event_name: activity.event_name,
+        daily_schedule: activity.daily_schedule,
+        role_assignments: activity.role_assignments,
+        special_notes: activity.special_notes,
+        meal: activity.meal,
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
@@ -261,7 +272,8 @@ export async function POST(request: NextRequest) {
     const facility_id = metadata.current_facility_id;
     const user_id = metadata.user_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
+    const { activity_date, class_id, title, content, snack, mentioned_children, photos,
+      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
 
     if (!activity_date || !class_id || !content) {
       return NextResponse.json(
@@ -346,6 +358,25 @@ export async function POST(request: NextRequest) {
 
     const normalizedPhotos = normalizePhotos(photos);
 
+    // 新規フィールドのバリデーション
+    const extendedFieldsResult = validateActivityExtendedFields({
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      snack,
+      meal,
+    });
+
+    if (!extendedFieldsResult.valid) {
+      return NextResponse.json(
+        { success: false, error: extendedFieldsResult.error },
+        { status: 400 }
+      );
+    }
+
+    const validatedFields = extendedFieldsResult.data;
+
     // 活動記録を作成
     const { data: activity, error: activityError } = await supabase
       .from('r_activity')
@@ -355,10 +386,16 @@ export async function POST(request: NextRequest) {
         activity_date,
         title: title || '活動記録',
         content,
-        snack,
+        snack: validatedFields.snack,
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],
         created_by: user_id,
+        // 新規フィールド（バリデーション済み）
+        event_name: validatedFields.event_name,
+        daily_schedule: validatedFields.daily_schedule,
+        role_assignments: validatedFields.role_assignments,
+        special_notes: validatedFields.special_notes,
+        meal: validatedFields.meal,
       })
       .select()
       .single();

@@ -15,18 +15,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import DOMPurify from "dompurify"
 import {
@@ -36,6 +31,18 @@ import {
 } from "@/lib/drafts/aiDraftCookie"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap } from "@/lib/mention/mentionFormatter"
+import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from "@/types/activity"
+import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/security/sanitize"
+import {
+  MAX_EVENT_NAME_LENGTH,
+  MAX_SPECIAL_NOTES_LENGTH,
+  MAX_SNACK_LENGTH,
+  MAX_SCHEDULE_CONTENT_LENGTH,
+  MAX_ROLE_LENGTH,
+  MAX_MEAL_MENU_LENGTH,
+  MAX_MEAL_ITEMS_LENGTH,
+  MAX_MEAL_NOTES_LENGTH,
+} from "@/lib/validation/activityValidation"
 
 interface IndividualRecord {
   observation_id: string
@@ -58,14 +65,12 @@ interface Activity {
   individual_records: IndividualRecord[]
   mentioned_children?: string[]
   mentioned_children_names?: Record<string, string>
-}
-
-interface ActivityPhoto {
-  url: string
-  caption?: string | null
-  thumbnail_url?: string | null
-  file_id?: string
-  file_path?: string
+  // 新規拡張フィールド
+  event_name?: string | null
+  daily_schedule?: DailyScheduleItem[]
+  role_assignments?: RoleAssignment[]
+  special_notes?: string | null
+  meal?: Meal | null
 }
 
 interface MentionSuggestion {
@@ -84,6 +89,11 @@ interface ActivitiesData {
   activities: Activity[]
   total: number
   has_more: boolean
+}
+
+interface StaffMember {
+  user_id: string
+  name: string
 }
 
 // AiObservationResult型は共通ファイルからimport済み
@@ -139,6 +149,29 @@ export default function ActivityRecordClient() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+
+  // 新規フィールドの状態
+  const [eventName, setEventName] = useState("")
+  // デフォルト5行、初期値10:00
+  const DEFAULT_SCHEDULE: DailyScheduleItem[] = [
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+  ]
+  const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
+  // デフォルト2行
+  const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
+    { user_id: "", user_name: "", role: "" },
+    { user_id: "", user_name: "", role: "" },
+  ]
+  const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>(DEFAULT_ROLE_ASSIGNMENTS)
+  const [snack, setSnack] = useState("")
+  const [meal, setMeal] = useState<Meal | null>(null)
+  const [specialNotes, setSpecialNotes] = useState("")
+  const [staffList, setStaffList] = useState<StaffMember[]>([])
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -178,6 +211,31 @@ export default function ActivityRecordClient() {
     }
 
     fetchClasses()
+  }, [])
+
+  // 職員リストを取得
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        setIsLoadingStaff(true)
+        const response = await fetch('/api/users?is_active=true')
+        const result = await response.json()
+
+        if (response.ok && result.success) {
+          const users = result.data?.users || []
+          setStaffList(users.map((u: { user_id: string; name: string }) => ({
+            user_id: u.user_id,
+            name: u.name,
+          })))
+        }
+      } catch (err) {
+        console.error('Failed to fetch staff:', err)
+      } finally {
+        setIsLoadingStaff(false)
+      }
+    }
+
+    fetchStaff()
   }, [])
 
   const fetchActivities = useCallback(async () => {
@@ -319,8 +377,9 @@ export default function ActivityRecordClient() {
     setActivityContent(value)
     updateMentionedChildren(value)
 
-    // @検出：開始位置を記録
-    if (MENTION_TRIGGERS.includes(value.slice(-1))) {
+    // @検出：カーソル位置の直前の文字を確認（テキスト中間でも検出可能）
+    const justTypedChar = cursorPos > 0 ? value.charAt(cursorPos - 1) : ''
+    if (MENTION_TRIGGERS.includes(justTypedChar)) {
       setMentionStartIndex(cursorPos - 1)
       mentionTriggerRef.current = 'textarea'
       setShowMentionPicker(true)
@@ -343,6 +402,27 @@ export default function ActivityRecordClient() {
     setMentionStartIndex(null)
     setSelectedIndex(0)
   }
+
+  // メンションピッカーの外部クリックで閉じる
+  const mentionPickerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showMentionPicker) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (
+        mentionPickerRef.current &&
+        !mentionPickerRef.current.contains(target) &&
+        textareaRef.current &&
+        !textareaRef.current.contains(target)
+      ) {
+        closeMentionPicker()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMentionPicker])
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!showMentionPicker) return
@@ -390,7 +470,15 @@ export default function ActivityRecordClient() {
           throw new Error(result.error || "児童の取得に失敗しました")
         }
 
-        const children = (result.data?.children || []).map((child: any) => ({
+        const children = (result.data?.children || []).map((child: {
+          child_id: string;
+          name: string;
+          kana: string;
+          nickname?: string;
+          grade?: string;
+          class_name?: string;
+          photo_url?: string | null;
+        }) => ({
           child_id: child.child_id,
           name: child.name,
           kana: child.kana,
@@ -413,6 +501,26 @@ export default function ActivityRecordClient() {
     []
   )
 
+  const getSanitizedExtendedFields = () => {
+    const mealData = meal && meal.menu ? meal : null
+
+    return {
+      event_name: sanitizeText(eventName),
+      special_notes: sanitizeText(specialNotes),
+      snack: sanitizeText(snack),
+      daily_schedule: dailySchedule.length > 0
+        ? sanitizeArrayFields(dailySchedule, ['content'])
+        : null,
+      role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
+        ? sanitizeArrayFields(
+            roleAssignments.filter(r => r.user_id && r.role),
+            ['role']
+          )
+        : null,
+      meal: sanitizeObjectFields(mealData, ['menu', 'items_to_bring', 'notes']),
+    }
+  }
+
   useEffect(() => {
     if (selectedClass) {
       loadClassChildren(selectedClass)
@@ -433,6 +541,8 @@ export default function ActivityRecordClient() {
       // 1. 先に活動記録を保存（編集モードの場合は更新）
       let savedActivityId: string | null = editingActivityId
 
+      const sanitizedFields = getSanitizedExtendedFields()
+
       if (isEditMode && editingActivityId) {
         // 編集モードの場合は更新
         const updateResponse = await fetch(`/api/activities/${editingActivityId}`, {
@@ -446,6 +556,13 @@ export default function ActivityRecordClient() {
             content: activityContent,
             mentioned_children: selectedMentions.map((child) => child.child_id),
             photos,
+            // 新規フィールド（サニタイズ済み）
+            event_name: sanitizedFields.event_name,
+            daily_schedule: sanitizedFields.daily_schedule,
+            role_assignments: sanitizedFields.role_assignments,
+            snack: sanitizedFields.snack,
+            meal: sanitizedFields.meal,
+            special_notes: sanitizedFields.special_notes,
           }),
         })
 
@@ -469,6 +586,13 @@ export default function ActivityRecordClient() {
             content: activityContent,
             mentioned_children: selectedMentions.map((child) => child.child_id),
             photos,
+            // 新規フィールド（サニタイズ済み）
+            event_name: sanitizedFields.event_name,
+            daily_schedule: sanitizedFields.daily_schedule,
+            role_assignments: sanitizedFields.role_assignments,
+            snack: sanitizedFields.snack,
+            meal: sanitizedFields.meal,
+            special_notes: sanitizedFields.special_notes,
           }),
         })
 
@@ -532,6 +656,8 @@ export default function ActivityRecordClient() {
       const nameToIdMap = buildNameToIdMap(selectedMentions)
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
 
+      const sanitizedFields = getSanitizedExtendedFields()
+
       const response = await fetch('/api/activities', {
         method: 'POST',
         headers: {
@@ -543,6 +669,13 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
+          // 新規フィールド（サニタイズ済み）
+          event_name: sanitizedFields.event_name,
+          daily_schedule: sanitizedFields.daily_schedule,
+          role_assignments: sanitizedFields.role_assignments,
+          snack: sanitizedFields.snack,
+          meal: sanitizedFields.meal,
+          special_notes: sanitizedFields.special_notes,
         }),
       })
 
@@ -552,11 +685,18 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '保存に失敗しました')
       }
 
+      // フォームをリセット
       setActivityContent("")
       setSelectedMentions([])
       setMentionTokens(new Map())
       setPhotos([])
       setPhotoUploadError(null)
+      setEventName("")
+      setDailySchedule([...DEFAULT_SCHEDULE])
+      setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+      setSnack("")
+      setMeal(null)
+      setSpecialNotes("")
       setSaveMessage('保存しました')
       fetchActivities()
     } catch (err) {
@@ -579,6 +719,8 @@ export default function ActivityRecordClient() {
       const nameToIdMap = buildNameToIdMap(selectedMentions)
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
 
+      const sanitizedFields = getSanitizedExtendedFields()
+
       const response = await fetch(`/api/activities/${editingActivityId}`, {
         method: 'PATCH',
         headers: {
@@ -590,6 +732,13 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
+          // 新規フィールド（サニタイズ済み）
+          event_name: sanitizedFields.event_name,
+          daily_schedule: sanitizedFields.daily_schedule,
+          role_assignments: sanitizedFields.role_assignments,
+          snack: sanitizedFields.snack,
+          meal: sanitizedFields.meal,
+          special_notes: sanitizedFields.special_notes,
         }),
       })
 
@@ -602,11 +751,18 @@ export default function ActivityRecordClient() {
       setSaveMessage('更新しました')
       setIsEditMode(false)
       setEditingActivityId(null)
+      // フォームをリセット
       setActivityContent("")
       setSelectedMentions([])
       setMentionTokens(new Map())
       setPhotos([])
       setPhotoUploadError(null)
+      setEventName("")
+      setDailySchedule([...DEFAULT_SCHEDULE])
+      setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+      setSnack("")
+      setMeal(null)
+      setSpecialNotes("")
       fetchActivities()
     } catch (err) {
       console.error('Failed to update:', err)
@@ -633,6 +789,18 @@ export default function ActivityRecordClient() {
       .filter(Boolean) as ActivityPhoto[]
     setPhotos(mappedPhotos)
 
+    // 新規フィールドを復元（デフォルト値と一貫性を保つ）
+    setEventName(activity.event_name || "")
+    setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+      ? activity.daily_schedule
+      : DEFAULT_SCHEDULE)
+    setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+      ? activity.role_assignments
+      : DEFAULT_ROLE_ASSIGNMENTS)
+    setSnack(activity.snack || "")
+    setMeal(activity.meal || null)
+    setSpecialNotes(activity.special_notes || "")
+
     // メンション復元: クラスの児童リストから名前情報を取得
     if (activity.mentioned_children && activity.mentioned_children.length > 0) {
       // クラスが異なる場合は児童リストを再取得する必要があるため、APIから取得
@@ -642,7 +810,15 @@ export default function ActivityRecordClient() {
           const response = await fetch(`/api/children?class_id=${activity.class_id}`)
           const result = await response.json()
           if (response.ok && result.success) {
-            children = (result.data?.children || []).map((child: any) => ({
+            children = (result.data?.children || []).map((child: {
+              child_id: string;
+              name: string;
+              kana: string;
+              nickname?: string;
+              grade?: string;
+              class_name?: string;
+              photo_url?: string | null;
+            }) => ({
               child_id: child.child_id,
               name: child.name,
               kana: child.kana,
@@ -803,6 +979,13 @@ export default function ActivityRecordClient() {
     setOriginalMentionedChildren([])
     setPhotos([])
     setPhotoUploadError(null)
+    // 新規フィールドもリセット
+    setEventName("")
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setSnack("")
+    setMeal(null)
+    setSpecialNotes("")
   }
 
   const handleRestart = () => {
@@ -811,6 +994,13 @@ export default function ActivityRecordClient() {
     setMentionTokens(new Map())
     setPhotos([])
     setPhotoUploadError(null)
+    // 新規フィールドもリセット
+    setEventName("")
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setSnack("")
+    setMeal(null)
+    setSpecialNotes("")
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
@@ -1063,9 +1253,251 @@ export default function ActivityRecordClient() {
               </div>
             </div>
 
+            {/* 今日の行事・イベント */}
+            <div className="space-y-2">
+              <Label htmlFor="eventName">今日の行事・イベント</Label>
+              <Input
+                id="eventName"
+                type="text"
+                value={eventName}
+                onChange={(e) => setEventName(e.target.value)}
+                placeholder="例: 運動会、遠足、誕生日会"
+                maxLength={MAX_EVENT_NAME_LENGTH}
+              />
+            </div>
+
+            {/* 1日の流れ */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label htmlFor="activityContent" className="text-base font-semibold">活動内容</Label>
+                <Label className="text-sm font-medium">1日の流れ</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  追加
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {dailySchedule.map((item, index) => {
+                  // 時間フォーマットの防御的パース (HH:MM形式を想定)
+                  const timeParts = (item.time || '10:00').split(':')
+                  const hours = timeParts[0] || '10'
+                  const minutes = timeParts[1] || '00'
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={hours}
+                          onValueChange={(value) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: `${value}:${minutes}` }
+                            setDailySchedule(newSchedule)
+                          }}
+                        >
+                          <SelectTrigger className="w-16">
+                            <SelectValue placeholder="時" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                              <SelectItem key={h} value={h}>
+                                {h}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">時</span>
+                        <Select
+                          value={minutes}
+                          onValueChange={(value) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: `${hours}:${value}` }
+                            setDailySchedule(newSchedule)
+                          }}
+                        >
+                          <SelectTrigger className="w-16">
+                            <SelectValue placeholder="分" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                              <SelectItem key={m} value={m}>
+                                {m}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">分</span>
+                      </div>
+                      <Input
+                        type="text"
+                        value={item.content}
+                        onChange={(e) => {
+                          const newSchedule = [...dailySchedule]
+                          newSchedule[index] = { ...item, content: e.target.value }
+                          setDailySchedule(newSchedule)
+                        }}
+                        placeholder="活動内容"
+                        className="flex-1"
+                        maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setDailySchedule((prev) => prev.filter((_, i) => i !== index))
+                        }}
+                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 役割分担 */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">役割分担</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRoleAssignments((prev) => [...prev, { user_id: "", user_name: "", role: "" }])}
+                  disabled={staffList.length === 0}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  追加
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {roleAssignments.map((assignment, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Select
+                      value={assignment.user_id}
+                      onValueChange={(value) => {
+                        const staff = staffList.find((s) => s.user_id === value)
+                        const newAssignments = [...roleAssignments]
+                        newAssignments[index] = {
+                          ...assignment,
+                          user_id: value,
+                          user_name: staff?.name || "",
+                        }
+                        setRoleAssignments(newAssignments)
+                      }}
+                    >
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="職員を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {staffList.map((staff) => (
+                          <SelectItem key={staff.user_id} value={staff.user_id}>
+                            {staff.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="text"
+                      value={assignment.role}
+                      onChange={(e) => {
+                        const newAssignments = [...roleAssignments]
+                        newAssignments[index] = { ...assignment, role: e.target.value }
+                        setRoleAssignments(newAssignments)
+                      }}
+                      placeholder="役割（例: 主担当、配膳）"
+                      className="flex-1"
+                      maxLength={MAX_ROLE_LENGTH}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setRoleAssignments((prev) => prev.filter((_, i) => i !== index))
+                      }}
+                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* おやつ */}
+            <div className="space-y-2">
+              <Label htmlFor="snack">おやつ</Label>
+              <Input
+                id="snack"
+                type="text"
+                value={snack}
+                onChange={(e) => setSnack(e.target.value)}
+                placeholder="例: りんご、クッキー"
+                maxLength={MAX_SNACK_LENGTH}
+              />
+            </div>
+
+            {/* ごはん */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">ごはん</Label>
+              <div className="grid grid-cols-1 gap-3 p-4 border rounded-lg bg-muted/30">
+                <div className="space-y-2">
+                  <Label htmlFor="mealMenu" className="text-xs text-muted-foreground">メニュー</Label>
+                  <Input
+                    id="mealMenu"
+                    type="text"
+                    value={meal?.menu || ""}
+                    onChange={(e) => setMeal((prev) => ({
+                      menu: e.target.value,
+                      items_to_bring: prev?.items_to_bring,
+                      notes: prev?.notes,
+                    }))}
+                    placeholder="例: カレーライス、サラダ"
+                    maxLength={MAX_MEAL_MENU_LENGTH}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mealItems" className="text-xs text-muted-foreground">持ち物案内（任意）</Label>
+                  <Input
+                    id="mealItems"
+                    type="text"
+                    value={meal?.items_to_bring || ""}
+                    onChange={(e) => setMeal((prev) => ({
+                      menu: prev?.menu || "",
+                      items_to_bring: e.target.value,
+                      notes: prev?.notes,
+                    }))}
+                    placeholder="例: フォーク、スプーン"
+                    maxLength={MAX_MEAL_ITEMS_LENGTH}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mealNotes" className="text-xs text-muted-foreground">備考（任意）</Label>
+                  <Input
+                    id="mealNotes"
+                    type="text"
+                    value={meal?.notes || ""}
+                    onChange={(e) => setMeal((prev) => ({
+                      menu: prev?.menu || "",
+                      items_to_bring: prev?.items_to_bring,
+                      notes: e.target.value,
+                    }))}
+                    placeholder="例: アレルギー対応済み"
+                    maxLength={MAX_MEAL_NOTES_LENGTH}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 観察記録（旧: 活動内容） */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="activityContent" className="text-base font-semibold">観察記録</Label>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>{selectedMentions.length}人</span>
                   <span>・</span>
@@ -1111,34 +1543,24 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
 
-              <Popover
-                open={showMentionPicker}
-                onOpenChange={(open) => {
-                  if (!open) closeMentionPicker()
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <div className="sr-only" aria-hidden="true" />
-                </PopoverTrigger>
-                <Textarea
-                  ref={textareaRef}
-                  id="activityContent"
-                  rows={12}
-                  value={activityContent}
-                  onChange={handleContentChange}
-                  onKeyDown={handleTextareaKeyDown}
-                  maxLength={ACTIVITY_CONTENT_MAX}
-                  placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
-                  className="min-h-[300px]"
-                />
+              <div className="relative">
+              <Textarea
+                ref={textareaRef}
+                id="activityContent"
+                rows={12}
+                value={activityContent}
+                onChange={handleContentChange}
+                onKeyDown={handleTextareaKeyDown}
+                maxLength={ACTIVITY_CONTENT_MAX}
+                placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+                className="min-h-[300px]"
+              />
 
-                <PopoverContent
-                  align="start"
-                  side="bottom"
-                  sideOffset={8}
-                  avoidCollisions={false}
-                  className="w-64 max-h-[300px] p-2"
-                  onOpenAutoFocus={(e) => e.preventDefault()}
+              {showMentionPicker && (
+                <div
+                  ref={mentionPickerRef}
+                  className="absolute top-full left-0 mt-2 z-50 w-64 max-h-[300px] p-2 bg-popover border rounded-md shadow-md"
+                  onMouseDown={(e) => e.preventDefault()}
                 >
                   {mentionLoading ? (
                     <p className="text-center py-4 text-sm text-muted-foreground">読み込み中...</p>
@@ -1165,11 +1587,12 @@ export default function ActivityRecordClient() {
                     </div>
                   ) : (
                     <p className="text-center py-4 text-sm text-muted-foreground">
-                      児童が見つかりません
+                      {!selectedClass ? "クラスを選択してください" : "児童が見つかりません"}
                     </p>
                   )}
-                </PopoverContent>
-              </Popover>
+                </div>
+              )}
+            </div>
               {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
             </div>
 
@@ -1253,6 +1676,19 @@ export default function ActivityRecordClient() {
                 </div>
               </div>
             )}
+
+            {/* 特記事項 */}
+            <div className="space-y-2">
+              <Label htmlFor="specialNotes">特記事項</Label>
+              <Textarea
+                id="specialNotes"
+                rows={4}
+                value={specialNotes}
+                onChange={(e) => setSpecialNotes(e.target.value)}
+                placeholder="その他、気になったことや共有事項があれば記入してください"
+                maxLength={MAX_SPECIAL_NOTES_LENGTH}
+              />
+            </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex flex-wrap gap-3 flex-1">
