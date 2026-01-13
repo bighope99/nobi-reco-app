@@ -86,7 +86,7 @@ describe('GET /api/dashboard/summary - Unscheduled Filter', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      const unscheduledAbsent = json.attendance_list.filter(
+      const unscheduledAbsent = json.data.attendance_list.filter(
         (c: any) => !c.is_scheduled_today && c.status === 'absent'
       );
       expect(unscheduledAbsent).toHaveLength(1);
@@ -124,7 +124,7 @@ describe('GET /api/dashboard/summary - Unscheduled Filter', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      const unscheduledAbsent = json.attendance_list.filter(
+      const unscheduledAbsent = json.data.attendance_list.filter(
         (c: any) => !c.is_scheduled_today && c.status === 'absent'
       );
       expect(unscheduledAbsent).toHaveLength(0); // Should be excluded (checked_in)
@@ -168,7 +168,7 @@ describe('GET /api/dashboard/summary - Unscheduled Filter', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      const unscheduledAbsent = json.attendance_list.filter(
+      const unscheduledAbsent = json.data.attendance_list.filter(
         (c: any) => !c.is_scheduled_today && c.status === 'absent'
       );
       expect(unscheduledAbsent).toHaveLength(0); // Should be excluded (checked_out)
@@ -205,7 +205,7 @@ describe('GET /api/dashboard/summary - Unscheduled Filter', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      const unscheduledAbsent = json.attendance_list.filter(
+      const unscheduledAbsent = json.data.attendance_list.filter(
         (c: any) => !c.is_scheduled_today && c.status === 'absent'
       );
       expect(unscheduledAbsent).toHaveLength(0); // Should be excluded (is_scheduled_today=true)
@@ -242,7 +242,7 @@ describe('GET /api/dashboard/summary - Unscheduled Filter', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      const unscheduledAbsent = json.attendance_list.filter(
+      const unscheduledAbsent = json.data.attendance_list.filter(
         (c: any) => !c.is_scheduled_today && c.status === 'absent'
       );
       expect(unscheduledAbsent).toHaveLength(1);
@@ -257,6 +257,22 @@ function createMockSupabase(
   attendanceLogs: any[],
   dailyAttendance: any[]
 ) {
+  const createMockQueryChain = (data: any[]) => {
+    const chain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      lte: jest.fn().mockReturnThis(),
+      or: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+    };
+    // Make the chain thenable to work with Promise.all
+    (chain as any).then = jest.fn((resolve: any) => Promise.resolve({ data, error: null }).then(resolve));
+    return chain;
+  };
+
   return {
     auth: {
       getSession: jest.fn().mockResolvedValue({
@@ -266,72 +282,33 @@ function createMockSupabase(
     },
     from: jest.fn().mockImplementation((table: string) => {
       if (table === 'm_children') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          is: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: children, error: null }),
-        };
+        return createMockQueryChain(children);
       }
       if (table === 'h_attendance') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          gte: jest.fn().mockReturnThis(),
-          lte: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: attendanceLogs, error: null }),
-        };
+        return createMockQueryChain(attendanceLogs);
       }
       if (table === 'r_daily_attendance') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: dailyAttendance, error: null }),
-        };
+        return createMockQueryChain(dailyAttendance);
+      }
+      if (table === 's_attendance_schedule') {
+        return createMockQueryChain([]);
       }
       if (table === 'm_schools') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: [], error: null }),
-        };
+        return createMockQueryChain([]);
       }
-      if (table === 'r_school_schedules') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: [], error: null }),
-        };
+      if (table === 's_school_schedules') {
+        return createMockQueryChain([]);
       }
-      if (table === 'h_observations') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          gte: jest.fn().mockReturnThis(),
-          lte: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: [], error: null }),
-        };
+      if (table === 'r_observation') {
+        return createMockQueryChain([]);
       }
-      if (table === 'r_guardian_child_link') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: [], error: null }),
-        };
+      if (table === '_child_guardian') {
+        return createMockQueryChain([]);
       }
-      if (table === 'r_attendance_schedule_patterns') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          in: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          then: jest.fn().mockResolvedValue({ data: [], error: null }),
-        };
+      if (table === 'm_classes') {
+        return createMockQueryChain([]);
       }
-      return {};
+      return createMockQueryChain([]);
     }),
   };
 }
