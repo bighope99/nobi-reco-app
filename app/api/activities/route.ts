@@ -85,6 +85,11 @@ export async function GET(request: NextRequest) {
         photos,
         class_id,
         mentioned_children,
+        event_name,
+        daily_schedule,
+        role_assignments,
+        special_notes,
+        meal,
         created_at,
         updated_at,
         m_classes!inner (
@@ -220,6 +225,11 @@ export async function GET(request: NextRequest) {
           },
           {} as Record<string, string>
         ),
+        event_name: activity.event_name,
+        daily_schedule: activity.daily_schedule,
+        role_assignments: activity.role_assignments,
+        special_notes: activity.special_notes,
+        meal: activity.meal,
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
@@ -261,7 +271,8 @@ export async function POST(request: NextRequest) {
     const facility_id = metadata.current_facility_id;
     const user_id = metadata.user_id;
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
+    const { activity_date, class_id, title, content, snack, mentioned_children, photos,
+      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
 
     if (!activity_date || !class_id || !content) {
       return NextResponse.json(
@@ -359,6 +370,12 @@ export async function POST(request: NextRequest) {
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],
         created_by: user_id,
+        // 新規フィールド
+        event_name: event_name || null,
+        daily_schedule: daily_schedule || null,
+        role_assignments: role_assignments || null,
+        special_notes: special_notes || null,
+        meal: meal || null,
       })
       .select()
       .single();

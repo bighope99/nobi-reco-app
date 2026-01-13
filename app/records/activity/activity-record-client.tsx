@@ -15,11 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -146,8 +141,21 @@ export default function ActivityRecordClient() {
 
   // 新規フィールドの状態
   const [eventName, setEventName] = useState("")
-  const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>([])
-  const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>([])
+  // デフォルト5行、初期値10:00
+  const DEFAULT_SCHEDULE: DailyScheduleItem[] = [
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+  ]
+  const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
+  // デフォルト2行
+  const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
+    { user_id: "", user_name: "", role: "" },
+    { user_id: "", user_name: "", role: "" },
+  ]
+  const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>(DEFAULT_ROLE_ASSIGNMENTS)
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
   const [specialNotes, setSpecialNotes] = useState("")
@@ -358,8 +366,9 @@ export default function ActivityRecordClient() {
     setActivityContent(value)
     updateMentionedChildren(value)
 
-    // @検出：開始位置を記録
-    if (MENTION_TRIGGERS.includes(value.slice(-1))) {
+    // @検出：カーソル位置の直前の文字を確認（テキスト中間でも検出可能）
+    const justTypedChar = cursorPos > 0 ? value.charAt(cursorPos - 1) : ''
+    if (MENTION_TRIGGERS.includes(justTypedChar)) {
       setMentionStartIndex(cursorPos - 1)
       mentionTriggerRef.current = 'textarea'
       setShowMentionPicker(true)
@@ -382,6 +391,27 @@ export default function ActivityRecordClient() {
     setMentionStartIndex(null)
     setSelectedIndex(0)
   }
+
+  // メンションピッカーの外部クリックで閉じる
+  const mentionPickerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showMentionPicker) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (
+        mentionPickerRef.current &&
+        !mentionPickerRef.current.contains(target) &&
+        textareaRef.current &&
+        !textareaRef.current.contains(target)
+      ) {
+        closeMentionPicker()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMentionPicker])
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!showMentionPicker) return
@@ -631,8 +661,8 @@ export default function ActivityRecordClient() {
       setPhotos([])
       setPhotoUploadError(null)
       setEventName("")
-      setDailySchedule([])
-      setRoleAssignments([])
+      setDailySchedule([...DEFAULT_SCHEDULE])
+      setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
       setSnack("")
       setMeal(null)
       setSpecialNotes("")
@@ -700,8 +730,8 @@ export default function ActivityRecordClient() {
       setPhotos([])
       setPhotoUploadError(null)
       setEventName("")
-      setDailySchedule([])
-      setRoleAssignments([])
+      setDailySchedule([...DEFAULT_SCHEDULE])
+      setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
       setSnack("")
       setMeal(null)
       setSpecialNotes("")
@@ -911,8 +941,8 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule([])
-    setRoleAssignments([])
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -926,8 +956,8 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule([])
-    setRoleAssignments([])
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -1203,26 +1233,59 @@ export default function ActivityRecordClient() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setDailySchedule((prev) => [...prev, { time: "", content: "" }])}
+                  onClick={() => setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   追加
                 </Button>
               </div>
-              {dailySchedule.length > 0 ? (
-                <div className="space-y-2">
-                  {dailySchedule.map((item, index) => (
+              <div className="space-y-2">
+                {dailySchedule.map((item, index) => {
+                  const [hours, minutes] = item.time.split(':')
+                  return (
                     <div key={index} className="flex items-center gap-2">
-                      <Input
-                        type="time"
-                        value={item.time}
-                        onChange={(e) => {
-                          const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, time: e.target.value }
-                          setDailySchedule(newSchedule)
-                        }}
-                        className="w-28"
-                      />
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={hours}
+                          onValueChange={(value) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: `${value}:${minutes}` }
+                            setDailySchedule(newSchedule)
+                          }}
+                        >
+                          <SelectTrigger className="w-16">
+                            <SelectValue placeholder="時" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                              <SelectItem key={h} value={h}>
+                                {h}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">時</span>
+                        <Select
+                          value={minutes}
+                          onValueChange={(value) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: `${hours}:${value}` }
+                            setDailySchedule(newSchedule)
+                          }}
+                        >
+                          <SelectTrigger className="w-16">
+                            <SelectValue placeholder="分" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                              <SelectItem key={m} value={m}>
+                                {m}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">分</span>
+                      </div>
                       <Input
                         type="text"
                         value={item.content}
@@ -1246,11 +1309,9 @@ export default function ActivityRecordClient() {
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">「追加」ボタンでスケジュールを追加できます</p>
-              )}
+                  )
+                })}
+              </div>
             </div>
 
             {/* 役割分担 */}
@@ -1268,64 +1329,58 @@ export default function ActivityRecordClient() {
                   追加
                 </Button>
               </div>
-              {roleAssignments.length > 0 ? (
-                <div className="space-y-2">
-                  {roleAssignments.map((assignment, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Select
-                        value={assignment.user_id}
-                        onValueChange={(value) => {
-                          const staff = staffList.find((s) => s.user_id === value)
-                          const newAssignments = [...roleAssignments]
-                          newAssignments[index] = {
-                            ...assignment,
-                            user_id: value,
-                            user_name: staff?.name || "",
-                          }
-                          setRoleAssignments(newAssignments)
-                        }}
-                      >
-                        <SelectTrigger className="w-40">
-                          <SelectValue placeholder="職員を選択" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {staffList.map((staff) => (
-                            <SelectItem key={staff.user_id} value={staff.user_id}>
-                              {staff.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="text"
-                        value={assignment.role}
-                        onChange={(e) => {
-                          const newAssignments = [...roleAssignments]
-                          newAssignments[index] = { ...assignment, role: e.target.value }
-                          setRoleAssignments(newAssignments)
-                        }}
-                        placeholder="役割（例: 主担当、配膳）"
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setRoleAssignments((prev) => prev.filter((_, i) => i !== index))
-                        }}
-                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {staffList.length === 0 ? "職員情報を読み込み中..." : "「追加」ボタンで役割分担を追加できます"}
-                </p>
-              )}
+              <div className="space-y-2">
+                {roleAssignments.map((assignment, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Select
+                      value={assignment.user_id}
+                      onValueChange={(value) => {
+                        const staff = staffList.find((s) => s.user_id === value)
+                        const newAssignments = [...roleAssignments]
+                        newAssignments[index] = {
+                          ...assignment,
+                          user_id: value,
+                          user_name: staff?.name || "",
+                        }
+                        setRoleAssignments(newAssignments)
+                      }}
+                    >
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="職員を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {staffList.map((staff) => (
+                          <SelectItem key={staff.user_id} value={staff.user_id}>
+                            {staff.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="text"
+                      value={assignment.role}
+                      onChange={(e) => {
+                        const newAssignments = [...roleAssignments]
+                        newAssignments[index] = { ...assignment, role: e.target.value }
+                        setRoleAssignments(newAssignments)
+                      }}
+                      placeholder="役割（例: 主担当、配膳）"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setRoleAssignments((prev) => prev.filter((_, i) => i !== index))
+                      }}
+                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* おやつ */}
@@ -1438,34 +1493,24 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
 
-              <Popover
-                open={showMentionPicker}
-                onOpenChange={(open) => {
-                  if (!open) closeMentionPicker()
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <div className="sr-only" aria-hidden="true" />
-                </PopoverTrigger>
-                <Textarea
-                  ref={textareaRef}
-                  id="activityContent"
-                  rows={12}
-                  value={activityContent}
-                  onChange={handleContentChange}
-                  onKeyDown={handleTextareaKeyDown}
-                  maxLength={ACTIVITY_CONTENT_MAX}
-                  placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
-                  className="min-h-[300px]"
-                />
+              <div className="relative">
+              <Textarea
+                ref={textareaRef}
+                id="activityContent"
+                rows={12}
+                value={activityContent}
+                onChange={handleContentChange}
+                onKeyDown={handleTextareaKeyDown}
+                maxLength={ACTIVITY_CONTENT_MAX}
+                placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+                className="min-h-[300px]"
+              />
 
-                <PopoverContent
-                  align="start"
-                  side="bottom"
-                  sideOffset={8}
-                  avoidCollisions={false}
-                  className="w-64 max-h-[300px] p-2"
-                  onOpenAutoFocus={(e) => e.preventDefault()}
+              {showMentionPicker && (
+                <div
+                  ref={mentionPickerRef}
+                  className="absolute top-full left-0 mt-2 z-50 w-64 max-h-[300px] p-2 bg-popover border rounded-md shadow-md"
+                  onMouseDown={(e) => e.preventDefault()}
                 >
                   {mentionLoading ? (
                     <p className="text-center py-4 text-sm text-muted-foreground">読み込み中...</p>
@@ -1492,11 +1537,12 @@ export default function ActivityRecordClient() {
                     </div>
                   ) : (
                     <p className="text-center py-4 text-sm text-muted-foreground">
-                      児童が見つかりません
+                      {!selectedClass ? "クラスを選択してください" : "児童が見つかりません"}
                     </p>
                   )}
-                </PopoverContent>
-              </Popover>
+                </div>
+              )}
+            </div>
               {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
             </div>
 

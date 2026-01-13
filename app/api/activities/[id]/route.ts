@@ -38,7 +38,8 @@ export async function PATCH(
     const user_id = metadata.user_id;
 
     const body = await request.json();
-    const { activity_date, class_id, title, content, snack, mentioned_children, photos } = body;
+    const { activity_date, class_id, title, content, snack, mentioned_children, photos,
+      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
 
     // Content length validation
     if (content !== undefined && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
@@ -155,6 +156,11 @@ export async function PATCH(
     if (snack !== undefined) updateData.snack = snack;
     if (mentioned_children !== undefined) updateData.mentioned_children = mentioned_children;
     if (normalizedPhotos !== undefined) updateData.photos = normalizedPhotos;
+    if (event_name !== undefined) updateData.event_name = event_name;
+    if (daily_schedule !== undefined) updateData.daily_schedule = daily_schedule;
+    if (role_assignments !== undefined) updateData.role_assignments = role_assignments;
+    if (special_notes !== undefined) updateData.special_notes = special_notes;
+    if (meal !== undefined) updateData.meal = meal;
 
     // 活動記録を更新
     const { data: updatedActivity, error: updateError } = await supabase
