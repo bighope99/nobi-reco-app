@@ -789,10 +789,14 @@ export default function ActivityRecordClient() {
       .filter(Boolean) as ActivityPhoto[]
     setPhotos(mappedPhotos)
 
-    // 新規フィールドを復元
+    // 新規フィールドを復元（デフォルト値と一貫性を保つ）
     setEventName(activity.event_name || "")
-    setDailySchedule(activity.daily_schedule || [])
-    setRoleAssignments(activity.role_assignments || [])
+    setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+      ? activity.daily_schedule
+      : DEFAULT_SCHEDULE)
+    setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+      ? activity.role_assignments
+      : DEFAULT_ROLE_ASSIGNMENTS)
     setSnack(activity.snack || "")
     setMeal(activity.meal || null)
     setSpecialNotes(activity.special_notes || "")
@@ -1278,7 +1282,10 @@ export default function ActivityRecordClient() {
               </div>
               <div className="space-y-2">
                 {dailySchedule.map((item, index) => {
-                  const [hours, minutes] = item.time.split(':')
+                  // 時間フォーマットの防御的パース (HH:MM形式を想定)
+                  const timeParts = (item.time || '10:00').split(':')
+                  const hours = timeParts[0] || '10'
+                  const minutes = timeParts[1] || '00'
                   return (
                     <div key={index} className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
