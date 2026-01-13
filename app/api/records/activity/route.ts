@@ -5,6 +5,32 @@ import { decryptChildId } from '@/utils/crypto/childIdEncryption';
 import { extractChildContent } from '@/lib/ai/contentExtractor';
 
 /**
+ * 型定義: 1日の流れの項目
+ */
+type DailyScheduleItem = {
+  time: string;
+  content: string;
+};
+
+/**
+ * 型定義: 役割分担
+ */
+type RoleAssignment = {
+  user_id: string;
+  user_name: string;
+  role: string;
+};
+
+/**
+ * 型定義: ごはん情報
+ */
+type Meal = {
+  menu: string;
+  items_to_bring?: string;
+  notes?: string;
+};
+
+/**
  * 活動記録を保存し、メンションされた子供の個別記録を自動生成
  *
  * 処理フロー：
@@ -42,6 +68,11 @@ export async function POST(request: NextRequest) {
       activity_id,
       ai_preview = false,
       photos,
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      meal,
     } = body;
 
     // バリデーション
@@ -119,6 +150,11 @@ export async function POST(request: NextRequest) {
           class_id: class_id || null,
           mentioned_children,
           updated_at: new Date().toISOString(),
+          event_name: event_name || null,
+          daily_schedule: daily_schedule || null,
+          role_assignments: role_assignments || null,
+          special_notes: special_notes || null,
+          meal: meal || null,
         }
 
         if (Array.isArray(photos)) {
@@ -148,6 +184,11 @@ export async function POST(request: NextRequest) {
         content,
         mentioned_children,
         created_by: session.user_id,
+        event_name: event_name || null,
+        daily_schedule: daily_schedule || null,
+        role_assignments: role_assignments || null,
+        special_notes: special_notes || null,
+        meal: meal || null,
       }
 
       if (Array.isArray(photos)) {
@@ -353,6 +394,11 @@ export async function PUT(request: NextRequest) {
       activity_date,
       class_id,
       title,
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      meal,
     } = body;
 
     // バリデーション
@@ -417,6 +463,11 @@ export async function PUT(request: NextRequest) {
         class_id: class_id || null,
         mentioned_children,
         updated_at: new Date().toISOString(),
+        event_name: event_name || null,
+        daily_schedule: daily_schedule || null,
+        role_assignments: role_assignments || null,
+        special_notes: special_notes || null,
+        meal: meal || null,
       })
       .eq('id', activity_id)
       .select()
