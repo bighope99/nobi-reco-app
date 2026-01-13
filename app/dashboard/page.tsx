@@ -135,30 +135,76 @@ export default function ChildcareDashboard() {
 
   // --- Actions ---
   const postAttendanceAction = async (action: string, childId: string, actionTimestamp?: string) => {
+    // 楽観的更新: ローカルステートを先に更新
+    const previousData = dashboardData;
+
+    if (dashboardData) {
+      const now = new Date();
+      const timeJST = now.toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Tokyo'
+      });
+
+      setDashboardData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          attendance_list: prev.attendance_list.map(child => {
+            if (child.child_id !== childId) return child;
+
+            switch (action) {
+              case 'check_in':
+                return {
+                  ...child,
+                  status: 'checked_in' as const,
+                  actual_in_time: timeJST,
+                  is_scheduled_today: true,
+                };
+              case 'check_out':
+                return {
+                  ...child,
+                  status: 'checked_out' as const,
+                  actual_out_time: timeJST,
+                };
+              case 'mark_absent':
+                return {
+                  ...child,
+                  status: 'absent' as const,
+                };
+              default:
+                return child;
+            }
+          }),
+        };
+      });
+    }
+
     try {
       setError(null);
       const response = await fetch('/api/dashboard/attendance', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, child_id: childId, action_timestamp: actionTimestamp }),
       });
-
       const result = await response.json();
 
       if (!response.ok || !result.success) {
+        // ロールバック
+        setDashboardData(previousData);
         throw new Error(result.error || '出欠処理に失敗しました');
       }
-
-      await fetchDashboardData();
+      // 成功時はローカルステートのまま（再フェッチ不要）
     } catch (err) {
+      // ロールバック
+      setDashboardData(previousData);
       console.error('Attendance action error:', err);
       setError(err instanceof Error ? err.message : '出欠処理に失敗しました');
     }
   };
 
-  // 登園処理
+  // 登所処理
   const handleCheckIn = async (childId: string) => {
     const clickedAt = new Date().toISOString();
     await postAttendanceAction('check_in', childId, clickedAt);
@@ -180,7 +226,7 @@ export default function ChildcareDashboard() {
     await postAttendanceAction('add_schedule', childId);
   };
 
-  // 予定外登園の確認
+  // 予定外登所の確認
   const handleConfirmUnexpected = async (childId: string) => {
     await postAttendanceAction('confirm_unexpected', childId);
   };
@@ -217,7 +263,8 @@ export default function ChildcareDashboard() {
 
     // 2. Filter: Show/Hide Unscheduled
     if (showUnscheduled) {
-      result = result.filter(c => !c.is_scheduled_today);
+      // 予定なしセクション: 登所実績がある子どもは除外
+      result = result.filter(c => !c.is_scheduled_today && c.status === 'absent');
     } else {
       result = result.filter(c => c.is_scheduled_today || c.status === 'checked_in' || c.status === 'checked_out');
     }
@@ -276,7 +323,7 @@ export default function ChildcareDashboard() {
     if (!dashboardData) return null;
 
     if (child.status === 'checked_in' && !child.is_scheduled_today) {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">予定外登園</span>;
+      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">予定外登所</span>;
     }
 
     const overdue = child.status === 'checked_in' && child.is_scheduled_today && child.scheduled_end_time &&
@@ -293,9 +340,9 @@ export default function ChildcareDashboard() {
           const isLate = child.scheduled_start_time &&
             getMinutesDiff(dashboardData.current_time, child.scheduled_start_time) > 0;
           if (isLate) {
-            return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">未登園(遅れ)</span>;
+            return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">未登所(遅れ)</span>;
           }
-          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">未登園</span>;
+          return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">未登所</span>;
         } else {
           return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400 border border-gray-200">予定なし</span>;
         }
@@ -312,7 +359,7 @@ export default function ChildcareDashboard() {
       return (
         <div className="flex gap-2">
           <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
-            <LogIn size={14} /> 登園
+            <LogIn size={14} /> 登所
           </button>
           <button onClick={() => handleMarkAbsent(child.child_id)} className={absentButtonClass}>
             <UserX size={14} /> 欠席
@@ -325,7 +372,7 @@ export default function ChildcareDashboard() {
       return (
         <div className="flex gap-2">
           <button onClick={() => handleCheckIn(child.child_id)} className={loginButtonClass}>
-            <LogIn size={14} /> 登園
+            <LogIn size={14} /> 登所
           </button>
           <button onClick={() => handleAddSchedule(child.child_id)} className={absentButtonClass}>
             <CalendarPlus size={14} /> 予定追加
@@ -427,7 +474,7 @@ export default function ChildcareDashboard() {
                   </div>
                 </div>
                 <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">未登園（未到着）</h3>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">未登所（未到着）</h3>
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-bold text-slate-700">{dashboardData.kpi.not_arrived}</span>
                     <span className="text-xs text-slate-400">名</span>
@@ -472,7 +519,7 @@ export default function ChildcareDashboard() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-red-900">{child.name}</span>
-                            <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 font-bold">未登園・遅刻</span>
+                            <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 font-bold">未登所・遅刻</span>
                           </div>
                           {/* 学校名と学年を表示 */}
                           <div className="text-xs text-red-700 mt-1 flex flex-wrap items-center gap-x-2">
@@ -514,9 +561,9 @@ export default function ChildcareDashboard() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-amber-900">{child.name}</span>
-                            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-200 font-bold">予定外登園</span>
+                            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-200 font-bold">予定外登所</span>
                           </div>
-                          <div className="text-sm text-amber-800 mt-1">本日の出席予定登録がありませんが、チェックインされています。</div>
+                          <div className="text-sm text-amber-800 mt-1">本日の出席予定登録がありませんが、登所されています。</div>
                         </div>
                       </div>
                       <button onClick={() => handleConfirmUnexpected(child.child_id)} className="flex-1 sm:flex-none px-3 py-2 bg-white text-amber-700 border border-amber-300 rounded-md font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 whitespace-nowrap">

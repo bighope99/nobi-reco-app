@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
       }
 
-      const status: 'scheduled' | 'irregular' = dailyRecord ? 'scheduled' : 'irregular';
-      await upsertDailyAttendance(status);
+      // 手動ボタンでは常にscheduled（irregularはQRコードのみ）
+      await upsertDailyAttendance('scheduled');
 
       return NextResponse.json({ success: true });
     }

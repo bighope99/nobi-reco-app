@@ -12,6 +12,7 @@ import {
   type LateArrivalAlert,
   getMinutesDiff,
 } from '@/lib/alerts/late-arrival';
+import { formatTimeJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -241,6 +242,7 @@ export async function GET(request: NextRequest) {
       scheduled_end_time: string | null;
       actual_in_time: string | null;
       actual_out_time: string | null;
+      check_in_method: 'qr' | 'manual' | null;
       guardian_phone: string | null;
       last_record_date: string | null;
       weekly_record_count: number;
@@ -329,8 +331,9 @@ export async function GET(request: NextRequest) {
         is_scheduled_today: isScheduledToday,
         scheduled_start_time: formatTimeToMinutes(scheduledStartTime),
         scheduled_end_time: formatTimeToMinutes(null),
-        actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
-        actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
+        actual_in_time: formatTimeJST(displayLog?.checked_in_at),
+        actual_out_time: formatTimeJST(displayLog?.checked_out_at),
+        check_in_method: displayLog?.check_in_method || null,
         guardian_phone: guardianPhone,
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
@@ -390,9 +393,9 @@ export async function GET(request: NextRequest) {
         alert_triggered_at: new Date().toISOString(),
       }));
 
-    // 予定外登園アラート
+    // 予定外登園アラート（QRコード経由のみ）
     const unexpected = attendanceList
-      .filter(c => c.status === 'checked_in' && !c.is_scheduled_today)
+      .filter(c => c.status === 'checked_in' && !c.is_scheduled_today && c.check_in_method === 'qr')
       .map(c => ({
         child_id: c.child_id,
         name: c.name,
