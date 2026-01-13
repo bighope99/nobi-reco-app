@@ -36,3 +36,7 @@ setting.local.json
 *.tsbuildinfo
 # Test coverage
 coverage/
+
+*.png
+*.jpg
+*.jpeg
