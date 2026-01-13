@@ -152,6 +152,7 @@ describe('/api/records/activity PUT', () => {
             return {
               select: jest.fn().mockReturnThis(),
               eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
               single: jest.fn().mockResolvedValue({
                 data: {
                   id: mockUpdateData.activity_id,
@@ -212,6 +213,7 @@ describe('/api/records/activity PUT', () => {
             return {
               select: jest.fn().mockReturnThis(),
               eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
               single: jest.fn().mockResolvedValue({
                 data: null,
                 error: { message: 'Not found' },
@@ -250,6 +252,7 @@ describe('/api/records/activity PUT', () => {
             return {
               select: jest.fn().mockReturnThis(),
               eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
               single: jest.fn().mockResolvedValue({
                 data: {
                   id: mockUpdateData.activity_id,
@@ -293,6 +296,7 @@ describe('/api/records/activity PUT', () => {
             return {
               select: jest.fn().mockReturnThis(),
               eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
               single: jest.fn().mockResolvedValue({
                 data: {
                   id: mockUpdateData.activity_id,
@@ -351,6 +355,7 @@ describe('/api/records/activity PUT', () => {
             return {
               select: jest.fn().mockReturnThis(),
               eq: jest.fn().mockReturnThis(),
+              is: jest.fn().mockReturnThis(),
               single: jest.fn().mockResolvedValue({
                 data: {
                   id: mockUpdateData.activity_id,

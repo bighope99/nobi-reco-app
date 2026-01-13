@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { MentionTextarea } from '@/components/ui/mention-textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -238,12 +239,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const draftId = searchParams?.get('draftId');
   const paramChildId = searchParams?.get('childId')?.trim() || '';
   const paramChildName = searchParams?.get('childName')?.trim() || '';
+  const paramActivityId = searchParams?.get('activityId')?.trim() || '';
   const { user } = useAuth();
   const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
   const [showReassignDialog, setShowReassignDialog] = useState(false);
   const [selectedNewChild, setSelectedNewChild] = useState('');
   const [selectedChildId, setSelectedChildId] = useState('');
+  const [activityId, setActivityId] = useState<string | null>(null);
   const [lockedChildName, setLockedChildName] = useState('');
   const [reassignReason, setReassignReason] = useState('');
   const [loading, setLoading] = useState(false);
@@ -320,16 +323,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   }, [observation, isEditing, toDisplayText]);
 
   useEffect(() => {
-    if (isNew) {
-      setObservation(null);
-      setEditText('');
-      setIsEditing(true);
-      setAiEditForm({
-        ai_action: '',
-        ai_opinion: '',
-        flags: buildDefaultTagFlags(observationTags),
-      });
-    }
+    if (!isNew) return;
+    setObservation(null);
+    setEditText('');
+    setIsEditing(true);
+    setAiEditForm({
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultTagFlags(observationTags),
+    });
+  }, [isNew]);
+
+  useEffect(() => {
+    if (!isNew) return;
+    setAiEditForm((prev) => ({
+      ...prev,
+      flags: buildDefaultTagFlags(observationTags),
+    }));
   }, [isNew, observationTags]);
 
   useEffect(() => {
@@ -357,6 +367,26 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     if (!paramChildName) return;
     setLockedChildName(paramChildName);
   }, [paramChildName]);
+
+  // activity_idをURLパラメータまたはドラフトから取得
+  useEffect(() => {
+    if (!isNew) return;
+
+    // 優先順位: URLパラメータ > ドラフト
+    if (paramActivityId) {
+      setActivityId(paramActivityId);
+      return;
+    }
+
+    // ドラフトからactivity_idを取得
+    if (draftId) {
+      const drafts = loadAiDraftsFromCookie();
+      const draft = drafts.find((d) => d.draft_id === draftId);
+      if (draft?.activity_id) {
+        setActivityId(draft.activity_id);
+      }
+    }
+  }, [isNew, paramActivityId, draftId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -466,6 +496,31 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       ai_opinion: nextOpinion,
     }));
   }, [aiEditForm.ai_action, aiEditForm.ai_opinion, nameByIdMap, toDisplayText]);
+
+  // nameByIdMapが構築された時点でaiEditFormを再変換
+  useEffect(() => {
+    if (nameByIdMap.size === 0) return;
+
+    setAiEditForm((prev) => {
+      // child:形式が含まれない場合はスキップ
+      if (!prev.ai_action.includes('child:') && !prev.ai_opinion.includes('child:')) {
+        return prev;
+      }
+
+      const nextAction = toDisplayText(prev.ai_action);
+      const nextOpinion = toDisplayText(prev.ai_opinion);
+
+      if (nextAction === prev.ai_action && nextOpinion === prev.ai_opinion) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ai_action: nextAction,
+        ai_opinion: nextOpinion,
+      };
+    });
+  }, [nameByIdMap.size, toDisplayText]);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -881,6 +936,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           child_id: selectedChildId,
           observation_date: observationDate,
           content: text,
+          activity_id: activityId || null,
           ai_action: aiResult.ai_action,
           ai_opinion: aiResult.ai_opinion,
           tag_flags: aiResult.flags,
@@ -923,7 +979,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         if (typeof window !== 'undefined') {
           const lastSaved = {
             draft_id: draftId,
-            activity_id: null,
+            activity_id: activityId,
             child_id: selectedChildId,
             child_display_name: resolvedChildName,
             observation_date: result.data.observation_date ?? new Date().toISOString().split('T')[0],
@@ -1119,7 +1175,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         {editText.length}/{OBSERVATION_BODY_MAX}文字
                       </span>
                     </div>
-                    <Textarea
+                    <MentionTextarea
                       id="observation_body"
                       autoFocus
                       className="min-h-[200px]"
@@ -1180,7 +1236,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
-                      <Textarea
+                      <MentionTextarea
                         id="ai_action"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_action}
@@ -1198,7 +1254,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
-                      <Textarea
+                      <MentionTextarea
                         id="ai_opinion"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_opinion}

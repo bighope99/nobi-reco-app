@@ -261,8 +261,8 @@ export default function AttendanceSchedulePage() {
 
   return (
     <StaffLayout title="出席予定登録" subtitle="曜日ベースの通所設定">
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="min-h-screen">
+        <div className="max-w-7xl mx-auto">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -383,7 +383,7 @@ export default function AttendanceSchedulePage() {
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
                       <th
-                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                        className="px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
                         onClick={() => handleSort('name')}
                       >
                         <div className="flex items-center gap-1">
@@ -392,7 +392,7 @@ export default function AttendanceSchedulePage() {
                         </div>
                       </th>
                       <th
-                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                        className="px-3 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
                         onClick={() => handleSort('grade')}
                       >
                         <div className="flex items-center gap-1">
@@ -426,7 +426,7 @@ export default function AttendanceSchedulePage() {
                           key={child.child_id}
                           className={`transition-colors ${hasChanges ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
                         >
-                          <td className="px-6 py-4">
+                          <td className="px-3 py-4">
                             <div>
                               <div className="font-bold text-base text-slate-800">
                                 {child.name}
@@ -436,10 +436,10 @@ export default function AttendanceSchedulePage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-2 py-4">
                             <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-3 py-4">
                             <span className="text-sm text-slate-600">{child.class_name}</span>
                           </td>
                           {weekdays.map((day) => (

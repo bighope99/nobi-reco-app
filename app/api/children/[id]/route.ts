@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { handleChildSave } from '../save/route';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 // GET /api/children/:id - 子ども詳細取得
 export async function GET(
@@ -83,16 +84,41 @@ export async function GET(
     const primaryGuardian = guardians.find((g: any) => g.is_primary);
     const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
 
+
+    // 保護者情報の復号化
+    const decryptGuardian = (guardian: any) => {
+      if (!guardian) return null;
+      return {
+        ...guardian,
+        family_name: decryptOrFallback(guardian.family_name),
+        given_name: decryptOrFallback(guardian.given_name),
+        phone: decryptOrFallback(guardian.phone),
+        email: decryptOrFallback(guardian.email),
+      };
+    };
+
+    const decryptedPrimaryGuardian = primaryGuardian ? {
+      ...primaryGuardian,
+      m_guardians: decryptGuardian(primaryGuardian.m_guardians),
+    } : null;
+
+    const decryptedEmergencyContacts = emergencyContacts.map((ec: any) => ({
+      ...ec,
+      m_guardians: decryptGuardian(ec.m_guardians),
+    }));
+
+  
+
     // データ整形
     const response = {
       success: true,
       data: {
         child_id: childData.id,
         basic_info: {
-          family_name: childData.family_name,
-          given_name: childData.given_name,
-          family_name_kana: childData.family_name_kana,
-          given_name_kana: childData.given_name_kana,
+          family_name: decryptOrFallback(childData.family_name),
+          given_name: decryptOrFallback(childData.given_name),
+          family_name_kana: decryptOrFallback(childData.family_name_kana),
+          given_name_kana: decryptOrFallback(childData.given_name_kana),
           nickname: childData.nickname,
           gender: childData.gender,
           birth_date: childData.birth_date,
@@ -110,31 +136,44 @@ export async function GET(
           age_group: classInfo?.age_group || '',
         },
         contact: {
-          parent_name: primaryGuardian
-            ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
-            : childData.parent_name || null, // 後方互換性のためフォールバック
-          parent_phone: primaryGuardian?.m_guardians.phone || childData.parent_phone || null,
-          parent_email: primaryGuardian?.m_guardians.email || childData.parent_email || null,
-          emergency_contacts: emergencyContacts.map((ec: any) => ({
-            name: `${ec.m_guardians.family_name} ${ec.m_guardians.given_name}`.trim(),
+          parent_name: decryptedPrimaryGuardian
+            ? formatName(
+                [
+                  decryptedPrimaryGuardian.m_guardians.family_name,
+                  decryptedPrimaryGuardian.m_guardians.given_name,
+                ],
+                null
+              )
+            : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
+          parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(childData.parent_phone) || null,
+          parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(childData.parent_email) || null,
+          emergency_contacts: decryptedEmergencyContacts.map((ec: any) => ({
+            name: formatName(
+              [ec.m_guardians.family_name, ec.m_guardians.given_name],
+              ''
+            ) || '',
             relation: ec.relationship,
             phone: ec.m_guardians.phone,
           })),
         },
         care_info: {
-          allergies: childData.allergies,
-          child_characteristics: childData.child_characteristics,
-          parent_characteristics: childData.parent_characteristics,
+          allergies: decryptOrFallback(childData.allergies),
+          child_characteristics: decryptOrFallback(childData.child_characteristics),
+          parent_characteristics: decryptOrFallback(childData.parent_characteristics),
         },
         permissions: {
           photo_permission_public: childData.photo_permission_public,
           photo_permission_share: childData.photo_permission_share,
         },
-        siblings: (siblingsData || []).map((s: any) => ({
-          child_id: s.m_children.id,
-          name: `${s.m_children.family_name} ${s.m_children.given_name}`,
-          relationship: s.relationship,
-        })),
+        siblings: (siblingsData || []).map((s: any) => {
+          const decryptedFamilyName = decryptOrFallback(s.m_children.family_name);
+          const decryptedGivenName = decryptOrFallback(s.m_children.given_name);
+          return {
+            child_id: s.m_children.id,
+            name: formatName([decryptedFamilyName, decryptedGivenName], ''),
+            relationship: s.relationship,
+          };
+        }),
         created_at: childData.created_at,
         updated_at: childData.updated_at,
       },

@@ -408,8 +408,15 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       : (isEditMode ? formData.birth_date : '');
 
     // Validation
-    if (!formData.family_name || !formData.given_name || !birthDate || !formData.school_id || !formData.enrolled_at) {
-      setError('必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）');
+    if (
+      !formData.family_name ||
+      !formData.given_name ||
+      !birthDate ||
+      !formData.enrolled_at
+    ) {
+      setError(
+        '必須項目を入力してください（氏名、生年月日、入所開始日は必須です）'
+      );
       return;
     }
 
@@ -493,8 +500,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-600 pb-24">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen font-sans text-slate-600 pb-24">
+      <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
           {/* Side Navigation (Sticky) */}
@@ -661,7 +668,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       </div>
                     </FieldGroup>
 
-                    <FieldGroup label="通学している学校" required className="sm:col-span-2">
+                    <FieldGroup label="通学している学校" className="sm:col-span-2">
                       <Select
                         value={formData.school_id}
                         onChange={(e: any) => setFormData({ ...formData, school_id: e.target.value })}
@@ -1024,4 +1031,3 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     </div>
   );
 }
-

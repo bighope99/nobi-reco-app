@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserSession } from '@/lib/auth/session'
 import { calculateGrade, formatGradeLabel } from '@/utils/grade'
 import { createClient } from '@/utils/supabase/server'
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -76,12 +77,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+  
+
     const suggestions = (children || []).map((child) => {
-      const name = `${child.family_name} ${child.given_name}`
-      const kana = `${child.family_name_kana} ${child.given_name_kana}`
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+      const name = formatName([decryptedFamilyName, decryptedGivenName])
+      const kana = formatName([decryptedFamilyNameKana, decryptedGivenNameKana])
       const grade = calculateGrade(child.birth_date, child.grade_add)
       const gradeLabel = formatGradeLabel(grade)
-      const className = child._child_class?.[0]?.m_classes?.name || ''
+      const className = (child._child_class?.[0]?.m_classes as { name?: string } | undefined)?.name || ''
 
       return {
         child_id: child.id,

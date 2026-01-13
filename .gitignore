@@ -12,6 +12,7 @@ plan/
 # next.js
 .next/
 out/
+next-env.d.ts
 
 # production
 build/
@@ -26,10 +27,12 @@ yarn-error.log*
 .vercel
 .cursor
 .serena
-.claude
 .ui_file
 .mcp.json
+.work
 setting.local.json
 
 # typescript
 *.tsbuildinfo
+# Test coverage
+coverage/

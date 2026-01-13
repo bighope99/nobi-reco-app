@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate, weekdayJpMap } from '../utils/attendance';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -156,10 +157,16 @@ export async function GET(request: NextRequest) {
         status = 'absent';
       }
 
+      // PIIフィールドを復号化
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         class_id: classData?.id || null,
         class_name: classData?.name || '',
         age_group: classData?.age_group || '',
