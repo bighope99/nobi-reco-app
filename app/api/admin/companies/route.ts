@@ -71,7 +71,8 @@ export async function GET() {
             .eq('company_id', company.id)
             .eq('role', 'company_admin')
             .is('deleted_at', null)
-            .single()
+            .limit(1)
+            .maybeSingle()
         ]);
 
         return {
@@ -197,10 +198,13 @@ export async function POST(request: NextRequest) {
 
     if (facilityError) {
       // ロールバック: 会社削除
-      await supabase
+      const { error: rollbackError } = await supabase
         .from('m_companies')
         .delete()
         .eq('id', newCompany.id);
+      if (rollbackError) {
+        console.error('Rollback failed for company:', newCompany.id, rollbackError);
+      }
 
       throw facilityError;
     }
@@ -220,15 +224,21 @@ export async function POST(request: NextRequest) {
 
     if (authCreateError || !authData.user) {
       // ロールバック: 施設削除 → 会社削除
-      await supabase
+      const { error: rollbackFacilityError } = await supabase
         .from('m_facilities')
         .delete()
         .eq('id', newFacility.id);
+      if (rollbackFacilityError) {
+        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
+      }
 
-      await supabase
+      const { error: rollbackCompanyError } = await supabase
         .from('m_companies')
         .delete()
         .eq('id', newCompany.id);
+      if (rollbackCompanyError) {
+        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
+      }
 
       throw authCreateError || new Error('Failed to create auth user');
     }
@@ -241,17 +251,26 @@ export async function POST(request: NextRequest) {
 
     if (linkError || !linkData) {
       // ロールバック: Auth ユーザー削除 → 施設削除 → 会社削除
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      if (rollbackAuthError) {
+        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
+      }
 
-      await supabase
+      const { error: rollbackFacilityError } = await supabase
         .from('m_facilities')
         .delete()
         .eq('id', newFacility.id);
+      if (rollbackFacilityError) {
+        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
+      }
 
-      await supabase
+      const { error: rollbackCompanyError } = await supabase
         .from('m_companies')
         .delete()
         .eq('id', newCompany.id);
+      if (rollbackCompanyError) {
+        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
+      }
 
       throw linkError || new Error('Failed to generate invite link');
     }
@@ -263,20 +282,29 @@ export async function POST(request: NextRequest) {
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link:', supabaseUrl);
+      console.error('Failed to extract token from invite link for email:', body.admin_user.email);
 
       // ロールバック: Auth ユーザー削除 → 施設削除 → 会社削除
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      if (rollbackAuthError) {
+        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
+      }
 
-      await supabase
+      const { error: rollbackFacilityError } = await supabase
         .from('m_facilities')
         .delete()
         .eq('id', newFacility.id);
+      if (rollbackFacilityError) {
+        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
+      }
 
-      await supabase
+      const { error: rollbackCompanyError } = await supabase
         .from('m_companies')
         .delete()
         .eq('id', newCompany.id);
+      if (rollbackCompanyError) {
+        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
+      }
 
       return NextResponse.json(
         {
@@ -313,17 +341,26 @@ export async function POST(request: NextRequest) {
 
     if (createUserError) {
       // ロールバック: Auth ユーザー削除 → 施設削除 → 会社削除
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      if (rollbackAuthError) {
+        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
+      }
 
-      await supabase
+      const { error: rollbackFacilityError } = await supabase
         .from('m_facilities')
         .delete()
         .eq('id', newFacility.id);
+      if (rollbackFacilityError) {
+        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
+      }
 
-      await supabase
+      const { error: rollbackCompanyError } = await supabase
         .from('m_companies')
         .delete()
         .eq('id', newCompany.id);
+      if (rollbackCompanyError) {
+        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
+      }
 
       throw createUserError;
     }
@@ -341,22 +378,34 @@ export async function POST(request: NextRequest) {
 
     if (userFacilityError) {
       // ロールバック: m_users削除 → Auth ユーザー削除 → 施設削除 → 会社削除
-      await supabase
+      const { error: rollbackUserError } = await supabase
         .from('m_users')
         .delete()
         .eq('id', newUser.id);
+      if (rollbackUserError) {
+        console.error('Rollback failed for user:', newUser.id, rollbackUserError);
+      }
 
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      if (rollbackAuthError) {
+        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
+      }
 
-      await supabase
+      const { error: rollbackFacilityError } = await supabase
         .from('m_facilities')
         .delete()
         .eq('id', newFacility.id);
+      if (rollbackFacilityError) {
+        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
+      }
 
-      await supabase
+      const { error: rollbackCompanyError } = await supabase
         .from('m_companies')
         .delete()
         .eq('id', newCompany.id);
+      if (rollbackCompanyError) {
+        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
+      }
 
       throw userFacilityError;
     }

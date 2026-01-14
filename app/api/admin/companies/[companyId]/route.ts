@@ -118,7 +118,16 @@ export async function PUT(
     }
 
     const { companyId } = await props.params;
-    const body = await request.json();
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
 
     // 必須パラメータチェック
     if (!body.company?.name) {

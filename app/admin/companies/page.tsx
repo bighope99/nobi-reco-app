@@ -158,7 +158,7 @@ export default function CompaniesPage() {
                           {resendingId === company.id ? "送信中..." : "招待再送信"}
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" asChild>
+                      <Button variant="ghost" size="icon" asChild aria-label={`${company.name}を編集`}>
                         <Link href={`/admin/companies/${company.id}/edit`}>
                           <Edit className="h-4 w-4" />
                         </Link>

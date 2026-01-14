@@ -103,7 +103,7 @@ export async function POST(
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link:', supabaseUrl);
+      console.error('Failed to extract token from invite link for user:', adminUser.id);
       return NextResponse.json(
         {
           success: false,
