@@ -757,7 +757,7 @@ export default function ChildcareDashboard() {
                         key={child.child_id}
                         href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
                         className="group p-3 rounded-lg border border-transparent hover:border-indigo-100 hover:bg-indigo-50/50 transition-all flex items-center justify-between"
-                        aria-label={`${child.name}の個別記録を作成`}
+                        aria-label={`${child.name}の児童記録を作成`}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 w-full">
                           <span className="font-bold text-slate-800 text-sm whitespace-nowrap">{child.name}</span>
