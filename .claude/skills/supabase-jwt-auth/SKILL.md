@@ -236,6 +236,53 @@ const current_facility_id = payload.app_metadata?.current_facility_id;
 
 **正しいヘルパー実装**: `assets/correct-jwt-helper.ts`を参照してください。
 
+## 重要: middleware (Edge Runtime) での使用
+
+**問題**: middleware は Edge Runtime で動作するため、Node.js の `Buffer` が使用できません。
+
+**間違った実装（Edge Runtime では動作しない）:**
+```typescript
+// ❌ Buffer は Edge Runtime で使用不可
+const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+```
+
+**正しい実装（Edge Runtime 対応）:**
+```typescript
+// ✅ atob() を使用（Edge Runtime 対応）
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+
+        // Base64URL を Base64 に変換
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+        );
+
+        return JSON.parse(jsonPayload);
+    } catch {
+        return null;
+    }
+}
+
+// middleware での使用例
+const { data: { session } } = await supabase.auth.getSession();
+if (session?.access_token) {
+    const payload = decodeJwtPayload(session.access_token);
+    const role = payload?.app_metadata?.role as string | undefined;
+}
+```
+
+**重要なポイント**:
+- `getUser()` の `user.app_metadata` にはカスタムクレームが**含まれない**
+- `getSession()` の `session.access_token` をデコードして取得する必要がある
+- Edge Runtime では `Buffer` が使えないため `atob()` を使用
+- JWT は Base64URL 形式なので `-` → `+`、`_` → `/` への変換が必要
+
 ## Security Notes
 
 - JWT tokens are signed by Supabase and cannot be tampered with
