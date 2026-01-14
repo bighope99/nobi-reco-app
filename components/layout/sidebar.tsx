@@ -34,8 +34,8 @@ const staffNavItems: NavItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
     children: [
       { label: "記録状況一覧", href: "/records/status" },
-      { label: "活動記録入力", href: "/records/activity" },
-      { label: "観察内容入力", href: "/records/personal/new" },
+      { label: "活動記録", href: "/records/activity" },
+      { label: "児童記録", href: "/records/personal/new" },
     ],
   },
   {
