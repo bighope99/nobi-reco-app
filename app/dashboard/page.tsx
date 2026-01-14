@@ -721,18 +721,18 @@ export default function ChildcareDashboard() {
 
             <div className="lg:col-span-4 h-full flex flex-col gap-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col items-center justify-center gap-2">
+                <Link href="/records/activity" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col items-center justify-center gap-2">
                   <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform">
                     <FileText size={20} />
                   </div>
                   <span className="text-sm font-bold text-slate-700">日誌記録</span>
-                </button>
-                <button className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group flex flex-col items-center justify-center gap-2">
+                </Link>
+                <Link href="/attendance/list" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group flex flex-col items-center justify-center gap-2">
                   <div className="p-2 bg-emerald-50 text-emerald-600 rounded-full group-hover:scale-110 transition-transform">
                     <Activity size={20} />
                   </div>
-                  <span className="text-sm font-bold text-slate-700">成長レポート</span>
-                </button>
+                  <span className="text-sm font-bold text-slate-700">出席生徒</span>
+                </Link>
               </div>
 
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col lg:sticky lg:top-6">
@@ -753,7 +753,12 @@ export default function ChildcareDashboard() {
                     </div>
                   ) : (
                     dashboardData.record_support.map(child => (
-                      <div key={child.child_id} className="group p-3 rounded-lg border border-transparent hover:border-indigo-100 hover:bg-indigo-50/50 transition-all flex items-center justify-between">
+                      <Link
+                        key={child.child_id}
+                        href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
+                        className="group p-3 rounded-lg border border-transparent hover:border-indigo-100 hover:bg-indigo-50/50 transition-all flex items-center justify-between"
+                        aria-label={`${child.name}の児童記録を作成`}
+                      >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 w-full">
                           <span className="font-bold text-slate-800 text-sm whitespace-nowrap">{child.name}</span>
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700 border border-indigo-200 whitespace-nowrap">
@@ -761,14 +766,13 @@ export default function ChildcareDashboard() {
                           </span>
                           <span className="text-xs text-slate-500 whitespace-nowrap">{child.class_name}</span>
                         </div>
-                        <Link
-                          href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition-all"
-                          aria-label={`${child.name}の個別記録を作成`}
+                        <span
+                          className="p-1.5 rounded-md text-slate-400 group-hover:text-indigo-600 transition-all"
+                          aria-hidden="true"
                         >
                           <ChevronRight size={18} />
-                        </Link>
-                      </div>
+                        </span>
+                      </Link>
                     ))
                   )}
                 </div>

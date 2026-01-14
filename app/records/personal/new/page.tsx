@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default function ObservationNewPage() {
   return (
-    <StaffLayout title="個別記録" subtitle="新規作成">
+    <StaffLayout title="児童記録" subtitle="新規作成">
       <Suspense fallback={<div className="p-8 text-center">読み込み中...</div>}>
         <ObservationEditor mode="new" />
       </Suspense>

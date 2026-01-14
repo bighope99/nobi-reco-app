@@ -1814,7 +1814,7 @@ export default function ActivityRecordClient() {
                       <div className="flex items-center justify-between pt-2 border-t">
                         <div className="flex flex-col gap-2 flex-1">
                           <span className="text-xs text-muted-foreground">
-                            {activity.individual_record_count}件の個別記録
+                            {activity.individual_record_count}件の児童記録
                           </span>
                           {activity.individual_records && activity.individual_records.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
@@ -1899,7 +1899,7 @@ export default function ActivityRecordClient() {
                         </div>
                       </div>
                       {result.status === "saved" && (
-                        <p className="text-xs text-green-600">個別記録として保存されました</p>
+                        <p className="text-xs text-green-600">児童記録として保存されました</p>
                       )}
                     </CardContent>
                   </Card>
