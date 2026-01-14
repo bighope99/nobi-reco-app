@@ -53,18 +53,35 @@ export async function GET() {
       throw companiesError;
     }
 
-    // 各会社の施設数を並列取得
+    // 各会社の施設数と代表者情報を並列取得
     const companiesWithFacilityCount = await Promise.all(
       (companies || []).map(async (company) => {
-        const { count: facilityCount } = await supabase
-          .from('m_facilities')
-          .select('*', { count: 'exact', head: true })
-          .eq('company_id', company.id)
-          .is('deleted_at', null);
+        const [
+          { count: facilityCount },
+          { data: adminUser }
+        ] = await Promise.all([
+          supabase
+            .from('m_facilities')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', company.id)
+            .is('deleted_at', null),
+          supabase
+            .from('m_users')
+            .select('id, name, email')
+            .eq('company_id', company.id)
+            .eq('role', 'company_admin')
+            .is('deleted_at', null)
+            .single()
+        ]);
 
         return {
           ...company,
           facilities_count: facilityCount || 0,
+          admin_user: adminUser ? {
+            id: adminUser.id,
+            name: adminUser.name,
+            email: adminUser.email,
+          } : null,
         };
       })
     );
