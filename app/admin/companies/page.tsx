@@ -98,7 +98,7 @@ export default function CompaniesPage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>会社一覧</span>
-              {!loading && !error && (
+              {!isLoading && !error && (
                 <span className="text-sm font-normal text-muted-foreground">
                   {filteredCompanies.length}件
                 </span>
