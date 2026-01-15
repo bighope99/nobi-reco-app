@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
 import { LogOut, Loader2 } from 'lucide-react';
 
@@ -21,29 +20,24 @@ export function LogoutButton({
 }: LogoutButtonProps) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const supabase = createClient();
 
     const handleLogout = async () => {
         setIsLoading(true);
         try {
-            // 1. まずサーバー側のセッションをクリア（API呼び出し）
-            const response = await fetch('/api/auth/logout', { method: 'POST' });
-            if (!response.ok) {
-                throw new Error('Logout API failed');
-            }
-
-            // 2. クライアント側の Supabase セッションをクリア
-            await supabase.auth.signOut();
-
-            // 3. sessionStorage をクリア
+            // 1. sessionStorage を先にクリア（リダイレクト前に確実に削除）
             sessionStorage.removeItem('user_session');
 
-            // 4. ログインページへリダイレクト
+            // 2. サーバー側でセッションとCookieをクリア（signOutもサーバーで実行）
+            const response = await fetch('/api/auth/logout', { method: 'POST' });
+            if (!response.ok) {
+                console.warn('Logout API returned non-OK status');
+            }
+
+            // 3. ログインページへリダイレクト
             router.push('/login');
         } catch (error) {
             console.error('Logout error:', error);
-            // エラーでも sessionStorage はクリアしてリダイレクト
-            sessionStorage.removeItem('user_session');
+            // エラーでもリダイレクト
             router.push('/login');
         } finally {
             setIsLoading(false);
