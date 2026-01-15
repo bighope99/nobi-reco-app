@@ -142,7 +142,7 @@ describe('getSanitizedExtendedFields', () => {
       expect(result.daily_schedule?.[0].time).toBe('14:00')
     })
 
-    it('should keep rows where only time has value', () => {
+    it('should exclude rows where only time has value (content is required)', () => {
       const input = {
         roleAssignments: [],
         dailySchedule: [
@@ -157,7 +157,10 @@ describe('getSanitizedExtendedFields', () => {
 
       const result = getSanitizedExtendedFields(input)
 
-      expect(result.daily_schedule).toHaveLength(2)
+      // Only the row with content should be kept
+      expect(result.daily_schedule).toHaveLength(1)
+      expect(result.daily_schedule?.[0].time).toBe('10:00')
+      expect(result.daily_schedule?.[0].content).toBe('Activity')
     })
 
     it('should keep rows where only content has value', () => {
@@ -184,6 +187,29 @@ describe('getSanitizedExtendedFields', () => {
         dailySchedule: [
           { time: '', content: '' },
           { time: '  ', content: '  ' },
+        ],
+        snack: '',
+        meal: null,
+        specialNotes: '',
+        eventName: '',
+      }
+
+      const result = getSanitizedExtendedFields(input)
+
+      expect(result.daily_schedule).toBeNull()
+    })
+
+    it('should return null when all rows have only time values (DEFAULT_SCHEDULE scenario)', () => {
+      // This tests the scenario where user hasn't filled in any schedule content
+      // but the form has default time values like "10:00"
+      const input = {
+        roleAssignments: [],
+        dailySchedule: [
+          { time: '10:00', content: '' },
+          { time: '10:00', content: '' },
+          { time: '10:00', content: '' },
+          { time: '10:00', content: '' },
+          { time: '10:00', content: '' },
         ],
         snack: '',
         meal: null,

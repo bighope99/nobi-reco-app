@@ -40,9 +40,9 @@ export interface SanitizedExtendedFields {
  * @returns Sanitized extended fields with proper null handling
  */
 export function getSanitizedExtendedFields(input: ExtendedFieldsInput): SanitizedExtendedFields {
-  // 1. daily_schedule: time と content の両方が空の行を除外
+  // 1. daily_schedule: content が空の行を除外（time のみ入力は無効とする）
   const filteredSchedule = input.dailySchedule.filter(
-    (item) => item.time?.trim() || item.content?.trim()
+    (item) => item.content?.trim()
   )
   const sanitizedSchedule = filteredSchedule.length > 0
     ? sanitizeArrayFields(filteredSchedule, ['content'])
