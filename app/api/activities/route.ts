@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
         meal,
         created_at,
         updated_at,
-        m_classes!inner (
+        m_classes (
           id,
           name
         ),
