@@ -137,6 +137,7 @@ export default function ActivityRecordClient() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [transcriptionTarget, setTranscriptionTarget] = useState<'activityContent' | 'specialNotes'>('activityContent')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
@@ -1146,8 +1147,9 @@ export default function ActivityRecordClient() {
     })
   }
 
-  const startRecording = async () => {
+  const startRecording = async (target: 'activityContent' | 'specialNotes' = 'activityContent') => {
     try {
+      setTranscriptionTarget(target)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
@@ -1200,7 +1202,11 @@ export default function ActivityRecordClient() {
       }
 
       const transcribedText = result.text
-      setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      if (transcriptionTarget === 'specialNotes') {
+        setSpecialNotes((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      } else {
+        setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      }
     } catch (error) {
       console.error('Failed to transcribe:', error)
       setSaveError(error instanceof Error ? error.message : '文字起こしに失敗しました')
@@ -1572,12 +1578,12 @@ export default function ActivityRecordClient() {
                 <Button
                   type="button"
                   size="sm"
-                  variant={isRecording ? "destructive" : "outline"}
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={isTranscribing}
+                  variant={isRecording && transcriptionTarget === 'activityContent' ? "destructive" : "outline"}
+                  onClick={isRecording && transcriptionTarget === 'activityContent' ? stopRecording : () => startRecording('activityContent')}
+                  disabled={isTranscribing || (isRecording && transcriptionTarget !== 'activityContent')}
                 >
-                  <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
-                  {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording && transcriptionTarget === 'activityContent' ? 'animate-pulse' : ''}`} />
+                  {isRecording && transcriptionTarget === 'activityContent' ? '停止' : isTranscribing && transcriptionTarget === 'activityContent' ? '文字起こし中...' : '音声入力'}
                 </Button>
               </div>
 
@@ -1717,7 +1723,19 @@ export default function ActivityRecordClient() {
 
             {/* 特記事項 */}
             <div className="space-y-2">
-              <Label htmlFor="specialNotes">特記事項</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="specialNotes">特記事項</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isRecording && transcriptionTarget === 'specialNotes' ? "destructive" : "outline"}
+                  onClick={isRecording && transcriptionTarget === 'specialNotes' ? stopRecording : () => startRecording('specialNotes')}
+                  disabled={isTranscribing || (isRecording && transcriptionTarget !== 'specialNotes')}
+                >
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording && transcriptionTarget === 'specialNotes' ? 'animate-pulse' : ''}`} />
+                  {isRecording && transcriptionTarget === 'specialNotes' ? '停止' : isTranscribing && transcriptionTarget === 'specialNotes' ? '文字起こし中...' : '音声入力'}
+                </Button>
+              </div>
               <Textarea
                 id="specialNotes"
                 rows={4}

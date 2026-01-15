@@ -33,6 +33,7 @@ import {
   Pencil,
   Save,
   X,
+  Mic,
 } from 'lucide-react';
 import {
   type AiObservationDraft,
@@ -275,6 +276,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
+  // 音声入力用の状態
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
@@ -1044,6 +1050,72 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
+  // 音声録音開始
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await transcribeAudio(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+      setError('音声録音の開始に失敗しました');
+    }
+  };
+
+  // 音声録音停止
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // 音声の文字起こし
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setIsTranscribing(true);
+      setError('');
+
+      const formData = new FormData();
+      formData.append('audio', audioBlob);
+
+      const response = await fetch('/api/voice/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '文字起こしに失敗しました');
+      }
+
+      const transcribedText = result.text;
+      setEditText((prev) => prev + (prev ? '\n' : '') + transcribedText);
+    } catch (err) {
+      console.error('Failed to transcribe:', err);
+      setError(err instanceof Error ? err.message : '文字起こしに失敗しました');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   const childDisplayName = isNew
     ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
     : observation?.child_name || observation?.child_id;
@@ -1174,6 +1246,18 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <span className="text-sm text-gray-500">
                         {editText.length}/{OBSERVATION_BODY_MAX}文字
                       </span>
+                    </div>
+                    <div className="flex justify-end mb-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isRecording ? 'destructive' : 'outline'}
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={isTranscribing}
+                      >
+                        <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                        {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                      </Button>
                     </div>
                     <MentionTextarea
                       id="observation_body"
