@@ -275,15 +275,15 @@ export async function POST(request: NextRequest) {
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
       event_name, daily_schedule, role_assignments, special_notes, meal } = body;
 
-    if (!activity_date) {
+    if (!activity_date || !class_id || !content) {
       return NextResponse.json(
-        { success: false, error: 'activity_date is required' },
+        { success: false, error: 'activity_date, class_id, and content are required' },
         { status: 400 }
       );
     }
 
-    // Content length validation (only if content is provided)
-    if (content && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
+    // Content length validation
+    if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
         { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
         { status: 400 }
@@ -385,7 +385,7 @@ export async function POST(request: NextRequest) {
         class_id,
         activity_date,
         title: title || '活動記録',
-        content: content || '',
+        content,
         snack: validatedFields.snack,
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],

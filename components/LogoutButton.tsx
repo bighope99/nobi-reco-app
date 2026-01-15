@@ -23,6 +23,7 @@ export function LogoutButton({
 
     const handleLogout = async () => {
         setIsLoading(true);
+
         try {
             // 1. sessionStorage を先にクリア（リダイレクト前に確実に削除）
             sessionStorage.removeItem('user_session');
