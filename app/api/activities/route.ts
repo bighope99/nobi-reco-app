@@ -460,15 +460,25 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // 全ての処理が完了するまで待機
-      const results = await Promise.all(observationPromises);
+      // 全ての処理が完了するまで待機（部分失敗を許容）
+      const results = await Promise.allSettled(observationPromises);
 
-      // 成功した観察記録のみを抽出
-      results.forEach((result) => {
-        if (result.success) {
-          observations.push({ child_id: result.child_id, content: result.content });
+      // 成功・失敗を分類
+      const failedChildren: string[] = [];
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value.success) {
+          observations.push({ child_id: result.value.child_id, content: result.value.content });
+        } else {
+          // 失敗した子どものIDを記録
+          const childId = result.status === 'fulfilled' ? result.value.child_id : mentioned_children[index];
+          failedChildren.push(childId);
         }
       });
+
+      // 部分失敗をログに記録
+      if (failedChildren.length > 0) {
+        console.warn(`Failed to generate observations for ${failedChildren.length} children:`, failedChildren);
+      }
     }
 
     return NextResponse.json({
@@ -480,6 +490,9 @@ export async function POST(request: NextRequest) {
         content: activity.content,
         observations_created: observations.length,
         observations,
+        ...(observations.length < (mentioned_children?.length || 0) && {
+          warning: `${(mentioned_children?.length || 0) - observations.length}件の児童の観察記録生成に失敗しました`,
+        }),
       },
     });
 
