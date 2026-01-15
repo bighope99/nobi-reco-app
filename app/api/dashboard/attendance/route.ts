@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out';
-
-const buildDateRange = (date: string) => {
-  return {
-    start: `${date}T00:00:00`,
-    end: `${date}T23:59:59`,
-  };
-};
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,9 +30,10 @@ export async function POST(request: NextRequest) {
     }
 
     const facilityId = userSession.current_facility_id;
-    const today = new Date();
-    const attendanceDate = today.toISOString().split('T')[0];
-    const { start, end } = buildDateRange(attendanceDate);
+    const attendanceDate = getCurrentDateJST(); // JST日付 (YYYY-MM-DD)
+    // JSTベースの範囲をUTCに変換して検索
+    const startOfDayUTC = new Date(`${attendanceDate}T00:00:00+09:00`).toISOString();
+    const endOfDayUTC = new Date(`${attendanceDate}T23:59:59.999+09:00`).toISOString();
 
     // child_idが施設に所属しているか検証
     const { data: childValidation, error: childError } = await supabase
@@ -72,8 +67,8 @@ export async function POST(request: NextRequest) {
         .select('*')
         .eq('child_id', child_id)
         .eq('facility_id', facilityId)
-        .gte('checked_in_at', start)
-        .lte('checked_in_at', end)
+        .gte('checked_in_at', startOfDayUTC)
+        .lte('checked_in_at', endOfDayUTC)
         .is('checked_out_at', null)
         .maybeSingle()
     ]);

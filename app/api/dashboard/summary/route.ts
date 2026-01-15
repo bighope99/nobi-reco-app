@@ -12,7 +12,7 @@ import {
   type LateArrivalAlert,
   getMinutesDiff,
 } from '@/lib/alerts/late-arrival';
-import { formatTimeJST } from '@/lib/utils/timezone';
+import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const dateParam = searchParams.get('date');
     const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
       ? dateParam
-      : new Date().toISOString().split('T')[0];
+      : getCurrentDateJST();
 
     // class_idのバリデーション（UUID形式）
     const classIdParam = searchParams.get('class_id');
@@ -48,8 +48,7 @@ export async function GET(request: NextRequest) {
       : null;
 
     // 現在時刻
-    const now = new Date();
-    const currentTime = now.toTimeString().slice(0, 5); // HH:mm
+    const currentTime = getCurrentTimeJST();
     const currentDate = date;
 
     // 1. 出席リスト取得（子ども一覧 + 出席予定 + 実績）

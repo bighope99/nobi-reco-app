@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { getQrSignatureSecret } from '@/lib/qr/secrets';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 export async function POST(request: NextRequest) {
   try {
@@ -139,9 +140,10 @@ export async function POST(request: NextRequest) {
       || 'クラス未設定';
 
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const startOfDay = `${today}T00:00:00`;
-    const endOfDay = `${today}T23:59:59.999`;
+    const today = getCurrentDateJST(); // JST日付 (YYYY-MM-DD)
+    // JSTベースの範囲をUTCに変換して検索
+    const startOfDayUTC = new Date(`${today}T00:00:00+09:00`).toISOString();
+    const endOfDayUTC = new Date(`${today}T23:59:59.999+09:00`).toISOString();
 
     // Check if already checked in today
     const { data: existing } = await supabase
@@ -149,8 +151,8 @@ export async function POST(request: NextRequest) {
       .select('id, checked_in_at')
       .eq('child_id', child_id)
       .eq('facility_id', userSession.current_facility_id)
-      .gte('checked_in_at', startOfDay)
-      .lte('checked_in_at', endOfDay)
+      .gte('checked_in_at', startOfDayUTC)
+      .lte('checked_in_at', endOfDayUTC)
       .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
@@ -195,8 +197,8 @@ export async function POST(request: NextRequest) {
           .select('id, checked_in_at')
           .eq('child_id', child_id)
           .eq('facility_id', userSession.current_facility_id)
-          .gte('checked_in_at', startOfDay)
-          .lte('checked_in_at', endOfDay)
+          .gte('checked_in_at', startOfDayUTC)
+          .lte('checked_in_at', endOfDayUTC)
           .order('checked_in_at', { ascending: true })
           .maybeSingle();
 

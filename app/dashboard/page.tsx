@@ -93,6 +93,7 @@ type SortOrder = 'asc' | 'desc';
 export default function ChildcareDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [filterClass, setFilterClass] = useState<string>('all');
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(false);
@@ -188,7 +189,7 @@ export default function ChildcareDashboard() {
     }
 
     try {
-      setError(null);
+      setActionError(null);
       const response = await fetch('/api/dashboard/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -206,7 +207,10 @@ export default function ChildcareDashboard() {
       // ロールバック
       setDashboardData(previousData);
       console.error('Attendance action error:', err);
-      setError(err instanceof Error ? err.message : '出欠処理に失敗しました');
+      const errorMessage = err instanceof Error ? err.message : '出欠処理に失敗しました';
+      setActionError(errorMessage);
+      // 5秒後に自動消去
+      setTimeout(() => setActionError(null), 5000);
     } finally {
       // 処理完了後にpendingから削除
       setPendingActions(prev => {
@@ -439,6 +443,19 @@ export default function ChildcareDashboard() {
 
   return (
     <StaffLayout title="ダッシュボード">
+      {actionError && (
+        <div className="fixed top-4 right-4 z-50 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-lg flex items-center gap-2 max-w-md">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <span className="flex-1">{actionError}</span>
+          <button
+            onClick={() => setActionError(null)}
+            className="ml-2 text-red-500 hover:text-red-700 transition-colors"
+            aria-label="Close error notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}

@@ -55,3 +55,29 @@ export const formatTimeJST = (
     return null;
   }
 };
+
+/**
+ * Get current date in JST (Japan Standard Time) in YYYY-MM-DD format
+ */
+export const getCurrentDateJST = (): string => {
+  const now = new Date();
+  return now.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-'); // "YYYY/MM/DD" → "YYYY-MM-DD"
+};
+
+/**
+ * Get current time in JST (Japan Standard Time) in HH:mm format
+ */
+export const getCurrentTimeJST = (): string => {
+  const now = new Date();
+  return now.toLocaleTimeString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+};
