@@ -132,8 +132,8 @@ export const validateRoleAssignments = (
 
     const { user_id, user_name, role } = item as Record<string, unknown>;
 
-    // 空のエントリはスキップ
-    if (!user_id && !role) {
+    // user_id が空の場合はスキップ（role のみ入力されても保存しない）
+    if (!user_id || (typeof user_id === 'string' && user_id.trim() === '')) {
       continue;
     }
 

@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
         meal,
         created_at,
         updated_at,
-        m_classes!inner (
+        m_classes (
           id,
           name
         ),
@@ -275,15 +275,15 @@ export async function POST(request: NextRequest) {
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
       event_name, daily_schedule, role_assignments, special_notes, meal } = body;
 
-    if (!activity_date || !class_id || !content) {
+    if (!activity_date) {
       return NextResponse.json(
-        { success: false, error: 'activity_date, class_id, and content are required' },
+        { success: false, error: 'activity_date is required' },
         { status: 400 }
       );
     }
 
-    // Content length validation
-    if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
+    // Content length validation (only if content is provided)
+    if (content && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
         { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
         { status: 400 }
@@ -382,10 +382,10 @@ export async function POST(request: NextRequest) {
       .from('r_activity')
       .insert({
         facility_id,
-        class_id,
+        class_id: class_id || null,  // 空文字列の場合はnullに変換
         activity_date,
         title: title || '活動記録',
-        content,
+        content: content || '',
         snack: validatedFields.snack,
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],

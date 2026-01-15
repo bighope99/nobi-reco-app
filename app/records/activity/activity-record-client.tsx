@@ -43,6 +43,7 @@ import {
   MAX_MEAL_ITEMS_LENGTH,
   MAX_MEAL_NOTES_LENGTH,
 } from "@/lib/validation/activityValidation"
+import { getSanitizedExtendedFields as getSanitizedExtendedFieldsUtil } from "@/lib/activity/sanitizeExtendedFields"
 
 interface IndividualRecord {
   observation_id: string
@@ -137,6 +138,7 @@ export default function ActivityRecordClient() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [transcriptionTarget, setTranscriptionTarget] = useState<'activityContent' | 'specialNotes'>('activityContent')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
@@ -149,6 +151,7 @@ export default function ActivityRecordClient() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const [originalContent, setOriginalContent] = useState<string>("")
 
   // 新規フィールドの状態
   const [eventName, setEventName] = useState("")
@@ -502,23 +505,14 @@ export default function ActivityRecordClient() {
   )
 
   const getSanitizedExtendedFields = () => {
-    const mealData = meal && meal.menu ? meal : null
-
-    return {
-      event_name: sanitizeText(eventName),
-      special_notes: sanitizeText(specialNotes),
-      snack: sanitizeText(snack),
-      daily_schedule: dailySchedule.length > 0
-        ? sanitizeArrayFields(dailySchedule, ['content'])
-        : null,
-      role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
-        ? sanitizeArrayFields(
-            roleAssignments.filter(r => r.user_id && r.role),
-            ['role']
-          )
-        : null,
-      meal: sanitizeObjectFields(mealData, ['menu', 'items_to_bring', 'notes']),
-    }
+    return getSanitizedExtendedFieldsUtil({
+      dailySchedule,
+      roleAssignments,
+      snack,
+      meal,
+      specialNotes,
+      eventName,
+    })
   }
 
   useEffect(() => {
@@ -685,20 +679,41 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '保存に失敗しました')
       }
 
-      // フォームをリセット
-      setActivityContent("")
-      setSelectedMentions([])
-      setMentionTokens(new Map())
-      setPhotos([])
-      setPhotoUploadError(null)
-      setEventName("")
-      setDailySchedule([...DEFAULT_SCHEDULE])
-      setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
-      setSnack("")
-      setMeal(null)
-      setSpecialNotes("")
+      // 保存成功後、編集モードに切り替え（データを維持）
+      const savedActivityId = result.data?.activity_id
+      setEditingActivityId(savedActivityId)
+      setIsEditMode(true)
+      setOriginalContent(contentForDB)
       setSaveMessage('保存しました')
       fetchActivities()
+
+      // AI分析自動実行（観察記録+メンションがある場合のみ）
+      if (contentForDB.trim() && selectedMentions.length > 0) {
+        try {
+          setIsAiLoading(true)
+          const aiResponse = await fetch('/api/ai/observation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              class_id: selectedClass || null,
+              content: contentForDB,
+              activity_date: activityDate,
+              mentioned_children: selectedMentions.map((child) => child.child_id),
+              activity_id: savedActivityId,
+            }),
+          })
+          const aiResult = await aiResponse.json()
+          if (aiResponse.ok && aiResult.success) {
+            setAiAnalysisResults(aiResult.data?.analysis_results || [])
+            setShowAnalysisModal(true)
+            persistAiDraftsToCookie(aiResult.data?.analysis_results || [])
+          }
+        } catch (err) {
+          console.error('Auto AI analysis failed:', err)
+        } finally {
+          setIsAiLoading(false)
+        }
+      }
     } catch (err) {
       console.error('Failed to save:', err)
       setSaveError(err instanceof Error ? err.message : '保存に失敗しました')
@@ -749,21 +764,36 @@ export default function ActivityRecordClient() {
       }
 
       setSaveMessage('更新しました')
-      setIsEditMode(false)
-      setEditingActivityId(null)
-      // フォームをリセット
-      setActivityContent("")
-      setSelectedMentions([])
-      setMentionTokens(new Map())
-      setPhotos([])
-      setPhotoUploadError(null)
-      setEventName("")
-      setDailySchedule([...DEFAULT_SCHEDULE])
-      setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
-      setSnack("")
-      setMeal(null)
-      setSpecialNotes("")
       fetchActivities()
+
+      // AI分析は内容が変更された場合のみ実行
+      if (contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
+        try {
+          setIsAiLoading(true)
+          const aiResponse = await fetch('/api/ai/observation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              class_id: selectedClass || null,
+              content: contentForDB,
+              activity_date: activityDate,
+              mentioned_children: selectedMentions.map((child) => child.child_id),
+              activity_id: editingActivityId,
+            }),
+          })
+          const aiResult = await aiResponse.json()
+          if (aiResponse.ok && aiResult.success) {
+            setAiAnalysisResults(aiResult.data?.analysis_results || [])
+            setShowAnalysisModal(true)
+            persistAiDraftsToCookie(aiResult.data?.analysis_results || [])
+          }
+        } catch (err) {
+          console.error('Auto AI analysis failed:', err)
+        } finally {
+          setIsAiLoading(false)
+        }
+      }
+      setOriginalContent(contentForDB)
     } catch (err) {
       console.error('Failed to update:', err)
       setSaveError(err instanceof Error ? err.message : '更新に失敗しました')
@@ -782,6 +812,7 @@ export default function ActivityRecordClient() {
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
     setOriginalMentionedChildren(activity.mentioned_children || [])
+    setOriginalContent(activity.content || "")
 
     // 写真を復元
     const mappedPhotos = (activity.photos || [])
@@ -1108,8 +1139,9 @@ export default function ActivityRecordClient() {
     })
   }
 
-  const startRecording = async () => {
+  const startRecording = async (target: 'activityContent' | 'specialNotes' = 'activityContent') => {
     try {
+      setTranscriptionTarget(target)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
@@ -1162,7 +1194,11 @@ export default function ActivityRecordClient() {
       }
 
       const transcribedText = result.text
-      setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      if (transcriptionTarget === 'specialNotes') {
+        setSpecialNotes((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      } else {
+        setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      }
     } catch (error) {
       console.error('Failed to transcribe:', error)
       setSaveError(error instanceof Error ? error.message : '文字起こしに失敗しました')
@@ -1534,12 +1570,12 @@ export default function ActivityRecordClient() {
                 <Button
                   type="button"
                   size="sm"
-                  variant={isRecording ? "destructive" : "outline"}
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={isTranscribing}
+                  variant={isRecording && transcriptionTarget === 'activityContent' ? "destructive" : "outline"}
+                  onClick={isRecording && transcriptionTarget === 'activityContent' ? stopRecording : () => startRecording('activityContent')}
+                  disabled={isTranscribing || (isRecording && transcriptionTarget !== 'activityContent')}
                 >
-                  <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
-                  {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording && transcriptionTarget === 'activityContent' ? 'animate-pulse' : ''}`} />
+                  {isRecording && transcriptionTarget === 'activityContent' ? '停止' : isTranscribing && transcriptionTarget === 'activityContent' ? '文字起こし中...' : '音声入力'}
                 </Button>
               </div>
 
@@ -1679,7 +1715,19 @@ export default function ActivityRecordClient() {
 
             {/* 特記事項 */}
             <div className="space-y-2">
-              <Label htmlFor="specialNotes">特記事項</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="specialNotes">特記事項</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isRecording && transcriptionTarget === 'specialNotes' ? "destructive" : "outline"}
+                  onClick={isRecording && transcriptionTarget === 'specialNotes' ? stopRecording : () => startRecording('specialNotes')}
+                  disabled={isTranscribing || (isRecording && transcriptionTarget !== 'specialNotes')}
+                >
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording && transcriptionTarget === 'specialNotes' ? 'animate-pulse' : ''}`} />
+                  {isRecording && transcriptionTarget === 'specialNotes' ? '停止' : isTranscribing && transcriptionTarget === 'specialNotes' ? '文字起こし中...' : '音声入力'}
+                </Button>
+              </div>
               <Textarea
                 id="specialNotes"
                 rows={4}
@@ -1692,18 +1740,6 @@ export default function ActivityRecordClient() {
 
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex flex-wrap gap-3 flex-1">
-                {!isEditMode && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isAiLoading || !activityContent.trim()}
-                    onClick={handleAnalyze}
-                    className="flex-1 sm:flex-none"
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    AI分析
-                  </Button>
-                )}
                 {isEditMode ? (
                   <>
                     <Button type="button" onClick={handleUpdate} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
@@ -1713,16 +1749,22 @@ export default function ActivityRecordClient() {
                     <Button type="button" variant="outline" onClick={handleCancelEdit} className="flex-1 sm:flex-none">
                       キャンセル
                     </Button>
+                    <Button type="button" variant="outline" onClick={handleRestart} className="flex-1 sm:flex-none">
+                      <Plus className="mr-2 h-4 w-4" />
+                      新規作成
+                    </Button>
                   </>
                 ) : (
-                  <Button type="button" onClick={handleSave} disabled={isSaving || isUploadingPhotos || !activityContent.trim()} className="flex-1 sm:flex-none">
-                    保存
-                  </Button>
+                  <>
+                    <Button type="button" onClick={handleSave} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
+                      保存
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={handleRestart}>
+                      リセット
+                    </Button>
+                  </>
                 )}
               </div>
-              <Button type="button" variant="ghost" onClick={handleRestart}>
-                リセット
-              </Button>
             </div>
             {saveError && <p className="text-sm text-red-500">{saveError}</p>}
             {saveMessage && <p className="text-sm text-green-600">{saveMessage}</p>}
