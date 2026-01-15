@@ -1,30 +1,21 @@
-import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
 export async function POST() {
-  try {
-    const supabase = await createClient();
-    const cookieStore = await cookies();
+    try {
+        const supabase = await createClient();
 
-    // Supabase セッションをクリア
-    const { error } = await supabase.auth.signOut();
+        // Supabase セッションをクリア
+        const { error } = await supabase.auth.signOut();
 
-    if (error) {
-      console.error('Logout error:', error);
+        if (error) {
+            console.error('Logout error:', error);
+            return NextResponse.json({ error: 'Logout failed' }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('Logout API Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
-
-    // Supabase 関連の Cookie を明示的に削除
-    const allCookies = cookieStore.getAll();
-    for (const cookie of allCookies) {
-      if (cookie.name.startsWith('sb-')) {
-        cookieStore.delete(cookie.name);
-      }
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Logout API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
 }
