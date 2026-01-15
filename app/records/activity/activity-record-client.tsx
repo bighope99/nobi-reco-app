@@ -504,22 +504,52 @@ export default function ActivityRecordClient() {
   )
 
   const getSanitizedExtendedFields = () => {
-    const mealData = meal && meal.menu ? meal : null
+    // 1. daily_schedule: time と content の両方が空の行を除外
+    const filteredSchedule = dailySchedule.filter(
+      item => item.time?.trim() || item.content?.trim()
+    )
+    const sanitizedSchedule = filteredSchedule.length > 0
+      ? sanitizeArrayFields(filteredSchedule, ['content'])
+      : null
+
+    // 2. role_assignments: user_id が空文字列または空白のみの行を完全に除外
+    const filteredRoles = roleAssignments.filter(
+      r => r.user_id && r.user_id.trim() !== "" && r.role
+    )
+    const sanitizedRoles = filteredRoles.length > 0
+      ? sanitizeArrayFields(filteredRoles, ['role'])
+      : null
+
+    // 3. snack: 空文字列・空白のみの場合はnull
+    const sanitizedSnack = snack && snack.trim() !== "" ? sanitizeText(snack) : null
+
+    // 4. meal: menu, notes, items_to_bring すべて空の場合はnull
+    const hasMealData = meal && (
+      (meal.menu && meal.menu.trim() !== "") ||
+      (meal.notes && meal.notes.trim() !== "") ||
+      (meal.items_to_bring && meal.items_to_bring.trim() !== "")
+    )
+    const sanitizedMeal = hasMealData
+      ? sanitizeObjectFields(meal, ['menu', 'items_to_bring', 'notes'])
+      : null
+
+    // 5. special_notes: 空文字列・空白のみの場合はnull
+    const sanitizedSpecialNotes = specialNotes && specialNotes.trim() !== ""
+      ? sanitizeText(specialNotes)
+      : null
+
+    // 6. event_name: 空文字列・空白のみの場合はnull
+    const sanitizedEventName = eventName && eventName.trim() !== ""
+      ? sanitizeText(eventName)
+      : null
 
     return {
-      event_name: sanitizeText(eventName),
-      special_notes: sanitizeText(specialNotes),
-      snack: sanitizeText(snack),
-      daily_schedule: dailySchedule.length > 0
-        ? sanitizeArrayFields(dailySchedule, ['content'])
-        : null,
-      role_assignments: roleAssignments.filter(r => r.user_id && r.role).length > 0
-        ? sanitizeArrayFields(
-            roleAssignments.filter(r => r.user_id && r.role),
-            ['role']
-          )
-        : null,
-      meal: sanitizeObjectFields(mealData, ['menu', 'items_to_bring', 'notes']),
+      event_name: sanitizedEventName,
+      special_notes: sanitizedSpecialNotes,
+      snack: sanitizedSnack,
+      daily_schedule: sanitizedSchedule,
+      role_assignments: sanitizedRoles,
+      meal: sanitizedMeal,
     }
   }
 
