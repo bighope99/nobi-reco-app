@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const cookieStore = await cookies();
 
-    // CSRF保護: Origin/Refererヘッダーをチェック
+    // CSRF保護: OriginヘッダーをURLとして解析し、ホスト名を厳密に比較
     const origin = request.headers.get('origin');
     const host = request.headers.get('host');
-    if (origin && host && !origin.includes(host)) {
-      console.warn('CSRF attempt blocked:', { origin, host });
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (origin && host) {
+      try {
+        const originUrl = new URL(origin);
+        const expectedHost = host.split(':')[0]; // ポートを除去
+        if (originUrl.hostname !== expectedHost) {
+          console.warn('CSRF attempt blocked:', { origin, host });
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+      } catch {
+        // originが不正なURLの場合はブロック
+        console.warn('Invalid origin header:', origin);
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     // 認証チェック: セッションが存在するか確認
@@ -25,10 +35,9 @@ export async function POST(request: NextRequest) {
     // Supabase セッションをクリア
     const { error } = await supabase.auth.signOut();
 
-        if (error) {
-            console.error('Logout error:', error);
-            return NextResponse.json({ error: 'Logout failed' }, { status: 500 });
-        }
+    if (error) {
+      console.error('Logout error:', error);
+    }
 
     // Supabase 関連の Cookie を明示的に削除（セキュア属性付き）
     const allCookies = cookieStore.getAll();
@@ -42,9 +51,11 @@ export async function POST(request: NextRequest) {
           path: '/',
         });
       }
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('Logout API Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Logout API Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
