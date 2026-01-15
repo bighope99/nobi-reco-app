@@ -282,6 +282,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!class_id) {
+      return NextResponse.json(
+        { success: false, error: 'クラスを選択してください' },
+        { status: 400 }
+      );
+    }
+
     // Content length validation (only if content is provided)
     if (content && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
