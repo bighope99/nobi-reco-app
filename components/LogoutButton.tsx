@@ -25,26 +25,27 @@ export function LogoutButton({
 
     const handleLogout = async () => {
         setIsLoading(true);
-
         try {
-            // Supabase セッションをクリア
-            const { error } = await supabase.auth.signOut();
-
-            if (error) {
-                console.error('Logout error:', error);
-                alert('ログアウトに失敗しました。もう一度お試しください。');
-                setIsLoading(false);
-                return;
+            // 1. まずサーバー側のセッションをクリア（API呼び出し）
+            const response = await fetch('/api/auth/logout', { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Logout API failed');
             }
 
-            // sessionStorage をクリア
+            // 2. クライアント側の Supabase セッションをクリア
+            await supabase.auth.signOut();
+
+            // 3. sessionStorage をクリア
             sessionStorage.removeItem('user_session');
 
-            // ログインページへリダイレクト
+            // 4. ログインページへリダイレクト
             router.push('/login');
         } catch (error) {
             console.error('Logout error:', error);
-            alert('ログアウトに失敗しました。もう一度お試しください。');
+            // エラーでも sessionStorage はクリアしてリダイレクト
+            sessionStorage.removeItem('user_session');
+            router.push('/login');
+        } finally {
             setIsLoading(false);
         }
     };
