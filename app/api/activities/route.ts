@@ -282,13 +282,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!class_id) {
-      return NextResponse.json(
-        { success: false, error: 'クラスを選択してください' },
-        { status: 400 }
-      );
-    }
-
     // Content length validation (only if content is provided)
     if (content && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
@@ -389,7 +382,7 @@ export async function POST(request: NextRequest) {
       .from('r_activity')
       .insert({
         facility_id,
-        class_id,
+        class_id: class_id || null,  // 空文字列の場合はnullに変換
         activity_date,
         title: title || '活動記録',
         content: content || '',
