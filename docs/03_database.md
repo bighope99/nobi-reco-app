@@ -418,10 +418,12 @@ CREATE TABLE IF NOT EXISTS m_children (
   school_id UUID REFERENCES m_schools(id),       -- 所属学校（フィルタリング用）
 
   -- 基本情報
-  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
-  given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
-  family_name_kana VARCHAR(50),                  -- 姓（カナ）
-  given_name_kana VARCHAR(50),                   -- 名（カナ）
+  -- 注: 以下の名前フィールドはPII暗号化データを格納するため、VARCHAR(255)に拡張
+  -- 暗号化されたデータは平文より長くなるため、十分な領域を確保
+  family_name VARCHAR(255) NOT NULL,             -- 姓（漢字）※暗号化PII
+  given_name VARCHAR(255) NOT NULL,              -- 名（漢字）※暗号化PII
+  family_name_kana VARCHAR(255),                 -- 姓（カナ）※暗号化PII
+  given_name_kana VARCHAR(255),                  -- 名（カナ）※暗号化PII
   nickname VARCHAR(50),                          -- 呼び名・略称
   gender gender_type,                            -- 性別
   birth_date DATE NOT NULL,                      -- 生年月日
@@ -1516,6 +1518,21 @@ CREATE POLICY facility_access ON r_activity
 
 ---
 
+### PII暗号化対応のカラム幅拡張（2026年1月15日）
+
+#### `m_children`テーブルの変更
+- **変更**: 以下のカラムを `VARCHAR(50)` から `VARCHAR(255)` に拡張
+  - `family_name`
+  - `given_name`
+  - `family_name_kana`
+  - `given_name_kana`
+- **理由**:
+  - これらのフィールドはPII（個人識別情報）として暗号化されて保存される
+  - 暗号化されたデータは元の平文より長くなるため、十分な格納領域が必要
+  - VARCHAR(50)では暗号化データを格納できない場合があり、VARCHAR(255)に拡張
+
+---
+
 **作成日**: 2025年1月
-**最終更新**: 2026年1月13日（活動記録テーブルの拡張）
+**最終更新**: 2026年1月15日（PII暗号化対応のカラム幅拡張）
 **管理者**: プロジェクトリーダー
