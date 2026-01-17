@@ -202,9 +202,15 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
     const content = typeof body?.content === 'string' ? body.content.trim() : '';
+    const observationDate = typeof body?.observation_date === 'string' ? body.observation_date.trim() : null;
 
     if (!content) {
       return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    }
+
+    // Validate observation_date format if provided (YYYY-MM-DD)
+    if (observationDate && !/^\d{4}-\d{2}-\d{2}$/.test(observationDate)) {
+      return NextResponse.json({ success: false, error: '日付形式が不正です' }, { status: 400 });
     }
 
     const { data: existing, error: fetchError } = await supabase
@@ -234,15 +240,22 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    // Build update object dynamically
+    const updateData: Record<string, unknown> = {
+      content,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    };
+
+    if (observationDate) {
+      updateData.observation_date = observationDate;
+    }
+
     const { data: updated, error: updateError } = await supabase
       .from('r_observation')
-      .update({
-        content,
-        updated_at: new Date().toISOString(),
-        updated_by: user.id,
-      })
+      .update(updateData)
       .eq('id', id)
-      .select('id, content, updated_at')
+      .select('id, content, observation_date, updated_at')
       .single();
 
     if (updateError || !updated) {
