@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     // 年初
     const yearStartStr = `${year}-01-01`;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDateJST();
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase

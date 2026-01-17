@@ -4,6 +4,7 @@ import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate, weekdayJpMap } from '../utils/attendance';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     // 対象日（デフォルトは今日）
-    const targetDate = dateParam || new Date().toISOString().split('T')[0];
+    const targetDate = dateParam || getCurrentDateJST();
 
     // 児童一覧を取得
     let childrenQuery = supabase

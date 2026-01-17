@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { getCurrentDateJST } from "@/lib/utils/timezone"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -108,7 +109,7 @@ export default function ActivityRecordClient() {
 
   // 記録入力フォームの状態
   const [selectedClass, setSelectedClass] = useState("")
-  const [activityDate, setActivityDate] = useState(new Date().toISOString().split('T')[0])
+  const [activityDate, setActivityDate] = useState(getCurrentDateJST())
   const [activityContent, setActivityContent] = useState("")
   const [isAiLoading, setIsAiLoading] = useState(false)
   const [showMentionPicker, setShowMentionPicker] = useState(false)

@@ -7,6 +7,7 @@ import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0');
 
     // 対象日（デフォルトは今日）
-    const targetDate = dateParam || new Date().toISOString().split('T')[0];
+    const targetDate = dateParam || getCurrentDateJST();
 
     // 活動記録を取得
     let query = supabase

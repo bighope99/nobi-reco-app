@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 /**
  * GET /api/users
@@ -289,7 +290,7 @@ export async function POST(request: NextRequest) {
         name_kana: body.name_kana || null,
         phone: body.phone || null,
         role: body.role,
-        hire_date: body.hire_date || new Date().toISOString().split('T')[0],
+        hire_date: body.hire_date || getCurrentDateJST(),
         is_active: true,
       })
       .select()
