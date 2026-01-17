@@ -232,10 +232,8 @@ export async function saveChild(
     const processPrimaryGuardian = async (): Promise<string | null> => {
       if (!contact || !contact.parent_name?.trim()) return null;
 
-      // 名前から姓と名に分割（スペース区切り）
-      const nameParts = contact.parent_name.trim().split(/\s+/);
-      const familyName = nameParts[0] || contact.parent_name;
-      const givenName = nameParts.slice(1).join(' ') || '';
+      // 名前を分割せず全体を family_name に保存
+      const guardianName = contact.parent_name.trim();
 
       // 電話番号を正規化
       const normalizedPhone = contact?.parent_phone ? normalizePhone(contact.parent_phone) : null;
@@ -270,8 +268,8 @@ export async function saveChild(
             await supabase
               .from('m_guardians')
               .update({
-                family_name: encryptPII(familyName),
-                given_name: encryptPII(givenName),
+                family_name: encryptPII(guardianName),
+                given_name: '',
                 phone: encryptPII(normalizedPhone),
                 email: encryptPII(contact?.parent_email || null),
                 updated_at: new Date().toISOString(),
@@ -282,7 +280,7 @@ export async function saveChild(
             await Promise.all([
               updateSearchIndex(supabase, 'guardian', guardianId!, 'phone', normalizedPhone),
               updateSearchIndex(supabase, 'guardian', guardianId!, 'email', contact.parent_email || null),
-              updateSearchIndex(supabase, 'guardian', guardianId!, 'name', familyName && givenName ? `${familyName} ${givenName}` : null),
+              updateSearchIndex(supabase, 'guardian', guardianId!, 'name', guardianName),
             ]);
           }
         }
@@ -295,8 +293,8 @@ export async function saveChild(
           .from('m_guardians')
           .insert({
             facility_id: facilityId,
-            family_name: encryptPII(familyName),
-            given_name: encryptPII(givenName),
+            family_name: encryptPII(guardianName),
+            given_name: '',
             phone: encryptPII(normalizedPhone),
             email: encryptPII(contact.parent_email || null),
           })
@@ -310,7 +308,6 @@ export async function saveChild(
           guardianId = guardianData.id;
 
           // 検索用ハッシュテーブルを更新
-          const guardianName = familyName && givenName ? `${familyName} ${givenName}` : null;
           const updatePromises = [];
           if (normalizedPhone) {
             updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'phone', normalizedPhone));
@@ -354,10 +351,8 @@ export async function saveChild(
     const processEmergencyContact = async (emergencyContact: { name: string; phone: string; relation?: string }): Promise<string | null> => {
       if (!emergencyContact.name || !emergencyContact.phone) return null;
 
-      // 名前から姓と名に分割
-      const nameParts = emergencyContact.name.trim().split(/\s+/);
-      const familyName = nameParts[0] || emergencyContact.name;
-      const givenName = nameParts.slice(1).join(' ') || '';
+      // 名前を分割せず全体を family_name に保存
+      const emergencyGuardianName = emergencyContact.name.trim();
 
       // 電話番号を正規化
       const normalizedPhone = normalizePhone(emergencyContact.phone);
@@ -379,20 +374,19 @@ export async function saveChild(
         
         if (existingEmergencyGuardians && existingEmergencyGuardians.length > 0) {
           emergencyGuardianId = existingEmergencyGuardians[0].id;
-          
+
           // 既存の保護者情報を更新（PIIフィールドを暗号化）
           await supabase
             .from('m_guardians')
             .update({
-              family_name: encryptPII(familyName),
-              given_name: encryptPII(givenName),
+              family_name: encryptPII(emergencyGuardianName),
+              given_name: '',
               phone: encryptPII(normalizedPhone),
               updated_at: new Date().toISOString(),
             })
             .eq('id', emergencyGuardianId);
-          
+
           // 検索用ハッシュテーブルを更新
-          const emergencyGuardianName = familyName && givenName ? `${familyName} ${givenName}` : null;
           const updatePromises = [];
           if (normalizedPhone) {
             updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId!, 'phone', normalizedPhone));
@@ -413,8 +407,8 @@ export async function saveChild(
           .from('m_guardians')
           .insert({
             facility_id: facilityId,
-            family_name: encryptPII(familyName),
-            given_name: encryptPII(givenName),
+            family_name: encryptPII(emergencyGuardianName),
+            given_name: '',
             phone: encryptPII(normalizedPhone),
           })
           .select('id')
@@ -425,9 +419,8 @@ export async function saveChild(
           return null;
         } else {
           emergencyGuardianId = emergencyGuardianData.id;
-          
+
           // 検索用ハッシュテーブルを更新
-          const emergencyGuardianName = familyName && givenName ? `${familyName} ${givenName}` : null;
           const updatePromises = [];
           if (normalizedPhone) {
             updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId!, 'phone', normalizedPhone));
