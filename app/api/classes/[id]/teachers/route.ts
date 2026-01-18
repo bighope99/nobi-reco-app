@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 /**
  * POST /api/classes/:id/teachers
@@ -108,7 +109,7 @@ export async function POST(
         user_id,
         class_id: classId,
         class_role,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: getCurrentDateJST(),
         is_current: true,
       })
       .select()

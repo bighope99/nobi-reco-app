@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -932,7 +933,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD形式
+      const observationDate = getCurrentDateJST(); // YYYY-MM-DD形式（JST）
 
       // APIに保存
       const response = await fetch('/api/records/personal', {
@@ -988,7 +989,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             activity_id: activityId,
             child_id: selectedChildId,
             child_display_name: resolvedChildName,
-            observation_date: result.data.observation_date ?? new Date().toISOString().split('T')[0],
+            observation_date: result.data.observation_date ?? getCurrentDateJST(),
             content: result.data.content ?? text,
             status: 'saved' as const,
             observation_id: result.data.id,
