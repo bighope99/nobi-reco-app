@@ -4,6 +4,37 @@ import { getUserSession } from '@/lib/auth/session';
 import { handleChildSave } from '../save/route';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
+// 型定義
+interface GuardianRelation {
+  guardian_id: string;
+  is_primary: boolean;
+  is_emergency_contact: boolean;
+  m_guardians: Guardian | null;
+}
+
+interface Guardian {
+  id: string;
+  facility_id: string;
+  family_name: string;
+  given_name: string;
+  family_name_kana?: string;
+  given_name_kana?: string;
+  phone?: string;
+  email?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface ClassRelation {
+  class_id: string;
+  is_current: boolean;
+  m_classes?: {
+    class_id: string;
+    class_name: string;
+  };
+}
+
 // GET /api/children/:id - 子ども詳細取得
 export async function GET(
   request: NextRequest,
@@ -77,21 +108,15 @@ export async function GET(
       `)
       .eq('child_id', child_id);
 
-    const classInfo = childData._child_class.find((c: any) => c.is_current)?.m_classes;
+    const classInfo = childData._child_class.find((c: ClassRelation) => c.is_current)?.m_classes;
 
     // 保護者情報の整形
-    const guardians = childData._child_guardian || [];
-    const primaryGuardian = guardians.find((g: any) => g.is_primary);
-    const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
-
-    // DEBUG: 保護者データの確認
-    console.log('[DEBUG] guardians raw:', JSON.stringify(guardians, null, 2));
-    console.log('[DEBUG] primaryGuardian:', JSON.stringify(primaryGuardian, null, 2));
-    console.log('[DEBUG] emergencyContacts (filtered):', JSON.stringify(emergencyContacts, null, 2));
-
+    const guardians: GuardianRelation[] = childData._child_guardian || [];
+    const primaryGuardian = guardians.find((g: GuardianRelation) => g.is_primary);
+    const emergencyContacts = guardians.filter((g: GuardianRelation) => g.is_emergency_contact && !g.is_primary);
 
     // 保護者情報の復号化
-    const decryptGuardian = (guardian: any) => {
+    const decryptGuardian = (guardian: GuardianRelation) => {
       if (!guardian) return null;
       return {
         ...guardian,
@@ -107,13 +132,10 @@ export async function GET(
       m_guardians: decryptGuardian(primaryGuardian.m_guardians),
     } : null;
 
-    const decryptedEmergencyContacts = emergencyContacts.map((ec: any) => ({
+    const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({
       ...ec,
-      m_guardians: decryptGuardian(ec.m_guardians),
+      m_guardians: ec.m_guardians ? decryptGuardian(ec) : null,
     }));
-
-    // DEBUG: 復号後のデータ確認
-    console.log('[DEBUG] decryptedEmergencyContacts:', JSON.stringify(decryptedEmergencyContacts, null, 2));
 
     // データ整形
     const response = {
@@ -154,18 +176,16 @@ export async function GET(
           parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(childData.parent_email) || null,
           emergency_contacts: (() => {
-            // DEBUG: レスポンス整形前の確認
             const formattedContacts = decryptedEmergencyContacts
-              .filter((ec: any) => ec.m_guardians)  // null の保護者を除外
-              .map((ec: any) => ({
+              .filter((ec) => ec.m_guardians !== null)
+              .map((ec) => ({
                 name: formatName(
-                  [ec.m_guardians?.family_name, ec.m_guardians?.given_name],
+                  [ec.m_guardians!.family_name, ec.m_guardians!.given_name],
                   ''
                 ) || '',
                 relation: ec.relationship,
-                phone: ec.m_guardians?.phone || '',
+                phone: ec.m_guardians!.phone || '',
               }));
-            console.log('[DEBUG] emergency_contacts response:', JSON.stringify(formattedContacts, null, 2));
             return formattedContacts;
           })(),
         },
@@ -178,7 +198,7 @@ export async function GET(
           photo_permission_public: childData.photo_permission_public,
           photo_permission_share: childData.photo_permission_share,
         },
-        siblings: (siblingsData || []).map((s: any) => {
+        siblings: (siblingsData || []).map((s) => {
           const decryptedFamilyName = decryptOrFallback(s.m_children.family_name);
           const decryptedGivenName = decryptOrFallback(s.m_children.given_name);
           return {

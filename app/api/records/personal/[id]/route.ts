@@ -85,32 +85,39 @@ export async function GET(
       }
       return acc;
     }, {});
-    const { data: createdByUser } = await supabase
-      .from('m_users')
-      .select('name')
-      .eq('id', data.created_by)
-      .single();
-    const createdByName = createdByUser?.name || '';
 
-    const { data: recentObservations, error: recentError } = await supabase
-      .from('r_observation')
-      .select(
-        `
-        id,
-        observation_date,
-        content,
-        created_at,
-        record_tags:_record_tag!observation_id (
-          tag_id
+    // 作成者名と最近の観察記録を並列取得
+    const [
+      { data: createdByUser },
+      { data: recentObservations, error: recentError }
+    ] = await Promise.all([
+      supabase
+        .from('m_users')
+        .select('name')
+        .eq('id', data.created_by)
+        .single(),
+      supabase
+        .from('r_observation')
+        .select(
+          `
+          id,
+          observation_date,
+          content,
+          created_at,
+          record_tags:_record_tag!observation_id (
+            tag_id
+          )
+        `,
         )
-      `,
-      )
-      .eq('child_id', data.child_id)
-      .is('deleted_at', null)
-      .neq('id', data.id)
-      .order('observation_date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(10);
+        .eq('child_id', data.child_id)
+        .is('deleted_at', null)
+        .neq('id', data.id)
+        .order('observation_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(10)
+    ]);
+
+    const createdByName = createdByUser?.name || '';
 
     if (recentError) {
       console.error('Recent observations load error:', recentError);

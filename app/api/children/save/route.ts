@@ -154,7 +154,7 @@ export async function saveChild(
       .single();
 
     if (updateError || !updatedChild) {
-      console.error('Child update error:', updateError);
+      console.error('Child update error:', updateError?.message);
       return NextResponse.json({ error: 'Failed to update child' }, { status: 500 });
     }
     result = updatedChild;
@@ -166,7 +166,7 @@ export async function saveChild(
       .single();
 
     if (childError || !childData) {
-      console.error('Child creation error:', childError);
+      console.error('Child creation error:', childError?.message);
       return NextResponse.json({ error: 'Failed to create child' }, { status: 500 });
     }
     result = childData;
@@ -202,7 +202,7 @@ export async function saveChild(
       });
 
     if (classError) {
-      console.error('Class assignment error:', classError);
+      console.error('Class assignment error:', classError?.message);
     }
   }
 
@@ -302,7 +302,7 @@ export async function saveChild(
           .single();
 
         if (guardianError || !guardianData) {
-          console.error('Guardian creation error:', guardianError);
+          console.error('Guardian creation error:', guardianError?.message);
           return null;
         } else {
           guardianId = guardianData.id;
@@ -339,7 +339,7 @@ export async function saveChild(
           });
 
         if (linkError) {
-          console.error('Child-guardian link error:', linkError);
+          console.error('Child-guardian link error:', linkError?.message);
           return null;
         }
       }
@@ -356,6 +356,12 @@ export async function saveChild(
 
       // 電話番号を正規化
       const normalizedPhone = normalizePhone(emergencyContact.phone);
+
+      // 電話番号の検証（正規化後）
+      if (!normalizedPhone || normalizedPhone.length < 10 || normalizedPhone.length > 15) {
+        console.error('Invalid emergency contact phone format after normalization:', emergencyContact.phone);
+        return null;
+      }
 
       // 既存の保護者を検索（検索用ハッシュテーブル経由）
       let emergencyGuardianId: string | null = null;
@@ -415,7 +421,7 @@ export async function saveChild(
           .single();
 
         if (emergencyGuardianError || !emergencyGuardianData) {
-          console.error('Emergency contact creation error:', emergencyGuardianError);
+          console.error('Emergency contact creation error:', emergencyGuardianError?.message);
           return null;
         } else {
           emergencyGuardianId = emergencyGuardianData.id;
@@ -449,13 +455,22 @@ export async function saveChild(
           });
 
         if (emergencyLinkError) {
-          console.error('Emergency contact link error:', emergencyLinkError);
+          console.error('Emergency contact link error:', emergencyLinkError?.message);
           return null;
         }
       }
 
       return emergencyGuardianId;
     };
+
+    // 緊急連絡先の最大数チェック
+    const MAX_EMERGENCY_CONTACTS = 2;
+    if (contact?.emergency_contacts && contact.emergency_contacts.length > MAX_EMERGENCY_CONTACTS) {
+      return NextResponse.json(
+        { error: `緊急連絡先は最大${MAX_EMERGENCY_CONTACTS}件までです` },
+        { status: 400 }
+      );
+    }
 
     // 主たる保護者と緊急連絡先を並列処理
     const [primaryGuardianId, ...emergencyGuardianIds] = await Promise.all([
@@ -528,7 +543,7 @@ export async function handleChildSave(request: NextRequest, childId?: string) {
 
     return saveChild(body, userSession.current_facility_id, supabase, childId);
   } catch (error) {
-    console.error('Children SAVE API Error:', error);
+    console.error('Children SAVE API Error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
