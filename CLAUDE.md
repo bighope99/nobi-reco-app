@@ -50,6 +50,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **TypeScript**: Strict types, avoid `any`
 - **Components**: Server Components by default, `use client` only when needed
 - **Dependencies**: 新しいパッケージの追加は最小限に。既存の依存関係で実現できないか検討すること
+- **Mention Display**: 記録本文を表示する際、メンション（`child:childId`形式）を名前（`@児童名`）に変換すること
+  - `replaceChildIdsWithNames` を `@/lib/ai/childIdFormatter` からインポート
+  - 児童リストから `nameByIdMap: Map<string, string>` を構築
+  - 表示時に `replaceChildIdsWithNames(content, nameByIdMap)` を適用
 
 # Agent Guidelines
 

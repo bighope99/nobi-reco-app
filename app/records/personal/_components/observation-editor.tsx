@@ -35,6 +35,7 @@ import {
   Save,
   X,
   Mic,
+  Trash2,
 } from 'lucide-react';
 import {
   type AiObservationDraft,
@@ -140,12 +141,14 @@ type ChildOption = {
   id: string;
   name: string;
   className: string;
+  grade?: number | null;
 };
 
 type ChildApi = {
   child_id: string;
   name: string;
   class_name?: string | null;
+  grade?: number | null;
 };
 
 type ChildListResponse = {
@@ -274,6 +277,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [childOptions, setChildOptions] = useState<ChildOption[]>([]);
   const [childOptionsError, setChildOptionsError] = useState('');
   const [childOptionsLoading, setChildOptionsLoading] = useState(false);
+  const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -349,31 +355,40 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }));
   }, [isNew, observationTags]);
 
+  // 児童選択・名前解決・フォームリセットの統合処理
   useEffect(() => {
-    if (!isNew || !lockedChildId) return;
-    setSelectedChildId(lockedChildId);
-    if (paramChildName) {
-      setLockedChildName(paramChildName);
+    if (!isNew) return;
+
+    // lockedChildIdがある場合はそれを設定
+    if (lockedChildId) {
+      setSelectedChildId(lockedChildId);
+
+      // 名前解決（paramChildNameまたはchildOptionsから）
+      if (paramChildName) {
+        setLockedChildName(paramChildName);
+      } else if (!lockedChildName) {
+        const resolvedName = childOptions.find((child) => child.id === lockedChildId)?.name;
+        if (resolvedName) {
+          setLockedChildName(resolvedName);
+        }
+      }
     }
-  }, [isNew, lockedChildId, paramChildName]);
 
-  useEffect(() => {
-    if (!isNew || !lockedChildId || lockedChildName) return;
-    const resolvedName = childOptions.find((child) => child.id === lockedChildId)?.name;
-    if (resolvedName) {
-      setLockedChildName(resolvedName);
+    // フォームリセット（ドラフト時は除外）
+    if (selectedChildId && !draftId) {
+      setEditText('');
+      setAiEditForm({
+        ai_action: '',
+        ai_opinion: '',
+        flags: buildDefaultTagFlags(observationTags),
+      });
+      setError('');
+      setAiEditError('');
+      setAiEditSuccess(false);
+      autoAiTriggeredRef.current = false;
+      autoAiDraftTriggeredRef.current = false;
     }
-  }, [childOptions, isNew, lockedChildId, lockedChildName]);
-
-  useEffect(() => {
-    if (!isNew || !lockedChildId) return;
-    setSelectedChildId(lockedChildId);
-  }, [isNew, lockedChildId]);
-
-  useEffect(() => {
-    if (!paramChildName) return;
-    setLockedChildName(paramChildName);
-  }, [paramChildName]);
+  }, [isNew, lockedChildId, selectedChildId, draftId, childOptions, lockedChildName, paramChildName, observationTags]);
 
   // activity_idをURLパラメータまたはドラフトから取得
   useEffect(() => {
@@ -443,7 +458,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           id: child.child_id,
           name: child.name,
           className: child.class_name || '未設定',
+          grade: child.grade ?? null,
         }));
+        // 学年昇順、同学年内は名前順にソート
+        children.sort((a, b) => {
+          const gradeA = a.grade ?? 999;
+          const gradeB = b.grade ?? 999;
+          if (gradeA !== gradeB) {
+            return gradeA - gradeB;
+          }
+          return a.name.localeCompare(b.name, 'ja');
+        });
         if (isMounted) {
           setChildOptions(children);
         }
@@ -1130,6 +1155,45 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     router.push(`/records/personal/${id}/edit`);
   };
 
+  const handleDeleteClick = (id: string) => {
+    setDeletingRecordId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingRecordId) return;
+
+    setDeletingObservationId(deletingRecordId);
+    setDeleteConfirmOpen(false);
+
+    try {
+      const response = await fetch('/api/records/observation', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observation_id: deletingRecordId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '削除に失敗しました');
+      }
+
+      setRecentObservations(prev => prev.filter(obs => obs.id !== deletingRecordId));
+    } catch (err) {
+      console.error('Delete error:', err);
+      setError(err instanceof Error ? err.message : '削除に失敗しました');
+    } finally {
+      setDeletingObservationId(null);
+      setDeletingRecordId(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmOpen(false);
+    setDeletingRecordId(null);
+  };
+
   return (
     <RequireAuth>
       <div className="space-y-6">
@@ -1430,9 +1494,24 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
                           <div className="flex items-start justify-between gap-2 text-xs text-gray-500">
                             <span>{item.observation_date ? formatDateTime(item.observation_date) : '日付不明'}</span>
-                            <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
-                              編集
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
+                                編集
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteClick(item.id)}
+                                disabled={deletingObservationId === item.id}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              >
+                                {deletingObservationId === item.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
                           <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">
                             {displayRecentContent(item.content)}
@@ -1576,6 +1655,33 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             </DialogContent>
           </Dialog>
         )}
+
+        {/* 削除確認ダイアログ */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>記録を削除しますか？</DialogTitle>
+              <DialogDescription>
+                この操作は取り消せません。削除された記録は復元できません。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={handleDeleteCancel}
+                autoFocus
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+              >
+                削除する
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </RequireAuth>
   );

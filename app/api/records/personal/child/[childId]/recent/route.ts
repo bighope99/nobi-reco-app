@@ -66,29 +66,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: '過去記録の取得に失敗しました' }, { status: 500 });
     }
 
-    const observationIds = (observations || []).map((obs) => obs.id).filter(Boolean);
-    let tagMap: Record<string, string[]> = {};
-    if (observationIds.length > 0) {
-      const { data: tagRows, error: tagError } = await supabase
-        .from('_record_tag')
-        .select('observation_id, tag_id')
-        .in('observation_id', observationIds);
-      if (tagError) {
-        console.error('Recent observation tags load error:', tagError);
-      } else {
-        tagMap = (tagRows || []).reduce<Record<string, string[]>>((acc, row) => {
-          if (!row.observation_id || !row.tag_id) {
-            return acc;
-          }
-          if (!acc[row.observation_id]) {
-            acc[row.observation_id] = [];
-          }
-          acc[row.observation_id].push(row.tag_id);
-          return acc;
-        }, {});
-      }
-    }
-
+    // JOINで取得したタグをそのまま使用（冗長なクエリを削除）
     return NextResponse.json({
       success: true,
       data: {
@@ -97,17 +75,9 @@ export async function GET(
           observation_date: obs.observation_date,
           content: obs.content,
           created_at: obs.created_at,
-          tag_ids: (() => {
-            const fromJoin = Array.isArray(obs.record_tags)
-              ? obs.record_tags
-                  .map((tag: { tag_id?: string }) => tag.tag_id)
-                  .filter(Boolean)
-              : [];
-            if (fromJoin.length > 0) {
-              return fromJoin;
-            }
-            return tagMap[obs.id] || [];
-          })(),
+          tag_ids: Array.isArray(obs.record_tags)
+            ? obs.record_tags.map((tag: { tag_id?: string }) => tag.tag_id).filter(Boolean)
+            : [],
         })),
       },
     });
