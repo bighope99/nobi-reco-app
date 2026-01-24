@@ -84,6 +84,11 @@ export async function GET(
     const primaryGuardian = guardians.find((g: any) => g.is_primary);
     const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
 
+    // DEBUG: 保護者データの確認
+    console.log('[DEBUG] guardians raw:', JSON.stringify(guardians, null, 2));
+    console.log('[DEBUG] primaryGuardian:', JSON.stringify(primaryGuardian, null, 2));
+    console.log('[DEBUG] emergencyContacts (filtered):', JSON.stringify(emergencyContacts, null, 2));
+
 
     // 保護者情報の復号化
     const decryptGuardian = (guardian: any) => {
@@ -107,7 +112,8 @@ export async function GET(
       m_guardians: decryptGuardian(ec.m_guardians),
     }));
 
-  
+    // DEBUG: 復号後のデータ確認
+    console.log('[DEBUG] decryptedEmergencyContacts:', JSON.stringify(decryptedEmergencyContacts, null, 2));
 
     // データ整形
     const response = {
@@ -147,14 +153,21 @@ export async function GET(
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
           parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(childData.parent_email) || null,
-          emergency_contacts: decryptedEmergencyContacts.map((ec: any) => ({
-            name: formatName(
-              [ec.m_guardians.family_name, ec.m_guardians.given_name],
-              ''
-            ) || '',
-            relation: ec.relationship,
-            phone: ec.m_guardians.phone,
-          })),
+          emergency_contacts: (() => {
+            // DEBUG: レスポンス整形前の確認
+            const formattedContacts = decryptedEmergencyContacts
+              .filter((ec: any) => ec.m_guardians)  // null の保護者を除外
+              .map((ec: any) => ({
+                name: formatName(
+                  [ec.m_guardians?.family_name, ec.m_guardians?.given_name],
+                  ''
+                ) || '',
+                relation: ec.relationship,
+                phone: ec.m_guardians?.phone || '',
+              }));
+            console.log('[DEBUG] emergency_contacts response:', JSON.stringify(formattedContacts, null, 2));
+            return formattedContacts;
+          })(),
         },
         care_info: {
           allergies: decryptOrFallback(childData.allergies),

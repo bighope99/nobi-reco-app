@@ -237,6 +237,10 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
 
         if (result.success && result.data) {
           const data = result.data;
+
+          // DEBUG: API レスポンスの確認
+          console.log('[DEBUG] ChildForm API response:', JSON.stringify(data, null, 2));
+          console.log('[DEBUG] emergency_contacts from API:', JSON.stringify(data.contact?.emergency_contacts, null, 2));
           // birth_dateを分割
           const birthDate = data.basic_info.birth_date || '';
           const [year, month, day] = birthDate ? birthDate.split('-') : ['', '', ''];
