@@ -544,12 +544,13 @@ CREATE TABLE IF NOT EXISTS m_guardians (
 
 -- インデックス
 CREATE INDEX idx_guardians_facility_id ON m_guardians(facility_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_phone ON m_guardians(phone) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_email ON m_guardians(email) WHERE deleted_at IS NULL;
+-- 注意: phone, email は暗号化されているため、インデックスは検索に使用不可
+-- 検索には s_pii_search_index テーブルのハッシュインデックスを使用
 
 -- フルテキスト検索用インデックス（名前検索）
+-- given_name は使用しないため、family_name のみで検索
 CREATE INDEX idx_guardians_name_search ON m_guardians
-  USING gin(to_tsvector('japanese', family_name || ' ' || given_name));
+  USING gin(to_tsvector('japanese', family_name));
 ```
 
 ### 保護者情報の管理方針（2026年1月更新）
