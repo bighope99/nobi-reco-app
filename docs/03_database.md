@@ -521,15 +521,15 @@ CREATE TABLE IF NOT EXISTS m_guardians (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   facility_id UUID NOT NULL REFERENCES m_facilities(id),
 
-  -- 基本情報
-  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
-  given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
-  family_name_kana VARCHAR(50),                  -- 姓（カナ）
-  given_name_kana VARCHAR(50),                   -- 名（カナ）
+  -- 基本情報（暗号化）
+  family_name TEXT NOT NULL,                     -- 姓（漢字）（AES-256-GCM暗号化、Base64url）
+  given_name TEXT NOT NULL DEFAULT '',           -- 名（漢字）（AES-256-GCM暗号化、Base64url）
+  family_name_kana TEXT,                         -- 姓（カナ）（AES-256-GCM暗号化、Base64url）
+  given_name_kana TEXT,                          -- 名（カナ）（AES-256-GCM暗号化、Base64url）
 
-  -- 連絡先
-  phone VARCHAR(20),                             -- 電話番号
-  email VARCHAR(255),                            -- メールアドレス
+  -- 連絡先（暗号化）
+  phone TEXT,                                    -- 電話番号（AES-256-GCM暗号化、Base64url）
+  email TEXT,                                    -- メールアドレス（AES-256-GCM暗号化、Base64url）
   postal_code VARCHAR(10),                       -- 郵便番号
   address TEXT,                                  -- 住所
 
@@ -544,12 +544,13 @@ CREATE TABLE IF NOT EXISTS m_guardians (
 
 -- インデックス
 CREATE INDEX idx_guardians_facility_id ON m_guardians(facility_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_phone ON m_guardians(phone) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_email ON m_guardians(email) WHERE deleted_at IS NULL;
+-- 注意: phone, email は暗号化されているため、インデックスは検索に使用不可
+-- 検索には s_pii_search_index テーブルのハッシュインデックスを使用
 
 -- フルテキスト検索用インデックス（名前検索）
+-- given_name は使用しないため、family_name のみで検索
 CREATE INDEX idx_guardians_name_search ON m_guardians
-  USING gin(to_tsvector('japanese', family_name || ' ' || given_name));
+  USING gin(to_tsvector('japanese', family_name));
 ```
 
 ### 保護者情報の管理方針（2026年1月更新）
@@ -1516,6 +1517,27 @@ CREATE POLICY facility_access ON r_activity
 
 ---
 
+### 保護者マスタの暗号化対応（2026年1月24日）
+
+#### `m_guardians`テーブルの変更
+- **変更**: `family_name VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+- **変更**: `given_name VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+- **変更**: `family_name_kana VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+- **変更**: `given_name_kana VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+
+**理由**:
+- AES-256-GCM + Base64url エンコードにより、暗号化後のデータサイズが60-80文字に膨らむ
+- `VARCHAR(50)` では暗号化データが切り詰められ、復号時にデータ欠損が発生
+- マイグレーション016で `phone`, `email` を TEXT 化済み。名前カラムも同様に対応
+
+**影響**:
+- 既存の切り詰められたデータは再保存が必要
+- 緊急連絡先「中谷テスト」が「中谷」のみ表示される問題を解決
+
+**マイグレーション**: `017_alter_guardians_name_columns.sql`
+
+---
+
 **作成日**: 2025年1月
-**最終更新**: 2026年1月13日（活動記録テーブルの拡張）
+**最終更新**: 2026年1月24日（保護者マスタの暗号化対応）
 **管理者**: プロジェクトリーダー
