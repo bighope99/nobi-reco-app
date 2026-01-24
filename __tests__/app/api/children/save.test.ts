@@ -242,8 +242,10 @@ describe('saveChild PII暗号化', () => {
     expect(decryptPII(insertedValues.parent_email)).toBe(payload.contact?.parent_email);
 
     const guardianInsertValues = supabase.__guardianInsert.mock.calls[0][0];
-    expect(decryptPII(guardianInsertValues.family_name)).toBe('田中');
-    expect(decryptPII(guardianInsertValues.given_name)).toBe('優子');
+    // 保護者名は分割せず全体をfamily_nameに保存
+    expect(decryptPII(guardianInsertValues.family_name)).toBe('田中 優子');
+    // given_nameは空文字列（暗号化されていない）
+    expect(guardianInsertValues.given_name).toBe('');
     expect(decryptPII(guardianInsertValues.phone)).toBe(normalizedParentPhone);
     expect(decryptPII(guardianInsertValues.email)).toBe(payload.contact?.parent_email);
   });
@@ -298,5 +300,66 @@ describe('saveChild PII暗号化', () => {
 
     expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  it('保護者名は分割せずfamily_nameに全て保存されること', async () => {
+    const supabase = createSupabaseMock();
+    const payload: ChildPayload = {
+      basic_info: {
+        family_name: '山田',
+        given_name: '太郎',
+        birth_date: '2020-01-01',
+      },
+      affiliation: {
+        enrolled_at: '2024-04-01',
+      },
+      contact: {
+        parent_name: '田中 太郎',
+        parent_phone: '090-1234-5678',
+      },
+    };
+
+    await saveChild(payload, 'facility-1', supabase);
+
+    const guardianInsertValues = supabase.__guardianInsert.mock.calls[0][0];
+
+    // family_nameには全体が暗号化されて保存されること
+    expect(decryptPII(guardianInsertValues.family_name)).toBe('田中 太郎');
+
+    // given_nameは空文字列（暗号化されていない）
+    expect(guardianInsertValues.given_name).toBe('');
+  });
+
+  it('緊急連絡先名も分割せずfamily_nameに全て保存されること', async () => {
+    const supabase = createSupabaseMock();
+    const payload: ChildPayload = {
+      basic_info: {
+        family_name: '山田',
+        given_name: '太郎',
+        birth_date: '2020-01-01',
+      },
+      affiliation: {
+        enrolled_at: '2024-04-01',
+      },
+      contact: {
+        emergency_contacts: [
+          {
+            name: '佐藤 次郎',
+            relation: '祖父',
+            phone: '090-9876-5432',
+          },
+        ],
+      },
+    };
+
+    await saveChild(payload, 'facility-1', supabase);
+
+    const guardianInsertValues = supabase.__guardianInsert.mock.calls[0][0];
+
+    // family_nameには全体が暗号化されて保存されること
+    expect(decryptPII(guardianInsertValues.family_name)).toBe('佐藤 次郎');
+
+    // given_nameは空文字列（暗号化されていない）
+    expect(guardianInsertValues.given_name).toBe('');
   });
 });

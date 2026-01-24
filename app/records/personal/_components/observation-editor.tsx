@@ -2,6 +2,8 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
+import { DatePicker } from '@/components/ui/date-picker';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -288,6 +290,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
   const previousSelectedChildIdRef = useRef('');
+  // 記録日選択用の状態
+  const [observationDate, setObservationDate] = useState<Date>(new Date());
   // 音声入力用の状態
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -697,6 +701,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ? new Date(data.observation_date).toISOString()
         : data.created_at || new Date().toISOString();
 
+      // 編集モードで日付を初期化
+      if (data.observation_date) {
+        setObservationDate(parseISO(data.observation_date));
+      }
+
       const displayContent = toDisplayText(data.content || '');
       const observationRecord: Observation = {
         id: data.id,
@@ -902,7 +911,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       const response = await fetch(`/api/records/personal/${observation.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({
+          content: text,
+          observation_date: format(observationDate, 'yyyy-MM-dd'),
+        }),
       });
 
       const result = await response.json();
@@ -972,7 +984,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDate = getCurrentDateJST(); // YYYY-MM-DD形式（JST）
+      const observationDateStr = format(observationDate, 'yyyy-MM-dd');
 
       // APIに保存
       const response = await fetch('/api/records/personal', {
@@ -980,7 +992,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           child_id: selectedChildId,
-          observation_date: observationDate,
+          observation_date: observationDateStr,
           content: text,
           activity_id: activityId || null,
           ai_action: aiResult.ai_action,
@@ -1353,8 +1365,21 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    {observation ? formatDateTime(observation.observed_at) : '未保存'}
+                    {isNew || isEditing ? (
+                      <div className="min-w-[180px]">
+                        <DatePicker
+                          date={observationDate}
+                          onSelect={(date) => date && setObservationDate(date)}
+                          placeholder="記録日を選択"
+                          disabled={savingEdit}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <Calendar className="h-4 w-4" />
+                        {observation ? formatDateTime(observation.observed_at) : '未保存'}
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
