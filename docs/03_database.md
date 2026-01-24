@@ -522,14 +522,14 @@ CREATE TABLE IF NOT EXISTS m_guardians (
   facility_id UUID NOT NULL REFERENCES m_facilities(id),
 
   -- 基本情報
-  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
-  given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
-  family_name_kana VARCHAR(50),                  -- 姓（カナ）
-  given_name_kana VARCHAR(50),                   -- 名（カナ）
+  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）※実際は姓名まとめて格納
+  given_name VARCHAR(50) DEFAULT '',             -- 名（NULL許可、互換性のため保持、実際は使用しない）
+  family_name_kana VARCHAR(50) DEFAULT '',       -- 姓（カナ）
+  given_name_kana VARCHAR(50) DEFAULT '',        -- 名（カナ）
 
-  -- 連絡先
-  phone VARCHAR(20),                             -- 電話番号
-  email VARCHAR(255),                            -- メールアドレス
+  -- 連絡先（PIIフィールド：AES-256-GCM暗号化）
+  phone TEXT,                                    -- 電話番号（AES-256-GCM暗号化、Base64url エンコード）
+  email TEXT,                                    -- メールアドレス（AES-256-GCM暗号化、Base64url エンコード）
   postal_code VARCHAR(10),                       -- 郵便番号
   address TEXT,                                  -- 住所
 
@@ -544,12 +544,13 @@ CREATE TABLE IF NOT EXISTS m_guardians (
 
 -- インデックス
 CREATE INDEX idx_guardians_facility_id ON m_guardians(facility_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_phone ON m_guardians(phone) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_email ON m_guardians(email) WHERE deleted_at IS NULL;
+-- 注意: phone, email は暗号化されているため、インデックスは検索に使用不可
+-- 検索には s_pii_search_index テーブルのハッシュインデックスを使用
 
 -- フルテキスト検索用インデックス（名前検索）
+-- given_name は使用しないため、family_name のみで検索
 CREATE INDEX idx_guardians_name_search ON m_guardians
-  USING gin(to_tsvector('japanese', family_name || ' ' || given_name));
+  USING gin(to_tsvector('japanese', family_name));
 ```
 
 ### 保護者情報の管理方針（2026年1月更新）
@@ -1514,8 +1515,36 @@ CREATE POLICY facility_access ON r_activity
 - `role_assignments`: `[{user_id: string, user_name: string, role: string}, ...]`
 - `meal`: `{menu: string, items_to_bring: string, notes: string}`
 
+### 保護者マスタのPII暗号化対応（2026年1月24日）
+
+#### `m_guardians`テーブルの変更
+
+**カラム型の変更**:
+- **変更**: `phone VARCHAR(20)` → `phone TEXT`（暗号化対応）
+- **変更**: `email VARCHAR(255)` → `email TEXT`（暗号化対応）
+
+**NULL許可・デフォルト値の変更**:
+- **変更**: `given_name VARCHAR(50) NOT NULL` → `given_name VARCHAR(50) DEFAULT ''`
+- **変更**: `family_name_kana VARCHAR(50)` → `family_name_kana VARCHAR(50) DEFAULT ''`
+- **変更**: `given_name_kana VARCHAR(50)` → `given_name_kana VARCHAR(50) DEFAULT ''`
+
+**インデックスの変更**:
+- **変更**: フルテキスト検索インデックスから `given_name` を除外（`family_name` のみで検索）
+- **削除**: `phone`, `email` のインデックス（暗号化によりインデックス検索不可）
+
+**理由**:
+- `phone`, `email` フィールドをAES-256-GCM暗号化して保存するため、固定長制限のあるVARCHARからTEXTに変更
+- 暗号化されたフィールドはBase64urlエンコードされるため、元の文字列長より長くなる
+- 氏名は `family_name` に姓名まとめて格納する運用のため、`given_name` は空文字列をデフォルトとし、検索対象から除外
+- 暗号化フィールドの検索は `s_pii_search_index` テーブルのハッシュインデックスを使用
+
+**関連マイグレーション**:
+- 009: `m_guardians` テーブル作成
+- 016: `phone`/`email` を TEXT 型に変更（暗号化対応）
+- 017: `given_name` を NULL 許可に変更
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2026年1月13日（活動記録テーブルの拡張）
+**最終更新**: 2026年1月24日（保護者マスタのPII暗号化対応）
 **管理者**: プロジェクトリーダー

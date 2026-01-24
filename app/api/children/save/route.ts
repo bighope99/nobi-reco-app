@@ -10,6 +10,7 @@ import {
   searchByEmail,
   deleteSearchIndex,
 } from '@/utils/pii/searchIndex';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface ChildPayload {
   child_id?: string;
@@ -55,7 +56,7 @@ export interface ChildPayload {
 export async function saveChild(
   payload: ChildPayload,
   facilityId: string,
-  supabase: any,
+  supabase: SupabaseClient,
   targetChildId?: string,
   options?: { skipParentLegacy?: boolean },
 ) {
@@ -106,7 +107,7 @@ export async function saveChild(
   const legacyParentPhoneValue = fitColumnLength(legacyParentPhone, 20);
   const legacyParentEmailValue = fitColumnLength(legacyParentEmail, 255);
 
-  const childValues: any = {
+  const childValues: Record<string, unknown> = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
     // PIIフィールドを暗号化（氏名・フリガナ・保護者情報）

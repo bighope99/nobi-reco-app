@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 export async function GET(
@@ -9,18 +9,14 @@ export async function GET(
 ) {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    if (!metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -66,7 +62,7 @@ export async function GET(
     // m_children は配列の可能性があるため、単一オブジェクトとして取得
     const child = Array.isArray(data.m_children) ? data.m_children[0] : data.m_children;
 
-    if (!child || child.facility_id !== session.current_facility_id) {
+    if (!child || child.facility_id !== metadata.current_facility_id) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
@@ -185,18 +181,14 @@ export async function PATCH(
 ) {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const metadata = await getAuthenticatedUserMetadata();
 
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    if (!metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -209,8 +201,16 @@ export async function PATCH(
     }
 
     // Validate observation_date format if provided (YYYY-MM-DD)
-    if (observationDate && !/^\d{4}-\d{2}-\d{2}$/.test(observationDate)) {
-      return NextResponse.json({ success: false, error: '日付形式が不正です' }, { status: 400 });
+    if (observationDate) {
+      // 形式チェック
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(observationDate)) {
+        return NextResponse.json({ success: false, error: '日付形式が不正です' }, { status: 400 });
+      }
+      // 実際の日付として有効かチェック
+      const dateObj = new Date(observationDate);
+      if (isNaN(dateObj.getTime()) || dateObj.toISOString().slice(0, 10) !== observationDate) {
+        return NextResponse.json({ success: false, error: '無効な日付です' }, { status: 400 });
+      }
     }
 
     const { data: existing, error: fetchError } = await supabase
@@ -236,7 +236,7 @@ export async function PATCH(
     }
 
     const child = Array.isArray(existing.m_children) ? existing.m_children[0] : existing.m_children;
-    if (!child || child.facility_id !== session.current_facility_id) {
+    if (!child || child.facility_id !== metadata.current_facility_id) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
@@ -244,7 +244,7 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {
       content,
       updated_at: new Date().toISOString(),
-      updated_by: user.id,
+      updated_by: metadata.user_id,
     };
 
     if (observationDate) {
