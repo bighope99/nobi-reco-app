@@ -136,7 +136,7 @@ export async function GET(
 
     const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({
       ...ec,
-      m_guardians: ec.m_guardians ? decryptGuardian(ec) : null,
+      m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
     }));
 
     // データ整形
