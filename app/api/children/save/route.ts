@@ -470,8 +470,10 @@ export async function saveChild(
 
     // 緊急連絡先の電話番号事前検証
     const invalidContact = contact?.emergency_contacts?.find((ec) => {
-      const normalized = normalizePhone(ec.phone ?? '');
-      return !normalized || normalized.length < 10 || normalized.length > 15;
+      // 名前と電話番号の両方がある場合のみ検証
+      if (!ec.name?.trim() || !ec.phone?.trim()) return false;
+      const normalized = normalizePhone(ec.phone);
+      return normalized.length < 10 || normalized.length > 15;
     });
     if (invalidContact) {
       return NextResponse.json(
