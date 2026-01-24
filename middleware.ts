@@ -48,6 +48,35 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 }
 
 export async function middleware(request: NextRequest) {
+    // CSRF Protection: Check Origin header for state-changing requests
+    // Supabase uses SameSite=Lax cookies, but this adds an additional layer of defense
+    if (['DELETE', 'PUT', 'POST', 'PATCH'].includes(request.method)) {
+        const origin = request.headers.get('origin');
+        const host = request.headers.get('host');
+
+        // Same-origin check: origin must match the current host
+        if (origin && host) {
+            let originHost: string | null = null;
+            try {
+                originHost = new URL(origin).host;
+            } catch {
+                originHost = null;
+            }
+            if (!originHost || originHost !== host) {
+                console.warn('CSRF attempt detected - origin mismatch:', {
+                    origin: originHost ?? origin,
+                    host,
+                    method: request.method,
+                    path: request.nextUrl.pathname,
+                });
+                return NextResponse.json(
+                    { success: false, error: 'Invalid request origin' },
+                    { status: 403 }
+                );
+            }
+        }
+    }
+
     let response = NextResponse.next({
         request: {
             headers: request.headers,

@@ -1,9 +1,12 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { FileText, ChevronLeft, Calendar, ChevronRight, ChevronDown, Search, Filter, History, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react"
+import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 
 // --- Types ---
 interface Child {
@@ -48,6 +51,14 @@ interface RecordsData {
     filters: {
         classes: Array<{ class_id: string; class_name: string }>;
     };
+}
+
+interface HistoryRecord {
+    id: string;
+    observation_date: string;
+    content: string;
+    created_at: string;
+    tag_ids?: string[];
 }
 
 // --- Helper Components ---
@@ -107,6 +118,8 @@ const MonthlyHeatmap = ({ history }: { history: string[] }) => {
 // --- Main Component ---
 
 export default function StatusPage() {
+    const router = useRouter()
+
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [recordsData, setRecordsData] = useState<RecordsData | null>(null)
@@ -117,6 +130,13 @@ export default function StatusPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
     const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'name', order: 'asc' })
+
+    // 履歴モーダル用の状態
+    const [historyModalOpen, setHistoryModalOpen] = useState(false)
+    const [selectedChildForHistory, setSelectedChildForHistory] = useState<Child | null>(null)
+    const [historyLoading, setHistoryLoading] = useState(false)
+    const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([])
+    const [historyError, setHistoryError] = useState<string | null>(null)
 
     // データ取得
     useEffect(() => {
@@ -177,32 +197,32 @@ export default function StatusPage() {
         setMonth(newMonth)
     }
 
+    type SortValue = string | number;
+
+    const getSortValue = (child: Child, key: string): SortValue => {
+        switch (key) {
+            case 'name':
+                return child.kana;
+            case 'grade':
+                return child.grade ?? 0;
+            case 'last_record_date':
+                return child.last_record_date || '';
+            case 'record_rate':
+                return child.monthly.record_rate;
+            case 'yearly_rate':
+                return child.yearly.record_rate;
+            default:
+                return '';
+        }
+    };
+
     const sortedData = useMemo(() => {
         if (!recordsData) return []
 
         const sorted = [...recordsData.children]
         sorted.sort((a, b) => {
-            let aValue: any
-            let bValue: any
-
-            if (sortConfig.key === 'name') {
-                aValue = a.kana
-                bValue = b.kana
-            } else if (sortConfig.key === 'grade') {
-                aValue = a.grade ?? 0
-                bValue = b.grade ?? 0
-            } else if (sortConfig.key === 'last_record_date') {
-                aValue = a.last_record_date || ''
-                bValue = b.last_record_date || ''
-            } else if (sortConfig.key === 'record_rate') {
-                aValue = a.monthly.record_rate
-                bValue = b.monthly.record_rate
-            } else if (sortConfig.key === 'yearly_rate') {
-                aValue = a.yearly.record_rate
-                bValue = b.yearly.record_rate
-            } else {
-                return 0
-            }
+            const aValue = getSortValue(a, sortConfig.key);
+            const bValue = getSortValue(b, sortConfig.key);
 
             if (aValue < bValue) return sortConfig.order === 'asc' ? -1 : 1
             if (aValue > bValue) return sortConfig.order === 'asc' ? 1 : -1
@@ -216,6 +236,51 @@ export default function StatusPage() {
             key,
             order: current.key === key && current.order === 'asc' ? 'desc' : 'asc'
         }))
+    }
+
+    // 児童IDから名前へのマップを構築
+    const nameByIdMap = useMemo(() => {
+        const map = new Map<string, string>();
+        recordsData?.children.forEach((child) => {
+            if (child.child_id && child.name) {
+                map.set(child.child_id, child.name);
+            }
+        });
+        return map;
+    }, [recordsData?.children]);
+
+    // メンション付きコンテンツを表示用に変換
+    const toDisplayText = useCallback(
+        (text: string) => replaceChildIdsWithNames(text, nameByIdMap),
+        [nameByIdMap]
+    );
+
+    // 履歴取得ハンドラ
+    const handleOpenHistory = async (child: Child) => {
+        setSelectedChildForHistory(child)
+        setHistoryModalOpen(true)
+        setHistoryLoading(true)
+        setHistoryError(null)
+
+        try {
+            const response = await fetch(`/api/records/personal/child/${child.child_id}/recent`)
+            const result = await response.json()
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || '履歴の取得に失敗しました')
+            }
+
+            setHistoryRecords(result.data?.recent_observations || [])
+        } catch (err) {
+            console.error('History fetch error:', err)
+            setHistoryError(err instanceof Error ? err.message : '履歴の取得に失敗しました')
+        } finally {
+            setHistoryLoading(false)
+        }
+    }
+
+    const handleEditRecord = (recordId: string) => {
+        router.push(`/records/personal/${recordId}/edit`)
     }
 
     if (loading) {
@@ -434,7 +499,11 @@ export default function StatusPage() {
 
                                             <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <button className="text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors" title="履歴">
+                                                    <button
+                                                        className="text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors"
+                                                        title="履歴"
+                                                        onClick={() => handleOpenHistory(child)}
+                                                    >
                                                         <History className="w-4 h-4" />
                                                     </button>
                                                     <Link
@@ -467,6 +536,49 @@ export default function StatusPage() {
                         </table>
                     </div>
                 </div>
+
+                {/* 履歴モーダル */}
+                <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>
+                                {selectedChildForHistory?.name}の記録履歴（直近10件）
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3 mt-4">
+                            {historyLoading ? (
+                                <div className="text-center py-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                                    <p className="mt-2 text-sm text-slate-500">読み込み中...</p>
+                                </div>
+                            ) : historyError ? (
+                                <div className="text-center py-8 text-red-500">{historyError}</div>
+                            ) : historyRecords.length === 0 ? (
+                                <div className="text-center py-8 text-slate-500">記録がありません</div>
+                            ) : (
+                                historyRecords.map((record) => (
+                                    <div
+                                        key={record.id}
+                                        className="border rounded-lg p-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                                        onClick={() => handleEditRecord(record.id)}
+                                    >
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-slate-700">
+                                                {record.observation_date}
+                                            </span>
+                                            <span className="text-xs text-slate-400">
+                                                作成: {new Date(record.created_at).toLocaleString('ja-JP')}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-slate-600 line-clamp-2">
+                                            {toDisplayText(record.content)}
+                                        </p>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </StaffLayout>
     )
