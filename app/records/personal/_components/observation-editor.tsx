@@ -16,6 +16,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -36,6 +37,7 @@ import {
   X,
   Mic,
   Trash2,
+  PlusCircle,
 } from 'lucide-react';
 import {
   type AiObservationDraft,
@@ -280,6 +282,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+  const [showContinueButton, setShowContinueButton] = useState(false);
+  const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -819,6 +823,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleAiEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (aiEditSaving) return;
     if (isNew) {
       setAiEditSaving(true);
       setAiEditError('');
@@ -936,6 +941,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const handleCreateObservation = async ({ forceAi = false }: { forceAi?: boolean } = {}) => {
+    if (savingEdit) return;
     const displayText = editText.trim();
     const text = toIdText(displayText).trim();
     if (!selectedChildId) {
@@ -1007,6 +1013,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       };
       setObservation(newObservation);
       setIsEditing(false);
+      if (!draftId) {
+        setShowContinueButton(true);
+      }
 
       // draftIdがある場合、ステータスを'saved'に更新
       if (draftId) {
@@ -1042,6 +1051,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const handleSaveEdit = async () => {
+    if (savingEdit) return;
     if (isNew) {
       await handleCreateObservation({ forceAi: true });
       return;
@@ -1083,6 +1093,55 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setAiProcessing(false);
     }
   };
+
+  // 続けて入力ハンドラー
+  const handleContinueInput = useCallback(() => {
+    // 二重送信防止ガード追加
+    if (savingEdit || aiEditSaving || aiProcessing) return;
+
+    // 児童選択は維持
+    setEditText('');
+    setAiEditForm({
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultTagFlags(observationTags),
+    });
+    setObservation(null);
+    setIsEditing(true);
+    setShowContinueButton(false);
+    setError('');
+    setAiEditError('');
+    setAiEditSuccess(false);
+    autoAiTriggeredRef.current = false;
+    autoAiDraftTriggeredRef.current = false;
+  }, [savingEdit, aiEditSaving, aiProcessing, observationTags]);
+
+  // 新規作成ページへ遷移
+  const navigateToNewRecord = useCallback(() => {
+    if (selectedChildId) {
+      router.push(`/records/personal/new?childId=${selectedChildId}`);
+    } else {
+      router.push('/records/personal/new');
+    }
+  }, [selectedChildId, router]);
+
+  // 別の記録を作成ハンドラー
+  const handleCreateNew = useCallback(() => {
+    // 編集中かつ未保存の変更がある場合は確認ダイアログ表示
+    const hasUnsavedChanges = isEditing && editText.trim() !== toDisplayText(observation?.body_text || '');
+
+    if (hasUnsavedChanges) {
+      setShowCreateNewDialog(true);
+    } else {
+      navigateToNewRecord();
+    }
+  }, [isEditing, editText, toDisplayText, observation?.body_text, navigateToNewRecord]);
+
+  // 確認ダイアログでOK押下時
+  const handleCreateNewConfirm = useCallback(() => {
+    setShowCreateNewDialog(false);
+    navigateToNewRecord();
+  }, [navigateToNewRecord]);
 
   // 音声録音開始
   const startRecording = async () => {
@@ -1213,6 +1272,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 
               </div>
               <div className="flex gap-2">
+                {!isNew && (
+                  <Button
+                    variant="outline"
+                    className="border-green-200 text-green-600 hover:bg-green-50"
+                    onClick={handleCreateNew}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => router.back()}>
                   戻る
                 </Button>
@@ -1300,7 +1368,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
                       {toDisplayText(observation?.body_text || '')}
                     </div>
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex justify-end gap-2">
+                      {isNew && !draftId && showContinueButton && (
+                        <Button
+                          variant="outline"
+                          className="border-green-200 text-green-600 hover:bg-green-50"
+                          onClick={handleContinueInput}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" /> 続けて入力
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -1688,6 +1765,26 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 削除する
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 別の記録を作成の確認ダイアログ */}
+        <Dialog open={showCreateNewDialog} onOpenChange={setShowCreateNewDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>別の記録を作成しますか？</DialogTitle>
+              <DialogDescription>
+                編集中の内容は破棄されます。よろしいですか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCreateNewDialog(false)}>
+                キャンセル
+              </Button>
+              <Button onClick={handleCreateNewConfirm}>
+                作成する
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
