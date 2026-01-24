@@ -393,8 +393,13 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   };
 
   const addEmergencyContact = () => {
-    if (emergencyContacts.length >= MAX_EMERGENCY_CONTACTS) return;
+    console.log('[DEBUG] addEmergencyContact called, current length:', emergencyContacts.length, 'MAX:', MAX_EMERGENCY_CONTACTS);
+    if (emergencyContacts.length >= MAX_EMERGENCY_CONTACTS) {
+      console.log('[DEBUG] Maximum contacts reached, not adding');
+      return;
+    }
     setEmergencyContacts([...emergencyContacts, { id: Date.now(), name: '', relation: '', phone: '' }]);
+    console.log('[DEBUG] Added contact, new length will be:', emergencyContacts.length + 1);
   };
 
   const removeEmergencyContact = (id: number) => {
@@ -856,11 +861,14 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                   <div className="border-b border-slate-100 pb-2">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-bold text-slate-800">緊急連絡先リスト（優先順）</h3>
-                      {emergencyContacts.length < MAX_EMERGENCY_CONTACTS && (
-                        <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
-                          <Plus size={14} /> 追加する
-                        </button>
-                      )}
+                      {(() => {
+                        console.log('[DEBUG] Render check - emergencyContacts.length:', emergencyContacts.length, 'MAX:', MAX_EMERGENCY_CONTACTS, 'show button:', emergencyContacts.length < MAX_EMERGENCY_CONTACTS);
+                        return emergencyContacts.length < MAX_EMERGENCY_CONTACTS && (
+                          <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
+                            <Plus size={14} /> 追加する
+                          </button>
+                        );
+                      })()}
                     </div>
                     <p className="text-xs text-slate-500 mt-1.5">
                       上記の保護者に連絡がつかない場合の連絡先を登録します（最大2件）
