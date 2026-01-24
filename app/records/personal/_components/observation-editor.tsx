@@ -283,6 +283,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
+  const previousSelectedChildIdRef = useRef('');
   // 音声入力用の状態
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -374,8 +375,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       }
     }
 
+    // 児童が実際に変更された場合のみフォームリセット
+    const didChangeChild =
+      selectedChildId && selectedChildId !== previousSelectedChildIdRef.current;
+
     // フォームリセット（ドラフト時は除外）
-    if (selectedChildId && !draftId) {
+    if (didChangeChild && !draftId) {
       setEditText('');
       setAiEditForm({
         ai_action: '',
@@ -388,6 +393,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       autoAiTriggeredRef.current = false;
       autoAiDraftTriggeredRef.current = false;
     }
+
+    // 前回の選択を更新
+    previousSelectedChildIdRef.current = selectedChildId;
   }, [isNew, lockedChildId, selectedChildId, draftId, childOptions, lockedChildName, paramChildName, observationTags]);
 
   // activity_idをURLパラメータまたはドラフトから取得

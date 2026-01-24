@@ -56,10 +56,15 @@ export async function middleware(request: NextRequest) {
 
         // Same-origin check: origin must match the current host
         if (origin && host) {
-            const originUrl = new URL(origin);
-            if (originUrl.host !== host) {
+            let originHost: string | null = null;
+            try {
+                originHost = new URL(origin).host;
+            } catch {
+                originHost = null;
+            }
+            if (!originHost || originHost !== host) {
                 console.warn('CSRF attempt detected - origin mismatch:', {
-                    origin: originUrl.host,
+                    origin: originHost ?? origin,
                     host,
                     method: request.method,
                     path: request.nextUrl.pathname,

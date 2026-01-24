@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
         .is('deleted_at', null),
     ]);
 
-    // エラーチェック（エラーがあっても続行、データはnullになる）
+    // エラーチェック
     if (monthlyAttError || monthlyObsError || yearlyAttError || yearlyObsError) {
       console.error('Data fetch errors:', {
         monthlyAttError,
@@ -158,6 +158,10 @@ export async function GET(request: NextRequest) {
         yearlyAttError,
         yearlyObsError,
       });
+      return NextResponse.json(
+        { error: 'Failed to fetch status data' },
+        { status: 500 },
+      );
     }
 
     // データをchild_idでグループ化（O(n²) → O(n)への最適化）
