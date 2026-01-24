@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 interface ScheduleUpdate {
   child_id: string;
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
               friday: schedule.friday,
               saturday: schedule.saturday,
               sunday: schedule.sunday,
-              valid_from: new Date().toISOString().split('T')[0], // 今日から有効
+              valid_from: getCurrentDateJST(), // 今日から有効
               is_active: true,
             });
 

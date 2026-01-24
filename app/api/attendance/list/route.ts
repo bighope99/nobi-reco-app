@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate, weekdayJpMap } from '../utils/attendance';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
+
+/**
+ * 検索パラメータのサニタイズ
+ * PostgRESTの特殊文字を除去してSQLインジェクション的な攻撃を防ぐ
+ */
+const sanitizeSearchInput = (input: string): string => {
+  return input
+    .replace(/[%_,.*()]/g, '') // PostgREST特殊文字を除去
+    .trim()
+    .substring(0, 100); // 長さ制限
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,31 +23,22 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
-      return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
-      );
-    }
-
-    const facility_id = userSession.current_facility_id;
+    const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
     const class_id = searchParams.get('class_id');
     const statusFilter = searchParams.get('status');
     const search = searchParams.get('search');
 
     // 対象日（デフォルトは今日）
-    const targetDate = dateParam || new Date().toISOString().split('T')[0];
+    const targetDate = dateParam || getCurrentDateJST();
 
     // 児童一覧を取得
     let childrenQuery = supabase
@@ -69,7 +72,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      childrenQuery = childrenQuery.or(`family_name.ilike.%${search}%,given_name.ilike.%${search}%,family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
+      const sanitized = sanitizeSearchInput(search);
+      if (sanitized) {
+        childrenQuery = childrenQuery.or(`family_name.ilike.%${sanitized}%,given_name.ilike.%${sanitized}%,family_name_kana.ilike.%${sanitized}%,given_name_kana.ilike.%${sanitized}%`);
+      }
     }
 
     const { data: childrenRaw, error: childrenError } = await childrenQuery;

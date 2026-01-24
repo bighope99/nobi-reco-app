@@ -7,6 +7,7 @@ import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -14,6 +15,9 @@ const SIGNED_URL_EXPIRES_IN = 300;
 // Content validation constants
 const MAX_CONTENT_LENGTH = 10000;
 const MAX_TITLE_LENGTH = 100;
+
+// Pagination constants
+const MAX_LIMIT = 100;
 
 const signActivityPhotos = async (
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -68,11 +72,25 @@ export async function GET(request: NextRequest) {
     const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
     const class_id = searchParams.get('class_id');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
+
+    // Parse pagination parameters
+    const parsedLimit = parseInt(searchParams.get('limit') || '20');
+    const parsedOffset = parseInt(searchParams.get('offset') || '0');
+
+    // Validate pagination parameters
+    if (isNaN(parsedLimit) || isNaN(parsedOffset)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid pagination parameters' },
+        { status: 400 }
+      );
+    }
+
+    // Apply bounds: limit [1, MAX_LIMIT], offset >= 0
+    const limit = Math.min(Math.max(parsedLimit, 1), MAX_LIMIT);
+    const offset = Math.max(parsedOffset, 0);
 
     // 対象日（デフォルトは今日）
-    const targetDate = dateParam || new Date().toISOString().split('T')[0];
+    const targetDate = dateParam || getCurrentDateJST();
 
     // 活動記録を取得
     let query = supabase

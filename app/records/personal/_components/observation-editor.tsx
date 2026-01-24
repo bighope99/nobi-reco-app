@@ -4,6 +4,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1000,7 +1001,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             activity_id: activityId,
             child_id: selectedChildId,
             child_display_name: resolvedChildName,
-            observation_date: result.data.observation_date ?? new Date().toISOString().split('T')[0],
+            observation_date: result.data.observation_date ?? getCurrentDateJST(),
             content: result.data.content ?? text,
             status: 'saved' as const,
             observation_id: result.data.id,

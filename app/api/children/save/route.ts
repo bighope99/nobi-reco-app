@@ -11,6 +11,7 @@ import {
   deleteSearchIndex,
 } from '@/utils/pii/searchIndex';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 export interface ChildPayload {
   child_id?: string;
@@ -183,7 +184,7 @@ export async function saveChild(
 
   // クラス紐付け処理
   if (affiliation?.class_id) {
-    const enrollmentDate = affiliation.enrolled_at || new Date().toISOString().split('T')[0];
+    const enrollmentDate = affiliation.enrolled_at || getCurrentDateJST();
 
     if (isUpdate) {
       await supabase

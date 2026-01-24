@@ -1,26 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
-      return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
-    }
-
-    const facility_id = userSession.current_facility_id;
+    const facility_id = metadata.current_facility_id;
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
@@ -44,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     // 年初
     const yearStartStr = `${year}-01-01`;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDateJST();
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase

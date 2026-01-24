@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { getCurrentDateJST } from "@/lib/utils/timezone"
 import { Button } from "@/components/ui/button"
 import {
   Calendar,
@@ -229,12 +230,15 @@ export default function AttendanceListPage() {
   const changeDate = (days: number) => {
     const currentDate = new Date(selectedDate)
     currentDate.setDate(currentDate.getDate() + days)
-    setSelectedDate(currentDate.toISOString().split('T')[0])
+    // 相対計算なのでそのまま変換（JSTベースの日付から相対計算）
+    const year = currentDate.getFullYear()
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0')
+    const day = String(currentDate.getDate()).padStart(2, '0')
+    setSelectedDate(`${year}-${month}-${day}`)
   }
 
   const goToToday = () => {
-    const today = new Date()
-    setSelectedDate(today.toISOString().split('T')[0])
+    setSelectedDate(getCurrentDateJST())
   }
 
   const goToTomorrow = () => {

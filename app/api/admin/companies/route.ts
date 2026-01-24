@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 /**
  * GET /api/admin/companies
@@ -321,7 +322,7 @@ export async function POST(request: NextRequest) {
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // Step 5: m_users テーブルにユーザー情報を登録
-    const hireDateValue = body.admin_user.hire_date || new Date().toISOString().split('T')[0];
+    const hireDateValue = body.admin_user.hire_date || getCurrentDateJST();
 
     const { data: newUser, error: createUserError } = await supabase
       .from('m_users')

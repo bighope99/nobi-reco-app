@@ -6,7 +6,7 @@
  * Then: Returns JST time in HH:mm format
  */
 
-import { formatTimeJST } from '../timezone';
+import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST } from '../timezone';
 
 describe('formatTimeJST', () => {
   describe('UTC to JST conversion', () => {
@@ -161,5 +161,80 @@ describe('formatTimeJST', () => {
       expect(result).toBe('09:05');
       expect(result).toMatch(/^\d{2}:\d{2}$/);
     });
+  });
+});
+
+describe('getCurrentDateJST', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it('should return JST date in YYYY-MM-DD format', () => {
+    // Arrange: UTC 2026-01-17 14:00:00 = JST 2026-01-17 23:00:00
+    jest.setSystemTime(new Date('2026-01-17T14:00:00Z'));
+
+    // Act
+    const result = getCurrentDateJST();
+
+    // Assert
+    expect(result).toBe('2026-01-17');
+  });
+
+  it('should handle day boundary crossing (UTC to JST)', () => {
+    // Arrange: UTC 2026-01-16 23:00:00 = JST 2026-01-17 08:00:00
+    jest.setSystemTime(new Date('2026-01-16T23:00:00Z'));
+
+    // Act
+    const result = getCurrentDateJST();
+
+    // Assert: Date should be next day in JST
+    expect(result).toBe('2026-01-17');
+  });
+
+  it('should handle midnight JST', () => {
+    // Arrange: UTC 2026-01-16 15:00:00 = JST 2026-01-17 00:00:00
+    jest.setSystemTime(new Date('2026-01-16T15:00:00Z'));
+
+    // Act
+    const result = getCurrentDateJST();
+
+    // Assert: Should be the new day in JST
+    expect(result).toBe('2026-01-17');
+  });
+});
+
+describe('getCurrentTimeJST', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it('should return JST time in HH:mm format', () => {
+    // Arrange: UTC 2026-01-17 14:30:00 = JST 2026-01-17 23:30:00
+    jest.setSystemTime(new Date('2026-01-17T14:30:00Z'));
+
+    // Act
+    const result = getCurrentTimeJST();
+
+    // Assert
+    expect(result).toBe('23:30');
+  });
+
+  it('should handle day boundary crossing', () => {
+    // Arrange: UTC 2026-01-16 23:45:00 = JST 2026-01-17 08:45:00
+    jest.setSystemTime(new Date('2026-01-16T23:45:00Z'));
+
+    // Act
+    const result = getCurrentTimeJST();
+
+    // Assert
+    expect(result).toBe('08:45');
   });
 });
