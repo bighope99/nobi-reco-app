@@ -7,6 +7,7 @@ import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper'
 // 型定義
 interface GuardianRelation {
   guardian_id: string;
+  relationship?: string | null;
   is_primary: boolean;
   is_emergency_contact: boolean;
   m_guardians: Guardian | null;
@@ -30,8 +31,9 @@ interface ClassRelation {
   class_id: string;
   is_current: boolean;
   m_classes?: {
-    class_id: string;
-    class_name: string;
+    id: string;
+    name: string;
+    age_group?: string | null;
   };
 }
 
@@ -116,7 +118,7 @@ export async function GET(
     const emergencyContacts = guardians.filter((g: GuardianRelation) => g.is_emergency_contact && !g.is_primary);
 
     // 保護者情報の復号化
-    const decryptGuardian = (guardian: GuardianRelation) => {
+    const decryptGuardian = (guardian: Guardian | null) => {
       if (!guardian) return null;
       return {
         ...guardian,
@@ -129,7 +131,7 @@ export async function GET(
 
     const decryptedPrimaryGuardian = primaryGuardian ? {
       ...primaryGuardian,
-      m_guardians: decryptGuardian(primaryGuardian.m_guardians),
+      m_guardians: primaryGuardian.m_guardians ? decryptGuardian(primaryGuardian.m_guardians) : null,
     } : null;
 
     const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({

@@ -355,14 +355,8 @@ export async function saveChild(
       // 名前を分割せず全体を family_name に保存
       const emergencyGuardianName = emergencyContact.name.trim();
 
-      // 電話番号を正規化
+      // 電話番号を正規化（事前検証済みのため、ここでは必ず有効）
       const normalizedPhone = normalizePhone(emergencyContact.phone);
-
-      // 電話番号の検証（正規化後）
-      if (!normalizedPhone || normalizedPhone.length < 10 || normalizedPhone.length > 15) {
-        console.error('Invalid emergency contact phone format after normalization:', emergencyContact.phone);
-        return null;
-      }
 
       // 既存の保護者を検索（検索用ハッシュテーブル経由）
       let emergencyGuardianId: string | null = null;
@@ -469,6 +463,18 @@ export async function saveChild(
     if (contact?.emergency_contacts && contact.emergency_contacts.length > MAX_EMERGENCY_CONTACTS) {
       return NextResponse.json(
         { error: `緊急連絡先は最大${MAX_EMERGENCY_CONTACTS}件までです` },
+        { status: 400 }
+      );
+    }
+
+    // 緊急連絡先の電話番号事前検証
+    const invalidContact = contact?.emergency_contacts?.find((ec) => {
+      const normalized = normalizePhone(ec.phone ?? '');
+      return !normalized || normalized.length < 10 || normalized.length > 15;
+    });
+    if (invalidContact) {
+      return NextResponse.json(
+        { error: '緊急連絡先の電話番号が不正です' },
         { status: 400 }
       );
     }
