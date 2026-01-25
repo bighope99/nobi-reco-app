@@ -4,7 +4,7 @@ import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
 import { formatName } from '@/utils/crypto/decryption-helper';
-import { batchDecryptChildren, batchDecryptGuardianPhones } from '@/utils/crypto/batch-decryption';
+import { cachedBatchDecryptChildren, cachedBatchDecryptGuardianPhones } from '@/utils/crypto/decryption-cache';
 import { formatTimeJST, getCurrentDateJST } from '@/lib/utils/timezone';
 
 /**
@@ -166,9 +166,9 @@ export async function GET(request: NextRequest) {
       (schoolsResult.data || []).map((s: any) => [s.id, s.name])
     );
 
-    // 4. バッチ復号化
-    const decryptedChildren = batchDecryptChildren(childrenData);
-    const guardianPhoneMap = batchDecryptGuardianPhones(guardianLinksResult.data || []);
+    // 4. バッチ復号化 - 施設IDでキャッシュ分離
+    const decryptedChildren = cachedBatchDecryptChildren(childrenData, facility_id);
+    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data || [], facility_id);
 
     // 5. ヘルパー関数
     const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {

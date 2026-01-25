@@ -4,7 +4,7 @@ import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
 import { formatName } from '@/utils/crypto/decryption-helper';
-import { batchDecryptChildren, batchDecryptGuardianPhones } from '@/utils/crypto/batch-decryption';
+import { cachedBatchDecryptChildren, cachedBatchDecryptGuardianPhones } from '@/utils/crypto/decryption-cache';
 import {
   LATE_ARRIVAL_THRESHOLD_MINUTES,
   OVERDUE_DEPARTURE_THRESHOLD_MINUTES,
@@ -191,8 +191,8 @@ export async function GET(request: NextRequest) {
       (schoolsResult.data || []).map((s: any) => [s.id, s.name])
     );
 
-    // 4. バッチ復号化（電話番号）
-    const guardianPhoneMap = batchDecryptGuardianPhones(guardianLinksResult.data || []);
+    // 4. バッチ復号化（電話番号）- 施設IDでキャッシュ分離
+    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data || [], facility_id);
 
     // 5. ヘルパー関数
     const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {
@@ -300,9 +300,9 @@ export async function GET(request: NextRequest) {
       return false;
     });
 
-    // 9. 要対応児童のみバッチ復号化（最適化のポイント）
+    // 9. 要対応児童のみバッチ復号化（最適化のポイント）- 施設IDでキャッシュ分離
     const actionRequiredChildren = actionRequiredStatuses.map((s) => s.child);
-    const decryptedActionRequired = batchDecryptChildren(actionRequiredChildren);
+    const decryptedActionRequired = cachedBatchDecryptChildren(actionRequiredChildren, facility_id);
 
     // 10. 要対応リスト構築
     type ActionRequiredItem = {

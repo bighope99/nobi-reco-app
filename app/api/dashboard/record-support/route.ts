@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { formatName } from '@/utils/crypto/decryption-helper';
-import { batchDecryptChildren } from '@/utils/crypto/batch-decryption';
+import { cachedBatchDecryptChildren } from '@/utils/crypto/decryption-cache';
 import { getCurrentDateJST, toDateStringJST } from '@/lib/utils/timezone';
 
 /**
@@ -155,8 +155,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 6. 候補児童のみバッチ復号化
-    const decryptedCandidates = batchDecryptChildren(candidateChildren);
+    // 6. 候補児童のみバッチ復号化 - 施設IDでキャッシュ分離
+    const decryptedCandidates = cachedBatchDecryptChildren(candidateChildren, facility_id);
 
     // 7. 記録サポートリスト構築
     type RecordSupportItem = {
