@@ -133,19 +133,16 @@ export default function DashboardClient() {
     fetchPriorityData();
   }, [fetchPriorityData]);
 
-  // After priority data loaded, fetch record support
+  // After priority data loaded, fetch record support and prefetch other children
   useEffect(() => {
     if (!priorityLoading && priorityData) {
       fetchRecordSupport();
+      // プリフェッチ: 折りたたみを開く前にデータ取得を開始
+      if (otherChildren.length === 0 && !otherChildrenLoading) {
+        fetchOtherChildren();
+      }
     }
-  }, [priorityLoading, priorityData, fetchRecordSupport]);
-
-  // When "other children" is expanded, fetch data
-  useEffect(() => {
-    if (showOtherChildren && otherChildren.length === 0 && !otherChildrenLoading) {
-      fetchOtherChildren();
-    }
-  }, [showOtherChildren, otherChildren.length, otherChildrenLoading, fetchOtherChildren]);
+  }, [priorityLoading, priorityData, fetchRecordSupport, fetchOtherChildren, otherChildren.length, otherChildrenLoading]);
 
   // Current time display
   useEffect(() => {
@@ -820,8 +817,7 @@ export default function DashboardClient() {
                     </div>
 
                     <span className="text-xs text-slate-500 self-end sm:self-center">
-                      要対応 {filteredActionRequired.length} 名
-                      {showOtherChildren && ` / その他 ${filteredOtherChildren.length} 名`}
+                      {filteredActionRequired.length + filteredOtherChildren.length} 名 表示
                     </span>
                   </div>
 
@@ -831,7 +827,7 @@ export default function DashboardClient() {
                       <div className="px-5 py-2 bg-rose-50 border-b border-rose-100">
                         <h3 className="font-bold text-rose-700 text-sm flex items-center gap-2">
                           <AlertTriangle size={14} />
-                          要対応 ({filteredActionRequired.length}名)
+                          要対応
                         </h3>
                       </div>
 
@@ -896,7 +892,7 @@ export default function DashboardClient() {
                         {showOtherChildren ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         その他の児童
                         <span className="text-slate-400 font-normal">
-                          ({priorityData.total_children - filteredActionRequired.length}名)
+                          {otherChildrenLoading ? '(読み込み中...)' : `(${filteredOtherChildren.length}名)`}
                         </span>
                       </span>
                       {otherChildrenLoading && <Loader2 size={16} className="animate-spin text-slate-400" />}
