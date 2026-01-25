@@ -833,7 +833,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const handleAiEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (aiEditSaving) return;
-    if (isNew) {
+    // isNewでも、既にobservationが存在する場合は既存記録として扱う（重複保存防止）
+    if (isNew && !observation) {
       setAiEditSaving(true);
       setAiEditError('');
       try {
@@ -1027,6 +1028,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setIsEditing(false);
       if (!draftId) {
         setShowContinueButton(true);
+        // 過去記録リストに新規保存した記録を追加（リロード不要で反映）
+        const newRecentItem: RecentObservation = {
+          id: result.data.id,
+          observation_date: result.data.observation_date,
+          content: result.data.content ?? text,
+          created_at: new Date().toISOString(),
+          tag_ids: Object.entries(aiResult.flags)
+            .filter(([, v]) => v)
+            .map(([k]) => k),
+        };
+        setRecentObservations((prev) => [newRecentItem, ...prev.slice(0, 9)]);
       }
 
       // draftIdがある場合、ステータスを'saved'に更新
