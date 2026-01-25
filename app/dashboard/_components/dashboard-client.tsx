@@ -288,8 +288,14 @@ export default function DashboardClient() {
       result = result.filter((c) => c.class_name === filterClass);
     }
 
+    // 「予定なしを表示」モードでは要対応リストを非表示（予定外登所以外）
+    if (showUnscheduled) {
+      // 予定外登所の児童のみ表示（予定なしで登所済み）
+      result = result.filter((c) => !c.is_scheduled_today && c.status === 'checked_in');
+    }
+
     return result;
-  }, [priorityData, filterClass]);
+  }, [priorityData, filterClass, showUnscheduled]);
 
   // Filter & Sort for other children
   const filteredOtherChildren = useMemo(() => {
