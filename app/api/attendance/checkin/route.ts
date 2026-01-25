@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { getQrSignatureSecret } from '@/lib/qr/secrets';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 
@@ -9,18 +9,17 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session: authSession }, error: authError } = await supabase.auth.getSession();
-    if (authError || !authSession) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(authSession.user.id);
-    if (!userSession?.current_facility_id) {
+    const { current_facility_id } = metadata;
+    if (!current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('id', child_id)
-      .eq('facility_id', userSession.current_facility_id)
+      .eq('facility_id', current_facility_id)
       .maybeSingle();
 
     if (childError || !child) {
@@ -150,7 +149,7 @@ export async function POST(request: NextRequest) {
       .from('h_attendance')
       .select('id, checked_in_at')
       .eq('child_id', child_id)
-      .eq('facility_id', userSession.current_facility_id)
+      .eq('facility_id', current_facility_id)
       .gte('checked_in_at', startOfDayUTC)
       .lte('checked_in_at', endOfDayUTC)
       .order('checked_in_at', { ascending: true })
@@ -176,7 +175,7 @@ export async function POST(request: NextRequest) {
       .from('h_attendance')
       .insert({
         child_id,
-        facility_id: userSession.current_facility_id,
+        facility_id: current_facility_id,
         checked_in_at: now.toISOString(),
         check_in_method: 'qr',
       })
@@ -196,7 +195,7 @@ export async function POST(request: NextRequest) {
           .from('h_attendance')
           .select('id, checked_in_at')
           .eq('child_id', child_id)
-          .eq('facility_id', userSession.current_facility_id)
+          .eq('facility_id', current_facility_id)
           .gte('checked_in_at', startOfDayUTC)
           .lte('checked_in_at', endOfDayUTC)
           .order('checked_in_at', { ascending: true })

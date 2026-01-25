@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getUserSession } from '@/lib/auth/session'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 import {
   createQrPayload,
   createQrPdf,
@@ -20,18 +20,14 @@ export async function GET(
     const childId = params.id
 
     const supabase = await createClient()
-    const {
-      data: { session },
-      error: authError,
-    } = await supabase.auth.getSession()
 
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userSession = await getUserSession(session.user.id)
-    const facilityId = userSession?.current_facility_id
-
+    const { current_facility_id: facilityId } = metadata
     if (!facilityId) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }

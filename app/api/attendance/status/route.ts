@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getUserSession } from '@/lib/auth/session'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 
 const VALID_STATUSES = ['absent', 'present', 'cancel'] as const
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { session }, error: authError } = await supabase.auth.getSession()
 
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { current_facility_id: facilityId, user_id } = metadata
+    if (!facilityId) {
+      return NextResponse.json({ success: false, error: 'Facility not found in session' }, { status: 400 })
     }
 
     const { child_id, date, status } = await request.json()
@@ -27,13 +33,6 @@ export async function POST(request: NextRequest) {
     if (Number.isNaN(attendanceDate.getTime())) {
       return NextResponse.json({ success: false, error: 'Invalid date format' }, { status: 400 })
     }
-
-    const userSession = await getUserSession(session.user.id)
-    if (!userSession?.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Facility not found in session' }, { status: 400 })
-    }
-
-    const facilityId = userSession.current_facility_id
 
     const { data: child, error: childError } = await supabase
       .from('m_children')
@@ -66,7 +65,7 @@ export async function POST(request: NextRequest) {
       if (dailyRecord) {
         const { error: updateError } = await supabase
           .from('r_daily_attendance')
-          .update({ status, updated_by: session.user.id, updated_at: timestamp })
+          .update({ status, updated_by: user_id, updated_at: timestamp })
           .eq('id', dailyRecord.id)
 
         if (updateError) {
@@ -84,8 +83,8 @@ export async function POST(request: NextRequest) {
           facility_id: facilityId,
           attendance_date: date,
           status,
-          created_by: session.user.id,
-          updated_by: session.user.id,
+          created_by: user_id,
+          updated_by: user_id,
           created_at: timestamp,
           updated_at: timestamp,
         })

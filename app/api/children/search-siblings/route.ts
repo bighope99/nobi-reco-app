@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { searchByPhone } from '@/utils/pii/searchIndex';
 import { normalizePhone } from '@/lib/children/import-csv';
@@ -10,19 +10,16 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
+    const { current_facility_id: facility_id } = metadata;
+    if (!facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
-
-    const facility_id = userSession.current_facility_id;
 
     // リクエストボディ取得
     const body = await request.json();
