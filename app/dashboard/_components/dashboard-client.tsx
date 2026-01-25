@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,6 +52,9 @@ export default function DashboardClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+
+  // 二次データ取得済みフラグ（無限ループ防止）
+  const hasFetchedSecondaryData = useRef(false);
 
   // Phase 1: Fetch priority data (fastest)
   const fetchPriorityData = useCallback(async () => {
@@ -131,15 +134,15 @@ export default function DashboardClient() {
   }, [fetchPriorityData]);
 
   // After priority data loaded, fetch record support and prefetch other children
+  // 依存配列を最小化し、フラグで一度だけ実行することで無限ループを防止
   useEffect(() => {
-    if (!priorityLoading && priorityData) {
+    if (!priorityLoading && priorityData && !hasFetchedSecondaryData.current) {
+      hasFetchedSecondaryData.current = true;
       fetchRecordSupport();
-      // プリフェッチ: 折りたたみを開く前にデータ取得を開始
-      if (otherChildren.length === 0 && !otherChildrenLoading) {
-        fetchOtherChildren();
-      }
+      fetchOtherChildren();
     }
-  }, [priorityLoading, priorityData, fetchRecordSupport, fetchOtherChildren, otherChildren.length, otherChildrenLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorityLoading, priorityData]);
 
   // Current time display - 1分ごとに更新
   useEffect(() => {
