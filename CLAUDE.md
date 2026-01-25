@@ -42,6 +42,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | JWT Authentication | `.claude/skills/supabase-jwt-auth` |
 | Query Patterns | `.claude/skills/supabase-query-patterns` |
 | Session Interface | `/lib/auth/session.ts` |
+| Code Improvement | `.claude/skills/incremental-code-improvement` |
 
 # Coding Rules
 - **Supabase Import**: Use `@/utils/supabase/server` (NOT `@/lib/supabase/server`)
@@ -57,32 +58,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Incremental Code Improvement (編集時の段階的改善)
 
-ファイルを編集する際、以下のルールに従って周辺コードも改善する:
-
-### 型安全性
-- `any` 型を見つけたら具体的な型に置き換える
-- Supabaseクエリ結果には `as Type[]` でキャストを追加
-- `(c: any) =>` は `(c: ChildData) =>` のように型を明示
-
-### エラーハンドリング
-- Promise.all の各結果に `.error` チェックを追加
-- エラーログには識別可能なプレフィックスを付ける（例: `'Children fetch error:'`）
-
-### API Route パターン
-```typescript
-// Dashboard API共通型: app/api/dashboard/types.ts を使用
-import type { ChildDataRaw, SchoolSchedule, AttendanceLog } from '../types';
-
-// Supabaseクエリ結果のキャスト
-const childrenData = (childrenDataRaw ?? []) as ChildDataRaw[];
-
-// 型ガード付きフィルター
-const schoolIds = childrenData.map((c) => c.school_id).filter((id): id is string => Boolean(id));
-```
-
-### 重複コードの共通化
-- 同じヘルパー関数が複数ファイルにあれば `utils.ts` に抽出
-- Dashboard API: `app/api/dashboard/utils.ts` を参照
+ファイル編集時は周辺の `any` 型やエラーハンドリングも改善する。
+詳細: `.claude/skills/incremental-code-improvement`
 
 # Agent Guidelines
 
