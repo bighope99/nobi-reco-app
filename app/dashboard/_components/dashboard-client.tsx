@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,7 +48,7 @@ export default function DashboardClient() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterClass, setFilterClass] = useState<string>('all');
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(false);
-  const [sortKey, setSortKey] = useState<SortKey>('status');
+  const [sortKey, setSortKey] = useState<SortKey>('grade');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
@@ -172,11 +172,40 @@ export default function DashboardClient() {
     // Optimistic update for action_required
     const previousPriorityData = priorityData;
     if (priorityData) {
-      setPriorityData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          action_required: prev.action_required.map((child) => {
+      startTransition(() => {
+        setPriorityData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            action_required: prev.action_required.map((child) => {
+              if (child.child_id !== childId) return child;
+
+              switch (action) {
+                case 'check_in':
+                  return { ...child, status: 'checked_in' as const, actual_in_time: timeJST, is_scheduled_today: true };
+                case 'check_out':
+                  return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
+                case 'mark_absent':
+                  return { ...child, status: 'absent' as const };
+                case 'add_schedule':
+                  return { ...child, is_scheduled_today: true };
+                case 'confirm_unexpected':
+                  return { ...child, is_scheduled_today: true, alert_type: null };
+                default:
+                  return child;
+              }
+            }),
+          };
+        });
+      });
+    }
+
+    // Optimistic update for other children
+    const previousOtherChildren = otherChildren;
+    if (otherChildren.length > 0) {
+      startTransition(() => {
+        setOtherChildren((prev) =>
+          prev.map((child) => {
             if (child.child_id !== childId) return child;
 
             switch (action) {
@@ -189,38 +218,13 @@ export default function DashboardClient() {
               case 'add_schedule':
                 return { ...child, is_scheduled_today: true };
               case 'confirm_unexpected':
-                return { ...child, is_scheduled_today: true, alert_type: null };
+                return { ...child, is_scheduled_today: true };
               default:
                 return child;
             }
-          }),
-        };
+          })
+        );
       });
-    }
-
-    // Optimistic update for other children
-    const previousOtherChildren = otherChildren;
-    if (otherChildren.length > 0) {
-      setOtherChildren((prev) =>
-        prev.map((child) => {
-          if (child.child_id !== childId) return child;
-
-          switch (action) {
-            case 'check_in':
-              return { ...child, status: 'checked_in' as const, actual_in_time: timeJST, is_scheduled_today: true };
-            case 'check_out':
-              return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
-            case 'mark_absent':
-              return { ...child, status: 'absent' as const };
-            case 'add_schedule':
-              return { ...child, is_scheduled_today: true };
-            case 'confirm_unexpected':
-              return { ...child, is_scheduled_today: true };
-            default:
-              return child;
-          }
-        })
-      );
     }
 
     try {
@@ -307,8 +311,34 @@ export default function DashboardClient() {
       result = result.filter((c) => !c.is_scheduled_today && c.status === 'checked_in');
     }
 
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+
+      if (sortKey === 'grade') {
+        const gradeA = a.grade ?? 0;
+        const gradeB = b.grade ?? 0;
+        comparison = gradeA - gradeB;
+        if (comparison === 0) {
+          comparison = a.kana.localeCompare(b.kana);
+        }
+      } else if (sortKey === 'schedule') {
+        comparison = (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
+      } else {
+        const getStatusPriority = (c: Child) => {
+          if (c.status === 'checked_in') return 1;
+          if (c.status === 'absent' && c.is_scheduled_today) return 2;
+          if (c.status === 'checked_out') return 3;
+          return 4;
+        };
+        comparison = getStatusPriority(a) - getStatusPriority(b);
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
     return result;
-  }, [priorityData, filterClass, showUnscheduled]);
+  }, [priorityData, filterClass, showUnscheduled, sortKey, sortOrder]);
 
   // Filter & Sort for other children
   const filteredOtherChildren = useMemo(() => {
