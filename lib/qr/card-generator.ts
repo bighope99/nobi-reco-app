@@ -1,10 +1,9 @@
 import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { getQrSignatureSecret } from '@/lib/qr/secrets'
-import { jsPDF } from 'jspdf'
+import { PDFDocument, rgb } from 'pdf-lib'
+import sharp from 'sharp'
 
 interface QrPayload {
   payload: string
@@ -22,31 +21,9 @@ interface ZipEntry {
   content: Buffer
 }
 
-// A4 size in mm
-const PAGE_WIDTH_MM = 210
-const PAGE_HEIGHT_MM = 297
-
-// Font cache to avoid re-reading the file on every PDF generation
-let fontBase64Cache: string | null = null
-
-// テキストの最大表示幅（mm）- A4の余白を考慮
-const TEXT_MAX_WIDTH = 170
-
-function loadFontBase64(): string {
-  if (fontBase64Cache) {
-    return fontBase64Cache
-  }
-
-  try {
-    const fontPath = join(process.cwd(), 'lib/qr/fonts/NotoSansJP-Regular.ttf')
-    const fontBuffer = readFileSync(fontPath)
-    fontBase64Cache = fontBuffer.toString('base64')
-    return fontBase64Cache
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    throw new Error(`Failed to load Japanese font file: ${message}`)
-  }
-}
+// A4 size in points (72 points per inch)
+const PAGE_WIDTH = 595.28
+const PAGE_HEIGHT = 841.89
 
 export function createQrPayload(childId: string, facilityId: string): QrPayload {
   const secret = getQrSignatureSecret();
@@ -72,52 +49,88 @@ export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   const displayChildName = childName?.trim() || '(名前なし)'
   const displayFacilityName = facilityName?.trim() || '(施設名なし)'
 
-  // Create jsPDF instance (A4, portrait, mm units)
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  })
+  // Create PDF document
+  const pdfDoc = await PDFDocument.create()
 
-  // Load and register Japanese font
-  const fontBase64 = loadFontBase64()
-  doc.addFileToVFS('NotoSansJP-Regular.ttf', fontBase64)
-  doc.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal')
-  doc.setFont('NotoSansJP', 'normal')
+  // Add A4 page
+  const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
 
-  // Draw child name (with maxWidth to handle long names)
-  doc.setFontSize(20)
-  doc.text(displayChildName, 20, 25, { maxWidth: TEXT_MAX_WIDTH })
-
-  // Draw facility name (with maxWidth to handle long names)
-  doc.setFontSize(14)
-  doc.text(displayFacilityName, 20, 35, { maxWidth: TEXT_MAX_WIDTH })
-
-  // Generate QR code as data URL
-  let qrDataUrl: string
+  // 日本語テキストをPNG画像として生成し埋め込み
   try {
-    qrDataUrl = await QRCode.toDataURL(payload, {
+    const textImageBuffer = await generateTextImage(displayChildName, displayFacilityName)
+    const textImage = await pdfDoc.embedPng(textImageBuffer)
+
+    // テキスト画像を描画（上部）
+    page.drawImage(textImage, {
+      x: 40,
+      y: PAGE_HEIGHT - 100,
+      width: 400,
+      height: 80,
+    })
+  } catch (error) {
+    // テキスト画像の生成に失敗した場合は無視（QRコードのみ表示）
+    console.warn('Failed to generate text image:', error)
+  }
+
+  // Generate QR code as PNG buffer
+  let qrPngBuffer: Uint8Array
+  try {
+    const buffer = await QRCode.toBuffer(payload, {
       errorCorrectionLevel: 'M',
-      type: 'image/png',
+      type: 'png',
       margin: 1,
       width: 400,
     })
+    // BufferをUint8Arrayに変換（pdf-lib互換性のため）
+    qrPngBuffer = new Uint8Array(buffer)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     throw new Error(`Failed to generate QR code: ${message}`)
   }
 
-  // Calculate QR code position (centered horizontally, below the text)
-  const qrSize = 120 // mm
-  const qrX = (PAGE_WIDTH_MM - qrSize) / 2
-  const qrY = 50
+  // Embed QR code image
+  const qrImage = await pdfDoc.embedPng(qrPngBuffer)
 
-  // Add QR code image to PDF
-  doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
+  // Calculate QR code position (centered horizontally)
+  const qrSize = 340 // points (approximately 120mm)
+  const qrX = (PAGE_WIDTH - qrSize) / 2
+  const qrY = (PAGE_HEIGHT - qrSize) / 2
 
-  // Get PDF as ArrayBuffer and convert to Buffer
-  const arrayBuffer = doc.output('arraybuffer')
-  return Buffer.from(arrayBuffer)
+  // Draw QR code
+  page.drawImage(qrImage, {
+    x: qrX,
+    y: qrY,
+    width: qrSize,
+    height: qrSize,
+  })
+
+  // Save PDF
+  const pdfBytes = await pdfDoc.save()
+  return Buffer.from(pdfBytes)
+}
+
+// 日本語テキストをPNG画像として生成
+async function generateTextImage(childName: string, facilityName: string): Promise<Uint8Array> {
+  // SVGを使用してテキストを画像化
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="80">
+<style>.child-name { font-family: sans-serif; font-size: 24px; fill: #000; } .facility-name { font-family: sans-serif; font-size: 16px; fill: #4a4a4a; }</style>
+<text x="10" y="30" class="child-name">${escapeXml(childName)}</text>
+<text x="10" y="60" class="facility-name">${escapeXml(facilityName)}</text>
+</svg>`
+
+  // SVGをPNGに変換（sharp使用）
+  const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer()
+  // BufferをUint8Arrayに変換（pdf-lib互換性のため）
+  return new Uint8Array(pngBuffer)
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }
 
 function toDosDateParts(date: Date) {
