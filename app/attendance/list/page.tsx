@@ -245,7 +245,8 @@ export default function AttendanceListPage() {
   }
 
   const formatDisplayDate = (dateString: string) => {
-    const date = new Date(dateString)
+    // JSTベースで曜日を計算（API側のgetDayOfWeekKeyと同じ方式）
+    const date = new Date(`${dateString}T00:00:00+09:00`)
     const month = date.getMonth() + 1
     const day = date.getDate()
     const weekdayJp = ['日', '月', '火', '水', '木', '金', '土']
