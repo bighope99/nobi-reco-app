@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +46,9 @@ export default function DashboardClient() {
 
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Prevent duplicate fetches
+  const hasFetchedSecondaryRef = useRef(false);
   const [filterClass, setFilterClass] = useState<string>('all');
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(false);
   const [sortKey, setSortKey] = useState<SortKey>('status');
@@ -78,12 +81,9 @@ export default function DashboardClient() {
   }, []);
 
   // Phase 2: Fetch other children (on demand)
-  const fetchOtherChildren = useCallback(async () => {
-    if (!priorityData) return;
-
+  const fetchOtherChildren = useCallback(async (excludeIds: string) => {
     try {
       setOtherChildrenLoading(true);
-      const excludeIds = priorityData.action_required.map((c) => c.child_id).join(',');
       const response = await fetch(
         `/api/dashboard/attendance-list?exclude_ids=${encodeURIComponent(excludeIds)}`,
         { cache: 'no-store' }
@@ -102,7 +102,7 @@ export default function DashboardClient() {
     } finally {
       setOtherChildrenLoading(false);
     }
-  }, [priorityData]);
+  }, []);
 
   // Phase 3: Fetch record support (async, lowest priority)
   const fetchRecordSupport = useCallback(async () => {
@@ -132,14 +132,14 @@ export default function DashboardClient() {
 
   // After priority data loaded, fetch record support and prefetch other children
   useEffect(() => {
-    if (!priorityLoading && priorityData) {
+    if (!priorityLoading && priorityData && !hasFetchedSecondaryRef.current) {
+      hasFetchedSecondaryRef.current = true;
       fetchRecordSupport();
       // プリフェッチ: 折りたたみを開く前にデータ取得を開始
-      if (otherChildren.length === 0 && !otherChildrenLoading) {
-        fetchOtherChildren();
-      }
+      const excludeIds = priorityData.action_required.map((c) => c.child_id).join(',');
+      fetchOtherChildren(excludeIds);
     }
-  }, [priorityLoading, priorityData, fetchRecordSupport, fetchOtherChildren, otherChildren.length, otherChildrenLoading]);
+  }, [priorityLoading, priorityData, fetchRecordSupport, fetchOtherChildren]);
 
   // Current time display - 1分ごとに更新
   useEffect(() => {
