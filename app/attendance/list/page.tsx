@@ -257,12 +257,11 @@ export default function AttendanceListPage() {
   }
 
   const formatDisplayDate = (dateString: string) => {
-    // JSTベースで曜日を計算（API側のgetDayOfWeekKeyと同じ方式）
-    const date = new Date(`${dateString}T00:00:00+09:00`)
-    const month = date.getMonth() + 1
-    const day = date.getDate()
+    // 環境のタイムゾーンに依存しない曜日計算（API側のgetDayOfWeekKeyと同じ方式）
+    const [year, month, day] = dateString.split('-').map(Number)
+    const utcDate = new Date(Date.UTC(year, month - 1, day))
     const weekdayJp = ['日', '月', '火', '水', '木', '金', '土']
-    const weekday = weekdayJp[date.getDay()]
+    const weekday = weekdayJp[utcDate.getUTCDay()]
     return `${month}月${day}日 (${weekday})`
   }
 
