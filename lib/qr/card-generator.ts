@@ -24,7 +24,6 @@ interface ZipEntry {
 
 // A4 size in mm
 const PAGE_WIDTH_MM = 210
-const PAGE_HEIGHT_MM = 297
 
 // Font cache to avoid re-reading the file on every PDF generation
 let fontBase64Cache: string | null = null

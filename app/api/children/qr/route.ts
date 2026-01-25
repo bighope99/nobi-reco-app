@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
 import { createQrPayload, createQrPdf, createZip, formatFileSegment } from '@/lib/qr/card-generator'
-import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper'
+import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
 
 interface BatchRequestBody {
   child_ids?: string[]
@@ -10,8 +10,8 @@ interface BatchRequestBody {
 
 interface ChildDataRow {
   id: string
-  family_name: string
-  given_name: string
+  family_name: string | null
+  given_name: string | null
   facility_id: string
 }
 

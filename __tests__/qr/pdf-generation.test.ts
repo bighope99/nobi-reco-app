@@ -54,6 +54,21 @@ describe('QR PDF Generation', () => {
       expect(pdfBuffer).toBeInstanceOf(Buffer)
       expect(pdfBuffer.length).toBeGreaterThan(0)
     })
+
+    it('非常に長い名前でもPDFを生成できる', async () => {
+      const { payload } = createQrPayload('child-123', 'facility-456')
+      const longName = '山田'.repeat(50) // 100文字の名前
+
+      const pdfBuffer = await createQrPdf({
+        childName: longName,
+        facilityName: 'とても長い施設名のテスト保育園学童クラブ児童館',
+        payload,
+      })
+
+      expect(pdfBuffer).toBeInstanceOf(Buffer)
+      expect(pdfBuffer.length).toBeGreaterThan(0)
+      expect(pdfBuffer.toString('utf8', 0, 5)).toBe('%PDF-')
+    })
   })
 
   describe('formatFileSegment', () => {
