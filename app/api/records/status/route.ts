@@ -118,8 +118,8 @@ export async function GET(request: NextRequest) {
         .from('h_attendance')
         .select('child_id, checked_in_at, checked_out_at')
         .in('child_id', childIds)
-        .gte('checked_in_at', `${startDateStr}T00:00:00`)
-        .lte('checked_in_at', `${endDateStr}T23:59:59`),
+        .gte('checked_in_at', `${startDateStr}T00:00:00+09:00`)
+        .lte('checked_in_at', `${endDateStr}T23:59:59.999+09:00`),
 
       // 月間記録
       supabase
@@ -135,8 +135,8 @@ export async function GET(request: NextRequest) {
         .from('h_attendance')
         .select('child_id, checked_in_at')
         .in('child_id', childIds)
-        .gte('checked_in_at', `${yearStartStr}T00:00:00`)
-        .lte('checked_in_at', `${today}T23:59:59`),
+        .gte('checked_in_at', `${yearStartStr}T00:00:00+09:00`)
+        .lte('checked_in_at', `${today}T23:59:59.999+09:00`),
 
       // 年間記録
       supabase

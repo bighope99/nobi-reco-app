@@ -110,18 +110,24 @@ export const toDateStringJST = (date: Date): string => {
 
 /**
  * Get the first day of a month in JST, returns YYYY-MM-DD format
+ * Note: First day is always 01, so we construct the string directly
  */
 export const getFirstDayOfMonthJST = (year: number, month: number): string => {
-  const date = new Date(year, month - 1, 1);
-  return toDateStringJST(date);
+  // 月初日は常に1日なので、直接文字列を構築（サーバータイムゾーン非依存）
+  const monthStr = String(month).padStart(2, '0');
+  return `${year}-${monthStr}-01`;
 };
 
 /**
  * Get the last day of a month in JST, returns YYYY-MM-DD format
+ * Uses UTC to calculate last day of month (server timezone independent)
  */
 export const getLastDayOfMonthJST = (year: number, month: number): string => {
-  const date = new Date(year, month, 0);
-  return toDateStringJST(date);
+  // 翌月の0日目 = 当月の最終日（UTCで計算してサーバータイムゾーン非依存）
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const monthStr = String(month).padStart(2, '0');
+  const dayStr = String(lastDay).padStart(2, '0');
+  return `${year}-${monthStr}-${dayStr}`;
 };
 
 /**
