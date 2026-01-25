@@ -42,6 +42,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | JWT Authentication | `.claude/skills/supabase-jwt-auth` |
 | Query Patterns | `.claude/skills/supabase-query-patterns` |
 | Session Interface | `/lib/auth/session.ts` |
+| Code Improvement | `.claude/skills/incremental-code-improvement` |
 
 # Coding Rules
 - **Supabase Import**: Use `@/utils/supabase/server` (NOT `@/lib/supabase/server`)
@@ -54,6 +55,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - `replaceChildIdsWithNames` を `@/lib/ai/childIdFormatter` からインポート
   - 児童リストから `nameByIdMap: Map<string, string>` を構築
   - 表示時に `replaceChildIdsWithNames(content, nameByIdMap)` を適用
+
+## Incremental Code Improvement (編集時の段階的改善)
+
+ファイル編集時は周辺の `any` 型やエラーハンドリングも改善する。
+詳細: `.claude/skills/incremental-code-improvement`
 
 # Agent Guidelines
 

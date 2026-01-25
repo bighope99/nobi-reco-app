@@ -1,0 +1,105 @@
+# Incremental Code Improvement (編集時の段階的改善)
+
+ファイルを編集する際、周辺コードも以下のルールに従って改善する。
+
+## 型安全性
+
+### any型の置き換え
+```typescript
+// Before
+const childrenData = childrenDataRaw ?? [];
+const childIds = childrenData.map((c: any) => c.id);
+
+// After
+const childrenData = (childrenDataRaw ?? []) as ChildDataRaw[];
+const childIds = childrenData.map((c) => c.id);
+```
+
+### 型ガード付きフィルター
+```typescript
+// Before
+const schoolIds = Array.from(
+  new Set(childrenData.map((c: any) => c.school_id).filter((id: string | null) => Boolean(id)))
+) as string[];
+
+// After
+const schoolIds = Array.from(
+  new Set(childrenData.map((c) => c.school_id).filter((id): id is string => Boolean(id)))
+);
+```
+
+### ラムダ関数の型注釈
+```typescript
+// Before
+todaysLogs.find((log: any) => !log.checked_out_at)
+
+// After
+todaysLogs.find((log) => !log.checked_out_at)  // 親配列に型があれば推論される
+// または
+todaysLogs.find((log: AttendanceLog) => !log.checked_out_at)
+```
+
+## エラーハンドリング
+
+### Promise.all結果のエラーチェック
+```typescript
+const [resultA, resultB, resultC] = await Promise.all([...]);
+
+// 各結果をチェック
+if (resultA.error) {
+  console.error('ResultA fetch error:', resultA.error);
+  return NextResponse.json({ error: 'Failed to fetch A' }, { status: 500 });
+}
+if (resultB.error) {
+  console.error('ResultB fetch error:', resultB.error);
+  return NextResponse.json({ error: 'Failed to fetch B' }, { status: 500 });
+}
+```
+
+## Dashboard API共通パターン
+
+### 共通型定義の使用
+```typescript
+// app/api/dashboard/types.ts から型をインポート
+import type {
+  ChildDataRaw,
+  ChildClassRaw,
+  SchoolSchedule,
+  SchoolInfo,
+  AttendanceLog,
+  ObservationRecord
+} from '../types';
+```
+
+### DecryptedChild型の定義
+```typescript
+type DecryptedChild = ChildDataRaw & {
+  decrypted_family_name: string | null;
+  decrypted_given_name: string | null;
+  decrypted_family_name_kana: string | null;
+  decrypted_given_name_kana: string | null;
+};
+
+const result = (decryptedChildren as DecryptedChild[]).map((child) => {...});
+```
+
+### データ構造のグループ化
+```typescript
+// Mapを使用してO(1)アクセス
+const attendanceLogsMap = new Map<string, AttendanceLog[]>();
+for (const log of (attendanceLogsData || []) as AttendanceLog[]) {
+  const existing = attendanceLogsMap.get(log.child_id) || [];
+  existing.push(log);
+  attendanceLogsMap.set(log.child_id, existing);
+}
+```
+
+## 重複コードの共通化
+
+### 共通ユーティリティの場所
+- Dashboard API: `app/api/dashboard/utils.ts`
+- 暗号化: `utils/crypto/decryption-cache.ts`
+
+### 共通化の判断基準
+- 同じ関数が2箇所以上にある場合
+- 10行以上の同じロジックがある場合
