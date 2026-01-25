@@ -63,30 +63,32 @@ export async function POST(request: NextRequest) {
   
 
     const generatedAt = new Date()
-    const entries = childrenData.map((child: any) => {
-      const decryptedFamilyName = decryptOrFallback(child.family_name);
-      const decryptedGivenName = decryptOrFallback(child.given_name);
-      const childName = `${decryptedFamilyName} ${decryptedGivenName}`.trim()
-      const { payload } = createQrPayload(child.id, facilityId)
-      const pdfBuffer = createQrPdf({
-        childName,
-        facilityName: facilityData.name,
-        payload,
+    const entries = await Promise.all(
+      childrenData.map(async (child: any) => {
+        const decryptedFamilyName = decryptOrFallback(child.family_name);
+        const decryptedGivenName = decryptOrFallback(child.given_name);
+        const childName = `${decryptedFamilyName} ${decryptedGivenName}`.trim()
+        const { payload } = createQrPayload(child.id, facilityId)
+        const pdfBuffer = await createQrPdf({
+          childName,
+          facilityName: facilityData.name,
+          payload,
+        })
+
+        const filename = `${formatFileSegment(childName)}_${child.id}.pdf`
+
+        return {
+          filename,
+          content: pdfBuffer,
+        }
       })
-
-      const filename = `${formatFileSegment(childName)}_${child.id}.pdf`
-
-      return {
-        filename,
-        content: pdfBuffer,
-      }
-    })
+    )
 
     const zipBuffer = createZip(entries)
     const dateSegment = generatedAt.toISOString().slice(0, 10).replace(/-/g, '')
     const zipName = `qr_codes_${formatFileSegment(facilityData.name)}_${dateSegment}.zip`
 
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',

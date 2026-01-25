@@ -1,7 +1,10 @@
 import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { getQrSignatureSecret } from '@/lib/qr/secrets'
+import { jsPDF } from 'jspdf'
 
 interface QrPayload {
   payload: string
@@ -19,14 +22,22 @@ interface ZipEntry {
   content: Buffer
 }
 
-const PAGE_WIDTH = 595.28 // A4 width in points
-const PAGE_HEIGHT = 841.89 // A4 height in points
+// A4 size in mm
+const PAGE_WIDTH_MM = 210
+const PAGE_HEIGHT_MM = 297
 
-const ESCAPE_REGEX = /[\\()]/g
-const PDF_HEADER = '%PDF-1.4\n'
+// Font cache to avoid re-reading the file on every PDF generation
+let fontBase64Cache: string | null = null
 
-function escapePdfText(text: string): string {
-  return text.replace(ESCAPE_REGEX, (match) => `\\${match}`)
+function loadFontBase64(): string {
+  if (fontBase64Cache) {
+    return fontBase64Cache
+  }
+
+  const fontPath = join(process.cwd(), 'lib/qr/fonts/NotoSansJP-Regular.ttf')
+  const fontBuffer = readFileSync(fontPath)
+  fontBase64Cache = fontBuffer.toString('base64')
+  return fontBase64Cache
 }
 
 export function createQrPayload(childId: string, facilityId: string): QrPayload {
@@ -46,98 +57,49 @@ export function createQrPayload(childId: string, facilityId: string): QrPayload 
   return { payload, signature }
 }
 
-function buildQrDrawing(payload: string) {
-  const qr = QRCode.create(payload, { errorCorrectionLevel: 'M' })
-  const moduleCount = qr.modules.size
-  const qrDisplaySize = Math.min(PAGE_WIDTH, PAGE_HEIGHT) - 200
-  const moduleSize = Math.max(2, Math.floor(qrDisplaySize / moduleCount))
-  const qrSize = moduleSize * moduleCount
-  const startX = (PAGE_WIDTH - qrSize) / 2
-  const startY = (PAGE_HEIGHT - qrSize) / 2 - 30
-
-  const commands: string[] = []
-  commands.push('q')
-  commands.push('0 0 0 rg')
-
-  for (let y = 0; y < moduleCount; y += 1) {
-    for (let x = 0; x < moduleCount; x += 1) {
-      const filled = qr.modules.get(x, y)
-      if (!filled) continue
-
-      const rectX = startX + x * moduleSize
-      const rectY = startY + (moduleCount - y - 1) * moduleSize
-      commands.push(`${rectX.toFixed(2)} ${rectY.toFixed(2)} ${moduleSize} ${moduleSize} re f`)
-    }
-  }
-
-  commands.push('Q')
-  return commands.join('\n')
-}
-
-function buildContentStream(options: PdfOptions): Buffer {
+export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   const { childName, facilityName, payload } = options
-  const lines: string[] = []
 
-  lines.push('BT')
-  lines.push('/F1 20 Tf')
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 80} Tm (${escapePdfText(childName)}) Tj`)
+  // Create jsPDF instance (A4, portrait, mm units)
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  })
 
-  lines.push('/F1 14 Tf')
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 105} Tm (${escapePdfText(facilityName)}) Tj`)
-  lines.push('ET')
+  // Load and register Japanese font
+  const fontBase64 = loadFontBase64()
+  doc.addFileToVFS('NotoSansJP-Regular.ttf', fontBase64)
+  doc.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal')
+  doc.setFont('NotoSansJP', 'normal')
 
-  lines.push(buildQrDrawing(payload))
+  // Draw child name
+  doc.setFontSize(20)
+  doc.text(childName, 20, 25)
 
-  const content = lines.join('\n')
-  return Buffer.from(content, 'utf8')
-}
+  // Draw facility name
+  doc.setFontSize(14)
+  doc.text(facilityName, 20, 35)
 
-export function createQrPdf(options: PdfOptions): Buffer {
-  const contentStream = buildContentStream(options)
-  const contentLength = contentStream.length
+  // Generate QR code as data URL
+  const qrDataUrl = await QRCode.toDataURL(payload, {
+    errorCorrectionLevel: 'M',
+    type: 'image/png',
+    margin: 1,
+    width: 400,
+  })
 
-  let offset = 0
-  const offsets: number[] = []
-  const parts: Buffer[] = []
+  // Calculate QR code position (centered horizontally, below the text)
+  const qrSize = 120 // mm
+  const qrX = (PAGE_WIDTH_MM - qrSize) / 2
+  const qrY = 50
 
-  const append = (buf: Buffer) => {
-    parts.push(buf)
-    offset += buf.length
-  }
+  // Add QR code image to PDF
+  doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
 
-  const addObject = (id: number, body: string | Buffer) => {
-    offsets[id] = offset
-    const header = Buffer.from(`${id} 0 obj\n`, 'utf8')
-    const footer = Buffer.from('\nendobj\n', 'utf8')
-    append(header)
-    append(Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'))
-    append(footer)
-  }
-
-  append(Buffer.from(PDF_HEADER, 'utf8'))
-  addObject(1, '<< /Type /Catalog /Pages 2 0 R >>')
-  addObject(2, '<< /Type /Pages /Count 1 /Kids [3 0 R] >>')
-  addObject(
-    3,
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`
-  )
-  addObject(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
-  addObject(5, `<< /Length ${contentLength} >>\nstream\n${contentStream.toString('utf8')}\nendstream`)
-
-  const xrefOffset = offset
-  let xref = 'xref\n0 6\n'
-  xref += '0000000000 65535 f \n'
-  for (let i = 1; i <= 5; i += 1) {
-    const refOffset = offsets[i] ?? 0
-    xref += `${refOffset.toString().padStart(10, '0')} 00000 n \n`
-  }
-
-  const trailer = `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
-
-  append(Buffer.from(xref, 'utf8'))
-  append(Buffer.from(trailer, 'utf8'))
-
-  return Buffer.concat(parts)
+  // Get PDF as ArrayBuffer and convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer')
+  return Buffer.from(arrayBuffer)
 }
 
 function toDosDateParts(date: Date) {
@@ -237,4 +199,3 @@ export function createZip(entries: ZipEntry[]): Buffer {
 export function formatFileSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '_') || 'qr'
 }
-

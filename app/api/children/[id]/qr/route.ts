@@ -53,7 +53,7 @@ export async function GET(
     const childName = `${childData.family_name} ${childData.given_name}`.trim()
 
     const { payload } = createQrPayload(childData.id, facilityId)
-    const pdfBuffer = createQrPdf({
+    const pdfBuffer = await createQrPdf({
       childName,
       facilityName: facilityData.name,
       payload,
@@ -61,7 +61,7 @@ export async function GET(
 
     const filename = `${formatFileSegment(childName)}_${childData.id}.pdf`
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
