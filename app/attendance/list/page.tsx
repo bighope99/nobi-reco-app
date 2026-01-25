@@ -184,7 +184,9 @@ interface AttendanceData {
 }
 
 export default function AttendanceListPage() {
-  const [selectedDate, setSelectedDate] = useState<string>(getTomorrowDateJST())
+  // 初期値は空文字列にして、useEffectでクライアント側のみで設定
+  // SSR時のタイムゾーン不一致を防ぐため
+  const [selectedDate, setSelectedDate] = useState<string>('')
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -192,7 +194,17 @@ export default function AttendanceListPage() {
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
 
+  // クライアント側でのみ初期日付を設定
+  useEffect(() => {
+    if (!selectedDate) {
+      setSelectedDate(getTomorrowDateJST())
+    }
+  }, [selectedDate])
+
   const fetchAttendance = useCallback(async () => {
+    // 日付が設定されるまで待つ
+    if (!selectedDate) return
+
     try {
       setLoading(true)
       setError(null)
