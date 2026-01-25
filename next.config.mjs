@@ -6,7 +6,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
- 
+  // Vercel環境でフォントファイルを含める
+  outputFileTracingIncludes: {
+    '/api/children/qr': ['./lib/qr/fonts/**/*'],
+    '/api/children/[id]/qr': ['./lib/qr/fonts/**/*'],
+  },
 }
 
 export default nextConfig
