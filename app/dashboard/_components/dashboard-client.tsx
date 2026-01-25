@@ -21,8 +21,6 @@ import {
   CheckCircle2,
   ShieldAlert,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   Loader2,
 } from 'lucide-react';
 import type { Child, PriorityData, RecordSupport, SortKey, SortOrder } from './types';
@@ -38,10 +36,9 @@ export default function DashboardClient() {
   const [priorityLoading, setPriorityLoading] = useState(true);
   const [priorityData, setPriorityData] = useState<PriorityData | null>(null);
 
-  // Phase 2: Full attendance list (loaded on demand)
+  // Phase 2: Full attendance list (auto-loaded after priority)
   const [otherChildrenLoading, setOtherChildrenLoading] = useState(false);
   const [otherChildren, setOtherChildren] = useState<Child[]>([]);
-  const [showOtherChildren, setShowOtherChildren] = useState(false);
 
   // Phase 3: Record support (loaded async after initial render)
   const [recordSupportLoading, setRecordSupportLoading] = useState(true);
@@ -881,57 +878,35 @@ export default function DashboardClient() {
                     </>
                   )}
 
-                  {/* Other Children Section (Collapsible) */}
-                  <div>
-                    <button
-                      onClick={() => setShowOtherChildren(!showOtherChildren)}
-                      className="w-full px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between text-left"
-                    >
-                      <span className="font-medium text-slate-700 text-sm flex items-center gap-2">
-                        {showOtherChildren ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        その他の児童
-                        <span className="text-slate-400 font-normal">
-                          {otherChildrenLoading ? '(読み込み中...)' : `(${filteredOtherChildren.length}名)`}
-                        </span>
-                      </span>
-                      {otherChildrenLoading && <Loader2 size={16} className="animate-spin text-slate-400" />}
-                    </button>
+                  {/* Other Children (auto-loaded, no collapsible) */}
+                  {filteredOtherChildren.length > 0 && (
+                    <>
+                      {/* Desktop Table */}
+                      <div className="hidden lg:block">
+                        <table className="w-full text-left border-collapse text-sm">
+                          <tbody className="divide-y divide-gray-100">
+                            {filteredOtherChildren.map((child) => (
+                              <ChildRow key={child.child_id} child={child} isDesktop={true} />
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
 
-                    {showOtherChildren && (
-                      <>
-                        {otherChildrenLoading ? (
-                          <div className="p-8 text-center">
-                            <Loader2 size={24} className="animate-spin text-slate-400 mx-auto" />
-                            <p className="mt-2 text-sm text-slate-500">読み込み中...</p>
-                          </div>
-                        ) : filteredOtherChildren.length > 0 ? (
-                          <>
-                            {/* Desktop Table */}
-                            <div className="hidden lg:block">
-                              <table className="w-full text-left border-collapse text-sm">
-                                <tbody className="divide-y divide-gray-100">
-                                  {filteredOtherChildren.map((child) => (
-                                    <ChildRow key={child.child_id} child={child} isDesktop={true} />
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                      {/* Mobile Cards */}
+                      <div className="lg:hidden divide-y divide-gray-100">
+                        {filteredOtherChildren.map((child) => (
+                          <ChildRow key={child.child_id} child={child} isDesktop={false} />
+                        ))}
+                      </div>
+                    </>
+                  )}
 
-                            {/* Mobile Cards */}
-                            <div className="lg:hidden divide-y divide-gray-100">
-                              {filteredOtherChildren.map((child) => (
-                                <ChildRow key={child.child_id} child={child} isDesktop={false} />
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="p-8 text-center text-slate-400">
-                            <p className="text-sm">該当する児童がいません</p>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  {/* Loading indicator for other children */}
+                  {otherChildrenLoading && (
+                    <div className="p-4 text-center">
+                      <Loader2 size={20} className="animate-spin text-slate-400 mx-auto" />
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>
