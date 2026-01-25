@@ -2,8 +2,7 @@ import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
 import { getQrSignatureSecret } from '@/lib/qr/secrets'
-import { PDFDocument, rgb } from 'pdf-lib'
-import sharp from 'sharp'
+import { PDFDocument } from 'pdf-lib'
 
 interface QrPayload {
   payload: string
@@ -43,34 +42,13 @@ export function createQrPayload(childId: string, facilityId: string): QrPayload 
 }
 
 export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
-  const { childName, facilityName, payload } = options
-
-  // 入力検証
-  const displayChildName = childName?.trim() || '(名前なし)'
-  const displayFacilityName = facilityName?.trim() || '(施設名なし)'
+  const { payload } = options
 
   // Create PDF document
   const pdfDoc = await PDFDocument.create()
 
   // Add A4 page
   const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-
-  // 日本語テキストをPNG画像として生成し埋め込み
-  try {
-    const textImageBuffer = await generateTextImage(displayChildName, displayFacilityName)
-    const textImage = await pdfDoc.embedPng(textImageBuffer)
-
-    // テキスト画像を描画（上部）
-    page.drawImage(textImage, {
-      x: 40,
-      y: PAGE_HEIGHT - 100,
-      width: 400,
-      height: 80,
-    })
-  } catch (error) {
-    // テキスト画像の生成に失敗した場合は無視（QRコードのみ表示）
-    console.warn('Failed to generate text image:', error)
-  }
 
   // Generate QR code as PNG buffer
   let qrPngBuffer: Uint8Array
@@ -91,8 +69,8 @@ export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   // Embed QR code image
   const qrImage = await pdfDoc.embedPng(qrPngBuffer)
 
-  // Calculate QR code position (centered horizontally)
-  const qrSize = 340 // points (approximately 120mm)
+  // Calculate QR code position (centered)
+  const qrSize = 400 // points (larger QR code for better scanning)
   const qrX = (PAGE_WIDTH - qrSize) / 2
   const qrY = (PAGE_HEIGHT - qrSize) / 2
 
@@ -107,30 +85,6 @@ export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   // Save PDF
   const pdfBytes = await pdfDoc.save()
   return Buffer.from(pdfBytes)
-}
-
-// 日本語テキストをPNG画像として生成
-async function generateTextImage(childName: string, facilityName: string): Promise<Uint8Array> {
-  // SVGを使用してテキストを画像化
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="80">
-<style>.child-name { font-family: sans-serif; font-size: 24px; fill: #000; } .facility-name { font-family: sans-serif; font-size: 16px; fill: #4a4a4a; }</style>
-<text x="10" y="30" class="child-name">${escapeXml(childName)}</text>
-<text x="10" y="60" class="facility-name">${escapeXml(facilityName)}</text>
-</svg>`
-
-  // SVGをPNGに変換（sharp使用）
-  const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer()
-  // BufferをUint8Arrayに変換（pdf-lib互換性のため）
-  return new Uint8Array(pngBuffer)
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
 }
 
 function toDosDateParts(date: Date) {

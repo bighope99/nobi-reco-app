@@ -6,7 +6,6 @@ jest.mock('@/lib/qr/secrets', () => ({
 }))
 
 describe('QR PDF Generation', () => {
-
   describe('createQrPayload', () => {
     it('ペイロードと署名を生成する', () => {
       const result = createQrPayload('child-123', 'facility-456')
@@ -28,7 +27,7 @@ describe('QR PDF Generation', () => {
   })
 
   describe('createQrPdf', () => {
-    it('日本語の名前でPDFを生成できる', async () => {
+    it('PDFを生成できる', async () => {
       const { payload } = createQrPayload('child-123', 'facility-456')
 
       const pdfBuffer = await createQrPdf({
@@ -43,26 +42,12 @@ describe('QR PDF Generation', () => {
       expect(pdfBuffer.toString('utf8', 0, 5)).toBe('%PDF-')
     })
 
-    it('空の名前でもPDFを生成できる（フォールバック）', async () => {
+    it('空の名前でもPDFを生成できる', async () => {
       const { payload } = createQrPayload('child-123', 'facility-456')
 
       const pdfBuffer = await createQrPdf({
         childName: '',
         facilityName: '',
-        payload,
-      })
-
-      expect(pdfBuffer).toBeInstanceOf(Buffer)
-      expect(pdfBuffer.length).toBeGreaterThan(0)
-    })
-
-    it('長い名前でもPDFを生成できる', async () => {
-      const { payload } = createQrPayload('child-123', 'facility-456')
-      const longName = '山田田中佐藤鈴木高橋渡辺伊藤中村小林加藤太郎'
-
-      const pdfBuffer = await createQrPdf({
-        childName: longName,
-        facilityName: 'とても長い名前の保育園テスト施設',
         payload,
       })
 
