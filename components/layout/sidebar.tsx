@@ -152,7 +152,7 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                     onClick={() => toggleMenu(item.label)}
                     className={cn(
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                      "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-all duration-150",
+                      "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
                       isActive(item.href) && "bg-sidebar-accent",
                     )}
                   >
@@ -172,7 +172,7 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                             href={child.href}
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                              "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-all duration-150",
+                              "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
                               isActive(child.href) && "bg-sidebar-accent font-medium",
                               child.hidden && "hidden",
                             )}
@@ -189,7 +189,7 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                   href={item.href}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                    "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-all duration-150",
+                    "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
                     isActive(item.href) && "bg-sidebar-accent font-medium",
                   )}
                 >
