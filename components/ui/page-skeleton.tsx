@@ -50,6 +50,9 @@ function PageSkeleton({
 
 /**
  * カード風のスケルトンコンポーネント
+ * アバター、タイトル、コンテンツ行を含むカードレイアウト
+ *
+ * @param props.className - 追加のCSSクラス
  */
 function SkeletonCard({ className }: { className?: string }) {
   return (
@@ -80,6 +83,11 @@ function SkeletonCard({ className }: { className?: string }) {
 
 /**
  * テーブル用スケルトンコンポーネント
+ * ヘッダー行と指定された行数・列数のデータ行を表示
+ *
+ * @param props.rows - 表示する行数（デフォルト: 5）
+ * @param props.columns - 表示する列数（デフォルト: 4）
+ * @param props.className - 追加のCSSクラス
  */
 function TableSkeleton({
   rows = 5,
