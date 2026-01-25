@@ -6,6 +6,7 @@ import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/uti
 import { formatName } from '@/utils/crypto/decryption-helper';
 import { cachedBatchDecryptChildren, cachedBatchDecryptGuardianPhones } from '@/utils/crypto/decryption-cache';
 import { formatTimeJST, getCurrentDateJST } from '@/lib/utils/timezone';
+import type { ChildDataRaw, ChildClassRaw, SchoolSchedule, SchoolInfo, AttendanceLog } from '../types';
 
 /**
  * Attendance List API
@@ -97,13 +98,13 @@ export async function GET(request: NextRequest) {
 
     // 除外IDを適用
     const excludeIdSet = new Set(excludeIds);
-    const childrenData = (childrenDataRaw ?? []).filter((c: any) => !excludeIdSet.has(c.id));
-    const childIds = childrenData.map((c: any) => c.id);
+    const childrenData = ((childrenDataRaw ?? []) as ChildDataRaw[]).filter((c) => !excludeIdSet.has(c.id));
+    const childIds = childrenData.map((c) => c.id);
 
     // 学校ID一覧
     const schoolIds = Array.from(
-      new Set(childrenData.map((c: any) => c.school_id).filter((id: string | null) => Boolean(id)))
-    ) as string[];
+      new Set(childrenData.map((c) => c.school_id).filter((id): id is string => Boolean(id)))
+    );
 
     // 2. 並列でデータ取得
     const [attendanceContext, schoolScheduleResult, schoolsResult, guardianLinksResult] =
@@ -143,19 +144,37 @@ export async function GET(request: NextRequest) {
 
     const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = attendanceContext;
 
-    // 3. データ構造最適化
-    const schedulePatternMap = new Map((schedulePatterns || []).map((s: any) => [s.child_id, s]));
-    const dailyAttendanceMap = new Map((dailyAttendanceData || []).map((r: any) => [r.child_id, r]));
+    // エラーチェック
+    if (schoolScheduleResult.error) {
+      console.error('School schedule fetch error:', schoolScheduleResult.error);
+      return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
+    }
+    if (schoolsResult.error) {
+      console.error('Schools fetch error:', schoolsResult.error);
+      return NextResponse.json({ error: 'Failed to fetch schools' }, { status: 500 });
+    }
+    if (guardianLinksResult.error) {
+      console.error('Guardian link fetch error:', guardianLinksResult.error);
+      return NextResponse.json({ error: 'Failed to fetch guardian links' }, { status: 500 });
+    }
 
-    const attendanceLogsMap = new Map<string, any[]>();
-    for (const log of attendanceLogsData || []) {
+    // 3. データ構造最適化
+    const schedulePatternMap = new Map(
+      (schedulePatterns || []).map((s: { child_id: string }) => [s.child_id, s])
+    );
+    const dailyAttendanceMap = new Map(
+      (dailyAttendanceData || []).map((r: { child_id: string; status?: string }) => [r.child_id, r])
+    );
+
+    const attendanceLogsMap = new Map<string, AttendanceLog[]>();
+    for (const log of (attendanceLogsData || []) as AttendanceLog[]) {
       const existing = attendanceLogsMap.get(log.child_id) || [];
       existing.push(log);
       attendanceLogsMap.set(log.child_id, existing);
     }
 
-    const schoolSchedules: Record<string, any[]> = {};
-    for (const schedule of schoolScheduleResult.data || []) {
+    const schoolSchedules: Record<string, SchoolSchedule[]> = {};
+    for (const schedule of (schoolScheduleResult.data || []) as SchoolSchedule[]) {
       if (!schoolSchedules[schedule.school_id]) {
         schoolSchedules[schedule.school_id] = [];
       }
@@ -163,7 +182,7 @@ export async function GET(request: NextRequest) {
     }
 
     const schoolNameMap = new Map<string, string>(
-      (schoolsResult.data || []).map((s: any) => [s.id, s.name])
+      ((schoolsResult.data || []) as SchoolInfo[]).map((s) => [s.id, s.name])
     );
 
     // 4. バッチ復号化 - 施設IDでキャッシュ分離
@@ -171,16 +190,16 @@ export async function GET(request: NextRequest) {
     const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data || [], facility_id);
 
     // 5. ヘルパー関数
-    const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {
+    const getSchoolStartTime = (schoolId: string | null, grade: number | null): string | null => {
       if (!schoolId || grade === null || grade === undefined) return null;
       const schedules = schoolSchedules[schoolId] || [];
       const gradeKey = String(grade);
-      const matchedSchedule = schedules.find((schedule: any) =>
+      const matchedSchedule = schedules.find((schedule) =>
         (schedule.grades || []).includes(gradeKey)
       );
       if (!matchedSchedule) return null;
-      const weekdayKey = `${dayOfWeekKey}_time`;
-      return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
+      const weekdayKey = `${dayOfWeekKey}_time` as keyof SchoolSchedule;
+      return (matchedSchedule[weekdayKey] as string | null) || null;
     };
 
     const formatTimeToMinutes = (time: string | null) => {
@@ -212,8 +231,16 @@ export async function GET(request: NextRequest) {
       guardian_phone: string | null;
     };
 
-    const attendanceList: AttendanceListItem[] = decryptedChildren.map((child: any) => {
-      const currentClass = child._child_class?.find((cc: any) => cc.is_current);
+    // DecryptedChild型の定義
+    type DecryptedChild = ChildDataRaw & {
+      decrypted_family_name: string | null;
+      decrypted_given_name: string | null;
+      decrypted_family_name_kana: string | null;
+      decrypted_given_name_kana: string | null;
+    };
+
+    const attendanceList: AttendanceListItem[] = (decryptedChildren as DecryptedChild[]).map((child) => {
+      const currentClass = child._child_class?.find((cc: ChildClassRaw) => cc.is_current);
       const classInfo = currentClass?.m_classes;
 
       const schedulePattern = schedulePatternMap.get(child.id);
@@ -221,11 +248,11 @@ export async function GET(request: NextRequest) {
       const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
 
       const todaysLogs = attendanceLogsMap.get(child.id) || [];
-      const activeLog = todaysLogs.find((log: any) => !log.checked_out_at);
+      const activeLog = todaysLogs.find((log) => !log.checked_out_at);
       const latestClosedLog = todaysLogs
-        .filter((log: any) => log.checked_out_at)
+        .filter((log) => log.checked_out_at)
         .sort(
-          (a: any, b: any) => new Date(b.checked_in_at).getTime() - new Date(a.checked_in_at).getTime()
+          (a, b) => new Date(b.checked_in_at || '').getTime() - new Date(a.checked_in_at || '').getTime()
         )[0];
       const displayLog = activeLog || latestClosedLog;
 

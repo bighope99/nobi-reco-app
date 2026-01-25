@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants/attendance';
 import { type LateArrivalAlert, getMinutesDiff } from '@/lib/alerts/late-arrival';
 import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST } from '@/lib/utils/timezone';
+import type { ChildDataRaw, ChildClassRaw, SchoolSchedule, SchoolInfo, ClassFilter, AttendanceLog } from '../types';
 
 /**
  * Priority Dashboard API
@@ -100,13 +101,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    const childrenData = childrenDataRaw ?? [];
-    const childIds = childrenData.map((c: any) => c.id);
+    const childrenData = (childrenDataRaw ?? []) as ChildDataRaw[];
+    const childIds = childrenData.map((c) => c.id);
 
     // 学校ID一覧
     const schoolIds = Array.from(
-      new Set(childrenData.map((c: any) => c.school_id).filter((id: string | null) => Boolean(id)))
-    ) as string[];
+      new Set(childrenData.map((c) => c.school_id).filter((id): id is string => Boolean(id)))
+    );
 
     // 2. 並列でデータ取得
     const [attendanceContext, schoolScheduleResult, schoolsResult, guardianLinksResult, classesResult] =
@@ -160,26 +161,42 @@ export async function GET(request: NextRequest) {
     const { dayOfWeekKey, schedulePatterns, dailyAttendanceData, attendanceLogsData } = attendanceContext;
 
     // エラーチェック
+    if (schoolScheduleResult.error) {
+      console.error('School schedule fetch error:', schoolScheduleResult.error);
+      return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
+    }
+    if (schoolsResult.error) {
+      console.error('Schools fetch error:', schoolsResult.error);
+      return NextResponse.json({ error: 'Failed to fetch schools' }, { status: 500 });
+    }
     if (guardianLinksResult.error) {
       console.error('Guardian link fetch error:', guardianLinksResult.error);
       return NextResponse.json({ error: 'Failed to fetch guardian links' }, { status: 500 });
     }
+    if (classesResult.error) {
+      console.error('Classes fetch error:', classesResult.error);
+      return NextResponse.json({ error: 'Failed to fetch classes' }, { status: 500 });
+    }
 
     // 3. データ構造最適化: Mapに変換
-    const schedulePatternMap = new Map((schedulePatterns || []).map((s: any) => [s.child_id, s]));
-    const dailyAttendanceMap = new Map((dailyAttendanceData || []).map((r: any) => [r.child_id, r]));
+    const schedulePatternMap = new Map(
+      (schedulePatterns || []).map((s: { child_id: string }) => [s.child_id, s])
+    );
+    const dailyAttendanceMap = new Map(
+      (dailyAttendanceData || []).map((r: { child_id: string; status?: string }) => [r.child_id, r])
+    );
 
     // 出席ログをグループ化
-    const attendanceLogsMap = new Map<string, any[]>();
-    for (const log of attendanceLogsData || []) {
+    const attendanceLogsMap = new Map<string, AttendanceLog[]>();
+    for (const log of (attendanceLogsData || []) as AttendanceLog[]) {
       const existing = attendanceLogsMap.get(log.child_id) || [];
       existing.push(log);
       attendanceLogsMap.set(log.child_id, existing);
     }
 
     // 学校スケジュールをグループ化
-    const schoolSchedules: Record<string, any[]> = {};
-    for (const schedule of schoolScheduleResult.data || []) {
+    const schoolSchedules: Record<string, SchoolSchedule[]> = {};
+    for (const schedule of (schoolScheduleResult.data || []) as SchoolSchedule[]) {
       if (!schoolSchedules[schedule.school_id]) {
         schoolSchedules[schedule.school_id] = [];
       }
@@ -188,23 +205,23 @@ export async function GET(request: NextRequest) {
 
     // 学校名マップ
     const schoolNameMap = new Map<string, string>(
-      (schoolsResult.data || []).map((s: any) => [s.id, s.name])
+      ((schoolsResult.data || []) as SchoolInfo[]).map((s) => [s.id, s.name])
     );
 
     // 4. バッチ復号化（電話番号）- 施設IDでキャッシュ分離
     const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data || [], facility_id);
 
     // 5. ヘルパー関数
-    const getSchoolStartTime = (schoolId: string | null, grade: number | null) => {
+    const getSchoolStartTime = (schoolId: string | null, grade: number | null): string | null => {
       if (!schoolId || grade === null || grade === undefined) return null;
       const schedules = schoolSchedules[schoolId] || [];
       const gradeKey = String(grade);
-      const matchedSchedule = schedules.find((schedule: any) =>
+      const matchedSchedule = schedules.find((schedule) =>
         (schedule.grades || []).includes(gradeKey)
       );
       if (!matchedSchedule) return null;
-      const weekdayKey = `${dayOfWeekKey}_time`;
-      return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
+      const weekdayKey = `${dayOfWeekKey}_time` as keyof SchoolSchedule;
+      return (matchedSchedule[weekdayKey] as string | null) || null;
     };
 
     const formatTimeToMinutes = (time: string | null) => {
@@ -214,9 +231,9 @@ export async function GET(request: NextRequest) {
     };
 
     // 6. KPI集計用の中間データ構築
-    type ChildStatus = {
+    type ChildStatusItem = {
       child_id: string;
-      child: any;
+      child: ChildDataRaw;
       status: 'checked_in' | 'checked_out' | 'absent';
       is_scheduled_today: boolean;
       scheduled_start_time: string | null;
@@ -227,17 +244,17 @@ export async function GET(request: NextRequest) {
       grade: number | null;
     };
 
-    const childStatuses: ChildStatus[] = childrenData.map((child: any) => {
+    const childStatuses: ChildStatusItem[] = childrenData.map((child) => {
       const schedulePattern = schedulePatternMap.get(child.id);
       const dailyRecord = dailyAttendanceMap.get(child.id);
       const isScheduledToday = isScheduledForDate(schedulePattern, dailyRecord, dayOfWeekKey);
 
       const todaysLogs = attendanceLogsMap.get(child.id) || [];
-      const activeLog = todaysLogs.find((log: any) => !log.checked_out_at);
+      const activeLog = todaysLogs.find((log) => !log.checked_out_at);
       const latestClosedLog = todaysLogs
-        .filter((log: any) => log.checked_out_at)
+        .filter((log) => log.checked_out_at)
         .sort(
-          (a: any, b: any) => new Date(b.checked_in_at).getTime() - new Date(a.checked_in_at).getTime()
+          (a, b) => new Date(b.checked_in_at || '').getTime() - new Date(a.checked_in_at || '').getTime()
         )[0];
       const displayLog = activeLog || latestClosedLog;
 
@@ -330,7 +347,7 @@ export async function GET(request: NextRequest) {
 
     const actionRequiredList: ActionRequiredItem[] = actionRequiredStatuses.map((s, index) => {
       const decrypted = decryptedActionRequired[index];
-      const currentClass = s.child._child_class?.find((cc: any) => cc.is_current);
+      const currentClass = s.child._child_class?.find((cc: ChildClassRaw) => cc.is_current);
       const classInfo = currentClass?.m_classes;
       const gradeLabel = formatGradeLabel(s.grade);
 
@@ -427,7 +444,7 @@ export async function GET(request: NextRequest) {
 
     // 12. フィルター用クラス一覧
     const filters = {
-      classes: (classesResult.data || []).map((cls: any) => ({
+      classes: ((classesResult.data || []) as ClassFilter[]).map((cls) => ({
         class_id: cls.id,
         class_name: cls.name,
       })),

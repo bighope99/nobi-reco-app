@@ -4,6 +4,24 @@ import { getUserSession } from '@/lib/auth/session';
 import { formatName } from '@/utils/crypto/decryption-helper';
 import { cachedBatchDecryptChildren } from '@/utils/crypto/decryption-cache';
 import { getCurrentDateJST, toDateStringJST } from '@/lib/utils/timezone';
+import type { ObservationRecord } from '../types';
+
+// Record Support用の子ども型（最小限のフィールド）
+interface RecordSupportChildData {
+  id: string;
+  family_name: string | null;
+  given_name: string | null;
+  family_name_kana: string | null;
+  given_name_kana: string | null;
+  _child_class: Array<{
+    class_id: string;
+    is_current: boolean;
+    m_classes: {
+      id: string;
+      name: string;
+    } | null;
+  }> | null;
+}
 
 /**
  * Record Support API
@@ -84,8 +102,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    const childrenData = childrenDataRaw ?? [];
-    const childIds = childrenData.map((c: any) => c.id);
+    const childrenData = (childrenDataRaw ?? []) as RecordSupportChildData[];
+    const childIds = childrenData.map((c) => c.id);
 
     if (childIds.length === 0) {
       return NextResponse.json({
@@ -115,22 +133,22 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. 記録情報をグループ化
-    const observationsMap = new Map<string, any[]>();
-    for (const obs of observationsData || []) {
+    const observationsMap = new Map<string, ObservationRecord[]>();
+    for (const obs of (observationsData || []) as ObservationRecord[]) {
       const existing = observationsMap.get(obs.child_id) || [];
       existing.push(obs);
       observationsMap.set(obs.child_id, existing);
     }
 
     // 5. 記録サポート候補を抽出
-    const getDaysDiff = (date1: string, date2: string | null) => {
+    const getDaysDiff = (date1: string, date2: string | null): number => {
       if (!date2) return 999;
       const d1 = new Date(date1);
       const d2 = new Date(date2);
       return Math.floor((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
     };
 
-    const candidateChildren: any[] = [];
+    const candidateChildren: RecordSupportChildData[] = [];
     const candidateData: Array<{
       lastRecordDate: string | null;
       daysSince: number;
@@ -141,7 +159,7 @@ export async function GET(request: NextRequest) {
       const childObservations = observationsMap.get(child.id) || [];
       const lastRecordDate =
         childObservations.length > 0
-          ? childObservations.sort((a: any, b: any) =>
+          ? childObservations.sort((a, b) =>
               b.observation_date.localeCompare(a.observation_date)
             )[0].observation_date
           : null;
@@ -170,8 +188,16 @@ export async function GET(request: NextRequest) {
       reason: string;
     };
 
-    const recordSupport: RecordSupportItem[] = decryptedCandidates.map((child: any, index: number) => {
-      const currentClass = child._child_class?.find((cc: any) => cc.is_current);
+    // DecryptedChild型の定義
+    type DecryptedChild = RecordSupportChildData & {
+      decrypted_family_name: string | null;
+      decrypted_given_name: string | null;
+      decrypted_family_name_kana: string | null;
+      decrypted_given_name_kana: string | null;
+    };
+
+    const recordSupport: RecordSupportItem[] = (decryptedCandidates as DecryptedChild[]).map((child, index) => {
+      const currentClass = child._child_class?.find((cc) => cc.is_current);
       const classInfo = currentClass?.m_classes;
       const { lastRecordDate, daysSince, weeklyRecordCount } = candidateData[index];
 

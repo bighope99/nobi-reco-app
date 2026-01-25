@@ -33,10 +33,52 @@ export interface KPI {
   checked_out: number;
 }
 
+// アラート詳細型
+export interface OverdueAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  grade: number | null;
+  grade_label: string;
+  school_id: string | null;
+  school_name: string | null;
+  scheduled_end_time: string | null;
+  actual_in_time: string | null;
+  minutes_overdue: number;
+  guardian_phone: string | null;
+}
+
+export interface LateAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  grade: number | null;
+  grade_label: string;
+  school_id: string | null;
+  school_name: string | null;
+  scheduled_start_time: string;
+  minutes_late: number;
+  guardian_phone: string | null;
+  alert_triggered_at: string;
+}
+
+export interface UnexpectedAlert {
+  child_id: string;
+  name: string;
+  kana: string;
+  class_name: string;
+  age_group: string;
+  actual_in_time: string | null;
+}
+
 export interface Alert {
-  overdue: any[];
-  late: any[];
-  unexpected: any[];
+  overdue: OverdueAlert[];
+  late: LateAlert[];
+  unexpected: UnexpectedAlert[];
 }
 
 export interface RecordSupport {
