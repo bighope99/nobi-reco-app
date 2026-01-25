@@ -7,6 +7,7 @@ import { StaffLayout } from "@/components/layout/staff-layout"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { FileText, ChevronLeft, Calendar, ChevronRight, ChevronDown, Search, Filter, History, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
+import { getCurrentDateJST } from "@/lib/utils/timezone"
 
 // --- Types ---
 interface Child {
@@ -72,8 +73,9 @@ const SortIcon = ({ colKey, currentSort }: { colKey: string, currentSort?: { key
 
 const LastRecordBadge = ({ dateStr }: { dateStr: string | null }) => {
     if (!dateStr) return <span className="text-xs text-slate-400">-</span>
-    const date = new Date(dateStr)
-    const isToday = new Date().toDateString() === date.toDateString()
+    // JSTベースで「今日」判定（環境のタイムゾーンに依存しない）
+    const todayJST = getCurrentDateJST()
+    const isToday = dateStr === todayJST
     return (
         <span className={`text-xs px-2 py-1 rounded-full ${isToday ? 'bg-green-100 text-green-700 font-bold' : 'bg-slate-100 text-slate-600'}`}>
             {dateStr}

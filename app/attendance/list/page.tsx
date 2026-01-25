@@ -231,15 +231,15 @@ export default function AttendanceListPage() {
     fetchAttendance()
   }, [fetchAttendance])
 
-  // 日付操作関数
+  // 日付操作関数（環境のタイムゾーンに依存しない）
   const changeDate = (days: number) => {
-    const currentDate = new Date(selectedDate)
-    currentDate.setDate(currentDate.getDate() + days)
-    // 相対計算なのでそのまま変換（JSTベースの日付から相対計算）
-    const year = currentDate.getFullYear()
-    const month = String(currentDate.getMonth() + 1).padStart(2, '0')
-    const day = String(currentDate.getDate()).padStart(2, '0')
-    setSelectedDate(`${year}-${month}-${day}`)
+    // 日付文字列から直接計算（ブラウザ依存を回避）
+    const [year, month, day] = selectedDate.split('-').map(Number)
+    const utcDate = new Date(Date.UTC(year, month - 1, day + days))
+    const newYear = utcDate.getUTCFullYear()
+    const newMonth = String(utcDate.getUTCMonth() + 1).padStart(2, '0')
+    const newDay = String(utcDate.getUTCDate()).padStart(2, '0')
+    setSelectedDate(`${newYear}-${newMonth}-${newDay}`)
   }
 
   const goToToday = () => {
