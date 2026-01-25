@@ -827,16 +827,9 @@ export default function DashboardClient() {
                     </span>
                   </div>
 
-                  {/* Action Required Section (Always Visible) */}
+                  {/* Action Required Children (inline, no header) */}
                   {filteredActionRequired.length > 0 && (
-                    <div className="border-b border-gray-200">
-                      <div className="px-5 py-2 bg-rose-50 border-b border-rose-100">
-                        <h3 className="font-bold text-rose-700 text-sm flex items-center gap-2">
-                          <AlertTriangle size={14} />
-                          要対応
-                        </h3>
-                      </div>
-
+                    <>
                       {/* Desktop Table */}
                       <div className="hidden lg:block">
                         <table className="w-full text-left border-collapse text-sm">
@@ -885,7 +878,7 @@ export default function DashboardClient() {
                           <ChildRow key={child.child_id} child={child} isDesktop={false} />
                         ))}
                       </div>
-                    </div>
+                    </>
                   )}
 
                   {/* Other Children Section (Collapsible) */}
