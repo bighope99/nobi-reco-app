@@ -203,3 +203,22 @@ export function formatFileSegment(value: string): string {
   // ファイル名として使えない文字とスペースを除去（日本語は保持）
   return value.replace(/[\\/:*?"<>|\s]+/g, '').trim() || 'qr'
 }
+
+/**
+ * Content-Dispositionヘッダーを生成
+ * RFC 5987/6266に準拠し、日本語ファイル名をサポート
+ */
+export function createContentDisposition(filename: string): string {
+  // ASCII文字のみかチェック
+  const isAsciiOnly = /^[\x00-\x7F]*$/.test(filename)
+
+  if (isAsciiOnly) {
+    // ASCII文字のみの場合はシンプルな形式
+    return `attachment; filename="${filename}"`
+  }
+
+  // 日本語を含む場合はRFC 5987形式でエンコード
+  const encodedFilename = encodeURIComponent(filename)
+  // filename*のみを使用（モダンブラウザはこれを優先する）
+  return `attachment; filename*=UTF-8''${encodedFilename}`
+}

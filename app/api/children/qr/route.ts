@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
-import { createQrPayload, createQrPdf, createZip, formatFileSegment } from '@/lib/qr/card-generator'
+import {
+  createQrPayload,
+  createQrPdf,
+  createZip,
+  formatFileSegment,
+  createContentDisposition,
+} from '@/lib/qr/card-generator'
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
 
 interface BatchRequestBody {
@@ -91,7 +97,8 @@ export async function POST(request: NextRequest) {
             payload,
           })
 
-          const filename = `${formatFileSegment(childName)}_${child.id}.pdf`
+          // ZIP内のファイル名: 子どもの名前を使用
+          const filename = `${formatFileSegment(childName)}.pdf`
 
           return {
             filename,
@@ -104,16 +111,15 @@ export async function POST(request: NextRequest) {
 
     const zipBuffer = createZip(entries)
     const dateSegment = generatedAt.toISOString().slice(0, 10).replace(/-/g, '')
-    const zipName = `qr_codes_${formatFileSegment(facilityData.name)}_${dateSegment}.zip`
-    // HTTPヘッダーはASCIIのみ対応。RFC 5987形式でUTF-8エンコード
-    const asciiZipName = `qr_codes_${dateSegment}.zip`
-    const encodedZipName = encodeURIComponent(zipName)
+    // ZIPファイル名: 施設名と日付
+    const zipName = `${formatFileSegment(facilityData.name)}_QRコード_${dateSegment}.zip`
+    const contentDisposition = createContentDisposition(zipName)
 
     return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${asciiZipName}"; filename*=UTF-8''${encodedZipName}`,
+        'Content-Disposition': contentDisposition,
       },
     })
   } catch (error) {

@@ -1,4 +1,9 @@
-import { createQrPdf, createQrPayload, formatFileSegment } from '@/lib/qr/card-generator'
+import {
+  createQrPdf,
+  createQrPayload,
+  formatFileSegment,
+  createContentDisposition,
+} from '@/lib/qr/card-generator'
 
 // Mock the QR signature secret
 jest.mock('@/lib/qr/secrets', () => ({
@@ -86,6 +91,26 @@ describe('QR PDF Generation', () => {
 
     it('空文字列の場合はqrを返す', () => {
       expect(formatFileSegment('')).toBe('qr')
+    })
+  })
+
+  describe('createContentDisposition', () => {
+    it('日本語ファイル名をUTF-8エンコードする', () => {
+      const header = createContentDisposition('山田太郎.pdf')
+      // filename*がUTF-8エンコードされていることを確認
+      expect(header).toContain("filename*=UTF-8''")
+      expect(header).toContain('%E5%B1%B1%E7%94%B0%E5%A4%AA%E9%83%8E.pdf')
+    })
+
+    it('ASCII文字のみのファイル名も正しく処理する', () => {
+      const header = createContentDisposition('test.pdf')
+      expect(header).toContain('filename="test.pdf"')
+    })
+
+    it('日本語ファイル名の場合、filename*が優先される形式になる', () => {
+      const header = createContentDisposition('山田太郎_abc123.pdf')
+      // RFC 5987/6266: filename*=UTF-8'' が含まれる
+      expect(header).toMatch(/filename\*=UTF-8''/)
     })
   })
 })

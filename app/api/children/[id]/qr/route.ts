@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
-import { createQrPayload, createQrPdf, formatFileSegment } from '@/lib/qr/card-generator'
+import {
+  createQrPayload,
+  createQrPdf,
+  formatFileSegment,
+  createContentDisposition,
+} from '@/lib/qr/card-generator'
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
 
 export async function GET(
@@ -63,16 +68,15 @@ export async function GET(
       payload,
     })
 
-    const filename = `${formatFileSegment(childName)}_${childData.id}.pdf`
-    // HTTPヘッダーはASCIIのみ対応。RFC 5987形式でUTF-8エンコード
-    const asciiFilename = `qr_${childData.id}.pdf`
-    const encodedFilename = encodeURIComponent(filename)
+    // ファイル名: 子どもの名前を使用
+    const filename = `${formatFileSegment(childName)}.pdf`
+    const contentDisposition = createContentDisposition(filename)
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`,
+        'Content-Disposition': contentDisposition,
       },
     })
   } catch (error) {
