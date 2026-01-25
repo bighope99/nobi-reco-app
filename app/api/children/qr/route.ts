@@ -105,12 +105,15 @@ export async function POST(request: NextRequest) {
     const zipBuffer = createZip(entries)
     const dateSegment = generatedAt.toISOString().slice(0, 10).replace(/-/g, '')
     const zipName = `qr_codes_${formatFileSegment(facilityData.name)}_${dateSegment}.zip`
+    // HTTPヘッダーはASCIIのみ対応。RFC 5987形式でUTF-8エンコード
+    const asciiZipName = `qr_codes_${dateSegment}.zip`
+    const encodedZipName = encodeURIComponent(zipName)
 
     return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${zipName}"`,
+        'Content-Disposition': `attachment; filename="${asciiZipName}"; filename*=UTF-8''${encodedZipName}`,
       },
     })
   } catch (error) {

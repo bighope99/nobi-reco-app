@@ -64,12 +64,15 @@ export async function GET(
     })
 
     const filename = `${formatFileSegment(childName)}_${childData.id}.pdf`
+    // HTTPヘッダーはASCIIのみ対応。RFC 5987形式でUTF-8エンコード
+    const asciiFilename = `qr_${childData.id}.pdf`
+    const encodedFilename = encodeURIComponent(filename)
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`,
       },
     })
   } catch (error) {
