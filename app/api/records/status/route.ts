@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST, toDateStringJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -228,8 +228,10 @@ export async function GET(request: NextRequest) {
 
       // 日別記録ステータス（1日〜月末）
       const dailyStatus: string[] = [];
+      const monthStr = String(month).padStart(2, '0');
       for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = toDateStringJST(new Date(year, month - 1, day));
+        // 文字列を直接構築（サーバータイムゾーン非依存）
+        const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
         const isAttended = monthlyAttendanceDates.has(dateStr);
         const isRecorded = monthlyObservationDates.has(dateStr);
 
