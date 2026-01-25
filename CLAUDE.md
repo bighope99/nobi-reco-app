@@ -55,6 +55,35 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - 児童リストから `nameByIdMap: Map<string, string>` を構築
   - 表示時に `replaceChildIdsWithNames(content, nameByIdMap)` を適用
 
+## Incremental Code Improvement (編集時の段階的改善)
+
+ファイルを編集する際、以下のルールに従って周辺コードも改善する:
+
+### 型安全性
+- `any` 型を見つけたら具体的な型に置き換える
+- Supabaseクエリ結果には `as Type[]` でキャストを追加
+- `(c: any) =>` は `(c: ChildData) =>` のように型を明示
+
+### エラーハンドリング
+- Promise.all の各結果に `.error` チェックを追加
+- エラーログには識別可能なプレフィックスを付ける（例: `'Children fetch error:'`）
+
+### API Route パターン
+```typescript
+// Dashboard API共通型: app/api/dashboard/types.ts を使用
+import type { ChildDataRaw, SchoolSchedule, AttendanceLog } from '../types';
+
+// Supabaseクエリ結果のキャスト
+const childrenData = (childrenDataRaw ?? []) as ChildDataRaw[];
+
+// 型ガード付きフィルター
+const schoolIds = childrenData.map((c) => c.school_id).filter((id): id is string => Boolean(id));
+```
+
+### 重複コードの共通化
+- 同じヘルパー関数が複数ファイルにあれば `utils.ts` に抽出
+- Dashboard API: `app/api/dashboard/utils.ts` を参照
+
 # Agent Guidelines
 
 **原則**: サブエージェントに委譲し、並列処理を活用する
