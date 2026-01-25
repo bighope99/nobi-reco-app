@@ -151,7 +151,8 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                   <button
                     onClick={() => toggleMenu(item.label)}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
+                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
+                      "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
                       isActive(item.href) && "bg-sidebar-accent",
                     )}
                   >
@@ -170,7 +171,8 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                           <Link
                             href={child.href}
                             className={cn(
-                              "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
+                              "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
+                              "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
                               isActive(child.href) && "bg-sidebar-accent font-medium",
                               child.hidden && "hidden",
                             )}
@@ -186,7 +188,8 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
+                    "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
                     isActive(item.href) && "bg-sidebar-accent font-medium",
                   )}
                 >
