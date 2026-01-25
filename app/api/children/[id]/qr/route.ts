@@ -6,8 +6,10 @@ import {
   createQrPdf,
   formatFileSegment,
   createContentDisposition,
+  formatGradePrefix,
 } from '@/lib/qr/card-generator'
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
+import { calculateGrade } from '@/utils/grade'
 
 export async function GET(
   _request: NextRequest,
@@ -46,7 +48,7 @@ export async function GET(
 
     const { data: childData, error: childError } = await supabase
       .from('m_children')
-      .select('id, family_name, given_name, facility_id')
+      .select('id, family_name, given_name, facility_id, birth_date, grade_add')
       .eq('id', childId)
       .eq('facility_id', facilityId)
       .is('deleted_at', null)
@@ -68,8 +70,11 @@ export async function GET(
       payload,
     })
 
-    // ファイル名: 子どもの名前を使用
-    const filename = `${formatFileSegment(childName)}.pdf`
+    // 学年を計算してファイル名のプレフィックスに使用
+    const grade = calculateGrade(childData.birth_date, childData.grade_add)
+    const gradePrefix = formatGradePrefix(grade)
+    // ファイル名: 学年 + 子どもの名前
+    const filename = `${gradePrefix}${formatFileSegment(childName)}.pdf`
     const contentDisposition = createContentDisposition(filename)
 
     return new NextResponse(new Uint8Array(pdfBuffer), {

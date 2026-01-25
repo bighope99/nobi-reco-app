@@ -3,6 +3,7 @@ import {
   createQrPayload,
   formatFileSegment,
   createContentDisposition,
+  formatGradePrefix,
 } from '@/lib/qr/card-generator'
 
 // Mock the QR signature secret
@@ -111,6 +112,30 @@ describe('QR PDF Generation', () => {
       const header = createContentDisposition('山田太郎_abc123.pdf')
       // RFC 5987/6266: filename*=UTF-8'' が含まれる
       expect(header).toMatch(/filename\*=UTF-8''/)
+    })
+  })
+
+  describe('formatGradePrefix', () => {
+    it('1年生の場合は"1"を返す', () => {
+      expect(formatGradePrefix(1)).toBe('1')
+    })
+
+    it('6年生の場合は"6"を返す', () => {
+      expect(formatGradePrefix(6)).toBe('6')
+    })
+
+    it('7年生以上の場合は"10"を返す', () => {
+      expect(formatGradePrefix(7)).toBe('10')
+      expect(formatGradePrefix(10)).toBe('10')
+    })
+
+    it('0年生以下の場合は"0"を返す', () => {
+      expect(formatGradePrefix(0)).toBe('0')
+      expect(formatGradePrefix(-1)).toBe('0')
+    })
+
+    it('nullの場合は"0"を返す', () => {
+      expect(formatGradePrefix(null)).toBe('0')
     })
   })
 })

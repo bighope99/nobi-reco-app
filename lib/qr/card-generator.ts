@@ -208,6 +208,22 @@ export function formatFileSegment(value: string): string {
  * Content-Dispositionヘッダーを生成
  * RFC 5987/6266に準拠し、日本語ファイル名をサポート
  */
+/**
+ * 学年からファイル名用のプレフィックスを生成
+ * - 1〜6年生: "1"〜"6"
+ * - 7年生以上: "10"
+ * - 0年生以下（未就学）: "0"
+ */
+export function formatGradePrefix(grade: number | null | undefined): string {
+  if (grade === null || grade === undefined || grade <= 0) {
+    return '0'
+  }
+  if (grade >= 7) {
+    return '10'
+  }
+  return String(grade)
+}
+
 export function createContentDisposition(filename: string): string {
   // ASCII文字のみかチェック
   const isAsciiOnly = /^[\x00-\x7F]*$/.test(filename)

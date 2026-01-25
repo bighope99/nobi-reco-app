@@ -7,8 +7,10 @@ import {
   createZip,
   formatFileSegment,
   createContentDisposition,
+  formatGradePrefix,
 } from '@/lib/qr/card-generator'
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
+import { calculateGrade } from '@/utils/grade'
 
 interface BatchRequestBody {
   child_ids?: string[]
@@ -19,6 +21,8 @@ interface ChildDataRow {
   family_name: string | null
   given_name: string | null
   facility_id: string
+  birth_date: string | null
+  grade_add: number | null
 }
 
 // 大量PDF生成時のタイムアウト対策
@@ -64,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const { data: childrenData, error: childrenError } = await supabase
       .from('m_children')
-      .select('id, family_name, given_name, facility_id')
+      .select('id, family_name, given_name, facility_id, birth_date, grade_add')
       .in('id', childIds)
       .eq('facility_id', facilityId)
       .is('deleted_at', null)
@@ -97,8 +101,11 @@ export async function POST(request: NextRequest) {
             payload,
           })
 
-          // ZIP内のファイル名: 子どもの名前を使用
-          const filename = `${formatFileSegment(childName)}.pdf`
+          // 学年を計算してファイル名のプレフィックスに使用
+          const grade = calculateGrade(child.birth_date, child.grade_add)
+          const gradePrefix = formatGradePrefix(grade)
+          // ZIP内のファイル名: 学年 + 子どもの名前
+          const filename = `${gradePrefix}${formatFileSegment(childName)}.pdf`
 
           return {
             filename,
