@@ -8,6 +8,19 @@ interface BatchRequestBody {
   child_ids?: string[]
 }
 
+interface ChildDataRow {
+  id: string
+  family_name: string
+  given_name: string
+  facility_id: string
+}
+
+// 大量PDF生成時のタイムアウト対策
+export const maxDuration = 60
+
+// メモリ使用量を抑えるための並行度制限
+const CONCURRENT_LIMIT = 5
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -59,30 +72,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Children not found' }, { status: 404 })
     }
 
-    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-  
-
     const generatedAt = new Date()
-    const entries = await Promise.all(
-      childrenData.map(async (child: any) => {
-        const decryptedFamilyName = decryptOrFallback(child.family_name);
-        const decryptedGivenName = decryptOrFallback(child.given_name);
-        const childName = `${decryptedFamilyName} ${decryptedGivenName}`.trim()
-        const { payload } = createQrPayload(child.id, facilityId)
-        const pdfBuffer = await createQrPdf({
-          childName,
-          facilityName: facilityData.name,
-          payload,
+
+    // チャンク処理でメモリ使用量を抑制
+    const entries: { filename: string; content: Buffer }[] = []
+    for (let i = 0; i < childrenData.length; i += CONCURRENT_LIMIT) {
+      const chunk = childrenData.slice(i, i + CONCURRENT_LIMIT)
+      const chunkEntries = await Promise.all(
+        chunk.map(async (child: ChildDataRow) => {
+          // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+          const decryptedFamilyName = decryptOrFallback(child.family_name)
+          const decryptedGivenName = decryptOrFallback(child.given_name)
+          const childName = `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim()
+          const { payload } = createQrPayload(child.id, facilityId)
+          const pdfBuffer = await createQrPdf({
+            childName,
+            facilityName: facilityData.name,
+            payload,
+          })
+
+          const filename = `${formatFileSegment(childName)}_${child.id}.pdf`
+
+          return {
+            filename,
+            content: pdfBuffer,
+          }
         })
-
-        const filename = `${formatFileSegment(childName)}_${child.id}.pdf`
-
-        return {
-          filename,
-          content: pdfBuffer,
-        }
-      })
-    )
+      )
+      entries.push(...chunkEntries)
+    }
 
     const zipBuffer = createZip(entries)
     const dateSegment = generatedAt.toISOString().slice(0, 10).replace(/-/g, '')

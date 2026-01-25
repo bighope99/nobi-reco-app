@@ -29,15 +29,23 @@ const PAGE_HEIGHT_MM = 297
 // Font cache to avoid re-reading the file on every PDF generation
 let fontBase64Cache: string | null = null
 
+// テキストの最大表示幅（mm）- A4の余白を考慮
+const TEXT_MAX_WIDTH = 170
+
 function loadFontBase64(): string {
   if (fontBase64Cache) {
     return fontBase64Cache
   }
 
-  const fontPath = join(process.cwd(), 'lib/qr/fonts/NotoSansJP-Regular.ttf')
-  const fontBuffer = readFileSync(fontPath)
-  fontBase64Cache = fontBuffer.toString('base64')
-  return fontBase64Cache
+  try {
+    const fontPath = join(process.cwd(), 'lib/qr/fonts/NotoSansJP-Regular.ttf')
+    const fontBuffer = readFileSync(fontPath)
+    fontBase64Cache = fontBuffer.toString('base64')
+    return fontBase64Cache
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    throw new Error(`Failed to load Japanese font file: ${message}`)
+  }
 }
 
 export function createQrPayload(childId: string, facilityId: string): QrPayload {
@@ -60,6 +68,10 @@ export function createQrPayload(childId: string, facilityId: string): QrPayload 
 export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   const { childName, facilityName, payload } = options
 
+  // 入力検証
+  const displayChildName = childName?.trim() || '(名前なし)'
+  const displayFacilityName = facilityName?.trim() || '(施設名なし)'
+
   // Create jsPDF instance (A4, portrait, mm units)
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -73,21 +85,27 @@ export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   doc.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal')
   doc.setFont('NotoSansJP', 'normal')
 
-  // Draw child name
+  // Draw child name (with maxWidth to handle long names)
   doc.setFontSize(20)
-  doc.text(childName, 20, 25)
+  doc.text(displayChildName, 20, 25, { maxWidth: TEXT_MAX_WIDTH })
 
-  // Draw facility name
+  // Draw facility name (with maxWidth to handle long names)
   doc.setFontSize(14)
-  doc.text(facilityName, 20, 35)
+  doc.text(displayFacilityName, 20, 35, { maxWidth: TEXT_MAX_WIDTH })
 
   // Generate QR code as data URL
-  const qrDataUrl = await QRCode.toDataURL(payload, {
-    errorCorrectionLevel: 'M',
-    type: 'image/png',
-    margin: 1,
-    width: 400,
-  })
+  let qrDataUrl: string
+  try {
+    qrDataUrl = await QRCode.toDataURL(payload, {
+      errorCorrectionLevel: 'M',
+      type: 'image/png',
+      margin: 1,
+      width: 400,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    throw new Error(`Failed to generate QR code: ${message}`)
+  }
 
   // Calculate QR code position (centered horizontally, below the text)
   const qrSize = 120 // mm

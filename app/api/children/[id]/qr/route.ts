@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getUserSession } from '@/lib/auth/session'
 import { createQrPayload, createQrPdf, formatFileSegment } from '@/lib/qr/card-generator'
+import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
 
 export async function GET(
   _request: NextRequest,
@@ -50,7 +51,10 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Child not found' }, { status: 404 })
     }
 
-    const childName = `${childData.family_name} ${childData.given_name}`.trim()
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    const decryptedFamilyName = decryptOrFallback(childData.family_name)
+    const decryptedGivenName = decryptOrFallback(childData.given_name)
+    const childName = `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim()
 
     const { payload } = createQrPayload(childData.id, facilityId)
     const pdfBuffer = await createQrPdf({
