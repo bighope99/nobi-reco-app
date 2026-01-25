@@ -141,10 +141,15 @@ export default function DashboardClient() {
     }
   }, [priorityLoading, priorityData, fetchRecordSupport, fetchOtherChildren, otherChildren.length, otherChildrenLoading]);
 
-  // Current time display
+  // Current time display - 1分ごとに更新
   useEffect(() => {
-    const now = new Date();
-    setCurrentTimeDisplay(now.toTimeString().slice(0, 5));
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTimeDisplay(now.toTimeString().slice(0, 5));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   // --- Actions ---
@@ -178,6 +183,10 @@ export default function DashboardClient() {
                 return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
               case 'mark_absent':
                 return { ...child, status: 'absent' as const };
+              case 'add_schedule':
+                return { ...child, is_scheduled_today: true };
+              case 'confirm_unexpected':
+                return { ...child, is_scheduled_today: true, alert_type: null };
               default:
                 return child;
             }
@@ -200,6 +209,10 @@ export default function DashboardClient() {
               return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
             case 'mark_absent':
               return { ...child, status: 'absent' as const };
+            case 'add_schedule':
+              return { ...child, is_scheduled_today: true };
+            case 'confirm_unexpected':
+              return { ...child, is_scheduled_today: true };
             default:
               return child;
           }
