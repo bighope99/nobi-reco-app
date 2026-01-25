@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,12 +30,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid year or month' }, { status: 400 });
     }
 
-    // 期間計算
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
-    const daysInMonth = endDate.getDate();
+    // 期間計算（JSTベース）
+    const startDateStr = getFirstDayOfMonthJST(year, month);
+    const endDateStr = getLastDayOfMonthJST(year, month);
+    const daysInMonth = new Date(year, month, 0).getDate();
 
     // 年初
     const yearStartStr = `${year}-01-01`;
@@ -120,8 +118,8 @@ export async function GET(request: NextRequest) {
         .from('h_attendance')
         .select('child_id, checked_in_at, checked_out_at')
         .in('child_id', childIds)
-        .gte('checked_in_at', `${startDateStr}T00:00:00`)
-        .lte('checked_in_at', `${endDateStr}T23:59:59`),
+        .gte('checked_in_at', `${startDateStr}T00:00:00+09:00`)
+        .lte('checked_in_at', `${endDateStr}T23:59:59.999+09:00`),
 
       // 月間記録
       supabase
@@ -137,8 +135,8 @@ export async function GET(request: NextRequest) {
         .from('h_attendance')
         .select('child_id, checked_in_at')
         .in('child_id', childIds)
-        .gte('checked_in_at', `${yearStartStr}T00:00:00`)
-        .lte('checked_in_at', `${today}T23:59:59`),
+        .gte('checked_in_at', `${yearStartStr}T00:00:00+09:00`)
+        .lte('checked_in_at', `${today}T23:59:59.999+09:00`),
 
       // 年間記録
       supabase
@@ -209,7 +207,7 @@ export async function GET(request: NextRequest) {
       // 月間統計（Mapから O(1) で取得）
       const monthlyAttendances = monthlyAttendancesByChild.get(child.id) || [];
       const monthlyAttendanceDates = new Set(
-        monthlyAttendances.map((a: any) => new Date(a.checked_in_at).toISOString().split('T')[0])
+        monthlyAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
       );
       const monthlyAttendanceCount = monthlyAttendanceDates.size;
 
@@ -230,8 +228,10 @@ export async function GET(request: NextRequest) {
 
       // 日別記録ステータス（1日〜月末）
       const dailyStatus: string[] = [];
+      const monthStr = String(month).padStart(2, '0');
       for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = new Date(year, month - 1, day).toISOString().split('T')[0];
+        // 文字列を直接構築（サーバータイムゾーン非依存）
+        const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
         const isAttended = monthlyAttendanceDates.has(dateStr);
         const isRecorded = monthlyObservationDates.has(dateStr);
 
@@ -249,7 +249,7 @@ export async function GET(request: NextRequest) {
       // 年間統計（Mapから O(1) で取得）
       const yearlyAttendances = yearlyAttendancesByChild.get(child.id) || [];
       const yearlyAttendanceDates = new Set(
-        yearlyAttendances.map((a: any) => new Date(a.checked_in_at).toISOString().split('T')[0])
+        yearlyAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
       );
       const yearlyAttendanceCount = yearlyAttendanceDates.size;
 

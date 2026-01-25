@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { getCurrentDateJST } from "@/lib/utils/timezone"
+import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { Button } from "@/components/ui/button"
 import {
   Calendar,
@@ -184,14 +184,9 @@ interface AttendanceData {
 }
 
 export default function AttendanceListPage() {
-  // デフォルトの日付を明日に設定
-  const getTomorrowDate = () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toISOString().split('T')[0]
-  }
-
-  const [selectedDate, setSelectedDate] = useState<string>(getTomorrowDate())
+  // 初期値は空文字列にして、useEffectでクライアント側のみで設定
+  // SSR時のタイムゾーン不一致を防ぐため
+  const [selectedDate, setSelectedDate] = useState<string>('')
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -199,7 +194,17 @@ export default function AttendanceListPage() {
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
 
+  // クライアント側でのみ初期日付を設定
+  useEffect(() => {
+    if (!selectedDate) {
+      setSelectedDate(getTomorrowDateJST())
+    }
+  }, [selectedDate])
+
   const fetchAttendance = useCallback(async () => {
+    // 日付が設定されるまで待つ
+    if (!selectedDate) return
+
     try {
       setLoading(true)
       setError(null)
@@ -226,15 +231,15 @@ export default function AttendanceListPage() {
     fetchAttendance()
   }, [fetchAttendance])
 
-  // 日付操作関数
+  // 日付操作関数（環境のタイムゾーンに依存しない）
   const changeDate = (days: number) => {
-    const currentDate = new Date(selectedDate)
-    currentDate.setDate(currentDate.getDate() + days)
-    // 相対計算なのでそのまま変換（JSTベースの日付から相対計算）
-    const year = currentDate.getFullYear()
-    const month = String(currentDate.getMonth() + 1).padStart(2, '0')
-    const day = String(currentDate.getDate()).padStart(2, '0')
-    setSelectedDate(`${year}-${month}-${day}`)
+    // 日付文字列から直接計算（ブラウザ依存を回避）
+    const [year, month, day] = selectedDate.split('-').map(Number)
+    const utcDate = new Date(Date.UTC(year, month - 1, day + days))
+    const newYear = utcDate.getUTCFullYear()
+    const newMonth = String(utcDate.getUTCMonth() + 1).padStart(2, '0')
+    const newDay = String(utcDate.getUTCDate()).padStart(2, '0')
+    setSelectedDate(`${newYear}-${newMonth}-${newDay}`)
   }
 
   const goToToday = () => {
@@ -242,7 +247,7 @@ export default function AttendanceListPage() {
   }
 
   const goToTomorrow = () => {
-    setSelectedDate(getTomorrowDate())
+    setSelectedDate(getTomorrowDateJST())
   }
 
   const formatTime = (dateString: string | null) => {
@@ -252,11 +257,11 @@ export default function AttendanceListPage() {
   }
 
   const formatDisplayDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const month = date.getMonth() + 1
-    const day = date.getDate()
+    // 環境のタイムゾーンに依存しない曜日計算（API側のgetDayOfWeekKeyと同じ方式）
+    const [year, month, day] = dateString.split('-').map(Number)
+    const utcDate = new Date(Date.UTC(year, month - 1, day))
     const weekdayJp = ['日', '月', '火', '水', '木', '金', '土']
-    const weekday = weekdayJp[date.getDay()]
+    const weekday = weekdayJp[utcDate.getUTCDay()]
     return `${month}月${day}日 (${weekday})`
   }
 

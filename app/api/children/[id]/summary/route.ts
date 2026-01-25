@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { toDateStringJST } from '@/lib/utils/timezone';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
@@ -93,8 +94,8 @@ export async function GET(
       .from('h_attendance')
       .select('id, attendance_date, checked_in_at')
       .eq('child_id', child_id)
-      .gte('attendance_date', startDate.toISOString().split('T')[0])
-      .lte('attendance_date', endDate.toISOString().split('T')[0])
+      .gte('attendance_date', toDateStringJST(startDate))
+      .lte('attendance_date', toDateStringJST(endDate))
       .not('checked_in_at', 'is', null)
       .is('deleted_at', null);
 
@@ -222,8 +223,8 @@ export async function GET(
           photo_url: child.photo_url,
         },
         period: {
-          start_date: startDate.toISOString().split('T')[0],
-          end_date: endDate.toISOString().split('T')[0],
+          start_date: toDateStringJST(startDate),
+          end_date: toDateStringJST(endDate),
           days: 90,
           display_label: '過去3ヶ月',
         },

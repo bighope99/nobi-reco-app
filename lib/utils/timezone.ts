@@ -81,3 +81,68 @@ export const getCurrentTimeJST = (): string => {
     hour12: false,
   });
 };
+
+/**
+ * Get tomorrow's date in JST (Japan Standard Time) in YYYY-MM-DD format
+ */
+export const getTomorrowDateJST = (): string => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-');
+};
+
+/**
+ * Convert a Date object to JST date string in YYYY-MM-DD format
+ */
+export const toDateStringJST = (date: Date): string => {
+  return date.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-');
+};
+
+/**
+ * Get the first day of a month in JST, returns YYYY-MM-DD format
+ * Note: First day is always 01, so we construct the string directly
+ */
+export const getFirstDayOfMonthJST = (year: number, month: number): string => {
+  // 月初日は常に1日なので、直接文字列を構築（サーバータイムゾーン非依存）
+  const monthStr = String(month).padStart(2, '0');
+  return `${year}-${monthStr}-01`;
+};
+
+/**
+ * Get the last day of a month in JST, returns YYYY-MM-DD format
+ * Uses UTC to calculate last day of month (server timezone independent)
+ */
+export const getLastDayOfMonthJST = (year: number, month: number): string => {
+  // 翌月の0日目 = 当月の最終日（UTCで計算してサーバータイムゾーン非依存）
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const monthStr = String(month).padStart(2, '0');
+  const dayStr = String(lastDay).padStart(2, '0');
+  return `${year}-${monthStr}-${dayStr}`;
+};
+
+/**
+ * Extract date part from ISO string (for already UTC timestamps)
+ * Use this when you have a UTC ISO string and want the UTC date portion
+ */
+export const extractDateFromISO = (isoString: string): string => {
+  return isoString.split('T')[0];
+};
+
+/**
+ * Convert UTC ISO string to JST date string in YYYY-MM-DD format
+ * Use this when you need the JST date from a UTC timestamp
+ */
+export const isoToDateJST = (isoString: string): string => {
+  const date = new Date(isoString);
+  return toDateStringJST(date);
+};

@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { toDateStringJST } from '@/lib/utils/timezone';
 
 type AttendanceContext = {
   dayOfWeekKey: string;
@@ -29,12 +30,17 @@ const getDateRange = (date: string) => {
   return {
     start,
     end,
-    nextDateString: nextDate.toISOString().split('T')[0],
+    nextDateString: toDateStringJST(nextDate),
   };
 };
 
-// JSTタイムゾーンを考慮した曜日計算
-export const getDayOfWeekKey = (date: string) => weekdayKeys[new Date(`${date}T00:00:00+09:00`).getDay()];
+// 日付文字列から曜日を計算（環境のタイムゾーンに依存しない）
+export const getDayOfWeekKey = (date: string): string => {
+  const [year, month, day] = date.split('-').map(Number);
+  // Date.UTC()とgetUTCDay()を使用して環境非依存で曜日を取得
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  return weekdayKeys[utcDate.getUTCDay()];
+};
 
 export async function fetchAttendanceContext(
   supabase: SupabaseClient,
