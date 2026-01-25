@@ -111,11 +111,11 @@ export async function saveChild(
   const childValues: Record<string, unknown> = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
-    // PIIフィールドを暗号化（氏名・フリガナ・保護者情報）
+    // PIIフィールドを暗号化（氏名・保護者情報）※読み仮名は暗号化しない
     family_name: encryptPII(basic_info.family_name),
     given_name: encryptPII(basic_info.given_name),
-    family_name_kana: encryptPII(basic_info.family_name_kana || null),
-    given_name_kana: encryptPII(basic_info.given_name_kana || null),
+    family_name_kana: basic_info.family_name_kana || null,
+    given_name_kana: basic_info.given_name_kana || null,
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,

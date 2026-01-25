@@ -174,7 +174,7 @@ describe('saveChild PII暗号化', () => {
     }
   });
 
-  it('児童の氏名・フリガナを暗号化して保存すること', async () => {
+  it('児童の氏名を暗号化し、読み仮名は平文で保存すること', async () => {
     const supabase = createSupabaseMock();
     const payload: ChildPayload = {
       basic_info: {
@@ -193,6 +193,7 @@ describe('saveChild PII暗号化', () => {
 
     const insertedValues = supabase.__childInsert.mock.calls[0][0];
 
+    // 氏名は暗号化されること
     expect(insertedValues.family_name.length).toBeLessThanOrEqual(50);
     expect(insertedValues.family_name).not.toBe(payload.basic_info?.family_name);
     expect(decryptPII(insertedValues.family_name)).toBe(payload.basic_info?.family_name);
@@ -201,13 +202,9 @@ describe('saveChild PII暗号化', () => {
     expect(insertedValues.given_name).not.toBe(payload.basic_info?.given_name);
     expect(decryptPII(insertedValues.given_name)).toBe(payload.basic_info?.given_name);
 
-    expect(insertedValues.family_name_kana.length).toBeLessThanOrEqual(50);
-    expect(insertedValues.family_name_kana).not.toBe(payload.basic_info?.family_name_kana);
-    expect(decryptPII(insertedValues.family_name_kana)).toBe(payload.basic_info?.family_name_kana);
-
-    expect(insertedValues.given_name_kana.length).toBeLessThanOrEqual(50);
-    expect(insertedValues.given_name_kana).not.toBe(payload.basic_info?.given_name_kana);
-    expect(decryptPII(insertedValues.given_name_kana)).toBe(payload.basic_info?.given_name_kana);
+    // 読み仮名は暗号化されず平文で保存されること
+    expect(insertedValues.family_name_kana).toBe(payload.basic_info?.family_name_kana);
+    expect(insertedValues.given_name_kana).toBe(payload.basic_info?.given_name_kana);
   });
 
   it('保護者情報の暗号化とレガシーカラム保存に対応すること', async () => {
