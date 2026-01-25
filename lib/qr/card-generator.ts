@@ -1,8 +1,10 @@
 import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { getQrSignatureSecret } from '@/lib/qr/secrets'
-import { PDFDocument } from 'pdf-lib'
+import { jsPDF } from 'jspdf'
 
 interface QrPayload {
   payload: string
@@ -20,13 +22,27 @@ interface ZipEntry {
   content: Buffer
 }
 
-// A4 size in points (72 points per inch)
-const PAGE_WIDTH = 595.28
-const PAGE_HEIGHT = 841.89
+// A4 size in mm
+const PAGE_WIDTH_MM = 210
+const PAGE_HEIGHT_MM = 297
+
+// Font cache to avoid re-reading the file on every PDF generation
+let fontBase64Cache: string | null = null
+
+function loadFontBase64(): string {
+  if (fontBase64Cache) {
+    return fontBase64Cache
+  }
+
+  const fontPath = join(process.cwd(), 'lib/qr/fonts/NotoSansJP-Regular.ttf')
+  const fontBuffer = readFileSync(fontPath)
+  fontBase64Cache = fontBuffer.toString('base64')
+  return fontBase64Cache
+}
 
 export function createQrPayload(childId: string, facilityId: string): QrPayload {
-  const secret = getQrSignatureSecret();
-  const inputString = `${childId}${facilityId}${secret}`;
+  const secret = getQrSignatureSecret()
+  const inputString = `${childId}${facilityId}${secret}`
   const signature = createHmac('sha256', secret)
     .update(inputString)
     .digest('hex')
@@ -42,49 +58,52 @@ export function createQrPayload(childId: string, facilityId: string): QrPayload 
 }
 
 export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
-  const { payload } = options
+  const { childName, facilityName, payload } = options
 
-  // Create PDF document
-  const pdfDoc = await PDFDocument.create()
+  // 入力検証
+  const displayChildName = childName?.trim() || '(名前なし)'
+  const displayFacilityName = facilityName?.trim() || '(施設名なし)'
 
-  // Add A4 page
-  const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-
-  // Generate QR code as PNG buffer
-  let qrPngBuffer: Uint8Array
-  try {
-    const buffer = await QRCode.toBuffer(payload, {
-      errorCorrectionLevel: 'M',
-      type: 'png',
-      margin: 1,
-      width: 400,
-    })
-    // BufferをUint8Arrayに変換（pdf-lib互換性のため）
-    qrPngBuffer = new Uint8Array(buffer)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    throw new Error(`Failed to generate QR code: ${message}`)
-  }
-
-  // Embed QR code image
-  const qrImage = await pdfDoc.embedPng(qrPngBuffer)
-
-  // Calculate QR code position (centered)
-  const qrSize = 400 // points (larger QR code for better scanning)
-  const qrX = (PAGE_WIDTH - qrSize) / 2
-  const qrY = (PAGE_HEIGHT - qrSize) / 2
-
-  // Draw QR code
-  page.drawImage(qrImage, {
-    x: qrX,
-    y: qrY,
-    width: qrSize,
-    height: qrSize,
+  // Create jsPDF instance (A4, portrait, mm units)
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
   })
 
-  // Save PDF
-  const pdfBytes = await pdfDoc.save()
-  return Buffer.from(pdfBytes)
+  // Load and register Japanese font
+  const fontBase64 = loadFontBase64()
+  doc.addFileToVFS('NotoSansJP-Regular.ttf', fontBase64)
+  doc.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal')
+  doc.setFont('NotoSansJP', 'normal')
+
+  // Draw child name
+  doc.setFontSize(20)
+  doc.text(displayChildName, 20, 25)
+
+  // Draw facility name
+  doc.setFontSize(14)
+  doc.text(displayFacilityName, 20, 35)
+
+  // Generate QR code as data URL
+  const qrDataUrl = await QRCode.toDataURL(payload, {
+    errorCorrectionLevel: 'M',
+    type: 'image/png',
+    margin: 1,
+    width: 400,
+  })
+
+  // Calculate QR code position (centered horizontally, below the text)
+  const qrSize = 120 // mm
+  const qrX = (PAGE_WIDTH_MM - qrSize) / 2
+  const qrY = 50
+
+  // Add QR code image to PDF
+  doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
+
+  // Get PDF as ArrayBuffer and convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer')
+  return Buffer.from(arrayBuffer)
 }
 
 function toDosDateParts(date: Date) {
