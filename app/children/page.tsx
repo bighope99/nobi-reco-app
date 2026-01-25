@@ -16,7 +16,8 @@ import {
     Users,
     QrCode,
     Download,
-    Loader2
+    Loader2,
+    KeyRound
 } from 'lucide-react';
 
 // --- Types ---
@@ -144,6 +145,8 @@ export default function StudentList() {
     const [totalCount, setTotalCount] = useState(0);
     const [qrGeneratingId, setQrGeneratingId] = useState<string | null>(null);
     const [batchGenerating, setBatchGenerating] = useState(false);
+    // 開発用: カナ一括復号（マージ前に削除）
+    const [decryptingKana, setDecryptingKana] = useState(false);
 
     // Sort State
     const [sortKey, setSortKey] = useState<SortKey>('grade');
@@ -367,6 +370,35 @@ export default function StudentList() {
         }
     };
 
+    // 開発用: カナ一括復号（マージ前に削除）
+    const handleDecryptKana = async () => {
+        if (!confirm('施設の全児童のカナを復号して平文に変換しますか？\n（この操作は元に戻せません）')) {
+            return;
+        }
+
+        setDecryptingKana(true);
+        try {
+            const response = await fetch('/api/children/decrypt-kana', {
+                method: 'POST',
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'カナの復号に失敗しました');
+            }
+
+            alert(`カナ復号完了\n\n更新: ${result.data.updated}件\nスキップ（既に平文）: ${result.data.skipped}件\nエラー: ${result.data.errors}件`);
+
+            // リロードして反映
+            window.location.reload();
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'カナの復号に失敗しました');
+        } finally {
+            setDecryptingKana(false);
+        }
+    };
+
     // Helper: Contract Badge
     const getContractBadge = (type: ContractType) => {
         switch (type) {
@@ -471,6 +503,19 @@ export default function StudentList() {
 
                         {/* Right: Actions */}
                         <div className="flex items-center gap-3 w-full md:w-auto justify-end" >
+                            {/* 開発用: カナ一括復号（マージ前に削除） */}
+                            <button
+                                className={`flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm ${decryptingKana
+                                    ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
+                                    : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+                                    }`}
+                                onClick={handleDecryptKana}
+                                disabled={decryptingKana}
+                                title="開発用: 暗号化されたカナを平文に変換"
+                            >
+                                {decryptingKana ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
+                                カナ一括復号
+                            </button>
                             <button
                                 className={`flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm ${batchGenerating || processedStudents.length === 0
                                     ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
