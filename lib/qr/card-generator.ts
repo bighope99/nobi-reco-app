@@ -215,6 +215,6 @@ export function createZip(entries: ZipEntry[]): Buffer {
 }
 
 export function formatFileSegment(value: string): string {
-  // ファイル名として使えない文字のみを置換（日本語は保持）
-  return value.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'qr'
+  // ファイル名として使えない文字とスペースを除去（日本語は保持）
+  return value.replace(/[\\/:*?"<>|\s]+/g, '').trim() || 'qr'
 }
