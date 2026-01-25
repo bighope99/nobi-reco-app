@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { getCurrentDateJST } from "@/lib/utils/timezone"
+import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { Button } from "@/components/ui/button"
 import {
   Calendar,
@@ -184,19 +184,7 @@ interface AttendanceData {
 }
 
 export default function AttendanceListPage() {
-  // デフォルトの日付を明日に設定（JSTベース）
-  const getTomorrowDate = () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toLocaleDateString('ja-JP', {
-      timeZone: 'Asia/Tokyo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).replace(/\//g, '-')
-  }
-
-  const [selectedDate, setSelectedDate] = useState<string>(getTomorrowDate())
+  const [selectedDate, setSelectedDate] = useState<string>(getTomorrowDateJST())
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -247,7 +235,7 @@ export default function AttendanceListPage() {
   }
 
   const goToTomorrow = () => {
-    setSelectedDate(getTomorrowDate())
+    setSelectedDate(getTomorrowDateJST())
   }
 
   const formatTime = (dateString: string | null) => {

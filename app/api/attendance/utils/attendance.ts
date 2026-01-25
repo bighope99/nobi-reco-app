@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { toDateStringJST } from '@/lib/utils/timezone';
 
 type AttendanceContext = {
   dayOfWeekKey: string;
@@ -29,7 +30,7 @@ const getDateRange = (date: string) => {
   return {
     start,
     end,
-    nextDateString: nextDate.toISOString().split('T')[0],
+    nextDateString: toDateStringJST(nextDate),
   };
 };
 

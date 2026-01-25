@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST, toDateStringJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,12 +30,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid year or month' }, { status: 400 });
     }
 
-    // 期間計算
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
-    const daysInMonth = endDate.getDate();
+    // 期間計算（JSTベース）
+    const startDateStr = getFirstDayOfMonthJST(year, month);
+    const endDateStr = getLastDayOfMonthJST(year, month);
+    const daysInMonth = new Date(year, month, 0).getDate();
 
     // 年初
     const yearStartStr = `${year}-01-01`;
@@ -209,7 +207,7 @@ export async function GET(request: NextRequest) {
       // 月間統計（Mapから O(1) で取得）
       const monthlyAttendances = monthlyAttendancesByChild.get(child.id) || [];
       const monthlyAttendanceDates = new Set(
-        monthlyAttendances.map((a: any) => new Date(a.checked_in_at).toISOString().split('T')[0])
+        monthlyAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
       );
       const monthlyAttendanceCount = monthlyAttendanceDates.size;
 
@@ -231,7 +229,7 @@ export async function GET(request: NextRequest) {
       // 日別記録ステータス（1日〜月末）
       const dailyStatus: string[] = [];
       for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = new Date(year, month - 1, day).toISOString().split('T')[0];
+        const dateStr = toDateStringJST(new Date(year, month - 1, day));
         const isAttended = monthlyAttendanceDates.has(dateStr);
         const isRecorded = monthlyObservationDates.has(dateStr);
 
@@ -249,7 +247,7 @@ export async function GET(request: NextRequest) {
       // 年間統計（Mapから O(1) で取得）
       const yearlyAttendances = yearlyAttendancesByChild.get(child.id) || [];
       const yearlyAttendanceDates = new Set(
-        yearlyAttendances.map((a: any) => new Date(a.checked_in_at).toISOString().split('T')[0])
+        yearlyAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
       );
       const yearlyAttendanceCount = yearlyAttendanceDates.size;
 

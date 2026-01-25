@@ -4,6 +4,7 @@ import { getUserSession } from '@/lib/auth/session';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { handleChildSave } from './save/route';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { isoToDateJST } from '@/lib/utils/timezone';
 import { searchByName } from '@/utils/pii/searchIndex';
 
 // GET /api/children - 子ども一覧取得
@@ -263,8 +264,8 @@ export async function GET(request: NextRequest) {
         photo_url: child.photo_url,
         enrollment_status: child.enrollment_status,
         enrollment_type: child.enrollment_type,
-        enrollment_date: child.enrolled_at ? new Date(child.enrolled_at).toISOString().split('T')[0] : null,
-        withdrawal_date: child.withdrawn_at ? new Date(child.withdrawn_at).toISOString().split('T')[0] : null,
+        enrollment_date: child.enrolled_at ? isoToDateJST(child.enrolled_at) : null,
+        withdrawal_date: child.withdrawn_at ? isoToDateJST(child.withdrawn_at) : null,
         parent_name: decryptedPrimaryGuardian
           ? formatName(
               [

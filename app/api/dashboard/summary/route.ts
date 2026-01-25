@@ -12,7 +12,7 @@ import {
   type LateArrivalAlert,
   getMinutesDiff,
 } from '@/lib/alerts/late-arrival';
-import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST } from '@/lib/utils/timezone';
+import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST, toDateStringJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     // 週間記録数計算用の日付
     const oneWeekAgo = new Date(date);
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+    const oneWeekAgoStr = toDateStringJST(oneWeekAgo);
 
     // 並列でデータ取得（パフォーマンス最適化）
     const [

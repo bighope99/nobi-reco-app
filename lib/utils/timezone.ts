@@ -81,3 +81,62 @@ export const getCurrentTimeJST = (): string => {
     hour12: false,
   });
 };
+
+/**
+ * Get tomorrow's date in JST (Japan Standard Time) in YYYY-MM-DD format
+ */
+export const getTomorrowDateJST = (): string => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-');
+};
+
+/**
+ * Convert a Date object to JST date string in YYYY-MM-DD format
+ */
+export const toDateStringJST = (date: Date): string => {
+  return date.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-');
+};
+
+/**
+ * Get the first day of a month in JST, returns YYYY-MM-DD format
+ */
+export const getFirstDayOfMonthJST = (year: number, month: number): string => {
+  const date = new Date(year, month - 1, 1);
+  return toDateStringJST(date);
+};
+
+/**
+ * Get the last day of a month in JST, returns YYYY-MM-DD format
+ */
+export const getLastDayOfMonthJST = (year: number, month: number): string => {
+  const date = new Date(year, month, 0);
+  return toDateStringJST(date);
+};
+
+/**
+ * Extract date part from ISO string (for already UTC timestamps)
+ * Use this when you have a UTC ISO string and want the UTC date portion
+ */
+export const extractDateFromISO = (isoString: string): string => {
+  return isoString.split('T')[0];
+};
+
+/**
+ * Convert UTC ISO string to JST date string in YYYY-MM-DD format
+ * Use this when you need the JST date from a UTC timestamp
+ */
+export const isoToDateJST = (isoString: string): string => {
+  const date = new Date(isoString);
+  return toDateStringJST(date);
+};
