@@ -237,13 +237,17 @@ export default function DashboardClient() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        setPriorityData(previousPriorityData);
-        setOtherChildren(previousOtherChildren);
+        startTransition(() => {
+          setPriorityData(previousPriorityData);
+          setOtherChildren(previousOtherChildren);
+        });
         throw new Error(result.error || '出欠処理に失敗しました');
       }
     } catch (err) {
-      setPriorityData(previousPriorityData);
-      setOtherChildren(previousOtherChildren);
+      startTransition(() => {
+        setPriorityData(previousPriorityData);
+        setOtherChildren(previousOtherChildren);
+      });
       console.error('Attendance action error:', err);
       const errorMessage = err instanceof Error ? err.message : '出欠処理に失敗しました';
       setActionError(errorMessage);
@@ -296,23 +300,9 @@ export default function DashboardClient() {
     }
   };
 
-  // Filter & Sort for action required children
-  const filteredActionRequired = useMemo(() => {
-    if (!priorityData) return [];
-    let result = [...priorityData.action_required];
-
-    if (filterClass !== 'all') {
-      result = result.filter((c) => c.class_name === filterClass);
-    }
-
-    // 「予定なしを表示」モードでは要対応リストを非表示（予定外登所以外）
-    if (showUnscheduled) {
-      // 予定外登所の児童のみ表示（予定なしで登所済み）
-      result = result.filter((c) => !c.is_scheduled_today && c.status === 'checked_in');
-    }
-
-    // Sort
-    result.sort((a, b) => {
+  // ソートロジックを共通化
+  const sortChildren = useCallback((children: Child[]): Child[] => {
+    return [...children].sort((a, b) => {
       let comparison = 0;
 
       if (sortKey === 'grade') {
@@ -320,7 +310,7 @@ export default function DashboardClient() {
         const gradeB = b.grade ?? 0;
         comparison = gradeA - gradeB;
         if (comparison === 0) {
-          comparison = a.kana.localeCompare(b.kana);
+          comparison = (a.kana ?? '').localeCompare(b.kana ?? '');
         }
       } else if (sortKey === 'schedule') {
         comparison = (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
@@ -336,9 +326,25 @@ export default function DashboardClient() {
 
       return sortOrder === 'asc' ? comparison : -comparison;
     });
+  }, [sortKey, sortOrder]);
 
-    return result;
-  }, [priorityData, filterClass, showUnscheduled, sortKey, sortOrder]);
+  // Filter & Sort for action required children
+  const filteredActionRequired = useMemo(() => {
+    if (!priorityData) return [];
+    let result = [...priorityData.action_required];
+
+    if (filterClass !== 'all') {
+      result = result.filter((c) => c.class_name === filterClass);
+    }
+
+    // 「予定なしを表示」モードでは要対応リストを非表示（予定外登所以外）
+    if (showUnscheduled) {
+      // 予定外登所の児童のみ表示（予定なしで登所済み）
+      result = result.filter((c) => !c.is_scheduled_today && c.status === 'checked_in');
+    }
+
+    return sortChildren(result);
+  }, [priorityData, filterClass, showUnscheduled, sortChildren]);
 
   // Filter & Sort for other children
   const filteredOtherChildren = useMemo(() => {
@@ -356,34 +362,8 @@ export default function DashboardClient() {
       );
     }
 
-    // Sort
-    result.sort((a, b) => {
-      let comparison = 0;
-
-      if (sortKey === 'grade') {
-        const gradeA = a.grade ?? 0;
-        const gradeB = b.grade ?? 0;
-        comparison = gradeA - gradeB;
-        if (comparison === 0) {
-          comparison = a.kana.localeCompare(b.kana);
-        }
-      } else if (sortKey === 'schedule') {
-        comparison = (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
-      } else {
-        const getStatusPriority = (c: Child) => {
-          if (c.status === 'checked_in') return 1;
-          if (c.status === 'absent' && c.is_scheduled_today) return 2;
-          if (c.status === 'checked_out') return 3;
-          return 4;
-        };
-        comparison = getStatusPriority(a) - getStatusPriority(b);
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
-  }, [otherChildren, filterClass, showUnscheduled, sortKey, sortOrder]);
+    return sortChildren(result);
+  }, [otherChildren, filterClass, showUnscheduled, sortChildren]);
 
   // --- UI Components ---
   const StatusBadge = ({ child }: { child: Child }) => {
