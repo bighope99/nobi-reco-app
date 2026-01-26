@@ -98,12 +98,22 @@ export async function GET(request: NextRequest) {
       const nameIds = await searchByName(supabase, 'child', 'name', search);
 
       // カナは平文なので直接DB検索
-      const { data: kanaMatches } = await supabase
+      // 特殊文字をエスケープしてSQL injection/filter breakを防止
+      const escapedSearch = search
+        .replace(/\\/g, '\\\\')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
+      const { data: kanaMatches, error: kanaError } = await supabase
         .from('m_children')
         .select('id')
         .eq('facility_id', facility_id)
         .is('deleted_at', null)
-        .or(`family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
+        .or(`family_name_kana.ilike.%${escapedSearch}%,given_name_kana.ilike.%${escapedSearch}%`);
+
+      if (kanaError) {
+        console.error('Kana search error:', kanaError);
+        return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+      }
 
       const kanaIds = kanaMatches?.map(c => c.id) || [];
       searchChildIds = [...new Set([...nameIds, ...kanaIds])];
