@@ -48,6 +48,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **Supabase Import**: Use `@/utils/supabase/server` (NOT `@/lib/supabase/server`)
 - **Next.js 15 Params**: `params` are async - use `props: { params: Promise<T> }` and `await`
 - **Auth in API**: Use `getAuthenticatedUserMetadata()` from `@/lib/auth/jwt`
+  - `supabase.auth.getSession()` は**使用禁止** → セキュリティ警告が出る
+  - 新規APIルート作成時は必ず `getAuthenticatedUserMetadata()` を使用
+  - 既存の `getSession()` + `getUserSession()` パターンを見つけたら置き換える
+  - 詳細: `.claude/skills/supabase-jwt-auth`
 - **TypeScript**: Strict types, avoid `any`
 - **Components**: Server Components by default, `use client` only when needed
 - **Dependencies**: 新しいパッケージの追加は最小限に。既存の依存関係で実現できないか検討すること

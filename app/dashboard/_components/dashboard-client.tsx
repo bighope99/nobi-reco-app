@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,10 +48,13 @@ export default function DashboardClient() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterClass, setFilterClass] = useState<string>('all');
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(false);
-  const [sortKey, setSortKey] = useState<SortKey>('status');
+  const [sortKey, setSortKey] = useState<SortKey>('grade');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+
+  // 二次データ取得済みフラグ（無限ループ防止）
+  const hasFetchedSecondaryData = useRef(false);
 
   // Phase 1: Fetch priority data (fastest)
   const fetchPriorityData = useCallback(async () => {
@@ -131,15 +134,15 @@ export default function DashboardClient() {
   }, [fetchPriorityData]);
 
   // After priority data loaded, fetch record support and prefetch other children
+  // 依存配列を最小化し、フラグで一度だけ実行することで無限ループを防止
   useEffect(() => {
-    if (!priorityLoading && priorityData) {
+    if (!priorityLoading && priorityData && !hasFetchedSecondaryData.current) {
+      hasFetchedSecondaryData.current = true;
       fetchRecordSupport();
-      // プリフェッチ: 折りたたみを開く前にデータ取得を開始
-      if (otherChildren.length === 0 && !otherChildrenLoading) {
-        fetchOtherChildren();
-      }
+      fetchOtherChildren();
     }
-  }, [priorityLoading, priorityData, fetchRecordSupport, fetchOtherChildren, otherChildren.length, otherChildrenLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorityLoading, priorityData]);
 
   // Current time display - 1分ごとに更新
   useEffect(() => {
@@ -169,11 +172,40 @@ export default function DashboardClient() {
     // Optimistic update for action_required
     const previousPriorityData = priorityData;
     if (priorityData) {
-      setPriorityData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          action_required: prev.action_required.map((child) => {
+      startTransition(() => {
+        setPriorityData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            action_required: prev.action_required.map((child) => {
+              if (child.child_id !== childId) return child;
+
+              switch (action) {
+                case 'check_in':
+                  return { ...child, status: 'checked_in' as const, actual_in_time: timeJST, is_scheduled_today: true };
+                case 'check_out':
+                  return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
+                case 'mark_absent':
+                  return { ...child, status: 'absent' as const };
+                case 'add_schedule':
+                  return { ...child, is_scheduled_today: true };
+                case 'confirm_unexpected':
+                  return { ...child, is_scheduled_today: true, alert_type: null };
+                default:
+                  return child;
+              }
+            }),
+          };
+        });
+      });
+    }
+
+    // Optimistic update for other children
+    const previousOtherChildren = otherChildren;
+    if (otherChildren.length > 0) {
+      startTransition(() => {
+        setOtherChildren((prev) =>
+          prev.map((child) => {
             if (child.child_id !== childId) return child;
 
             switch (action) {
@@ -186,38 +218,13 @@ export default function DashboardClient() {
               case 'add_schedule':
                 return { ...child, is_scheduled_today: true };
               case 'confirm_unexpected':
-                return { ...child, is_scheduled_today: true, alert_type: null };
+                return { ...child, is_scheduled_today: true };
               default:
                 return child;
             }
-          }),
-        };
+          })
+        );
       });
-    }
-
-    // Optimistic update for other children
-    const previousOtherChildren = otherChildren;
-    if (otherChildren.length > 0) {
-      setOtherChildren((prev) =>
-        prev.map((child) => {
-          if (child.child_id !== childId) return child;
-
-          switch (action) {
-            case 'check_in':
-              return { ...child, status: 'checked_in' as const, actual_in_time: timeJST, is_scheduled_today: true };
-            case 'check_out':
-              return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
-            case 'mark_absent':
-              return { ...child, status: 'absent' as const };
-            case 'add_schedule':
-              return { ...child, is_scheduled_today: true };
-            case 'confirm_unexpected':
-              return { ...child, is_scheduled_today: true };
-            default:
-              return child;
-          }
-        })
-      );
     }
 
     try {
@@ -230,13 +237,17 @@ export default function DashboardClient() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        setPriorityData(previousPriorityData);
-        setOtherChildren(previousOtherChildren);
+        startTransition(() => {
+          setPriorityData(previousPriorityData);
+          setOtherChildren(previousOtherChildren);
+        });
         throw new Error(result.error || '出欠処理に失敗しました');
       }
     } catch (err) {
-      setPriorityData(previousPriorityData);
-      setOtherChildren(previousOtherChildren);
+      startTransition(() => {
+        setPriorityData(previousPriorityData);
+        setOtherChildren(previousOtherChildren);
+      });
       console.error('Attendance action error:', err);
       const errorMessage = err instanceof Error ? err.message : '出欠処理に失敗しました';
       setActionError(errorMessage);
@@ -289,6 +300,34 @@ export default function DashboardClient() {
     }
   };
 
+  // ソートロジックを共通化
+  const sortChildren = useCallback((children: Child[]): Child[] => {
+    return [...children].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortKey === 'grade') {
+        const gradeA = a.grade ?? 0;
+        const gradeB = b.grade ?? 0;
+        comparison = gradeA - gradeB;
+        if (comparison === 0) {
+          comparison = (a.kana ?? '').localeCompare(b.kana ?? '');
+        }
+      } else if (sortKey === 'schedule') {
+        comparison = (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
+      } else {
+        const getStatusPriority = (c: Child) => {
+          if (c.status === 'checked_in') return 1;
+          if (c.status === 'absent' && c.is_scheduled_today) return 2;
+          if (c.status === 'checked_out') return 3;
+          return 4;
+        };
+        comparison = getStatusPriority(a) - getStatusPriority(b);
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [sortKey, sortOrder]);
+
   // Filter & Sort for action required children
   const filteredActionRequired = useMemo(() => {
     if (!priorityData) return [];
@@ -304,8 +343,8 @@ export default function DashboardClient() {
       result = result.filter((c) => !c.is_scheduled_today && c.status === 'checked_in');
     }
 
-    return result;
-  }, [priorityData, filterClass, showUnscheduled]);
+    return sortChildren(result);
+  }, [priorityData, filterClass, showUnscheduled, sortChildren]);
 
   // Filter & Sort for other children
   const filteredOtherChildren = useMemo(() => {
@@ -323,34 +362,8 @@ export default function DashboardClient() {
       );
     }
 
-    // Sort
-    result.sort((a, b) => {
-      let comparison = 0;
-
-      if (sortKey === 'grade') {
-        const gradeA = a.grade ?? 0;
-        const gradeB = b.grade ?? 0;
-        comparison = gradeA - gradeB;
-        if (comparison === 0) {
-          comparison = a.kana.localeCompare(b.kana);
-        }
-      } else if (sortKey === 'schedule') {
-        comparison = (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
-      } else {
-        const getStatusPriority = (c: Child) => {
-          if (c.status === 'checked_in') return 1;
-          if (c.status === 'absent' && c.is_scheduled_today) return 2;
-          if (c.status === 'checked_out') return 3;
-          return 4;
-        };
-        comparison = getStatusPriority(a) - getStatusPriority(b);
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
-  }, [otherChildren, filterClass, showUnscheduled, sortKey, sortOrder]);
+    return sortChildren(result);
+  }, [otherChildren, filterClass, showUnscheduled, sortChildren]);
 
   // --- UI Components ---
   const StatusBadge = ({ child }: { child: Child }) => {
