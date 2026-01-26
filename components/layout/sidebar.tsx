@@ -18,7 +18,6 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { LogoutButton } from "@/components/LogoutButton"
-import { useSession } from "@/hooks/useSession"
 
 type NavItem = {
   label: string
@@ -102,15 +101,12 @@ type SidebarProps = {
   type: "staff" | "admin"
   isOpen?: boolean
   onClose?: () => void
+  userName?: string
 }
 
-export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
-  const session = useSession()
-
-  // ユーザー名を取得
-  const userName = session?.name
 
   // デフォルトで全てのプルダウンメニューを開いた状態にする
   const defaultOpenMenus = navItems.filter(item => item.children).map(item => item.label)
