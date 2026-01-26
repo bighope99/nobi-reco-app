@@ -18,7 +18,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const facilityId = userMetadata.facility_id;
+  const facilityId = userMetadata.current_facility_id;
   if (!facilityId) {
     return NextResponse.json({ error: 'Facility ID not found' }, { status: 400 });
   }
