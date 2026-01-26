@@ -255,7 +255,7 @@ export default function StatusPage() {
                 </div>
                 <h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
                     <FileText className="w-6 h-6 text-indigo-600" />
-                    全児童 月間記録管理 -2026年1月~12月-
+                    全児童 月間記録管理
                 </h1>
             </div>
 
