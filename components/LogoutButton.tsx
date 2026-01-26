@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LogOut, Loader2 } from 'lucide-react';
 
@@ -18,7 +17,6 @@ export function LogoutButton({
     className,
     showIcon = true
 }: LogoutButtonProps) {
-    const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
 
     const handleLogout = async () => {
@@ -34,15 +32,14 @@ export function LogoutButton({
                 console.warn('Logout API returned non-OK status');
             }
 
-            // 3. ログインページへリダイレクト
-            router.push('/login');
+            // 3. ログインページへハードリダイレクト（キャッシュを確実にクリア）
+            window.location.href = '/login';
         } catch (error) {
             console.error('Logout error:', error);
             // エラーでもリダイレクト
-            router.push('/login');
-        } finally {
-            setIsLoading(false);
+            window.location.href = '/login';
         }
+        // Note: ハードリダイレクトのため finally での setIsLoading(false) は不要
     };
 
     const isIconOnly = size === 'icon';
