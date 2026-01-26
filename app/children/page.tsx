@@ -389,7 +389,7 @@ export default function StudentList() {
     };
 
     return (
-        <StaffLayout title="園児管理">
+        <StaffLayout title="子ども一覧">
             <div className="min-h-screen text-slate-900 font-sans" >
                 <style>
                     {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
