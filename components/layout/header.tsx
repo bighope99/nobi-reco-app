@@ -50,6 +50,13 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
         </div>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
+        {/* 施設名表示 */}
+        {facilityName && (
+          <div className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Building2 className="h-4 w-4" />
+            <span className="truncate max-w-[200px]">{facilityName}</span>
+          </div>
+        )}
         <Button variant="ghost" size="icon" className="hidden sm:flex">
           <Bell className="h-5 w-5" />
         </Button>

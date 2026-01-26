@@ -109,11 +109,8 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
   const navItems = type === "admin" ? adminNavItems : staffNavItems
   const session = useSession()
 
-  // 現在の施設名を取得
-  const currentFacility = session?.facilities.find(
-    f => f.facility_id === session.current_facility_id
-  )
-  const facilityName = currentFacility?.facility_name
+  // ユーザー名を取得
+  const userName = session?.name
 
   // デフォルトで全てのプルダウンメニューを開いた状態にする
   const defaultOpenMenus = navItems.filter(item => item.children).map(item => item.label)
@@ -150,9 +147,9 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
           </div>
           <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
         </div>
-        {facilityName && (
-          <p className="mt-1 text-xs text-muted-foreground truncate" title={facilityName}>
-            {facilityName}
+        {userName && (
+          <p className="mt-1 text-xs text-muted-foreground truncate" title={userName}>
+            {userName}
           </p>
         )}
       </div>
