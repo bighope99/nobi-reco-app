@@ -137,6 +137,10 @@ export function createZip(entries: ZipEntry[]): Buffer {
   const now = new Date()
   const { dosDate, dosTime } = toDosDateParts(now)
 
+  // UTF-8 Language encoding flag (bit 11) - RFC 7161準拠
+  // これを設定しないとWindows標準ZipツールがShift-JISとして解釈して文字化けする
+  const UTF8_FLAG = 0x0800
+
   entries.forEach((entry) => {
     const nameBytes = Buffer.from(entry.filename, 'utf8')
     const crc = crc32(entry.content)
@@ -145,7 +149,7 @@ export function createZip(entries: ZipEntry[]): Buffer {
     const localHeader = Buffer.alloc(30 + nameBytes.length)
     localHeader.writeUInt32LE(0x04034b50, 0)
     localHeader.writeUInt16LE(20, 4)
-    localHeader.writeUInt16LE(0, 6)
+    localHeader.writeUInt16LE(UTF8_FLAG, 6)
     localHeader.writeUInt16LE(8, 8)
     localHeader.writeUInt16LE(dosTime, 10)
     localHeader.writeUInt16LE(dosDate, 12)
@@ -162,7 +166,7 @@ export function createZip(entries: ZipEntry[]): Buffer {
     centralHeader.writeUInt32LE(0x02014b50, 0)
     centralHeader.writeUInt16LE(20, 4)
     centralHeader.writeUInt16LE(20, 6)
-    centralHeader.writeUInt16LE(0, 8)
+    centralHeader.writeUInt16LE(UTF8_FLAG, 8)
     centralHeader.writeUInt16LE(8, 10)
     centralHeader.writeUInt16LE(dosTime, 12)
     centralHeader.writeUInt16LE(dosDate, 14)
