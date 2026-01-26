@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     const { current_facility_id: facility_id } = metadata;
     if (!facility_id) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'Facility not found' },
+        { status: 404 }
       );
     }
     const class_id = searchParams.get('class_id');

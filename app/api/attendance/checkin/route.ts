@@ -18,11 +18,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { current_facility_id } = metadata;
-    if (!current_facility_id) {
+    const { current_facility_id: facility_id } = metadata;
+    if (!facility_id) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        { success: false, error: 'Facility not found' },
+        { status: 404 }
       );
     }
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('id', child_id)
-      .eq('facility_id', current_facility_id)
+      .eq('facility_id', facility_id)
       .maybeSingle();
 
     if (childError || !child) {
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       .from('h_attendance')
       .select('id, checked_in_at')
       .eq('child_id', child_id)
-      .eq('facility_id', current_facility_id)
+      .eq('facility_id', facility_id)
       .gte('checked_in_at', startOfDayUTC)
       .lte('checked_in_at', endOfDayUTC)
       .order('checked_in_at', { ascending: true })
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
       .from('h_attendance')
       .insert({
         child_id,
-        facility_id: current_facility_id,
+        facility_id,
         checked_in_at: now.toISOString(),
         check_in_method: 'qr',
       })
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
           .from('h_attendance')
           .select('id, checked_in_at')
           .eq('child_id', child_id)
-          .eq('facility_id', current_facility_id)
+          .eq('facility_id', facility_id)
           .gte('checked_in_at', startOfDayUTC)
           .lte('checked_in_at', endOfDayUTC)
           .order('checked_in_at', { ascending: true })

@@ -27,15 +27,15 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { current_facility_id: facilityId } = metadata
-    if (!facilityId) {
+    const { current_facility_id: facility_id } = metadata
+    if (!facility_id) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }
 
     const { data: facilityData, error: facilityError } = await supabase
       .from('m_facilities')
       .select('name')
-      .eq('id', facilityId)
+      .eq('id', facility_id)
       .single()
 
     if (facilityError || !facilityData) {
@@ -46,7 +46,7 @@ export async function GET(
       .from('m_children')
       .select('id, family_name, given_name, facility_id, birth_date, grade_add')
       .eq('id', childId)
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .single()
 
@@ -59,7 +59,7 @@ export async function GET(
     const decryptedGivenName = decryptOrFallback(childData.given_name)
     const childName = `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim()
 
-    const { payload } = createQrPayload(childData.id, facilityId)
+    const { payload } = createQrPayload(childData.id, facility_id)
     const pdfBuffer = await createQrPdf({
       childName,
       facilityName: facilityData.name,

@@ -15,9 +15,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id: facilityId, user_id } = metadata;
-    if (!facilityId) {
-      return NextResponse.json({ success: false, error: 'Facility not found in session' }, { status: 400 });
+    const { current_facility_id: facility_id, user_id } = metadata;
+    if (!facility_id) {
+      return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
     }
 
     const { action, child_id, action_timestamp } = await request.json();
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       .from('m_children')
       .select('id')
       .eq('id', child_id)
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .maybeSingle();
 
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         .from('h_attendance')
         .select('*')
         .eq('child_id', child_id)
-        .eq('facility_id', facilityId)
+        .eq('facility_id', facility_id)
         .gte('checked_in_at', startOfDayUTC)
         .lte('checked_in_at', endOfDayUTC)
         .is('checked_out_at', null)
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
           .from('r_daily_attendance')
           .insert({
             child_id,
-            facility_id: facilityId,
+            facility_id: facility_id,
             attendance_date: attendanceDate,
             status,
             created_by: user_id,
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
         .from('h_attendance')
         .insert({
           child_id,
-          facility_id: facilityId,
+          facility_id: facility_id,
           checked_in_at: resolvedTimestamp,
           check_in_method: 'manual',
           checked_in_by: user_id,

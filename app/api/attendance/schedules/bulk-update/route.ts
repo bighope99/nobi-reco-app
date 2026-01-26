@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
     const { current_facility_id: facility_id } = metadata;
     if (!facility_id) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'Facility not found' },
+        { status: 404 }
       );
     }
 

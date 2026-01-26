@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { current_facility_id: facilityId } = metadata
-    if (!facilityId) {
+    const { current_facility_id: facility_id } = metadata
+    if (!facility_id) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const { data: facilityData, error: facilityError } = await supabase
       .from('m_facilities')
       .select('name')
-      .eq('id', facilityId)
+      .eq('id', facility_id)
       .single()
 
     if (facilityError || !facilityData) {
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       .from('m_children')
       .select('id, family_name, given_name, facility_id, birth_date, grade_add')
       .in('id', childIds)
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .is('deleted_at', null)
 
     if (childrenError) {
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
           const decryptedFamilyName = decryptOrFallback(child.family_name)
           const decryptedGivenName = decryptOrFallback(child.given_name)
           const childName = `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim()
-          const { payload } = createQrPayload(child.id, facilityId)
+          const { payload } = createQrPayload(child.id, facility_id)
           const pdfBuffer = await createQrPdf({
             childName,
             facilityName: facilityData.name,

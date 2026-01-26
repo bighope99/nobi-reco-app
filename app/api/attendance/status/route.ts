@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { current_facility_id: facilityId, user_id } = metadata
-    if (!facilityId) {
-      return NextResponse.json({ success: false, error: 'Facility not found in session' }, { status: 400 })
+    const { current_facility_id: facility_id, user_id } = metadata
+    if (!facility_id) {
+      return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }
 
     const { child_id, date, status } = await request.json()
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       .from('m_children')
       .select('id')
       .eq('id', child_id)
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .single()
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const { data: dailyRecord, error: dailyError } = await supabase
       .from('r_daily_attendance')
       .select('*')
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .eq('child_id', child_id)
       .eq('attendance_date', date)
       .maybeSingle()
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         .from('r_daily_attendance')
         .insert({
           child_id,
-          facility_id: facilityId,
+          facility_id: facility_id,
           attendance_date: date,
           status,
           created_by: user_id,
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       const { error: dailyDeleteError } = await supabase
         .from('r_daily_attendance')
         .delete()
-        .eq('facility_id', facilityId)
+        .eq('facility_id', facility_id)
         .eq('child_id', child_id)
         .eq('attendance_date', date)
 
