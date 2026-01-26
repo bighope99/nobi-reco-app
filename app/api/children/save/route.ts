@@ -184,11 +184,9 @@ export async function saveChild(
   }
 
   // 検索用ハッシュテーブルを更新（児童情報）
+  // ※読み仮名(name_kana)は暗号化廃止によりDB直接検索可能なため、インデックス不要
   if (result.id) {
-    await Promise.all([
-      updateSearchIndex(supabase, 'child', result.id, 'name', basic_info.family_name && basic_info.given_name ? `${basic_info.family_name} ${basic_info.given_name}` : null),
-      updateSearchIndex(supabase, 'child', result.id, 'name_kana', basic_info.family_name_kana && basic_info.given_name_kana ? `${basic_info.family_name_kana} ${basic_info.given_name_kana}` : null),
-    ]);
+    await updateSearchIndex(supabase, 'child', result.id, 'name', basic_info.family_name && basic_info.given_name ? `${basic_info.family_name} ${basic_info.given_name}` : null);
   }
 
   // クラス紐付け処理
