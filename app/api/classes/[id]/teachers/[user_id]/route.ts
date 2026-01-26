@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 /**
  * DELETE /api/classes/:id/teachers/:user_id
@@ -77,7 +78,7 @@ export async function DELETE(
     }
 
     // 担任を解除（履歴として保持するため、is_currentをfalseにしてend_dateを設定）
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDateJST();
     const { error: updateError } = await supabase
       .from('_user_class')
       .update({

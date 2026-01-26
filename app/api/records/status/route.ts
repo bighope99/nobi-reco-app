@@ -1,25 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
-      return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
-    }
-
-    const facility_id = userSession.current_facility_id;
+    const facility_id = metadata.current_facility_id;
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
@@ -34,16 +30,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid year or month' }, { status: 400 });
     }
 
-    // 期間計算
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
-    const daysInMonth = endDate.getDate();
+    // 期間計算（JSTベース）
+    const startDateStr = getFirstDayOfMonthJST(year, month);
+    const endDateStr = getLastDayOfMonthJST(year, month);
+    const daysInMonth = new Date(year, month, 0).getDate();
 
     // 年初
     const yearStartStr = `${year}-01-01`;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDateJST();
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase
@@ -112,39 +106,94 @@ export async function GET(request: NextRequest) {
 
     const childIds = childrenData.map((c: any) => c.id);
 
-    // 2. 月間出席ログ取得
-    const { data: monthlyAttendanceData } = await supabase
-      .from('h_attendance')
-      .select('child_id, checked_in_at, checked_out_at')
-      .in('child_id', childIds)
-      .gte('checked_in_at', `${startDateStr}T00:00:00`)
-      .lte('checked_in_at', `${endDateStr}T23:59:59`);
+    // 2-5. データ取得（並列実行で高速化）
+    const [
+      { data: monthlyAttendanceData, error: monthlyAttError },
+      { data: monthlyObservationsData, error: monthlyObsError },
+      { data: yearlyAttendanceData, error: yearlyAttError },
+      { data: yearlyObservationsData, error: yearlyObsError },
+    ] = await Promise.all([
+      // 月間出席ログ
+      supabase
+        .from('h_attendance')
+        .select('child_id, checked_in_at, checked_out_at')
+        .in('child_id', childIds)
+        .gte('checked_in_at', `${startDateStr}T00:00:00+09:00`)
+        .lte('checked_in_at', `${endDateStr}T23:59:59.999+09:00`),
 
-    // 3. 月間記録取得
-    const { data: monthlyObservationsData } = await supabase
-      .from('r_observation')
-      .select('child_id, observation_date')
-      .in('child_id', childIds)
-      .gte('observation_date', startDateStr)
-      .lte('observation_date', endDateStr)
-      .is('deleted_at', null);
+      // 月間記録
+      supabase
+        .from('r_observation')
+        .select('child_id, observation_date')
+        .in('child_id', childIds)
+        .gte('observation_date', startDateStr)
+        .lte('observation_date', endDateStr)
+        .is('deleted_at', null),
 
-    // 4. 年間出席ログ取得
-    const { data: yearlyAttendanceData } = await supabase
-      .from('h_attendance')
-      .select('child_id, checked_in_at')
-      .in('child_id', childIds)
-      .gte('checked_in_at', `${yearStartStr}T00:00:00`)
-      .lte('checked_in_at', `${today}T23:59:59`);
+      // 年間出席ログ
+      supabase
+        .from('h_attendance')
+        .select('child_id, checked_in_at')
+        .in('child_id', childIds)
+        .gte('checked_in_at', `${yearStartStr}T00:00:00+09:00`)
+        .lte('checked_in_at', `${today}T23:59:59.999+09:00`),
 
-    // 5. 年間記録取得
-    const { data: yearlyObservationsData } = await supabase
-      .from('r_observation')
-      .select('child_id, observation_date')
-      .in('child_id', childIds)
-      .gte('observation_date', yearStartStr)
-      .lte('observation_date', today)
-      .is('deleted_at', null);
+      // 年間記録
+      supabase
+        .from('r_observation')
+        .select('child_id, observation_date')
+        .in('child_id', childIds)
+        .gte('observation_date', yearStartStr)
+        .lte('observation_date', today)
+        .is('deleted_at', null),
+    ]);
+
+    // エラーチェック
+    if (monthlyAttError || monthlyObsError || yearlyAttError || yearlyObsError) {
+      console.error('Data fetch errors:', {
+        monthlyAttError,
+        monthlyObsError,
+        yearlyAttError,
+        yearlyObsError,
+      });
+      return NextResponse.json(
+        { error: 'Failed to fetch status data' },
+        { status: 500 },
+      );
+    }
+
+    // データをchild_idでグループ化（O(n²) → O(n)への最適化）
+    const monthlyAttendancesByChild = new Map<string, any[]>();
+    (monthlyAttendanceData || []).forEach((a) => {
+      if (!monthlyAttendancesByChild.has(a.child_id)) {
+        monthlyAttendancesByChild.set(a.child_id, []);
+      }
+      monthlyAttendancesByChild.get(a.child_id)!.push(a);
+    });
+
+    const monthlyObservationsByChild = new Map<string, any[]>();
+    (monthlyObservationsData || []).forEach((o) => {
+      if (!monthlyObservationsByChild.has(o.child_id)) {
+        monthlyObservationsByChild.set(o.child_id, []);
+      }
+      monthlyObservationsByChild.get(o.child_id)!.push(o);
+    });
+
+    const yearlyAttendancesByChild = new Map<string, any[]>();
+    (yearlyAttendanceData || []).forEach((a) => {
+      if (!yearlyAttendancesByChild.has(a.child_id)) {
+        yearlyAttendancesByChild.set(a.child_id, []);
+      }
+      yearlyAttendancesByChild.get(a.child_id)!.push(a);
+    });
+
+    const yearlyObservationsByChild = new Map<string, any[]>();
+    (yearlyObservationsData || []).forEach((o) => {
+      if (!yearlyObservationsByChild.has(o.child_id)) {
+        yearlyObservationsByChild.set(o.child_id, []);
+      }
+      yearlyObservationsByChild.get(o.child_id)!.push(o);
+    });
 
     // データ整形
     const children = childrenData.map((child: any) => {
@@ -155,14 +204,14 @@ export async function GET(request: NextRequest) {
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
 
-      // 月間統計
-      const monthlyAttendances = (monthlyAttendanceData || []).filter((a: any) => a.child_id === child.id);
+      // 月間統計（Mapから O(1) で取得）
+      const monthlyAttendances = monthlyAttendancesByChild.get(child.id) || [];
       const monthlyAttendanceDates = new Set(
-        monthlyAttendances.map((a: any) => new Date(a.checked_in_at).toISOString().split('T')[0])
+        monthlyAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
       );
       const monthlyAttendanceCount = monthlyAttendanceDates.size;
 
-      const monthlyObservations = (monthlyObservationsData || []).filter((o: any) => o.child_id === child.id);
+      const monthlyObservations = monthlyObservationsByChild.get(child.id) || [];
       const monthlyObservationDates = new Set(monthlyObservations.map((o: any) => o.observation_date));
       const monthlyRecordCount = monthlyObservationDates.size;
 
@@ -179,8 +228,10 @@ export async function GET(request: NextRequest) {
 
       // 日別記録ステータス（1日〜月末）
       const dailyStatus: string[] = [];
+      const monthStr = String(month).padStart(2, '0');
       for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = new Date(year, month - 1, day).toISOString().split('T')[0];
+        // 文字列を直接構築（サーバータイムゾーン非依存）
+        const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
         const isAttended = monthlyAttendanceDates.has(dateStr);
         const isRecorded = monthlyObservationDates.has(dateStr);
 
@@ -195,14 +246,14 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 年間統計
-      const yearlyAttendances = (yearlyAttendanceData || []).filter((a: any) => a.child_id === child.id);
+      // 年間統計（Mapから O(1) で取得）
+      const yearlyAttendances = yearlyAttendancesByChild.get(child.id) || [];
       const yearlyAttendanceDates = new Set(
-        yearlyAttendances.map((a: any) => new Date(a.checked_in_at).toISOString().split('T')[0])
+        yearlyAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
       );
       const yearlyAttendanceCount = yearlyAttendanceDates.size;
 
-      const yearlyObservations = (yearlyObservationsData || []).filter((o: any) => o.child_id === child.id);
+      const yearlyObservations = yearlyObservationsByChild.get(child.id) || [];
       const yearlyObservationDates = new Set(yearlyObservations.map((o: any) => o.observation_date));
       const yearlyRecordCount = yearlyObservationDates.size;
 
@@ -210,10 +261,16 @@ export async function GET(request: NextRequest) {
         ? Math.round((yearlyRecordCount / yearlyAttendanceCount) * 100 * 10) / 10
         : 0;
 
+      // PIIフィールドを復号化
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',

@@ -635,4 +635,613 @@ describe('/api/records/activity', () => {
       // observations配列は存在するが、エラーにより空または一部のみ
     });
   });
+
+  describe('新規フィールド（拡張フィールド）', () => {
+    const mockExtendedActivityData = {
+      ...mockActivityData,
+      event_name: '運動会',
+      daily_schedule: [
+        { time: '09:00', content: '朝の会' },
+        { time: '10:00', content: '外遊び' },
+        { time: '12:00', content: '昼食' },
+      ],
+      role_assignments: [
+        { user_id: 'user-001', user_name: '山田太郎', role: '主担当' },
+        { user_id: 'user-002', user_name: '佐藤花子', role: '配膳' },
+      ],
+      special_notes: 'アレルギー対応が必要な児童が3名います',
+      meal: {
+        menu: 'カレーライス',
+        items_to_bring: 'フォーク、スプーン',
+        notes: 'アレルギー対応済み',
+      },
+    };
+
+    describe('POST - 新規フィールドを含む活動記録の保存', () => {
+      it('すべての新規フィールドを含む活動記録を正しく保存できること', async () => {
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+        let insertedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                insert: jest.fn((data) => {
+                  insertedActivity = data;
+                  return {
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'test-activity-id',
+                        ...data,
+                      },
+                      error: null,
+                    }),
+                  };
+                }),
+              };
+            }
+            if (tableName === 'r_observation') {
+              return {
+                insert: jest.fn(() => ({
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'test-observation-id',
+                      content: '抽出された内容',
+                    },
+                    error: null,
+                  }),
+                })),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'POST',
+          body: JSON.stringify(mockExtendedActivityData),
+        });
+
+        const response = await POST(request);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(insertedActivity).toBeDefined();
+        expect(insertedActivity.event_name).toBe('運動会');
+        expect(insertedActivity.daily_schedule).toEqual(mockExtendedActivityData.daily_schedule);
+        expect(insertedActivity.role_assignments).toEqual(mockExtendedActivityData.role_assignments);
+        expect(insertedActivity.special_notes).toBe('アレルギー対応が必要な児童が3名います');
+        expect(insertedActivity.meal).toEqual(mockExtendedActivityData.meal);
+      });
+
+      it('新規フィールドがnull/undefinedでも保存が成功すること（既存データとの互換性）', async () => {
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+        let insertedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                insert: jest.fn((data) => {
+                  insertedActivity = data;
+                  return {
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'test-activity-id',
+                        ...data,
+                      },
+                      error: null,
+                    }),
+                  };
+                }),
+              };
+            }
+            if (tableName === 'r_observation') {
+              return {
+                insert: jest.fn(() => ({
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'test-observation-id',
+                      content: '抽出された内容',
+                    },
+                    error: null,
+                  }),
+                })),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const dataWithoutNewFields = {
+          ...mockActivityData,
+          // 新規フィールドは含まない
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'POST',
+          body: JSON.stringify(dataWithoutNewFields),
+        });
+
+        const response = await POST(request);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(insertedActivity).toBeDefined();
+        expect(insertedActivity.event_name).toBeNull();
+        expect(insertedActivity.daily_schedule).toBeNull();
+        expect(insertedActivity.role_assignments).toBeNull();
+        expect(insertedActivity.special_notes).toBeNull();
+        expect(insertedActivity.meal).toBeNull();
+      });
+
+      it('daily_scheduleが正しいJSON配列形式で保存されること', async () => {
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+        let insertedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                insert: jest.fn((data) => {
+                  insertedActivity = data;
+                  return {
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'test-activity-id',
+                        ...data,
+                      },
+                      error: null,
+                    }),
+                  };
+                }),
+              };
+            }
+            if (tableName === 'r_observation') {
+              return {
+                insert: jest.fn(() => ({
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'test-observation-id',
+                      content: '抽出された内容',
+                    },
+                    error: null,
+                  }),
+                })),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const dataWithSchedule = {
+          ...mockActivityData,
+          daily_schedule: [
+            { time: '09:00', content: '朝の会' },
+            { time: '10:30', content: '外遊び' },
+          ],
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'POST',
+          body: JSON.stringify(dataWithSchedule),
+        });
+
+        const response = await POST(request);
+
+        expect(response.status).toBe(200);
+        expect(insertedActivity.daily_schedule).toBeDefined();
+        expect(Array.isArray(insertedActivity.daily_schedule)).toBe(true);
+        expect(insertedActivity.daily_schedule).toHaveLength(2);
+        expect(insertedActivity.daily_schedule[0]).toHaveProperty('time');
+        expect(insertedActivity.daily_schedule[0]).toHaveProperty('content');
+      });
+
+      it('role_assignmentsが正しいJSON配列形式で保存されること', async () => {
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+        let insertedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                insert: jest.fn((data) => {
+                  insertedActivity = data;
+                  return {
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'test-activity-id',
+                        ...data,
+                      },
+                      error: null,
+                    }),
+                  };
+                }),
+              };
+            }
+            if (tableName === 'r_observation') {
+              return {
+                insert: jest.fn(() => ({
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'test-observation-id',
+                      content: '抽出された内容',
+                    },
+                    error: null,
+                  }),
+                })),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const dataWithRoles = {
+          ...mockActivityData,
+          role_assignments: [
+            { user_id: 'user-001', user_name: '山田太郎', role: '主担当' },
+            { user_id: 'user-002', user_name: '佐藤花子', role: '配膳' },
+          ],
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'POST',
+          body: JSON.stringify(dataWithRoles),
+        });
+
+        const response = await POST(request);
+
+        expect(response.status).toBe(200);
+        expect(insertedActivity.role_assignments).toBeDefined();
+        expect(Array.isArray(insertedActivity.role_assignments)).toBe(true);
+        expect(insertedActivity.role_assignments).toHaveLength(2);
+        expect(insertedActivity.role_assignments[0]).toHaveProperty('user_id');
+        expect(insertedActivity.role_assignments[0]).toHaveProperty('user_name');
+        expect(insertedActivity.role_assignments[0]).toHaveProperty('role');
+      });
+
+      it('mealが正しいJSONオブジェクト形式で保存されること', async () => {
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+        let insertedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                insert: jest.fn((data) => {
+                  insertedActivity = data;
+                  return {
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'test-activity-id',
+                        ...data,
+                      },
+                      error: null,
+                    }),
+                  };
+                }),
+              };
+            }
+            if (tableName === 'r_observation') {
+              return {
+                insert: jest.fn(() => ({
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'test-observation-id',
+                      content: '抽出された内容',
+                    },
+                    error: null,
+                  }),
+                })),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const dataWithMeal = {
+          ...mockActivityData,
+          meal: {
+            menu: 'カレーライス',
+            items_to_bring: 'フォーク、スプーン',
+            notes: 'アレルギー対応済み',
+          },
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'POST',
+          body: JSON.stringify(dataWithMeal),
+        });
+
+        const response = await POST(request);
+
+        expect(response.status).toBe(200);
+        expect(insertedActivity.meal).toBeDefined();
+        expect(typeof insertedActivity.meal).toBe('object');
+        expect(insertedActivity.meal).toHaveProperty('menu');
+        expect(insertedActivity.meal.menu).toBe('カレーライス');
+        expect(insertedActivity.meal).toHaveProperty('items_to_bring');
+        expect(insertedActivity.meal).toHaveProperty('notes');
+      });
+
+      it('meal.items_to_bringとmeal.notesがオプションフィールドとして機能すること', async () => {
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+        let insertedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                insert: jest.fn((data) => {
+                  insertedActivity = data;
+                  return {
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'test-activity-id',
+                        ...data,
+                      },
+                      error: null,
+                    }),
+                  };
+                }),
+              };
+            }
+            if (tableName === 'r_observation') {
+              return {
+                insert: jest.fn(() => ({
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'test-observation-id',
+                      content: '抽出された内容',
+                    },
+                    error: null,
+                  }),
+                })),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const dataWithMinimalMeal = {
+          ...mockActivityData,
+          meal: {
+            menu: 'おにぎり',
+          },
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'POST',
+          body: JSON.stringify(dataWithMinimalMeal),
+        });
+
+        const response = await POST(request);
+
+        expect(response.status).toBe(200);
+        expect(insertedActivity.meal).toBeDefined();
+        expect(insertedActivity.meal.menu).toBe('おにぎり');
+        // items_to_bringとnotesは設定されていないが、エラーにならないこと
+      });
+    });
+
+    describe('PUT - 新規フィールドの更新', () => {
+      // PUTメソッドのモック（ファイルには実装済み）
+      it('新規フィールドの更新が成功すること', async () => {
+        const { PUT } = await import('@/app/api/records/activity/route');
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+
+        let updatedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                select: jest.fn(() => ({
+                  eq: jest.fn(() => ({
+                    is: jest.fn(() => ({
+                      single: jest.fn().mockResolvedValue({
+                        data: {
+                          id: 'existing-activity-id',
+                          facility_id: mockSession.current_facility_id,
+                          created_by: mockSession.user_id,
+                        },
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+                update: jest.fn((data) => {
+                  updatedActivity = data;
+                  return {
+                    eq: jest.fn(() => ({
+                      select: jest.fn().mockReturnThis(),
+                      single: jest.fn().mockResolvedValue({
+                        data: {
+                          id: 'existing-activity-id',
+                          ...data,
+                        },
+                        error: null,
+                      }),
+                    })),
+                  };
+                }),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const updateData = {
+          activity_id: 'existing-activity-id',
+          activity_date: '2025-01-03',
+          content: '更新された内容',
+          mentioned_children: [],
+          event_name: '遠足',
+          daily_schedule: [{ time: '08:00', content: '出発' }],
+          role_assignments: [{ user_id: 'user-003', user_name: '鈴木一郎', role: '引率' }],
+          special_notes: '雨天の場合は延期',
+          meal: { menu: 'お弁当', notes: '現地調達' },
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'PUT',
+          body: JSON.stringify(updateData),
+        });
+
+        const response = await PUT(request);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(updatedActivity).toBeDefined();
+        expect(updatedActivity.event_name).toBe('遠足');
+        expect(updatedActivity.daily_schedule).toEqual(updateData.daily_schedule);
+        expect(updatedActivity.role_assignments).toEqual(updateData.role_assignments);
+        expect(updatedActivity.special_notes).toBe('雨天の場合は延期');
+        expect(updatedActivity.meal).toEqual(updateData.meal);
+      });
+
+      it('新規フィールドのみの部分更新が成功すること', async () => {
+        const { PUT } = await import('@/app/api/records/activity/route');
+        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+
+        let updatedActivity: any = null;
+        const mockSupabase = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: { user: mockUser },
+              error: null,
+            }),
+          },
+          from: jest.fn((tableName: string) => {
+            if (tableName === 'r_activity') {
+              return {
+                select: jest.fn(() => ({
+                  eq: jest.fn(() => ({
+                    is: jest.fn(() => ({
+                      single: jest.fn().mockResolvedValue({
+                        data: {
+                          id: 'existing-activity-id',
+                          facility_id: mockSession.current_facility_id,
+                          created_by: mockSession.user_id,
+                        },
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+                update: jest.fn((data) => {
+                  updatedActivity = data;
+                  return {
+                    eq: jest.fn(() => ({
+                      select: jest.fn().mockReturnThis(),
+                      single: jest.fn().mockResolvedValue({
+                        data: {
+                          id: 'existing-activity-id',
+                          ...data,
+                        },
+                        error: null,
+                      }),
+                    })),
+                  };
+                }),
+              };
+            }
+            return mockSupabase;
+          }),
+        };
+        (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+        const partialUpdateData = {
+          activity_id: 'existing-activity-id',
+          activity_date: '2025-01-03',
+          content: '既存の内容',
+          mentioned_children: [],
+          event_name: '新しいイベント名',
+          // daily_schedule, role_assignments, special_notes, mealは更新しない
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/records/activity', {
+          method: 'PUT',
+          body: JSON.stringify(partialUpdateData),
+        });
+
+        const response = await PUT(request);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(updatedActivity).toBeDefined();
+        expect(updatedActivity.event_name).toBe('新しいイベント名');
+        expect(updatedActivity.daily_schedule).toBeNull();
+        expect(updatedActivity.role_assignments).toBeNull();
+        expect(updatedActivity.special_notes).toBeNull();
+        expect(updatedActivity.meal).toBeNull();
+      });
+    });
+  });
 });

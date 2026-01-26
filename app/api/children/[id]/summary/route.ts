@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { toDateStringJST } from '@/lib/utils/timezone';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
@@ -12,25 +14,22 @@ export async function GET(
     const supabase = await createClient();
     const { id: child_id } = await params;
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    const { current_facility_id: facility_id } = metadata;
+    if (!facility_id) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'Facility not found' },
+        { status: 404 }
       );
     }
-
-    const facility_id = userSession.current_facility_id;
 
     // 児童の基本情報を取得
     const { data: child, error: childError } = await supabase
@@ -70,7 +69,7 @@ export async function GET(
 
     // クラス情報を取得
     const childClass = Array.isArray(child._child_class) ? child._child_class[0] : child._child_class;
-    const classData = childClass?.m_classes;
+    const classData = childClass?.m_classes as { id?: string; name?: string } | undefined;
 
     // 過去3ヶ月の期間を設定
     const endDate = new Date();
@@ -92,8 +91,8 @@ export async function GET(
       .from('h_attendance')
       .select('id, attendance_date, checked_in_at')
       .eq('child_id', child_id)
-      .gte('attendance_date', startDate.toISOString().split('T')[0])
-      .lte('attendance_date', endDate.toISOString().split('T')[0])
+      .gte('attendance_date', toDateStringJST(startDate))
+      .lte('attendance_date', toDateStringJST(endDate))
       .not('checked_in_at', 'is', null)
       .is('deleted_at', null);
 
@@ -200,21 +199,29 @@ export async function GET(
       content: obs.content.substring(0, 100) + (obs.content.length > 100 ? '...' : ''),
     }));
 
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+  
+
+    const decryptedFamilyName = decryptOrFallback(child.family_name);
+    const decryptedGivenName = decryptOrFallback(child.given_name);
+    const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+    const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+
     return NextResponse.json({
       success: true,
       data: {
         child_info: {
           child_id: child.id,
-          name: `${child.family_name} ${child.given_name}`,
-          kana: `${child.family_name_kana} ${child.given_name_kana}`,
+          name: formatName([decryptedFamilyName, decryptedGivenName]),
+          kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
           age,
           birth_date: child.birth_date,
           class_name: classData?.name || '',
           photo_url: child.photo_url,
         },
         period: {
-          start_date: startDate.toISOString().split('T')[0],
-          end_date: endDate.toISOString().split('T')[0],
+          start_date: toDateStringJST(startDate),
+          end_date: toDateStringJST(endDate),
           days: 90,
           display_label: '過去3ヶ月',
         },

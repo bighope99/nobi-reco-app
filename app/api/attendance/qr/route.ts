@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getUserSession();
-    if (!session?.facility_id) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const { facility_id } = session;
+    const { current_facility_id: facility_id } = metadata;
+    if (!facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Facility not found' },
+        { status: 404 }
+      );
+    }
     const { expires_in_minutes = 30 } = await request.json().catch(() => ({}));
 
     // Generate JWT token

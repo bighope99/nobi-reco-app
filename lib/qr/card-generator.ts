@@ -1,7 +1,10 @@
 import QRCode from 'qrcode'
 import { createHmac } from 'crypto'
 import { deflateRawSync } from 'zlib'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { getQrSignatureSecret } from '@/lib/qr/secrets'
+import { jsPDF } from 'jspdf'
 
 interface QrPayload {
   payload: string
@@ -19,19 +22,26 @@ interface ZipEntry {
   content: Buffer
 }
 
-const PAGE_WIDTH = 595.28 // A4 width in points
-const PAGE_HEIGHT = 841.89 // A4 height in points
+// A4 size in mm
+const PAGE_WIDTH_MM = 210
 
-const ESCAPE_REGEX = /[\\()]/g
-const PDF_HEADER = '%PDF-1.4\n'
+// Font cache to avoid re-reading the file on every PDF generation
+let fontBase64Cache: string | null = null
 
-function escapePdfText(text: string): string {
-  return text.replace(ESCAPE_REGEX, (match) => `\\${match}`)
+function loadFontBase64(): string {
+  if (fontBase64Cache) {
+    return fontBase64Cache
+  }
+
+  const fontPath = join(process.cwd(), 'lib/qr/fonts/NotoSansJP-Regular.ttf')
+  const fontBuffer = readFileSync(fontPath)
+  fontBase64Cache = fontBuffer.toString('base64')
+  return fontBase64Cache
 }
 
 export function createQrPayload(childId: string, facilityId: string): QrPayload {
-  const secret = getQrSignatureSecret();
-  const inputString = `${childId}${facilityId}${secret}`;
+  const secret = getQrSignatureSecret()
+  const inputString = `${childId}${facilityId}${secret}`
   const signature = createHmac('sha256', secret)
     .update(inputString)
     .digest('hex')
@@ -46,98 +56,53 @@ export function createQrPayload(childId: string, facilityId: string): QrPayload 
   return { payload, signature }
 }
 
-function buildQrDrawing(payload: string) {
-  const qr = QRCode.create(payload, { errorCorrectionLevel: 'M' })
-  const moduleCount = qr.modules.size
-  const qrDisplaySize = Math.min(PAGE_WIDTH, PAGE_HEIGHT) - 200
-  const moduleSize = Math.max(2, Math.floor(qrDisplaySize / moduleCount))
-  const qrSize = moduleSize * moduleCount
-  const startX = (PAGE_WIDTH - qrSize) / 2
-  const startY = (PAGE_HEIGHT - qrSize) / 2 - 30
-
-  const commands: string[] = []
-  commands.push('q')
-  commands.push('0 0 0 rg')
-
-  for (let y = 0; y < moduleCount; y += 1) {
-    for (let x = 0; x < moduleCount; x += 1) {
-      const filled = qr.modules.get(x, y)
-      if (!filled) continue
-
-      const rectX = startX + x * moduleSize
-      const rectY = startY + (moduleCount - y - 1) * moduleSize
-      commands.push(`${rectX.toFixed(2)} ${rectY.toFixed(2)} ${moduleSize} ${moduleSize} re f`)
-    }
-  }
-
-  commands.push('Q')
-  return commands.join('\n')
-}
-
-function buildContentStream(options: PdfOptions): Buffer {
+export async function createQrPdf(options: PdfOptions): Promise<Buffer> {
   const { childName, facilityName, payload } = options
-  const lines: string[] = []
 
-  lines.push('BT')
-  lines.push('/F1 20 Tf')
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 80} Tm (${escapePdfText(childName)}) Tj`)
+  // 入力検証
+  const displayChildName = childName?.trim() || '(名前なし)'
+  const displayFacilityName = facilityName?.trim() || '(施設名なし)'
 
-  lines.push('/F1 14 Tf')
-  lines.push(`1 0 0 1 64 ${PAGE_HEIGHT - 105} Tm (${escapePdfText(facilityName)}) Tj`)
-  lines.push('ET')
+  // Create jsPDF instance (A4, portrait, mm units)
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  })
 
-  lines.push(buildQrDrawing(payload))
+  // Load and register Japanese font
+  const fontBase64 = loadFontBase64()
+  doc.addFileToVFS('NotoSansJP-Regular.ttf', fontBase64)
+  doc.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal')
+  doc.setFont('NotoSansJP', 'normal')
 
-  const content = lines.join('\n')
-  return Buffer.from(content, 'utf8')
-}
+  // Draw child name
+  doc.setFontSize(20)
+  doc.text(displayChildName, 20, 25)
 
-export function createQrPdf(options: PdfOptions): Buffer {
-  const contentStream = buildContentStream(options)
-  const contentLength = contentStream.length
+  // Draw facility name
+  doc.setFontSize(14)
+  doc.text(displayFacilityName, 20, 35)
 
-  let offset = 0
-  const offsets: number[] = []
-  const parts: Buffer[] = []
+  // Generate QR code as data URL
+  const qrDataUrl = await QRCode.toDataURL(payload, {
+    errorCorrectionLevel: 'M',
+    type: 'image/png',
+    margin: 1,
+    width: 400,
+  })
 
-  const append = (buf: Buffer) => {
-    parts.push(buf)
-    offset += buf.length
-  }
+  // Calculate QR code position (centered horizontally, below the text)
+  const qrSize = 120 // mm
+  const qrX = (PAGE_WIDTH_MM - qrSize) / 2
+  const qrY = 50
 
-  const addObject = (id: number, body: string | Buffer) => {
-    offsets[id] = offset
-    const header = Buffer.from(`${id} 0 obj\n`, 'utf8')
-    const footer = Buffer.from('\nendobj\n', 'utf8')
-    append(header)
-    append(Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'))
-    append(footer)
-  }
+  // Add QR code image to PDF
+  doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
 
-  append(Buffer.from(PDF_HEADER, 'utf8'))
-  addObject(1, '<< /Type /Catalog /Pages 2 0 R >>')
-  addObject(2, '<< /Type /Pages /Count 1 /Kids [3 0 R] >>')
-  addObject(
-    3,
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`
-  )
-  addObject(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
-  addObject(5, `<< /Length ${contentLength} >>\nstream\n${contentStream.toString('utf8')}\nendstream`)
-
-  const xrefOffset = offset
-  let xref = 'xref\n0 6\n'
-  xref += '0000000000 65535 f \n'
-  for (let i = 1; i <= 5; i += 1) {
-    const refOffset = offsets[i] ?? 0
-    xref += `${refOffset.toString().padStart(10, '0')} 00000 n \n`
-  }
-
-  const trailer = `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
-
-  append(Buffer.from(xref, 'utf8'))
-  append(Buffer.from(trailer, 'utf8'))
-
-  return Buffer.concat(parts)
+  // Get PDF as ArrayBuffer and convert to Buffer
+  const arrayBuffer = doc.output('arraybuffer')
+  return Buffer.from(arrayBuffer)
 }
 
 function toDosDateParts(date: Date) {
@@ -172,6 +137,10 @@ export function createZip(entries: ZipEntry[]): Buffer {
   const now = new Date()
   const { dosDate, dosTime } = toDosDateParts(now)
 
+  // UTF-8 Language encoding flag (bit 11) - RFC 7161準拠
+  // これを設定しないとWindows標準ZipツールがShift-JISとして解釈して文字化けする
+  const UTF8_FLAG = 0x0800
+
   entries.forEach((entry) => {
     const nameBytes = Buffer.from(entry.filename, 'utf8')
     const crc = crc32(entry.content)
@@ -180,7 +149,7 @@ export function createZip(entries: ZipEntry[]): Buffer {
     const localHeader = Buffer.alloc(30 + nameBytes.length)
     localHeader.writeUInt32LE(0x04034b50, 0)
     localHeader.writeUInt16LE(20, 4)
-    localHeader.writeUInt16LE(0, 6)
+    localHeader.writeUInt16LE(UTF8_FLAG, 6)
     localHeader.writeUInt16LE(8, 8)
     localHeader.writeUInt16LE(dosTime, 10)
     localHeader.writeUInt16LE(dosDate, 12)
@@ -197,7 +166,7 @@ export function createZip(entries: ZipEntry[]): Buffer {
     centralHeader.writeUInt32LE(0x02014b50, 0)
     centralHeader.writeUInt16LE(20, 4)
     centralHeader.writeUInt16LE(20, 6)
-    centralHeader.writeUInt16LE(0, 8)
+    centralHeader.writeUInt16LE(UTF8_FLAG, 8)
     centralHeader.writeUInt16LE(8, 10)
     centralHeader.writeUInt16LE(dosTime, 12)
     centralHeader.writeUInt16LE(dosDate, 14)
@@ -235,6 +204,41 @@ export function createZip(entries: ZipEntry[]): Buffer {
 }
 
 export function formatFileSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, '_') || 'qr'
+  // ファイル名として使えない文字とスペースを除去（日本語は保持）
+  return value.replace(/[\\/:*?"<>|\s]+/g, '').trim() || 'qr'
 }
 
+/**
+ * Content-Dispositionヘッダーを生成
+ * RFC 5987/6266に準拠し、日本語ファイル名をサポート
+ */
+/**
+ * 学年からファイル名用のプレフィックスを生成
+ * - 1〜6年生: "1"〜"6"
+ * - 7年生以上: "10"
+ * - 0年生以下（未就学）: "0"
+ */
+export function formatGradePrefix(grade: number | null | undefined): string {
+  if (grade === null || grade === undefined || grade <= 0) {
+    return '0'
+  }
+  if (grade >= 7) {
+    return '10'
+  }
+  return String(grade)
+}
+
+export function createContentDisposition(filename: string): string {
+  // ASCII文字のみかチェック
+  const isAsciiOnly = /^[\x00-\x7F]*$/.test(filename)
+
+  if (isAsciiOnly) {
+    // ASCII文字のみの場合はシンプルな形式
+    return `attachment; filename="${filename}"`
+  }
+
+  // 日本語を含む場合はRFC 5987形式でエンコード
+  const encodedFilename = encodeURIComponent(filename)
+  // filename*のみを使用（モダンブラウザはこれを優先する）
+  return `attachment; filename*=UTF-8''${encodedFilename}`
+}

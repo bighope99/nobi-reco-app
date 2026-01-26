@@ -14,7 +14,7 @@ export default function ObservationEditPage() {
   }, [params]);
 
   return (
-    <StaffLayout title="個別記録" subtitle="編集">
+    <StaffLayout title="児童記録" subtitle="編集">
       <ObservationEditor mode="edit" observationId={observationId} />
     </StaffLayout>
   );

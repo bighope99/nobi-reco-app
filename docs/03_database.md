@@ -521,15 +521,15 @@ CREATE TABLE IF NOT EXISTS m_guardians (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   facility_id UUID NOT NULL REFERENCES m_facilities(id),
 
-  -- 基本情報
-  family_name VARCHAR(50) NOT NULL,              -- 姓（漢字）
-  given_name VARCHAR(50) NOT NULL,               -- 名（漢字）
-  family_name_kana VARCHAR(50),                  -- 姓（カナ）
-  given_name_kana VARCHAR(50),                   -- 名（カナ）
+  -- 基本情報（暗号化）
+  family_name TEXT NOT NULL,                     -- 姓（漢字）（AES-256-GCM暗号化、Base64url）
+  given_name TEXT NOT NULL DEFAULT '',           -- 名（漢字）（AES-256-GCM暗号化、Base64url）
+  family_name_kana TEXT,                         -- 姓（カナ）（AES-256-GCM暗号化、Base64url）
+  given_name_kana TEXT,                          -- 名（カナ）（AES-256-GCM暗号化、Base64url）
 
-  -- 連絡先
-  phone VARCHAR(20),                             -- 電話番号
-  email VARCHAR(255),                            -- メールアドレス
+  -- 連絡先（暗号化）
+  phone TEXT,                                    -- 電話番号（AES-256-GCM暗号化、Base64url）
+  email TEXT,                                    -- メールアドレス（AES-256-GCM暗号化、Base64url）
   postal_code VARCHAR(10),                       -- 郵便番号
   address TEXT,                                  -- 住所
 
@@ -544,12 +544,13 @@ CREATE TABLE IF NOT EXISTS m_guardians (
 
 -- インデックス
 CREATE INDEX idx_guardians_facility_id ON m_guardians(facility_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_phone ON m_guardians(phone) WHERE deleted_at IS NULL;
-CREATE INDEX idx_guardians_email ON m_guardians(email) WHERE deleted_at IS NULL;
+-- 注意: phone, email は暗号化されているため、インデックスは検索に使用不可
+-- 検索には s_pii_search_index テーブルのハッシュインデックスを使用
 
 -- フルテキスト検索用インデックス（名前検索）
+-- given_name は使用しないため、family_name のみで検索
 CREATE INDEX idx_guardians_name_search ON m_guardians
-  USING gin(to_tsvector('japanese', family_name || ' ' || given_name));
+  USING gin(to_tsvector('japanese', family_name));
 ```
 
 ### 保護者情報の管理方針（2026年1月更新）
@@ -579,10 +580,10 @@ CREATE TABLE IF NOT EXISTS r_activity (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   facility_id UUID NOT NULL REFERENCES m_facilities(id),
   class_id UUID REFERENCES m_classes(id),        -- クラス単位の活動の場合
-  
+
   -- 記録日時
   activity_date DATE NOT NULL,                   -- 活動日（今日の日付）
-  
+
   -- 活動内容
   title VARCHAR(200),                            -- タイトル（例: 公園で外遊び）
   content TEXT NOT NULL,                         -- 活動内容（本文）
@@ -591,15 +592,22 @@ CREATE TABLE IF NOT EXISTS r_activity (
 
   -- 写真（JSONBで複数枚保存）
   photos JSONB,                                  -- [{url: "...", caption: "..."}, ...]
-  
+
+  -- イベント・日程情報
+  event_name TEXT,                               -- 今日の行事・イベント名
+  daily_schedule JSONB,                          -- 1日の流れ（JSONBスキーマ参照）
+  role_assignments JSONB,                        -- 役割分担（JSONBスキーマ参照）
+  special_notes TEXT,                            -- 特記事項（全体を通しての出来事）
+  meal JSONB,                                    -- ごはん情報（JSONBスキーマ参照）
+
   -- 記録者情報
   created_by UUID NOT NULL REFERENCES m_users(id),
   updated_by UUID REFERENCES m_users(id),
-  
+
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
   last_edited_at TIMESTAMP WITH TIME ZONE,       -- 最後の編集日時
-  
+
   -- 共通カラム
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -613,6 +621,43 @@ CREATE INDEX idx_activity_date ON r_activity(activity_date) WHERE deleted_at IS 
 CREATE INDEX idx_activity_created_by ON r_activity(created_by);
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
+```
+
+**JSONBカラムのスキーマ定義**:
+
+| カラム | スキーマ | 説明 |
+|--------|----------|------|
+| `daily_schedule` | `[{time: string, content: string}, ...]` | 1日の流れを時刻順に記録 |
+| `role_assignments` | `[{user_id: string, user_name: string, role: string}, ...]` | 職員の役割分担 |
+| `meal` | `{menu: string, items_to_bring: string, notes: string}` | ごはん情報 |
+
+**daily_schedule の例**:
+```json
+[
+  {"time": "09:00", "content": "朝の会"},
+  {"time": "10:00", "content": "外遊び"},
+  {"time": "12:00", "content": "昼食"},
+  {"time": "14:00", "content": "おやつ"},
+  {"time": "15:00", "content": "自由時間"}
+]
+```
+
+**role_assignments の例**:
+```json
+[
+  {"user_id": "uuid-1", "user_name": "田中", "role": "配膳"},
+  {"user_id": "uuid-2", "user_name": "佐藤", "role": "見守り"},
+  {"user_id": "uuid-3", "user_name": "山田", "role": "片付け"}
+]
+```
+
+**meal の例**:
+```json
+{
+  "menu": "カレーライス",
+  "items_to_bring": "お箸、スプーン",
+  "notes": "アレルギー対応食あり"
+}
 ```
 
 ---
@@ -845,6 +890,87 @@ CREATE INDEX idx_s_school_schedules_grades
 - 例: 「1~2年生は月~金 08:00登校」「3~6年生は月~金 08:00登校」
 - 曜日ごとに異なる時刻を設定可能（短縮授業など）
 - 時刻がNULLの曜日は「登校なし」を意味する
+
+---
+
+### 6.4 PII検索用ハッシュテーブル（`s_pii_search_index`）
+
+```sql
+CREATE TABLE IF NOT EXISTS s_pii_search_index (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- エンティティ情報
+  entity_type VARCHAR(20) NOT NULL,  -- 'child' or 'guardian'
+  entity_id UUID NOT NULL,            -- m_children.id or m_guardians.id
+  
+  -- 検索タイプ
+  search_type VARCHAR(20) NOT NULL,   -- 'phone', 'email', 'name', 'name_kana'
+  
+  -- 検索用データ
+  search_hash VARCHAR(64),            -- SHA-256ハッシュ（電話番号・メールアドレス用、64文字）
+  normalized_value TEXT,              -- 正規化された値（名前の部分一致検索用）
+  
+  -- タイムスタンプ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- 制約
+  CONSTRAINT unique_entity_search UNIQUE(entity_type, entity_id, search_type),
+  
+  -- チェック制約: search_hash と normalized_value のどちらかは必須
+  CONSTRAINT check_search_data CHECK (
+    (search_hash IS NOT NULL) OR (normalized_value IS NOT NULL)
+  )
+);
+
+-- インデックス
+-- 1. 電話番号・メールアドレスの完全一致検索用（search_hash）
+CREATE INDEX idx_pii_search_hash 
+  ON s_pii_search_index(search_hash) 
+  WHERE search_hash IS NOT NULL;
+
+-- 2. 名前の部分一致検索用（normalized_value、GINインデックスで日本語検索を高速化）
+CREATE INDEX idx_pii_search_normalized_value 
+  ON s_pii_search_index USING gin(to_tsvector('japanese', normalized_value))
+  WHERE normalized_value IS NOT NULL;
+
+-- 3. エンティティ削除時の検索用（entity_type, entity_id）
+CREATE INDEX idx_pii_search_entity 
+  ON s_pii_search_index(entity_type, entity_id);
+
+-- 4. 検索パフォーマンス向上用（entity_type, search_type, search_hash）
+CREATE INDEX idx_pii_search_type_hash 
+  ON s_pii_search_index(entity_type, search_type, search_hash)
+  WHERE search_hash IS NOT NULL;
+
+-- 5. 名前検索のパフォーマンス向上用（entity_type, search_type, normalized_value）
+CREATE INDEX idx_pii_search_type_normalized 
+  ON s_pii_search_index(entity_type, search_type, normalized_value)
+  WHERE normalized_value IS NOT NULL;
+```
+
+**説明**:
+- 暗号化されたPIIフィールドの検索を可能にするためのインデックステーブル
+- **電話番号・メールアドレス**: `search_hash`（SHA-256ハッシュ）で完全一致検索
+- **名前・フリガナ**: `normalized_value`（正規化された値）で部分一致検索（`ilike`）
+- エンティティ（児童・保護者）の保存・更新時に自動的に更新される
+- 検索時はこのテーブルから`entity_id`を取得し、本体テーブルから詳細情報を取得
+
+**使用例**:
+```sql
+-- 電話番号で保護者を検索
+SELECT entity_id FROM s_pii_search_index
+WHERE entity_type = 'guardian'
+  AND search_type = 'phone'
+  AND search_hash = 'abc123...'  -- 正規化された電話番号のSHA-256ハッシュ
+LIMIT 1;
+
+-- 名前で児童を部分一致検索
+SELECT entity_id FROM s_pii_search_index
+WHERE entity_type = 'child'
+  AND search_type = 'name'
+  AND normalized_value ILIKE '%田中%';
+```
 
 ---
 
@@ -1371,8 +1497,47 @@ CREATE POLICY facility_access ON r_activity
 - マイグレーション管理外で作成されたテーブルを事後的に文書化
 - 今後のスキーマ変更は必ずマイグレーションファイル経由で実施し、Supabaseに適用すること
 
+### 活動記録テーブルの拡張（2026年1月13日）
+
+#### `r_activity`テーブルの変更
+- **追加**: `event_name TEXT` - 今日の行事・イベント名
+- **追加**: `daily_schedule JSONB` - 1日の流れ
+- **追加**: `role_assignments JSONB` - 職員の役割分担
+- **追加**: `special_notes TEXT` - 特記事項（全体を通しての出来事）
+- **追加**: `meal JSONB` - ごはん情報
+
+**理由**:
+- 活動記録に日々の業務運営情報を追加し、より詳細な記録を可能にするため
+- イベント名、1日のスケジュール、職員の役割分担、食事情報を構造化して保存
+
+**JSONBスキーマ**:
+- `daily_schedule`: `[{time: string, content: string}, ...]`
+- `role_assignments`: `[{user_id: string, user_name: string, role: string}, ...]`
+- `meal`: `{menu: string, items_to_bring: string, notes: string}`
+
+---
+
+### 保護者マスタの暗号化対応（2026年1月24日）
+
+#### `m_guardians`テーブルの変更
+- **変更**: `family_name VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+- **変更**: `given_name VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+- **変更**: `family_name_kana VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+- **変更**: `given_name_kana VARCHAR(50)` → `TEXT`（AES-256-GCM暗号化対応）
+
+**理由**:
+- AES-256-GCM + Base64url エンコードにより、暗号化後のデータサイズが60-80文字に膨らむ
+- `VARCHAR(50)` では暗号化データが切り詰められ、復号時にデータ欠損が発生
+- マイグレーション016で `phone`, `email` を TEXT 化済み。名前カラムも同様に対応
+
+**影響**:
+- 既存の切り詰められたデータは再保存が必要
+- 緊急連絡先「中谷テスト」が「中谷」のみ表示される問題を解決
+
+**マイグレーション**: `017_alter_guardians_name_columns.sql`
+
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2026年1月4日（データベーススキーマの確認と文書化）
+**最終更新**: 2026年1月24日（保護者マスタの暗号化対応）
 **管理者**: プロジェクトリーダー

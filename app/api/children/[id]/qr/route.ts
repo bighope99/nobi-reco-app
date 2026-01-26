@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getUserSession } from '@/lib/auth/session'
-import { createQrPayload, createQrPdf, formatFileSegment } from '@/lib/qr/card-generator'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
+import {
+  createQrPayload,
+  createQrPdf,
+  formatFileSegment,
+  createContentDisposition,
+  formatGradePrefix,
+} from '@/lib/qr/card-generator'
+import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
+import { calculateGrade } from '@/utils/grade'
 
 export async function GET(
   _request: NextRequest,
@@ -12,26 +20,22 @@ export async function GET(
     const childId = params.id
 
     const supabase = await createClient()
-    const {
-      data: { session },
-      error: authError,
-    } = await supabase.auth.getSession()
 
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userSession = await getUserSession(session.user.id)
-    const facilityId = userSession?.current_facility_id
-
-    if (!facilityId) {
+    const { current_facility_id: facility_id } = metadata
+    if (!facility_id) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }
 
     const { data: facilityData, error: facilityError } = await supabase
       .from('m_facilities')
       .select('name')
-      .eq('id', facilityId)
+      .eq('id', facility_id)
       .single()
 
     if (facilityError || !facilityData) {
@@ -40,9 +44,9 @@ export async function GET(
 
     const { data: childData, error: childError } = await supabase
       .from('m_children')
-      .select('id, family_name, given_name, facility_id')
+      .select('id, family_name, given_name, facility_id, birth_date, grade_add')
       .eq('id', childId)
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .single()
 
@@ -50,22 +54,30 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Child not found' }, { status: 404 })
     }
 
-    const childName = `${childData.family_name} ${childData.given_name}`.trim()
+    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    const decryptedFamilyName = decryptOrFallback(childData.family_name)
+    const decryptedGivenName = decryptOrFallback(childData.given_name)
+    const childName = `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim()
 
-    const { payload } = createQrPayload(childData.id, facilityId)
-    const pdfBuffer = createQrPdf({
+    const { payload } = createQrPayload(childData.id, facility_id)
+    const pdfBuffer = await createQrPdf({
       childName,
       facilityName: facilityData.name,
       payload,
     })
 
-    const filename = `${formatFileSegment(childName)}_${childData.id}.pdf`
+    // 学年を計算してファイル名のプレフィックスに使用
+    const grade = calculateGrade(childData.birth_date, childData.grade_add)
+    const gradePrefix = formatGradePrefix(grade)
+    // ファイル名: 学年 + 子どもの名前
+    const filename = `${gradePrefix}${formatFileSegment(childName)}.pdf`
+    const contentDisposition = createContentDisposition(filename)
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': contentDisposition,
       },
     })
   } catch (error) {

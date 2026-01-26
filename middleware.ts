@@ -24,7 +24,59 @@ Environment: NODE_ENV=${process.env.NODE_ENV}, VERCEL_ENV=${process.env.VERCEL_E
   throw new Error('E2E_TEST enabled in production - aborting for security');
 }
 
+/**
+ * JWT ペイロードをデコードする（Edge Runtime 対応）
+ * Edge Runtime では Buffer が使用不可なので atob() を使用
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+        );
+
+        return JSON.parse(jsonPayload);
+    } catch {
+        return null;
+    }
+}
+
 export async function middleware(request: NextRequest) {
+    // CSRF Protection: Check Origin header for state-changing requests
+    // Supabase uses SameSite=Lax cookies, but this adds an additional layer of defense
+    if (['DELETE', 'PUT', 'POST', 'PATCH'].includes(request.method)) {
+        const origin = request.headers.get('origin');
+        const host = request.headers.get('host');
+
+        // Same-origin check: origin must match the current host
+        if (origin && host) {
+            let originHost: string | null = null;
+            try {
+                originHost = new URL(origin).host;
+            } catch {
+                originHost = null;
+            }
+            if (!originHost || originHost !== host) {
+                console.warn('CSRF attempt detected - origin mismatch:', {
+                    origin: originHost ?? origin,
+                    host,
+                    method: request.method,
+                    path: request.nextUrl.pathname,
+                });
+                return NextResponse.json(
+                    { success: false, error: 'Invalid request origin' },
+                    { status: 403 }
+                );
+            }
+        }
+    }
+
     let response = NextResponse.next({
         request: {
             headers: request.headers,
@@ -77,6 +129,7 @@ export async function middleware(request: NextRequest) {
         }
     );
 
+    // getSession() でセッションを取得（JWT からカスタムクレームを読み取るため）
     const { data: { session } } = await supabase.auth.getSession();
 
     // E2E テスト環境では認証チェックをスキップ（本番環境では決して実行されない）
@@ -98,9 +151,30 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // ログイン済みで /login にアクセス → /dashboard へリダイレクト
+    // JWT からカスタムクレーム（role）を取得
+    let role: string | undefined;
+    if (session?.access_token) {
+        const payload = decodeJwtPayload(session.access_token);
+        const appMetadata = payload?.app_metadata as Record<string, unknown> | undefined;
+        role = appMetadata?.role as string | undefined;
+    }
+
+    // ログイン済みで /login にアクセス → role に基づいてリダイレクト
     if (session && request.nextUrl.pathname === '/login') {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        // site_admin / company_admin → /admin, その他 → /dashboard
+        const redirectPath = (role === 'site_admin' || role === 'company_admin')
+            ? '/admin'
+            : '/dashboard';
+
+        return NextResponse.redirect(new URL(redirectPath, request.url));
+    }
+
+    // /admin へのアクセス制御（site_admin / company_admin のみ許可）
+    if (session && request.nextUrl.pathname.startsWith('/admin')) {
+        // site_admin / company_admin 以外は /dashboard にリダイレクト
+        if (role !== 'site_admin' && role !== 'company_admin') {
+            return NextResponse.redirect(new URL('/dashboard', request.url));
+        }
     }
 
     return response;

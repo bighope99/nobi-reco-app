@@ -145,26 +145,59 @@ export async function DELETE(request: NextRequest) {
 
     let facilityId: string | null = null;
     if (observation.activity_id) {
-      const { data: activity } = await supabase
+      const { data: activity, error: activityError } = await supabase
         .from('r_activity')
         .select('facility_id')
         .eq('id', observation.activity_id)
+        .is('deleted_at', null)
         .single();
+
+      if (activityError) {
+        console.error('Failed to fetch activity facility_id:', activityError);
+        return NextResponse.json(
+          { success: false, error: 'この個別記録の所属施設を確認できませんでした' },
+          { status: 400 },
+        );
+      }
+
       facilityId = activity?.facility_id ?? null;
     }
 
-    if (!facilityId) {
-      const { data: child } = await supabase
+    if (!facilityId && observation.child_id) {
+      const { data: child, error: childError } = await supabase
         .from('m_children')
         .select('facility_id')
         .eq('id', observation.child_id)
+        .is('deleted_at', null)
         .single();
+
+      if (childError) {
+        console.error('Failed to fetch child facility_id:', childError);
+        return NextResponse.json(
+          { success: false, error: 'この個別記録の所属施設を確認できませんでした' },
+          { status: 400 },
+        );
+      }
+
       facilityId = child?.facility_id ?? null;
     }
 
-    if (!facilityId || facilityId !== session.current_facility_id) {
+    // SECURITY: Explicit null check before authorization to prevent IDOR vulnerability
+    if (!facilityId) {
+      console.error('Observation facility lookup failed: facilityId is null', {
+        observation_id,
+        activity_id: observation.activity_id,
+        child_id: observation.child_id,
+      });
       return NextResponse.json(
-        { error: 'この個別記録を削除する権限がありません' },
+        { success: false, error: 'この個別記録の所属施設を確認できませんでした' },
+        { status: 400 },
+      );
+    }
+
+    if (facilityId !== session.current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'この個別記録を削除する権限がありません' },
         { status: 403 },
       );
     }

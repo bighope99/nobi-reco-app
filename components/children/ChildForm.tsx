@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Users,
@@ -135,6 +135,8 @@ interface ChildFormProps {
 
 export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) {
   const isEditMode = mode === 'edit';
+  const MAX_EMERGENCY_CONTACTS = 2;
+  const contactIdRef = useRef(1);
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
   const [siblingResult, setSiblingResult] = useState<any>(null);
@@ -237,6 +239,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
 
         if (result.success && result.data) {
           const data = result.data;
+
           // birth_dateを分割
           const birthDate = data.basic_info.birth_date || '';
           const [year, month, day] = birthDate ? birthDate.split('-') : ['', '', ''];
@@ -269,15 +272,18 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             photo_permission_share: data.permissions?.photo_permission_share ?? true,
           });
 
-          // 緊急連絡先の初期化
+          // 緊急連絡先の初期化（最大2つまで）
           if (data.contact?.emergency_contacts && data.contact.emergency_contacts.length > 0) {
             setEmergencyContacts(
-              data.contact.emergency_contacts.map((ec: any, idx: number) => ({
-                id: Date.now() + idx,
-                name: ec.name || '',
-                relation: ec.relation || '',
-                phone: ec.phone || '',
-              }))
+              data.contact.emergency_contacts.slice(0, MAX_EMERGENCY_CONTACTS).map((ec: any, idx: number) => {
+                contactIdRef.current = idx + 1;
+                return {
+                  id: idx + 1,
+                  name: ec.name || '',
+                  relation: ec.relation || '',
+                  phone: ec.phone || '',
+                };
+              })
             );
           }
         }
@@ -419,7 +425,9 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   };
 
   const addEmergencyContact = () => {
-    setEmergencyContacts([...emergencyContacts, { id: Date.now(), name: '', relation: '', phone: '' }]);
+    if (emergencyContacts.length >= MAX_EMERGENCY_CONTACTS) return;
+    contactIdRef.current += 1;
+    setEmergencyContacts([...emergencyContacts, { id: contactIdRef.current, name: '', relation: '', phone: '' }]);
   };
 
   const removeEmergencyContact = (id: number) => {
@@ -436,8 +444,15 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       : (isEditMode ? formData.birth_date : '');
 
     // Validation
-    if (!formData.family_name || !formData.given_name || !birthDate || !formData.school_id || !formData.enrolled_at) {
-      setError('必須項目を入力してください（氏名、生年月日、学校、入所開始日は必須です）');
+    if (
+      !formData.family_name ||
+      !formData.given_name ||
+      !birthDate ||
+      !formData.enrolled_at
+    ) {
+      setError(
+        '必須項目を入力してください（氏名、生年月日、入所開始日は必須です）'
+      );
       return;
     }
 
@@ -495,7 +510,6 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       }
 
       if (result.success) {
-        alert(isEditMode ? '児童情報を更新しました' : '児童を登録しました');
         if (onSuccess) {
           onSuccess();
         } else {
@@ -521,8 +535,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-600 pb-24">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen font-sans text-slate-600 pb-24">
+      <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
           {/* Side Navigation (Sticky) */}
@@ -689,7 +703,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       </div>
                     </FieldGroup>
 
-                    <FieldGroup label="通学している学校" required className="sm:col-span-2">
+                    <FieldGroup label="通学している学校" className="sm:col-span-2">
                       <Select
                         value={formData.school_id}
                         onChange={(e: any) => setFormData({ ...formData, school_id: e.target.value })}
@@ -874,12 +888,14 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                   <div className="border-b border-slate-100 pb-2">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-bold text-slate-800">緊急連絡先リスト（優先順）</h3>
-                      <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
-                        <Plus size={14} /> 追加する
-                      </button>
+                      {emergencyContacts.length < MAX_EMERGENCY_CONTACTS && (
+                        <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
+                          <Plus size={14} /> 追加する
+                        </button>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1.5">
-                      上記の保護者に連絡がつかない場合の連絡先を登録します（祖父母、親戚、緊急時連絡先など）
+                      上記の保護者に連絡がつかない場合の連絡先を登録します（最大2件）
                     </p>
                   </div>
 
@@ -1052,4 +1068,3 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     </div>
   );
 }
-

@@ -2,10 +2,14 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
+import { DatePicker } from '@/components/ui/date-picker';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { MentionTextarea } from '@/components/ui/mention-textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,6 +18,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -32,6 +37,9 @@ import {
   Pencil,
   Save,
   X,
+  Mic,
+  Trash2,
+  PlusCircle,
 } from 'lucide-react';
 import {
   type AiObservationDraft,
@@ -137,12 +145,14 @@ type ChildOption = {
   id: string;
   name: string;
   className: string;
+  grade?: number | null;
 };
 
 type ChildApi = {
   child_id: string;
   name: string;
   class_name?: string | null;
+  grade?: number | null;
 };
 
 type ChildListResponse = {
@@ -238,12 +248,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const draftId = searchParams?.get('draftId');
   const paramChildId = searchParams?.get('childId')?.trim() || '';
   const paramChildName = searchParams?.get('childName')?.trim() || '';
+  const paramActivityId = searchParams?.get('activityId')?.trim() || '';
   const { user } = useAuth();
   const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
   const [showReassignDialog, setShowReassignDialog] = useState(false);
   const [selectedNewChild, setSelectedNewChild] = useState('');
   const [selectedChildId, setSelectedChildId] = useState('');
+  const [activityId, setActivityId] = useState<string | null>(null);
   const [lockedChildName, setLockedChildName] = useState('');
   const [reassignReason, setReassignReason] = useState('');
   const [loading, setLoading] = useState(false);
@@ -269,9 +281,22 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [childOptions, setChildOptions] = useState<ChildOption[]>([]);
   const [childOptionsError, setChildOptionsError] = useState('');
   const [childOptionsLoading, setChildOptionsLoading] = useState(false);
+  const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+  const [showContinueButton, setShowContinueButton] = useState(false);
+  const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
+  const previousSelectedChildIdRef = useRef('');
+  // 記録日選択用の状態
+  const [observationDate, setObservationDate] = useState<Date>(new Date());
+  // 音声入力用の状態
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
@@ -320,43 +345,86 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   }, [observation, isEditing, toDisplayText]);
 
   useEffect(() => {
-    if (isNew) {
-      setObservation(null);
+    if (!isNew) return;
+    setObservation(null);
+    setEditText('');
+    setIsEditing(true);
+    setAiEditForm({
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultTagFlags(observationTags),
+    });
+  }, [isNew]);
+
+  useEffect(() => {
+    if (!isNew) return;
+    setAiEditForm((prev) => ({
+      ...prev,
+      flags: buildDefaultTagFlags(observationTags),
+    }));
+  }, [isNew, observationTags]);
+
+  // 児童選択・名前解決・フォームリセットの統合処理
+  useEffect(() => {
+    if (!isNew) return;
+
+    // lockedChildIdがある場合はそれを設定
+    if (lockedChildId) {
+      setSelectedChildId(lockedChildId);
+
+      // 名前解決（paramChildNameまたはchildOptionsから）
+      if (paramChildName) {
+        setLockedChildName(paramChildName);
+      } else if (!lockedChildName) {
+        const resolvedName = childOptions.find((child) => child.id === lockedChildId)?.name;
+        if (resolvedName) {
+          setLockedChildName(resolvedName);
+        }
+      }
+    }
+
+    // 児童が実際に変更された場合のみフォームリセット
+    const didChangeChild =
+      selectedChildId && selectedChildId !== previousSelectedChildIdRef.current;
+
+    // フォームリセット（ドラフト時は除外）
+    if (didChangeChild && !draftId) {
       setEditText('');
-      setIsEditing(true);
       setAiEditForm({
         ai_action: '',
         ai_opinion: '',
         flags: buildDefaultTagFlags(observationTags),
       });
+      setError('');
+      setAiEditError('');
+      setAiEditSuccess(false);
+      autoAiTriggeredRef.current = false;
+      autoAiDraftTriggeredRef.current = false;
     }
-  }, [isNew, observationTags]);
 
+    // 前回の選択を更新
+    previousSelectedChildIdRef.current = selectedChildId;
+  }, [isNew, lockedChildId, selectedChildId, draftId, childOptions, lockedChildName, paramChildName, observationTags]);
+
+  // activity_idをURLパラメータまたはドラフトから取得
   useEffect(() => {
-    if (!isNew || !lockedChildId) return;
-    setSelectedChildId(lockedChildId);
-    if (paramChildName) {
-      setLockedChildName(paramChildName);
+    if (!isNew) return;
+
+    // 優先順位: URLパラメータ > ドラフト
+    if (paramActivityId) {
+      setActivityId(paramActivityId);
+      return;
     }
-  }, [isNew, lockedChildId, paramChildName]);
 
-  useEffect(() => {
-    if (!isNew || !lockedChildId || lockedChildName) return;
-    const resolvedName = childOptions.find((child) => child.id === lockedChildId)?.name;
-    if (resolvedName) {
-      setLockedChildName(resolvedName);
+    // ドラフトからactivity_idを取得
+    if (draftId) {
+      const drafts = loadAiDraftsFromCookie();
+      const draft = drafts.find((d) => d.draft_id === draftId);
+      if (draft?.activity_id) {
+        setActivityId(draft.activity_id);
+      }
     }
-  }, [childOptions, isNew, lockedChildId, lockedChildName]);
-
-  useEffect(() => {
-    if (!isNew || !lockedChildId) return;
-    setSelectedChildId(lockedChildId);
-  }, [isNew, lockedChildId]);
-
-  useEffect(() => {
-    if (!paramChildName) return;
-    setLockedChildName(paramChildName);
-  }, [paramChildName]);
+  }, [isNew, paramActivityId, draftId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -406,7 +474,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           id: child.child_id,
           name: child.name,
           className: child.class_name || '未設定',
+          grade: child.grade ?? null,
         }));
+        // 学年昇順、同学年内は名前順にソート
+        children.sort((a, b) => {
+          const gradeA = a.grade ?? 999;
+          const gradeB = b.grade ?? 999;
+          if (gradeA !== gradeB) {
+            return gradeA - gradeB;
+          }
+          return a.name.localeCompare(b.name, 'ja');
+        });
         if (isMounted) {
           setChildOptions(children);
         }
@@ -466,6 +544,31 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       ai_opinion: nextOpinion,
     }));
   }, [aiEditForm.ai_action, aiEditForm.ai_opinion, nameByIdMap, toDisplayText]);
+
+  // nameByIdMapが構築された時点でaiEditFormを再変換
+  useEffect(() => {
+    if (nameByIdMap.size === 0) return;
+
+    setAiEditForm((prev) => {
+      // child:形式が含まれない場合はスキップ
+      if (!prev.ai_action.includes('child:') && !prev.ai_opinion.includes('child:')) {
+        return prev;
+      }
+
+      const nextAction = toDisplayText(prev.ai_action);
+      const nextOpinion = toDisplayText(prev.ai_opinion);
+
+      if (nextAction === prev.ai_action && nextOpinion === prev.ai_opinion) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ai_action: nextAction,
+        ai_opinion: nextOpinion,
+      };
+    });
+  }, [nameByIdMap.size, toDisplayText]);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -598,6 +701,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ? new Date(data.observation_date).toISOString()
         : data.created_at || new Date().toISOString();
 
+      // 編集モードで日付を初期化
+      if (data.observation_date) {
+        setObservationDate(parseISO(data.observation_date));
+      }
+
       const displayContent = toDisplayText(data.content || '');
       const observationRecord: Observation = {
         id: data.id,
@@ -724,7 +832,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleAiEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isNew) {
+    if (aiEditSaving) return;
+    // isNewでも、既にobservationが存在する場合は既存記録として扱う（重複保存防止）
+    if (isNew && !observation) {
       setAiEditSaving(true);
       setAiEditError('');
       try {
@@ -802,7 +912,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       const response = await fetch(`/api/records/personal/${observation.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({
+          content: text,
+          observation_date: format(observationDate, 'yyyy-MM-dd'),
+        }),
       });
 
       const result = await response.json();
@@ -841,6 +954,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const handleCreateObservation = async ({ forceAi = false }: { forceAi?: boolean } = {}) => {
+    if (savingEdit) return;
     const displayText = editText.trim();
     const text = toIdText(displayText).trim();
     if (!selectedChildId) {
@@ -871,7 +985,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD形式
+      const observationDateStr = format(observationDate, 'yyyy-MM-dd');
 
       // APIに保存
       const response = await fetch('/api/records/personal', {
@@ -879,8 +993,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           child_id: selectedChildId,
-          observation_date: observationDate,
+          observation_date: observationDateStr,
           content: text,
+          activity_id: activityId || null,
           ai_action: aiResult.ai_action,
           ai_opinion: aiResult.ai_opinion,
           tag_flags: aiResult.flags,
@@ -911,6 +1026,20 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       };
       setObservation(newObservation);
       setIsEditing(false);
+      if (!draftId) {
+        setShowContinueButton(true);
+        // 過去記録リストに新規保存した記録を追加（リロード不要で反映）
+        const newRecentItem: RecentObservation = {
+          id: result.data.id,
+          observation_date: result.data.observation_date,
+          content: result.data.content ?? text,
+          created_at: new Date().toISOString(),
+          tag_ids: Object.entries(aiResult.flags)
+            .filter(([, v]) => v)
+            .map(([k]) => k),
+        };
+        setRecentObservations((prev) => [newRecentItem, ...prev.slice(0, 9)]);
+      }
 
       // draftIdがある場合、ステータスを'saved'に更新
       if (draftId) {
@@ -923,10 +1052,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         if (typeof window !== 'undefined') {
           const lastSaved = {
             draft_id: draftId,
-            activity_id: null,
+            activity_id: activityId,
             child_id: selectedChildId,
             child_display_name: resolvedChildName,
-            observation_date: result.data.observation_date ?? new Date().toISOString().split('T')[0],
+            observation_date: result.data.observation_date ?? getCurrentDateJST(),
             content: result.data.content ?? text,
             status: 'saved' as const,
             observation_id: result.data.id,
@@ -946,6 +1075,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const handleSaveEdit = async () => {
+    if (savingEdit) return;
     if (isNew) {
       await handleCreateObservation({ forceAi: true });
       return;
@@ -988,6 +1118,121 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
+  // 続けて入力ハンドラー
+  const handleContinueInput = useCallback(() => {
+    // 二重送信防止ガード追加
+    if (savingEdit || aiEditSaving || aiProcessing) return;
+
+    // 児童選択は維持
+    setEditText('');
+    setAiEditForm({
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultTagFlags(observationTags),
+    });
+    setObservation(null);
+    setIsEditing(true);
+    setShowContinueButton(false);
+    setError('');
+    setAiEditError('');
+    setAiEditSuccess(false);
+    autoAiTriggeredRef.current = false;
+    autoAiDraftTriggeredRef.current = false;
+  }, [savingEdit, aiEditSaving, aiProcessing, observationTags]);
+
+  // 新規作成ページへ遷移
+  const navigateToNewRecord = useCallback(() => {
+    if (selectedChildId) {
+      router.push(`/records/personal/new?childId=${selectedChildId}`);
+    } else {
+      router.push('/records/personal/new');
+    }
+  }, [selectedChildId, router]);
+
+  // 別の記録を作成ハンドラー
+  const handleCreateNew = useCallback(() => {
+    // 編集中かつ未保存の変更がある場合は確認ダイアログ表示
+    const hasUnsavedChanges = isEditing && editText.trim() !== toDisplayText(observation?.body_text || '');
+
+    if (hasUnsavedChanges) {
+      setShowCreateNewDialog(true);
+    } else {
+      navigateToNewRecord();
+    }
+  }, [isEditing, editText, toDisplayText, observation?.body_text, navigateToNewRecord]);
+
+  // 確認ダイアログでOK押下時
+  const handleCreateNewConfirm = useCallback(() => {
+    setShowCreateNewDialog(false);
+    navigateToNewRecord();
+  }, [navigateToNewRecord]);
+
+  // 音声録音開始
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await transcribeAudio(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+      setError('音声録音の開始に失敗しました');
+    }
+  };
+
+  // 音声録音停止
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // 音声の文字起こし
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setIsTranscribing(true);
+      setError('');
+
+      const formData = new FormData();
+      formData.append('audio', audioBlob);
+
+      const response = await fetch('/api/voice/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '文字起こしに失敗しました');
+      }
+
+      const transcribedText = result.text;
+      setEditText((prev) => prev + (prev ? '\n' : '') + transcribedText);
+    } catch (err) {
+      console.error('Failed to transcribe:', err);
+      setError(err instanceof Error ? err.message : '文字起こしに失敗しました');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   const childDisplayName = isNew
     ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
     : observation?.child_name || observation?.child_id;
@@ -1001,6 +1246,45 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     router.push(`/records/personal/${id}/edit`);
   };
 
+  const handleDeleteClick = (id: string) => {
+    setDeletingRecordId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingRecordId) return;
+
+    setDeletingObservationId(deletingRecordId);
+    setDeleteConfirmOpen(false);
+
+    try {
+      const response = await fetch('/api/records/observation', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observation_id: deletingRecordId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '削除に失敗しました');
+      }
+
+      setRecentObservations(prev => prev.filter(obs => obs.id !== deletingRecordId));
+    } catch (err) {
+      console.error('Delete error:', err);
+      setError(err instanceof Error ? err.message : '削除に失敗しました');
+    } finally {
+      setDeletingObservationId(null);
+      setDeletingRecordId(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmOpen(false);
+    setDeletingRecordId(null);
+  };
+
   return (
     <RequireAuth>
       <div className="space-y-6">
@@ -1012,6 +1296,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 
               </div>
               <div className="flex gap-2">
+                {!isNew && (
+                  <Button
+                    variant="outline"
+                    className="border-green-200 text-green-600 hover:bg-green-50"
+                    onClick={handleCreateNew}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => router.back()}>
                   戻る
                 </Button>
@@ -1084,8 +1377,21 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    {observation ? formatDateTime(observation.observed_at) : '未保存'}
+                    {isNew || isEditing ? (
+                      <div className="min-w-[180px]">
+                        <DatePicker
+                          date={observationDate}
+                          onSelect={(date) => date && setObservationDate(date)}
+                          placeholder="記録日を選択"
+                          disabled={savingEdit}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <Calendar className="h-4 w-4" />
+                        {observation ? formatDateTime(observation.observed_at) : '未保存'}
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
@@ -1099,7 +1405,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
                       {toDisplayText(observation?.body_text || '')}
                     </div>
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex justify-end gap-2">
+                      {isNew && !draftId && showContinueButton && (
+                        <Button
+                          variant="outline"
+                          className="border-green-200 text-green-600 hover:bg-green-50"
+                          onClick={handleContinueInput}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" /> 続けて入力
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -1119,7 +1434,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         {editText.length}/{OBSERVATION_BODY_MAX}文字
                       </span>
                     </div>
-                    <Textarea
+                    <div className="flex justify-end mb-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isRecording ? 'destructive' : 'outline'}
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={isTranscribing}
+                      >
+                        <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                        {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                      </Button>
+                    </div>
+                    <MentionTextarea
                       id="observation_body"
                       autoFocus
                       className="min-h-[200px]"
@@ -1180,7 +1507,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
-                      <Textarea
+                      <MentionTextarea
                         id="ai_action"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_action}
@@ -1198,7 +1525,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
-                      <Textarea
+                      <MentionTextarea
                         id="ai_opinion"
                         className="min-h-[120px]"
                         value={aiEditForm.ai_opinion}
@@ -1289,9 +1616,24 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
                           <div className="flex items-start justify-between gap-2 text-xs text-gray-500">
                             <span>{item.observation_date ? formatDateTime(item.observation_date) : '日付不明'}</span>
-                            <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
-                              編集
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
+                                編集
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteClick(item.id)}
+                                disabled={deletingObservationId === item.id}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              >
+                                {deletingObservationId === item.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
                           <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">
                             {displayRecentContent(item.content)}
@@ -1435,6 +1777,53 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             </DialogContent>
           </Dialog>
         )}
+
+        {/* 削除確認ダイアログ */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>記録を削除しますか？</DialogTitle>
+              <DialogDescription>
+                この操作は取り消せません。削除された記録は復元できません。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={handleDeleteCancel}
+                autoFocus
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+              >
+                削除する
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 別の記録を作成の確認ダイアログ */}
+        <Dialog open={showCreateNewDialog} onOpenChange={setShowCreateNewDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>別の記録を作成しますか？</DialogTitle>
+              <DialogDescription>
+                編集中の内容は破棄されます。よろしいですか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCreateNewDialog(false)}>
+                キャンセル
+              </Button>
+              <Button onClick={handleCreateNewConfirm}>
+                作成する
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </RequireAuth>
   );

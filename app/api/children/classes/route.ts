@@ -1,25 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 // GET /api/children/classes - クラス一覧取得
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // 認証チェック（JWT方式に統一）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
-      return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
-    }
-
-    const facility_id = userSession.current_facility_id;
+    const facility_id = metadata.current_facility_id;
 
     // クラス一覧取得（施設に紐づくクラス）
     const { data: classesData, error: classesError } = await supabase

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 /**
  * PUT /api/users/:id
@@ -118,7 +119,7 @@ export async function PUT(
         .from('_user_class')
         .update({
           is_current: false,
-          end_date: new Date().toISOString().split('T')[0],
+          end_date: getCurrentDateJST(),
         })
         .eq('user_id', targetUserId)
         .eq('is_current', true);
@@ -135,7 +136,7 @@ export async function PUT(
               : assignment.is_main
                 ? 'main'
                 : 'sub'),
-          start_date: assignment.start_date || new Date().toISOString().split('T')[0],
+          start_date: assignment.start_date || getCurrentDateJST(),
           is_current: true,
         }));
 

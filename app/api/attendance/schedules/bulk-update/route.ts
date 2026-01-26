@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 interface ScheduleUpdate {
   child_id: string;
@@ -23,25 +24,22 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    const { current_facility_id: facility_id } = metadata;
+    if (!facility_id) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
-        { status: 400 }
+        { success: false, error: 'Facility not found' },
+        { status: 404 }
       );
     }
-
-    const facility_id = userSession.current_facility_id;
 
     // リクエストボディをパース
     const body: BulkUpdateRequest = await request.json();
@@ -129,7 +127,7 @@ export async function POST(request: NextRequest) {
               friday: schedule.friday,
               saturday: schedule.saturday,
               sunday: schedule.sunday,
-              valid_from: new Date().toISOString().split('T')[0], // 今日から有効
+              valid_from: getCurrentDateJST(), // 今日から有効
               is_active: true,
             });
 

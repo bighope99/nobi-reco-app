@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { fetchAttendanceContext, isScheduledForDate } from '../../attendance/utils/attendance';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import {
   LATE_ARRIVAL_THRESHOLD_MINUTES,
   OVERDUE_DEPARTURE_THRESHOLD_MINUTES,
@@ -11,33 +12,40 @@ import {
   type LateArrivalAlert,
   getMinutesDiff,
 } from '@/lib/alerts/late-arrival';
+import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST, toDateStringJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
+    const { current_facility_id: facility_id } = metadata;
+    if (!facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
-    const facility_id = userSession.current_facility_id;
-
-    // クエリパラメータ取得
+    // クエリパラメータ取得（入力検証付き）
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const class_id = searchParams.get('class_id') || null;
+
+    // 日付のバリデーション（YYYY-MM-DD形式）
+    const dateParam = searchParams.get('date');
+    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+      ? dateParam
+      : getCurrentDateJST();
+
+    // class_idのバリデーション（UUID形式）
+    const classIdParam = searchParams.get('class_id');
+    const class_id = classIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(classIdParam)
+      ? classIdParam
+      : null;
 
     // 現在時刻
-    const now = new Date();
-    const currentTime = now.toTimeString().slice(0, 5); // HH:mm
+    const currentTime = getCurrentTimeJST();
     const currentDate = date;
 
     // 1. 出席リスト取得（子ども一覧 + 出席予定 + 実績）
@@ -52,7 +60,6 @@ export async function GET(request: NextRequest) {
         birth_date,
         grade_add,
         photo_url,
-        parent_phone,
         school_id,
         _child_class (
           class_id,
@@ -91,7 +98,7 @@ export async function GET(request: NextRequest) {
     // 週間記録数計算用の日付
     const oneWeekAgo = new Date(date);
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+    const oneWeekAgoStr = toDateStringJST(oneWeekAgo);
 
     // 並列でデータ取得（パフォーマンス最適化）
     const [
@@ -99,6 +106,7 @@ export async function GET(request: NextRequest) {
       schoolScheduleResult,
       schoolsResult,
       observationsResult,
+      guardianLinksResult,
       classesResult
     ] = await Promise.all([
       // 1. 通所予定・当日設定・実績を取得
@@ -132,7 +140,23 @@ export async function GET(request: NextRequest) {
             .is('deleted_at', null)
         : Promise.resolve({ data: [], error: null }),
 
-      // 5. クラス一覧を取得（フィルター用）
+      // 5. 保護者連絡先を取得（主たる保護者を優先）
+      childIds.length > 0
+        ? supabase
+            .from('_child_guardian')
+            .select(`
+              child_id,
+              is_primary,
+              is_emergency_contact,
+              guardian:m_guardians (
+                id,
+                phone
+              )
+            `)
+            .in('child_id', childIds)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 6. クラス一覧を取得（フィルター用）
       supabase
         .from('m_classes')
         .select('id, name')
@@ -148,6 +172,11 @@ export async function GET(request: NextRequest) {
     if (schoolScheduleResult.error) {
       console.error('School schedule fetch error:', schoolScheduleResult.error);
       return NextResponse.json({ error: 'Failed to fetch school schedules' }, { status: 500 });
+    }
+
+    if (guardianLinksResult.error) {
+      console.error('Guardian link fetch error:', guardianLinksResult.error);
+      return NextResponse.json({ error: 'Failed to fetch guardian links' }, { status: 500 });
     }
 
     // データ構造最適化: O(n)検索をO(1)に変換するためMapを使用
@@ -173,6 +202,17 @@ export async function GET(request: NextRequest) {
       const existing = observationsMap.get(obs.child_id) || [];
       existing.push(obs);
       observationsMap.set(obs.child_id, existing);
+    }
+
+    // 保護者電話番号を child_id でグループ化（主たる保護者を優先）
+    const guardianPhoneMap = new Map<string, string | null>();
+    for (const link of guardianLinksResult.data || []) {
+      if (!link?.child_id) continue;
+      const encryptedPhone = (link.guardian as { phone?: string } | undefined | null)?.phone ?? null;
+      const decryptedPhone = decryptOrFallback(encryptedPhone);
+      if (!guardianPhoneMap.has(link.child_id) || link.is_primary) {
+        guardianPhoneMap.set(link.child_id, decryptedPhone);
+      }
     }
 
     // 学校スケジュールをschool_idでグループ化
@@ -208,6 +248,7 @@ export async function GET(request: NextRequest) {
       scheduled_end_time: string | null;
       actual_in_time: string | null;
       actual_out_time: string | null;
+      check_in_method: 'qr' | 'manual' | null;
       guardian_phone: string | null;
       last_record_date: string | null;
       weekly_record_count: number;
@@ -271,10 +312,19 @@ export async function GET(request: NextRequest) {
         status = 'absent';
       }
 
+      // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
+    
+
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana);
+      const guardianPhone = guardianPhoneMap.get(child.id) ?? null;
+
       return {
         child_id: child.id,
-        name: `${child.family_name} ${child.given_name}`,
-        kana: `${child.family_name_kana} ${child.given_name_kana}`,
+        name: formatName([decryptedFamilyName, decryptedGivenName]),
+        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
@@ -287,9 +337,10 @@ export async function GET(request: NextRequest) {
         is_scheduled_today: isScheduledToday,
         scheduled_start_time: formatTimeToMinutes(scheduledStartTime),
         scheduled_end_time: formatTimeToMinutes(null),
-        actual_in_time: displayLog?.checked_in_at ? new Date(displayLog.checked_in_at).toTimeString().slice(0, 5) : null,
-        actual_out_time: displayLog?.checked_out_at ? new Date(displayLog.checked_out_at).toTimeString().slice(0, 5) : null,
-        guardian_phone: child.parent_phone || null,
+        actual_in_time: formatTimeJST(displayLog?.checked_in_at),
+        actual_out_time: formatTimeJST(displayLog?.checked_out_at),
+        check_in_method: displayLog?.check_in_method || null,
+        guardian_phone: guardianPhone,
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
       };
@@ -348,9 +399,9 @@ export async function GET(request: NextRequest) {
         alert_triggered_at: new Date().toISOString(),
       }));
 
-    // 予定外登園アラート
+    // 予定外登園アラート（QRコード経由のみ）
     const unexpected = attendanceList
-      .filter(c => c.status === 'checked_in' && !c.is_scheduled_today)
+      .filter(c => c.status === 'checked_in' && !c.is_scheduled_today && c.check_in_method === 'qr')
       .map(c => ({
         child_id: c.child_id,
         name: c.name,

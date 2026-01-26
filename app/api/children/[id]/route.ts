@@ -1,7 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { handleChildSave } from '../save/route';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+
+// 型定義
+interface GuardianRelation {
+  guardian_id: string;
+  relationship?: string | null;
+  is_primary: boolean;
+  is_emergency_contact: boolean;
+  m_guardians: Guardian | null;
+}
+
+interface Guardian {
+  id: string;
+  facility_id: string;
+  family_name: string;
+  given_name: string;
+  family_name_kana?: string;
+  given_name_kana?: string;
+  phone?: string;
+  email?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface ClassRelation {
+  class_id: string;
+  is_current: boolean;
+  m_classes?: {
+    id: string;
+    name: string;
+    age_group?: string | null;
+  };
+}
 
 // GET /api/children/:id - 子ども詳細取得
 export async function GET(
@@ -11,15 +45,14 @@ export async function GET(
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
+    const { current_facility_id } = metadata;
+    if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
@@ -53,7 +86,7 @@ export async function GET(
         )
       `)
       .eq('id', child_id)
-      .eq('facility_id', userSession.current_facility_id)
+      .eq('facility_id', current_facility_id)
       .is('deleted_at', null)
       .single();
 
@@ -76,12 +109,34 @@ export async function GET(
       `)
       .eq('child_id', child_id);
 
-    const classInfo = childData._child_class.find((c: any) => c.is_current)?.m_classes;
+    const classInfo = childData._child_class.find((c: ClassRelation) => c.is_current)?.m_classes;
 
     // 保護者情報の整形
-    const guardians = childData._child_guardian || [];
-    const primaryGuardian = guardians.find((g: any) => g.is_primary);
-    const emergencyContacts = guardians.filter((g: any) => g.is_emergency_contact && !g.is_primary);
+    const guardians: GuardianRelation[] = childData._child_guardian || [];
+    const primaryGuardian = guardians.find((g: GuardianRelation) => g.is_primary);
+    const emergencyContacts = guardians.filter((g: GuardianRelation) => g.is_emergency_contact && !g.is_primary);
+
+    // 保護者情報の復号化
+    const decryptGuardian = (guardian: Guardian | null) => {
+      if (!guardian) return null;
+      return {
+        ...guardian,
+        family_name: decryptOrFallback(guardian.family_name),
+        given_name: decryptOrFallback(guardian.given_name),
+        phone: decryptOrFallback(guardian.phone),
+        email: decryptOrFallback(guardian.email),
+      };
+    };
+
+    const decryptedPrimaryGuardian = primaryGuardian ? {
+      ...primaryGuardian,
+      m_guardians: primaryGuardian.m_guardians ? decryptGuardian(primaryGuardian.m_guardians) : null,
+    } : null;
+
+    const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({
+      ...ec,
+      m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
+    }));
 
     // データ整形
     const response = {
@@ -89,10 +144,10 @@ export async function GET(
       data: {
         child_id: childData.id,
         basic_info: {
-          family_name: childData.family_name,
-          given_name: childData.given_name,
-          family_name_kana: childData.family_name_kana,
-          given_name_kana: childData.given_name_kana,
+          family_name: decryptOrFallback(childData.family_name),
+          given_name: decryptOrFallback(childData.given_name),
+          family_name_kana: decryptOrFallback(childData.family_name_kana),
+          given_name_kana: decryptOrFallback(childData.given_name_kana),
           nickname: childData.nickname,
           gender: childData.gender,
           birth_date: childData.birth_date,
@@ -110,31 +165,49 @@ export async function GET(
           age_group: classInfo?.age_group || '',
         },
         contact: {
-          parent_name: primaryGuardian
-            ? `${primaryGuardian.m_guardians.family_name} ${primaryGuardian.m_guardians.given_name}`.trim()
-            : childData.parent_name || null, // 後方互換性のためフォールバック
-          parent_phone: primaryGuardian?.m_guardians.phone || childData.parent_phone || null,
-          parent_email: primaryGuardian?.m_guardians.email || childData.parent_email || null,
-          emergency_contacts: emergencyContacts.map((ec: any) => ({
-            name: `${ec.m_guardians.family_name} ${ec.m_guardians.given_name}`.trim(),
-            relation: ec.relationship,
-            phone: ec.m_guardians.phone,
-          })),
+          parent_name: decryptedPrimaryGuardian
+            ? formatName(
+                [
+                  decryptedPrimaryGuardian.m_guardians.family_name,
+                  decryptedPrimaryGuardian.m_guardians.given_name,
+                ],
+                null
+              )
+            : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
+          parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(childData.parent_phone) || null,
+          parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(childData.parent_email) || null,
+          emergency_contacts: (() => {
+            const formattedContacts = decryptedEmergencyContacts
+              .filter((ec) => ec.m_guardians !== null)
+              .map((ec) => ({
+                name: formatName(
+                  [ec.m_guardians!.family_name, ec.m_guardians!.given_name],
+                  ''
+                ) || '',
+                relation: ec.relationship,
+                phone: ec.m_guardians!.phone || '',
+              }));
+            return formattedContacts;
+          })(),
         },
         care_info: {
-          allergies: childData.allergies,
-          child_characteristics: childData.child_characteristics,
-          parent_characteristics: childData.parent_characteristics,
+          allergies: decryptOrFallback(childData.allergies),
+          child_characteristics: decryptOrFallback(childData.child_characteristics),
+          parent_characteristics: decryptOrFallback(childData.parent_characteristics),
         },
         permissions: {
           photo_permission_public: childData.photo_permission_public,
           photo_permission_share: childData.photo_permission_share,
         },
-        siblings: (siblingsData || []).map((s: any) => ({
-          child_id: s.m_children.id,
-          name: `${s.m_children.family_name} ${s.m_children.given_name}`,
-          relationship: s.relationship,
-        })),
+        siblings: (siblingsData || []).map((s) => {
+          const decryptedFamilyName = decryptOrFallback(s.m_children.family_name);
+          const decryptedGivenName = decryptOrFallback(s.m_children.given_name);
+          return {
+            child_id: s.m_children.id,
+            name: formatName([decryptedFamilyName, decryptedGivenName], ''),
+            relationship: s.relationship,
+          };
+        }),
         created_at: childData.created_at,
         updated_at: childData.updated_at,
       },
@@ -164,15 +237,14 @@ export async function DELETE(
   try {
     const supabase = await createClient();
 
-    // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // セッション情報取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession || !userSession.current_facility_id) {
+    const { current_facility_id } = metadata;
+    if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
@@ -183,7 +255,7 @@ export async function DELETE(
       .from('m_children')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', child_id)
-      .eq('facility_id', userSession.current_facility_id);
+      .eq('facility_id', current_facility_id);
 
     if (deleteError) {
       console.error('Child delete error:', deleteError);

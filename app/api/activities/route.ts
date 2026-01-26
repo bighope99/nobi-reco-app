@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { normalizePhotos } from '@/lib/utils/photos';
+import { findInvalidUUIDs } from '@/lib/utils/validation';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
+
+// Content validation constants
+const MAX_CONTENT_LENGTH = 10000;
+const MAX_TITLE_LENGTH = 100;
+
+// Pagination constants
+const MAX_LIMIT = 100;
 
 const signActivityPhotos = async (
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -49,31 +61,36 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    const facility_id = metadata.current_facility_id;
+    const dateParam = searchParams.get('date');
+    const class_id = searchParams.get('class_id');
+
+    // Parse pagination parameters
+    const parsedLimit = parseInt(searchParams.get('limit') || '20');
+    const parsedOffset = parseInt(searchParams.get('offset') || '0');
+
+    // Validate pagination parameters
+    if (isNaN(parsedLimit) || isNaN(parsedOffset)) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
+        { success: false, error: 'Invalid pagination parameters' },
         { status: 400 }
       );
     }
 
-    const facility_id = userSession.current_facility_id;
-    const dateParam = searchParams.get('date');
-    const class_id = searchParams.get('class_id');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    // Apply bounds: limit [1, MAX_LIMIT], offset >= 0
+    const limit = Math.min(Math.max(parsedLimit, 1), MAX_LIMIT);
+    const offset = Math.max(parsedOffset, 0);
 
     // 対象日（デフォルトは今日）
-    const targetDate = dateParam || new Date().toISOString().split('T')[0];
+    const targetDate = dateParam || getCurrentDateJST();
 
     // 活動記録を取得
     let query = supabase
@@ -87,9 +104,14 @@ export async function GET(request: NextRequest) {
         photos,
         class_id,
         mentioned_children,
+        event_name,
+        daily_schedule,
+        role_assignments,
+        special_notes,
+        meal,
         created_at,
         updated_at,
-        m_classes!inner (
+        m_classes (
           id,
           name
         ),
@@ -124,39 +146,115 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 各活動の観察記録数を取得
+    // 各活動の観察記録を取得（子ども情報もJOIN）
     const activityIds = activities?.map(a => a.id) || [];
-    let observationCounts: { [key: string]: number } = {};
+    const observationsByActivity: { [key: string]: Array<{
+      observation_id: string;
+      child_id: string;
+      child_name: string;
+    }> } = {};
+
+    // mentioned_children の子ども名を解決するためのマップを作成
+    const allMentionedChildIds = new Set<string>();
+    activities?.forEach((activity: any) => {
+      if (Array.isArray(activity.mentioned_children)) {
+        activity.mentioned_children.forEach((childId: string) => {
+          allMentionedChildIds.add(childId);
+        });
+      }
+    });
+
+    const mentionedChildrenNamesMap = new Map<string, string>();
+    if (allMentionedChildIds.size > 0) {
+      const { data: mentionedChildren, error: mentionedChildrenError } = await supabase
+        .from('m_children')
+        .select('id, family_name, given_name, nickname')
+        .in('id', Array.from(allMentionedChildIds));
+
+      if (mentionedChildrenError) {
+        console.error('Failed to fetch mentioned children names:', mentionedChildrenError);
+      } else if (mentionedChildren) {
+        mentionedChildren.forEach((child: { id: string; family_name: string | null; given_name: string | null; nickname: string | null }) => {
+          const displayName = child.nickname || formatName([
+            decryptOrFallback(child.family_name),
+            decryptOrFallback(child.given_name),
+          ]);
+          mentionedChildrenNamesMap.set(child.id, displayName);
+        });
+      }
+    }
 
     if (activityIds.length > 0) {
-      const { data: observations } = await supabase
+      const { data: observations, error: obsError } = await supabase
         .from('r_observation')
-        .select('activity_id')
+        .select(`
+          id,
+          activity_id,
+          child_id,
+          m_children (
+            family_name,
+            given_name,
+            nickname
+          )
+        `)
         .in('activity_id', activityIds)
         .is('deleted_at', null);
 
       if (observations) {
         observations.forEach((obs: any) => {
-          observationCounts[obs.activity_id] = (observationCounts[obs.activity_id] || 0) + 1;
+          if (!observationsByActivity[obs.activity_id]) {
+            observationsByActivity[obs.activity_id] = [];
+          }
+
+          // 子ども名の取得（nicknameを優先、なければ姓名）
+          const child = Array.isArray(obs.m_children) ? obs.m_children[0] : obs.m_children;
+          const childName = child?.nickname ||
+                            [child?.family_name, child?.given_name].filter(Boolean).join(' ') ||
+                            '不明';
+
+          observationsByActivity[obs.activity_id].push({
+            observation_id: obs.id,
+            child_id: obs.child_id,
+            child_name: childName,
+          });
         });
       }
     }
 
     // データを整形
-    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => ({
-      activity_id: activity.id,
-      activity_date: activity.activity_date,
-      title: activity.title || '無題',
-      content: activity.content,
-      snack: activity.snack,
-      photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
-      class_id: activity.class_id,
-      class_name: activity.m_classes?.name || '',
-      mentioned_children: activity.mentioned_children || [],
-      created_by: activity.m_users?.name || '',
-      created_at: activity.created_at,
-      individual_record_count: observationCounts[activity.id] || 0,
-    })));
+    const formattedActivities = await Promise.all((activities || []).map(async (activity: any) => {
+      const individualRecords = observationsByActivity[activity.id] || [];
+      return {
+        activity_id: activity.id,
+        activity_date: activity.activity_date,
+        title: activity.title || '無題',
+        content: activity.content,
+        snack: activity.snack,
+        photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
+        class_id: activity.class_id,
+        class_name: activity.m_classes?.name || '',
+        mentioned_children: activity.mentioned_children || [],
+        mentioned_children_names: (activity.mentioned_children || []).reduce(
+          (acc: Record<string, string>, childId: string) => {
+            const name = mentionedChildrenNamesMap.get(childId);
+            if (name) {
+              acc[childId] = name;
+            }
+            return acc;
+          },
+          {} as Record<string, string>
+        ),
+        event_name: activity.event_name,
+        daily_schedule: activity.daily_schedule,
+        role_assignments: activity.role_assignments,
+        special_notes: activity.special_notes,
+        meal: activity.meal,
+        created_by: activity.m_users?.name || '',
+        created_at: activity.created_at,
+        individual_record_count: individualRecords.length,
+        individual_records: individualRecords,
+      };
+    }));
 
     return NextResponse.json({
       success: true,
@@ -181,32 +279,85 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
 
     // 認証チェック
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // セッションからfacility_idを取得
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
+    const facility_id = metadata.current_facility_id;
+    const user_id = metadata.user_id;
+    const body = await request.json();
+    const { activity_date, class_id, title, content, snack, mentioned_children, photos,
+      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+
+    if (!activity_date) {
       return NextResponse.json(
-        { success: false, error: 'Facility not found in session' },
+        { success: false, error: 'activity_date is required' },
         { status: 400 }
       );
     }
 
-    const facility_id = userSession.current_facility_id;
-    const body = await request.json();
-    const { activity_date, class_id, title, content, snack, child_ids, photos } = body;
-
-    if (!activity_date || !class_id || !content) {
+    // Content length validation (only if content is provided)
+    if (content && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
-        { success: false, error: 'activity_date, class_id, and content are required' },
+        { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
         { status: 400 }
       );
+    }
+
+    // Title length validation
+    if (title && typeof title === 'string' && title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Title exceeds maximum length of ${MAX_TITLE_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
+
+    // mentioned_children のUUID形式検証
+    if (mentioned_children && Array.isArray(mentioned_children) && mentioned_children.length > 0) {
+      const invalidIds = findInvalidUUIDs(mentioned_children);
+      if (invalidIds.length > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid child IDs in mentioned_children' },
+          { status: 400 }
+        );
+      }
+
+      // mentioned_children の存在確認と施設所属確認
+      const { data: mentionedChildrenData, error: mentionedChildrenError } = await supabase
+        .from('m_children')
+        .select('id')
+        .in('id', mentioned_children)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null);
+
+      if (mentionedChildrenError || !mentionedChildrenData || mentionedChildrenData.length !== mentioned_children.length) {
+        return NextResponse.json(
+          { success: false, error: 'One or more child IDs are invalid or do not belong to this facility' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // class_id の施設所属確認
+    if (class_id) {
+      const { data: classData, error: classError } = await supabase
+        .from('m_classes')
+        .select('id')
+        .eq('id', class_id)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null)
+        .single();
+
+      if (classError || !classData) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid class_id or class does not belong to this facility' },
+          { status: 400 }
+        );
+      }
     }
 
     if (photos && !Array.isArray(photos)) {
@@ -223,33 +374,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedPhotos = Array.isArray(photos)
-      ? photos
-          .map((photo: any) => {
-            if (!photo || typeof photo.url !== 'string') return null;
-            return {
-              url: photo.url,
-              caption: typeof photo.caption === 'string' ? photo.caption : null,
-              thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
-              file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
-              file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
-            };
-          })
-          .filter(Boolean)
-      : null;
+    const normalizedPhotos = normalizePhotos(photos);
+
+    // 新規フィールドのバリデーション
+    const extendedFieldsResult = validateActivityExtendedFields({
+      event_name,
+      daily_schedule,
+      role_assignments,
+      special_notes,
+      snack,
+      meal,
+    });
+
+    if (!extendedFieldsResult.valid) {
+      return NextResponse.json(
+        { success: false, error: extendedFieldsResult.error },
+        { status: 400 }
+      );
+    }
+
+    const validatedFields = extendedFieldsResult.data;
 
     // 活動記録を作成
     const { data: activity, error: activityError } = await supabase
       .from('r_activity')
       .insert({
         facility_id,
-        class_id,
+        class_id: class_id || null,  // 空文字列の場合はnullに変換
         activity_date,
         title: title || '活動記録',
-        content,
-        snack,
+        content: content || '',
+        snack: validatedFields.snack,
         photos: normalizedPhotos,
-        created_by: session.user.id,
+        mentioned_children: mentioned_children || [],
+        created_by: user_id,
+        // 新規フィールド（バリデーション済み）
+        event_name: validatedFields.event_name,
+        daily_schedule: validatedFields.daily_schedule,
+        role_assignments: validatedFields.role_assignments,
+        special_notes: validatedFields.special_notes,
+        meal: validatedFields.meal,
       })
       .select()
       .single();
@@ -262,9 +426,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // LangChainで個別記録を生成（簡素化版：入力をそのまま返す）
-    const observations = [];
-    if (child_ids && child_ids.length > 0) {
+    // LangChainで個別記録を生成（並列処理版）
+    const observations: Array<{ child_id: string; content: string }> = [];
+    if (mentioned_children && mentioned_children.length > 0) {
       // Initialize LangChain
       const model = new ChatOpenAI({
         modelName: 'gpt-4o-mini',
@@ -282,31 +446,56 @@ export async function POST(request: NextRequest) {
       const prompt = PromptTemplate.fromTemplate(template);
       const chain = prompt.pipe(model);
 
-      for (const child_id of child_ids) {
+      // 並列処理: 全ての子どもに対して同時にLangChain呼び出しとDB挿入を実行
+      const observationPromises = mentioned_children.map(async (child_id: string) => {
         try {
           // Call LangChain (minimal implementation)
           const result = await chain.invoke({ content });
           const observationContent = result.content || content;
 
           // Insert observation record
-          const { error: obsError } = await supabase
+          const { data, error: obsError } = await supabase
             .from('r_observation')
             .insert({
               child_id,
-              facility_id,
               activity_id: activity.id,
-              recorded_at: new Date().toISOString(),
+              observation_date: activity_date,
               content: observationContent,
-              created_by: session.user.id,
-            });
+              created_by: user_id,
+            })
+            .select()
+            .single();
 
-          if (!obsError) {
-            observations.push({ child_id, content: observationContent });
+          if (obsError) {
+            console.error('Observation insert error:', obsError);
+            return { success: false, child_id, error: obsError };
           }
+
+          return { success: true, child_id, content: observationContent, data };
         } catch (error) {
           console.error('LangChain error for child:', child_id, error);
-          // Continue with next child even if one fails
+          return { success: false, child_id, error };
         }
+      });
+
+      // 全ての処理が完了するまで待機（部分失敗を許容）
+      const results = await Promise.allSettled(observationPromises);
+
+      // 成功・失敗を分類
+      const failedChildren: string[] = [];
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value.success) {
+          observations.push({ child_id: result.value.child_id, content: result.value.content });
+        } else {
+          // 失敗した子どものIDを記録
+          const childId = result.status === 'fulfilled' ? result.value.child_id : mentioned_children[index];
+          failedChildren.push(childId);
+        }
+      });
+
+      // 部分失敗をログに記録
+      if (failedChildren.length > 0) {
+        console.warn(`Failed to generate observations for ${failedChildren.length} children:`, failedChildren);
       }
     }
 
@@ -319,6 +508,9 @@ export async function POST(request: NextRequest) {
         content: activity.content,
         observations_created: observations.length,
         observations,
+        ...(observations.length < (mentioned_children?.length || 0) && {
+          warning: `${(mentioned_children?.length || 0) - observations.length}件の児童の観察記録生成に失敗しました`,
+        }),
       },
     });
 

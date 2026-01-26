@@ -1,24 +1,23 @@
 import { NextResponse } from 'next/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { getUserSession } from '@/lib/auth/session';
-import { createClient } from '@/utils/supabase/server';
 
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
-
-        // セッションチェック（セキュリティのため）
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
+        // 認証チェック（JWT署名検証済みメタデータから取得）
+        const metadata = await getAuthenticatedUserMetadata();
+        if (!metadata) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const { user_id } = await request.json();
 
         // リクエストされたIDとトークンのIDが一致するか確認
-        if (user_id !== session.user.id) {
+        if (user_id !== metadata.user_id) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // フルセッションデータを取得（フロントエンド用）
         const sessionData = await getUserSession(user_id);
 
         if (!sessionData) {

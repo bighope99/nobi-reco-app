@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out';
-
-const buildDateRange = (date: string) => {
-  return {
-    start: `${date}T00:00:00`,
-    end: `${date}T23:59:59`,
-  };
-};
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
 
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { current_facility_id: facility_id, user_id } = metadata;
+    if (!facility_id) {
+      return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
     }
 
     const { action, child_id, action_timestamp } = await request.json();
@@ -29,49 +29,63 @@ export async function POST(request: NextRequest) {
     if (!['check_in', 'mark_absent', 'confirm_unexpected', 'add_schedule', 'check_out'].includes(action)) {
       return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
     }
+    const attendanceDate = getCurrentDateJST(); // JST日付 (YYYY-MM-DD)
+    // JSTベースの範囲をUTCに変換して検索
+    const startOfDayUTC = new Date(`${attendanceDate}T00:00:00+09:00`).toISOString();
+    const endOfDayUTC = new Date(`${attendanceDate}T23:59:59.999+09:00`).toISOString();
 
-    const userSession = await getUserSession(session.user.id);
-    if (!userSession?.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Facility not found in session' }, { status: 400 });
+    // child_idが施設に所属しているか検証
+    const { data: childValidation, error: childError } = await supabase
+      .from('m_children')
+      .select('id')
+      .eq('id', child_id)
+      .eq('facility_id', facility_id)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (childError || !childValidation) {
+      return NextResponse.json({
+        success: false,
+        error: 'Child not found or access denied'
+      }, { status: 403 });
     }
 
-    const facilityId = userSession.current_facility_id;
-    const today = new Date();
-    const attendanceDate = today.toISOString().split('T')[0];
-    const { start, end } = buildDateRange(attendanceDate);
-
-    const { data: dailyRecord, error: dailyError } = await supabase
-      .from('r_daily_attendance')
-      .select('*')
-      .eq('child_id', child_id)
-      .eq('attendance_date', attendanceDate)
-      .maybeSingle();
+    // 並列でデータ取得
+    const [
+      { data: dailyRecord, error: dailyError },
+      { data: openAttendance, error: attendanceFetchError }
+    ] = await Promise.all([
+      supabase
+        .from('r_daily_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('attendance_date', attendanceDate)
+        .maybeSingle(),
+      supabase
+        .from('h_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('facility_id', facility_id)
+        .gte('checked_in_at', startOfDayUTC)
+        .lte('checked_in_at', endOfDayUTC)
+        .is('checked_out_at', null)
+        .maybeSingle()
+    ]);
 
     if (dailyError) {
       console.error('Daily attendance fetch error:', dailyError);
-      return NextResponse.json({ success: false, error: 'Failed to fetch daily attendance' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
     }
-
-    const { data: openAttendance, error: attendanceFetchError } = await supabase
-      .from('h_attendance')
-      .select('*')
-      .eq('child_id', child_id)
-      .eq('facility_id', facilityId)
-      .gte('checked_in_at', start)
-      .lte('checked_in_at', end)
-      .is('checked_out_at', null)
-      .maybeSingle();
-
     if (attendanceFetchError) {
       console.error('Attendance fetch error:', attendanceFetchError);
-      return NextResponse.json({ success: false, error: 'Failed to fetch attendance logs' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
     }
 
     const upsertDailyAttendance = async (status: 'scheduled' | 'absent' | 'irregular') => {
       if (dailyRecord) {
         const { error: updateError } = await supabase
           .from('r_daily_attendance')
-          .update({ status, updated_by: session.user.id })
+          .update({ status, updated_by: user_id })
           .eq('id', dailyRecord.id);
 
         if (updateError) {
@@ -83,11 +97,11 @@ export async function POST(request: NextRequest) {
           .from('r_daily_attendance')
           .insert({
             child_id,
-            facility_id: facilityId,
+            facility_id: facility_id,
             attendance_date: attendanceDate,
             status,
-            created_by: session.user.id,
-            updated_by: session.user.id,
+            created_by: user_id,
+            updated_by: user_id,
           });
 
         if (insertError) {
@@ -99,13 +113,17 @@ export async function POST(request: NextRequest) {
 
     const actionType = action as AttendanceAction;
     const resolvedTimestamp = (() => {
+      const now = new Date();
       if (action_timestamp) {
         const parsed = new Date(action_timestamp);
-        if (!Number.isNaN(parsed.getTime())) {
+        const diffMinutes = Math.abs(now.getTime() - parsed.getTime()) / 60000;
+
+        // ±5分以内のみ許可
+        if (!isNaN(parsed.getTime()) && diffMinutes <= 5) {
           return parsed.toISOString();
         }
       }
-      return new Date().toISOString();
+      return now.toISOString();
     })();
 
     if (actionType === 'check_in') {
@@ -117,10 +135,10 @@ export async function POST(request: NextRequest) {
         .from('h_attendance')
         .insert({
           child_id,
-          facility_id: facilityId,
+          facility_id: facility_id,
           checked_in_at: resolvedTimestamp,
           check_in_method: 'manual',
-          checked_in_by: session.user.id,
+          checked_in_by: user_id,
         });
 
       if (insertError) {
@@ -128,8 +146,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
       }
 
-      const status: 'scheduled' | 'irregular' = dailyRecord ? 'scheduled' : 'irregular';
-      await upsertDailyAttendance(status);
+      // 手動ボタンでは常にscheduled（irregularはQRコードのみ）
+      await upsertDailyAttendance('scheduled');
 
       return NextResponse.json({ success: true });
     }
@@ -144,7 +162,7 @@ export async function POST(request: NextRequest) {
         .update({
           checked_out_at: resolvedTimestamp,
           check_out_method: 'manual',
-          checked_out_by: session.user.id,
+          checked_out_by: user_id,
         })
         .eq('id', openAttendance.id);
 
