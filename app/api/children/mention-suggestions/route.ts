@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getUserSession } from '@/lib/auth/session'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 import { calculateGrade, formatGradeLabel } from '@/utils/grade'
 import { createClient } from '@/utils/supabase/server'
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper'
@@ -17,21 +17,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = await createClient()
-    const {
-      data: { session },
-      error: authError,
-    } = await supabase.auth.getSession()
 
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userSession = await getUserSession(session.user.id)
-    if (!userSession || !userSession.current_facility_id) {
+    const { current_facility_id: facility_id } = metadata
+    if (!facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 })
     }
-
-    const facility_id = userSession.current_facility_id
 
     let childrenQuery = supabase
       .from('m_children')

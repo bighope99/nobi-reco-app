@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getUserSession } from '@/lib/auth/session'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 import {
   createQrPayload,
   createQrPdf,
@@ -20,26 +20,22 @@ export async function GET(
     const childId = params.id
 
     const supabase = await createClient()
-    const {
-      data: { session },
-      error: authError,
-    } = await supabase.auth.getSession()
 
-    if (authError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userSession = await getUserSession(session.user.id)
-    const facilityId = userSession?.current_facility_id
-
-    if (!facilityId) {
+    const { current_facility_id: facility_id } = metadata
+    if (!facility_id) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }
 
     const { data: facilityData, error: facilityError } = await supabase
       .from('m_facilities')
       .select('name')
-      .eq('id', facilityId)
+      .eq('id', facility_id)
       .single()
 
     if (facilityError || !facilityData) {
@@ -50,7 +46,7 @@ export async function GET(
       .from('m_children')
       .select('id, family_name, given_name, facility_id, birth_date, grade_add')
       .eq('id', childId)
-      .eq('facility_id', facilityId)
+      .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .single()
 
@@ -63,7 +59,7 @@ export async function GET(
     const decryptedGivenName = decryptOrFallback(childData.given_name)
     const childName = `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim()
 
-    const { payload } = createQrPayload(childData.id, facilityId)
+    const { payload } = createQrPayload(childData.id, facility_id)
     const pdfBuffer = await createQrPdf({
       childName,
       facilityName: facilityData.name,

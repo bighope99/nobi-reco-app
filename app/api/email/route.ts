@@ -2,17 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { isBadRequestError, sendWithResend } from "@/lib/email/resend"
 import { BAD_REQUEST_MESSAGE, EmailRequestBody } from "@/lib/email/types"
-import { createClient } from "@/utils/supabase/server"
+import { getAuthenticatedUserMetadata } from "@/lib/auth/jwt"
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
-
-    if (sessionError || !session) {
+    // 認証チェック（JWT署名検証済みメタデータから取得）
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata) {
       return NextResponse.json({ success: false, ok: false, error: "認証が必要です。" }, { status: 401 })
     }
 
