@@ -482,7 +482,6 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       }
 
       if (result.success) {
-        alert(isEditMode ? '児童情報を更新しました' : '児童を登録しました');
         if (onSuccess) {
           onSuccess();
         } else {
