@@ -70,10 +70,12 @@ export async function saveChild(
   const child_id = targetChildId || payload.child_id || null;
   const isUpdate = !!child_id;
 
+  // 更新時は既存データを取得（読み仮名の暗号化データを復号するため）
+  let existingKana: { family_name_kana: string | null; given_name_kana: string | null } | null = null;
   if (isUpdate) {
     const { data: existingChild } = await supabase
       .from('m_children')
-      .select('id')
+      .select('id, family_name_kana, given_name_kana')
       .eq('id', child_id)
       .eq('facility_id', facilityId)
       .is('deleted_at', null)
@@ -82,6 +84,12 @@ export async function saveChild(
     if (!existingChild) {
       return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
+
+    // 既存の暗号化された読み仮名を復号（平文ならそのまま返る）
+    existingKana = {
+      family_name_kana: decryptOrFallback(existingChild.family_name_kana),
+      given_name_kana: decryptOrFallback(existingChild.given_name_kana),
+    };
   }
 
   const shouldSaveParentLegacy = !options?.skipParentLegacy;
@@ -111,11 +119,12 @@ export async function saveChild(
   const childValues: Record<string, unknown> = {
     facility_id: facilityId,
     school_id: basic_info.school_id || null,
-    // PIIフィールドを暗号化（氏名・フリガナ・保護者情報）
+    // PIIフィールドを暗号化（氏名・保護者情報）※読み仮名は暗号化しない
     family_name: encryptPII(basic_info.family_name),
     given_name: encryptPII(basic_info.given_name),
-    family_name_kana: encryptPII(basic_info.family_name_kana || null),
-    given_name_kana: encryptPII(basic_info.given_name_kana || null),
+    // 読み仮名: 新規入力値を優先、なければ既存データ（復号済み）を使用
+    family_name_kana: basic_info.family_name_kana || existingKana?.family_name_kana || null,
+    given_name_kana: basic_info.given_name_kana || existingKana?.given_name_kana || null,
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,
@@ -175,11 +184,9 @@ export async function saveChild(
   }
 
   // 検索用ハッシュテーブルを更新（児童情報）
+  // ※読み仮名(name_kana)は暗号化廃止によりDB直接検索可能なため、インデックス不要
   if (result.id) {
-    await Promise.all([
-      updateSearchIndex(supabase, 'child', result.id, 'name', basic_info.family_name && basic_info.given_name ? `${basic_info.family_name} ${basic_info.given_name}` : null),
-      updateSearchIndex(supabase, 'child', result.id, 'name_kana', basic_info.family_name_kana && basic_info.given_name_kana ? `${basic_info.family_name_kana} ${basic_info.given_name_kana}` : null),
-    ]);
+    await updateSearchIndex(supabase, 'child', result.id, 'name', basic_info.family_name && basic_info.given_name ? `${basic_info.family_name} ${basic_info.given_name}` : null);
   }
 
   // クラス紐付け処理

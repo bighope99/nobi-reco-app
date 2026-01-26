@@ -45,8 +45,6 @@ PII_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc
 - `notes` - 特記事項
 - `family_name` - 姓（漢字）
 - `given_name` - 名（漢字）
-- `family_name_kana` - 姓（カナ）
-- `given_name_kana` - 名（カナ）
 
 ### m_childrenテーブル
 - `parent_phone` - 保護者電話番号（DEPRECATED）
@@ -57,8 +55,8 @@ PII_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc
 - `parent_characteristics` - 親の特性・要望
 - `family_name` - 姓（漢字）
 - `given_name` - 名（漢字）
-- `family_name_kana` - 姓（カナ）
-- `given_name_kana` - 名（カナ）
+
+※読み仮名（`family_name_kana`, `given_name_kana`）は暗号化対象外です
 
 ## 検索機能
 

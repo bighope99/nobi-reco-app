@@ -88,16 +88,33 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('_child_class.class_id', class_id);
     }
 
-    // 名前検索は検索用ハッシュテーブル経由
+    // 名前検索: 漢字名は検索用ハッシュテーブル経由、カナは直接DB検索（平文のため）
     let searchChildIds: string[] | null = null;
     if (search) {
-      // 名前とフリガナの両方で検索
-      const [nameIds, kanaIds] = await Promise.all([
-        searchByName(supabase, 'child', 'name', search),
-        searchByName(supabase, 'child', 'name_kana', search),
-      ]);
+      // 漢字名は暗号化されているためインデックス経由で検索
+      const nameIds = await searchByName(supabase, 'child', 'name', search);
+
+      // カナは平文なので直接DB検索
+      // 特殊文字をエスケープしてSQL injection/filter breakを防止
+      const escapedSearch = search
+        .replace(/\\/g, '\\\\')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
+      const { data: kanaMatches, error: kanaError } = await supabase
+        .from('m_children')
+        .select('id')
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null)
+        .or(`family_name_kana.ilike.%${escapedSearch}%,given_name_kana.ilike.%${escapedSearch}%`);
+
+      if (kanaError) {
+        console.error('Kana search error:', kanaError);
+        return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+      }
+
+      const kanaIds = kanaMatches?.map(c => c.id) || [];
       searchChildIds = [...new Set([...nameIds, ...kanaIds])];
-      
+
       if (searchChildIds.length === 0) {
         // 検索結果がない場合は空の結果を返す
         return NextResponse.json({
@@ -114,7 +131,7 @@ export async function GET(request: NextRequest) {
           },
         });
       }
-      
+
       childrenQuery = childrenQuery.in('id', searchChildIds);
     }
 
