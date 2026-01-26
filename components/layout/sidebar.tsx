@@ -101,9 +101,10 @@ type SidebarProps = {
   type: "staff" | "admin"
   isOpen?: boolean
   onClose?: () => void
+  userName?: string
 }
 
-export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
 
@@ -135,11 +136,18 @@ export function Sidebar({ type, isOpen = false, onClose }: SidebarProps) {
         "fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-          の
+      <div className="border-b border-sidebar-border px-6 py-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+            の
+          </div>
+          <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
         </div>
-        <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
+        {userName && (
+          <p className="mt-1 text-xs text-muted-foreground truncate" title={userName}>
+            {userName}
+          </p>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto p-4">
