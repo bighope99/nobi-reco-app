@@ -383,11 +383,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       }
     }
 
-    // 児童が実際に変更された場合のみフォームリセット
+    // 児童が実際に変更された場合のみフォームリセット（初回選択時は除外）
     const didChangeChild =
-      selectedChildId && selectedChildId !== previousSelectedChildIdRef.current;
+      previousSelectedChildIdRef.current &&
+      selectedChildId &&
+      selectedChildId !== previousSelectedChildIdRef.current;
 
-    // フォームリセット（ドラフト時は除外）
+    // フォームリセット（ドラフト時・初回選択時は除外）
     if (didChangeChild && !draftId) {
       setEditText('');
       setAiEditForm({
