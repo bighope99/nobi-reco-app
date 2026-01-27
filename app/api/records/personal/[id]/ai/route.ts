@@ -53,8 +53,27 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    // 有効なタグIDを取得してバリデーション
+    const { data: validTags, error: tagFetchError } = await supabase
+      .from('m_observation_tags')
+      .select('id')
+      .eq('is_active', true)
+      .is('deleted_at', null);
+
+    if (tagFetchError) {
+      console.error('Failed to fetch valid tags:', tagFetchError);
+      return NextResponse.json({ success: false, error: 'タグ情報の取得に失敗しました' }, { status: 500 });
+    }
+
+    const validTagIds = new Set((validTags || []).map((t) => t.id));
+
+    // bodyから有効なタグIDのみを抽出
     const tagFlags = Object.entries(body || {}).reduce<Record<string, number>>((acc, [key, value]) => {
       if (key === 'ai_action' || key === 'ai_opinion') {
+        return acc;
+      }
+      // 有効なタグIDのみを処理
+      if (!validTagIds.has(key)) {
         return acc;
       }
       const numeric = value === true || value === 1 ? 1 : 0;
