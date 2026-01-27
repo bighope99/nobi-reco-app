@@ -189,14 +189,24 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  DELETE FROM _record_tag WHERE observation_id = p_observation_id;
+  -- Delete existing tags for this observation
+  DELETE FROM _record_tag
+  WHERE observation_id = p_observation_id;
 
+  -- Insert new tags if any provided
   IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
     INSERT INTO _record_tag (observation_id, tag_id, is_auto_tagged, confidence_score)
-    SELECT p_observation_id, unnest(p_tag_ids), p_is_auto_tagged, NULL;
+    SELECT
+      p_observation_id,
+      unnest(p_tag_ids)::uuid,  -- TEXT配列をUUIDにキャスト
+      p_is_auto_tagged,
+      NULL;
   END IF;
+
+  -- If any error occurs, transaction will be automatically rolled back
 EXCEPTION
   WHEN OTHERS THEN
+    -- Re-raise the error with detailed context
     RAISE EXCEPTION 'Failed to update observation tags for observation_id %: %',
       p_observation_id, SQLERRM;
 END;
@@ -208,6 +218,12 @@ $$;
 - 既存のタグを削除してから新しいタグを挿入（トランザクション内で実行）
 - エラー発生時は自動的にロールバックされ、データ整合性を保証
 - AI解析結果のタグ更新時に使用
+
+**重要: UUID型キャストについて**:
+- `p_tag_ids` パラメータは `TEXT[]` 型で受け取る（Supabase RPC呼び出しの互換性のため）
+- `_record_tag.tag_id` カラムは `UUID` 型
+- `unnest(p_tag_ids)` は `TEXT` 型を返すため、明示的に `::uuid` キャストが必要
+- キャストがない場合、型不一致エラー（`cannot automatically cast TEXT to UUID`）が発生する
 
 **使用例**:
 ```sql
@@ -1539,5 +1555,5 @@ CREATE POLICY facility_access ON r_activity
 ---
 
 **作成日**: 2025年1月
-**最終更新**: 2026年1月24日（保護者マスタの暗号化対応）
+**最終更新**: 2026年1月24日
 **管理者**: プロジェクトリーダー
