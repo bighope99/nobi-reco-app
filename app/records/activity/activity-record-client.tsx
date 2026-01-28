@@ -459,15 +459,15 @@ export default function ActivityRecordClient() {
     }
   }
 
-  const loadClassChildren = useCallback(
-    async (classId: string) => {
-      if (!classId) return
-
+  const loadChildren = useCallback(
+    async (classId?: string) => {
       try {
         setMentionLoading(true)
         setMentionError(null)
 
-        const response = await fetch(`/api/children?class_id=${classId}`)
+        // classIdがあればフィルタリング、なければ施設全体の児童を取得
+        const url = classId ? `/api/children?class_id=${classId}` : '/api/children'
+        const response = await fetch(url)
         const result = await response.json()
 
         if (!response.ok || !result.success) {
@@ -516,11 +516,10 @@ export default function ActivityRecordClient() {
     })
   }
 
+  // 初期ロード時と選択クラス変更時に児童リストを取得
   useEffect(() => {
-    if (selectedClass) {
-      loadClassChildren(selectedClass)
-    }
-  }, [selectedClass, loadClassChildren])
+    loadChildren(selectedClass || undefined)
+  }, [selectedClass, loadChildren])
 
   const handleAnalyze = async () => {
     setIsAiLoading(true)
@@ -1563,7 +1562,7 @@ export default function ActivityRecordClient() {
                       textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
                     }, 0)
                   }}
-                  disabled={!selectedClass || classChildren.length === 0}
+                  disabled={classChildren.length === 0}
                 >
                   <span className="mr-1">@</span>
                   児童をメンション
@@ -1624,7 +1623,7 @@ export default function ActivityRecordClient() {
                     </div>
                   ) : (
                     <p className="text-center py-4 text-sm text-muted-foreground">
-                      {!selectedClass ? "クラスを選択してください" : "児童が見つかりません"}
+                      児童が見つかりません
                     </p>
                   )}
                 </div>
