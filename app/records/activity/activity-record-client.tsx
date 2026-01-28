@@ -516,10 +516,20 @@ export default function ActivityRecordClient() {
     })
   }
 
-  // 初期ロード時と選択クラス変更時に児童リストを取得
+  // クラスがない施設: 初期ロード時に全児童取得
+  // クラスがある施設: クラス選択時のみ児童取得（大規模施設対応）
   useEffect(() => {
-    loadChildren(selectedClass || undefined)
-  }, [selectedClass, loadChildren])
+    if (classes.length === 0) {
+      // クラスがない施設は全児童を取得
+      loadChildren(undefined)
+    } else if (selectedClass) {
+      // クラスがある施設は選択されたクラスの児童のみ取得
+      loadChildren(selectedClass)
+    } else {
+      // クラスがある施設でクラス未選択時は児童リストをクリア
+      setClassChildren([])
+    }
+  }, [classes.length, selectedClass, loadChildren])
 
   const handleAnalyze = async () => {
     setIsAiLoading(true)
@@ -1562,7 +1572,7 @@ export default function ActivityRecordClient() {
                       textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
                     }, 0)
                   }}
-                  disabled={classChildren.length === 0}
+                  disabled={classes.length > 0 && !selectedClass || classChildren.length === 0}
                 >
                   <span className="mr-1">@</span>
                   児童をメンション
@@ -1623,7 +1633,7 @@ export default function ActivityRecordClient() {
                     </div>
                   ) : (
                     <p className="text-center py-4 text-sm text-muted-foreground">
-                      児童が見つかりません
+                      {classes.length > 0 && !selectedClass ? "クラスを選択してください" : "児童が見つかりません"}
                     </p>
                   )}
                 </div>
