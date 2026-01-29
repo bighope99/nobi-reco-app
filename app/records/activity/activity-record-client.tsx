@@ -459,15 +459,15 @@ export default function ActivityRecordClient() {
     }
   }
 
-  const loadClassChildren = useCallback(
-    async (classId: string) => {
-      if (!classId) return
-
+  const loadChildren = useCallback(
+    async (classId?: string) => {
       try {
         setMentionLoading(true)
         setMentionError(null)
 
-        const response = await fetch(`/api/children?class_id=${classId}`)
+        // classIdがあればフィルタリング、なければ施設全体の児童を取得
+        const url = classId ? `/api/children?class_id=${classId}` : '/api/children'
+        const response = await fetch(url)
         const result = await response.json()
 
         if (!response.ok || !result.success) {
@@ -516,11 +516,23 @@ export default function ActivityRecordClient() {
     })
   }
 
+  // クラスがない施設: 初期ロード時に全児童取得
+  // クラスがある施設: クラス選択時のみ児童取得（大規模施設対応）
   useEffect(() => {
-    if (selectedClass) {
-      loadClassChildren(selectedClass)
+    // クラス読み込み中は何もしない（初期状態と区別するため）
+    if (isLoadingClasses) return
+
+    if (classOptions.length === 0) {
+      // クラスがない施設は全児童を取得
+      loadChildren(undefined)
+    } else if (selectedClass) {
+      // クラスがある施設は選択されたクラスの児童のみ取得
+      loadChildren(selectedClass)
+    } else {
+      // クラスがある施設でクラス未選択時は児童リストをクリア
+      setClassChildren([])
     }
-  }, [selectedClass, loadClassChildren])
+  }, [isLoadingClasses, classOptions.length, selectedClass, loadChildren])
 
   const handleAnalyze = async () => {
     setIsAiLoading(true)
@@ -1563,7 +1575,7 @@ export default function ActivityRecordClient() {
                       textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
                     }, 0)
                   }}
-                  disabled={!selectedClass || classChildren.length === 0}
+                  disabled={classOptions.length > 0 && !selectedClass || classChildren.length === 0}
                 >
                   <span className="mr-1">@</span>
                   児童をメンション
@@ -1624,7 +1636,7 @@ export default function ActivityRecordClient() {
                     </div>
                   ) : (
                     <p className="text-center py-4 text-sm text-muted-foreground">
-                      {!selectedClass ? "クラスを選択してください" : "児童が見つかりません"}
+                      {classOptions.length > 0 && !selectedClass ? "クラスを選択してください" : "児童が見つかりません"}
                     </p>
                   )}
                 </div>
