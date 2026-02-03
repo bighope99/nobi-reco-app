@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useMemo, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { StickyHorizontalScrollbar } from "@/components/ui/sticky-horizontal-scrollbar";
 
 import {
     Search,
@@ -502,7 +503,7 @@ export default function StudentList() {
                                 <p>読み込み中...</p>
                             </div>
                         ) : (
-                            <div className="overflow-x-auto" >
+                            <StickyHorizontalScrollbar>
                                 <table className="w-full text-left border-collapse lg:min-w-[1100px]" >
                                     <thead className="bg-gray-50 border-b border-gray-100" >
                                         <tr>
@@ -713,7 +714,7 @@ export default function StudentList() {
                                         </div>
                                     )
                                 }
-                            </div>
+                            </StickyHorizontalScrollbar>
                         )}
                     </div>
 
