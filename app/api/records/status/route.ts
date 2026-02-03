@@ -106,12 +106,13 @@ export async function GET(request: NextRequest) {
 
     const childIds = childrenData.map((c: any) => c.id);
 
-    // 2-5. データ取得（並列実行で高速化）
+    // 2-6. データ取得（並列実行で高速化）
     const [
       { data: monthlyAttendanceData, error: monthlyAttError },
       { data: monthlyObservationsData, error: monthlyObsError },
       { data: yearlyAttendanceData, error: yearlyAttError },
       { data: yearlyObservationsData, error: yearlyObsError },
+      { data: allTimeLastRecordsData, error: allTimeLastRecordsError },
     ] = await Promise.all([
       // 月間出席ログ
       supabase
@@ -146,15 +147,24 @@ export async function GET(request: NextRequest) {
         .gte('observation_date', yearStartStr)
         .lte('observation_date', today)
         .is('deleted_at', null),
+
+      // 全期間の最終記録日（月をまたいでも継続表示するため）
+      supabase
+        .from('r_observation')
+        .select('child_id, observation_date')
+        .in('child_id', childIds)
+        .is('deleted_at', null)
+        .order('observation_date', { ascending: false }),
     ]);
 
     // エラーチェック
-    if (monthlyAttError || monthlyObsError || yearlyAttError || yearlyObsError) {
+    if (monthlyAttError || monthlyObsError || yearlyAttError || yearlyObsError || allTimeLastRecordsError) {
       console.error('Data fetch errors:', {
         monthlyAttError,
         monthlyObsError,
         yearlyAttError,
         yearlyObsError,
+        allTimeLastRecordsError,
       });
       return NextResponse.json(
         { error: 'Failed to fetch status data' },
@@ -195,6 +205,15 @@ export async function GET(request: NextRequest) {
       yearlyObservationsByChild.get(o.child_id)!.push(o);
     });
 
+    // 全期間の最終記録日（child_id -> 最新の observation_date）
+    // データは observation_date 降順でソート済みなので、最初の1件が最新
+    const allTimeLastRecordByChild = new Map<string, string>();
+    (allTimeLastRecordsData || []).forEach((o) => {
+      if (!allTimeLastRecordByChild.has(o.child_id)) {
+        allTimeLastRecordByChild.set(o.child_id, o.observation_date);
+      }
+    });
+
     // データ整形
     const children = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
@@ -219,10 +238,8 @@ export async function GET(request: NextRequest) {
         ? Math.round((monthlyRecordCount / monthlyAttendanceCount) * 100 * 10) / 10
         : 0;
 
-      // 最終記録日
-      const lastRecordDate = monthlyObservations.length > 0
-        ? monthlyObservations.sort((a: any, b: any) => b.observation_date.localeCompare(a.observation_date))[0].observation_date
-        : null;
+      // 最終記録日（全期間 - 月をまたいでも継続表示）
+      const lastRecordDate = allTimeLastRecordByChild.get(child.id) || null;
 
       const isRecordedToday = lastRecordDate === today;
 
