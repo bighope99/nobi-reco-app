@@ -1,0 +1,82 @@
+# Table Implementation (テーブル実装ガイドライン)
+
+横スクロールが必要なテーブルを実装する際のガイドライン。
+
+## スティッキー横スクロールバー
+
+縦に長いテーブルでは、画面下部に固定されたスクロールバーを表示する。
+
+### 使用コンポーネント
+
+```typescript
+import { StickyHorizontalScrollbar } from '@/components/ui/sticky-horizontal-scrollbar';
+```
+
+### 基本的な使い方
+
+```tsx
+// Before - 通常の横スクロール
+<div className="overflow-x-auto">
+  <table className="w-full min-w-[1100px]">
+    {/* ... */}
+  </table>
+</div>
+
+// After - スティッキースクロールバー付き
+<StickyHorizontalScrollbar>
+  <table className="w-full min-w-[1100px]">
+    {/* ... */}
+  </table>
+</StickyHorizontalScrollbar>
+```
+
+### コンポーネントの特徴
+
+- **自動表示制御**: テーブル下部が画面内に見えたらスクロールバーを非表示
+- **双方向同期**: 固定スクロールバーと実際のスクロールを同期
+- **パフォーマンス最適化**: `requestAnimationFrame`でスクロール同期
+- **アクセシビリティ**: ダミースクロールバーに`aria-hidden="true"`
+
+### 適用が推奨されるページ
+
+以下のページで縦に長いテーブルがある場合に適用を検討：
+
+- `/children` - 児童一覧 ✅ 適用済み
+- `/records/status` - 記録ステータス一覧
+- `/attendance/list` - 出欠一覧
+- `/settings/users` - ユーザー管理
+
+## テーブル構造のベストプラクティス
+
+### レスポンシブテーブル
+
+```tsx
+<div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <StickyHorizontalScrollbar>
+    <table className="w-full text-left border-collapse lg:min-w-[1100px]">
+      <thead className="bg-gray-50 border-b border-gray-200">
+        {/* ヘッダー */}
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {/* データ行 */}
+      </tbody>
+    </table>
+  </StickyHorizontalScrollbar>
+</div>
+```
+
+### 列の固定（必要な場合）
+
+左端の列を固定したい場合は`sticky`と`left-0`を組み合わせる：
+
+```tsx
+<th className="sticky left-0 z-10 bg-gray-50 px-4 py-3">
+  児童名
+</th>
+```
+
+## 注意事項
+
+- `StickyHorizontalScrollbar`内の`overflow-x-auto`は不要（コンポーネントが処理）
+- テーブルには`min-w-[...]`を設定して最小幅を確保
+- モバイルでも同じ動作（タッチスワイプで横スクロール可能）
