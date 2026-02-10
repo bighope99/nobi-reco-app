@@ -173,6 +173,10 @@ export default function StudentList() {
                     params.append('search', searchTerm);
                 }
 
+                // Add sort params
+                params.append('sort_by', sortKey);
+                params.append('sort_order', sortOrder);
+
                 const response = await fetch(`/api/children?${params.toString()}`);
                 const result: ChildrenAPIResponse = await response.json();
 

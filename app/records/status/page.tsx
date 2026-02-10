@@ -131,7 +131,7 @@ export default function StatusPage() {
     const [selectedClass, setSelectedClass] = useState('all')
     const [searchTerm, setSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
-    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'name', order: 'asc' })
+    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'asc' })
 
     // 履歴モーダル用の状態
     const [historyModalOpen, setHistoryModalOpen] = useState(false)
