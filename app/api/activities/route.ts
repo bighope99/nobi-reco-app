@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
     const user_id = metadata.user_id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+      event_name, daily_schedule, role_assignments, special_notes, meal, recorded_by } = body;
 
     if (!activity_date) {
       return NextResponse.json(
@@ -408,6 +408,7 @@ export async function POST(request: NextRequest) {
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],
         created_by: user_id,
+        recorded_by: recorded_by || null,
         // 新規フィールド（バリデーション済み）
         event_name: validatedFields.event_name,
         daily_schedule: validatedFields.daily_schedule,

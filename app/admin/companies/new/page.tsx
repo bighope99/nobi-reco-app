@@ -30,18 +30,6 @@ export default function NewCompanyPage() {
             phone: data.company.phone.trim() || undefined,
             email: data.company.email.trim() || undefined,
           },
-          facility: data.facility
-            ? {
-                name: data.facility.name.trim(),
-                name_kana: data.facility.name_kana.trim() || undefined,
-                postal_code: data.facility.postal_code.trim() || undefined,
-                address: data.facility.address.trim() || undefined,
-                phone: data.facility.phone.trim() || undefined,
-                capacity: data.facility.capacity
-                  ? parseInt(data.facility.capacity, 10)
-                  : undefined,
-              }
-            : undefined,
           admin_user: data.adminUser
             ? {
                 name: data.adminUser.name.trim(),
@@ -52,12 +40,15 @@ export default function NewCompanyPage() {
         }),
       })
 
-      if (!response.ok) {
-        const result = await response.json()
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
         throw new Error(result.error || "会社の登録に失敗しました")
       }
 
-      router.push("/admin/companies")
+      // 完了画面にリダイレクト
+      const companyId = result.data.company_id
+      router.push(`/admin/companies/${companyId}/complete`)
     } finally {
       setIsSubmitting(false)
     }

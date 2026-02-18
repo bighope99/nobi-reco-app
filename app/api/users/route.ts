@@ -197,12 +197,95 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 必須パラメータチェック
-    if (!body.email || !body.name || !body.role) {
+    if (!body.name || !body.role) {
       return NextResponse.json(
-        { success: false, error: 'Missing required parameters' },
+        { success: false, error: 'Missing required parameters: name, role' },
         { status: 400 }
       );
     }
+
+    // メールなしスタッフ以外はメール必須
+    const isEmaillessStaff = !body.email && body.role === 'staff';
+    if (!body.email && !isEmaillessStaff) {
+      return NextResponse.json(
+        { success: false, error: 'Email is required for non-staff roles' },
+        { status: 400 }
+      );
+    }
+
+    // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
+    const targetFacilityId = role === 'site_admin'
+      ? (body.facility_id || current_facility_id)
+      : current_facility_id;
+
+    // ---- メールなしスタッフ登録（auth.users に登録しない） ----
+    if (isEmaillessStaff) {
+      const staffId = crypto.randomUUID();
+
+      const { data: newStaff, error: createError } = await supabase
+        .from('m_users')
+        .insert({
+          id: staffId,
+          company_id: company_id,
+          name: body.name,
+          name_kana: body.name_kana || null,
+          phone: body.phone || null,
+          role: 'staff',
+          hire_date: body.hire_date || getCurrentDateJST(),
+          is_active: true,
+          // email は NULL（個別ログインアカウントなし）
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
+
+      // 施設との紐付け
+      if (targetFacilityId) {
+        await supabase.from('_user_facility').insert({
+          user_id: newStaff.id,
+          facility_id: targetFacilityId,
+          start_date: newStaff.hire_date,
+          is_current: true,
+          is_primary: true,
+        });
+      }
+
+      // クラス担当設定（任意）
+      if (body.assigned_classes && body.assigned_classes.length > 0) {
+        const classAssignments = body.assigned_classes.map((assignment: { class_id: string; class_role?: string; is_main?: boolean; start_date?: string }) => ({
+          user_id: newStaff.id,
+          class_id: assignment.class_id,
+          class_role:
+            assignment.class_role ??
+            (assignment.is_main === undefined
+              ? null
+              : assignment.is_main
+                ? 'main'
+                : 'sub'),
+          start_date: assignment.start_date || newStaff.hire_date,
+          is_current: true,
+        }));
+
+        await supabase.from('_user_class').insert(classAssignments);
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          user_id: newStaff.id,
+          email: null,
+          name: newStaff.name,
+          role: newStaff.role,
+          created_at: newStaff.created_at,
+        },
+        message: '職員を登録しました（ログインアカウントなし）。',
+      });
+    }
+
+    // ---- メールありスタッフ登録（従来フロー: auth.users + 招待メール） ----
 
     // メールアドレス重複チェック
     const { data: existingUser } = await supabase
@@ -218,11 +301,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
-    const targetFacilityId = role === 'site_admin'
-      ? (body.facility_id || current_facility_id)
-      : current_facility_id;
 
     // Admin クライアントを作成（サービスロールキー使用）
     const supabaseAdmin = await createAdminClient();
@@ -315,7 +393,7 @@ export async function POST(request: NextRequest) {
 
     // クラス担当設定（任意）
     if (body.assigned_classes && body.assigned_classes.length > 0) {
-      const classAssignments = body.assigned_classes.map((assignment: any) => ({
+      const classAssignments = body.assigned_classes.map((assignment: { class_id: string; class_role?: string; is_main?: boolean; start_date?: string }) => ({
         user_id: newUser.id,
         class_id: assignment.class_id,
         class_role:
@@ -359,7 +437,7 @@ export async function POST(request: NextRequest) {
         role: newUser.role,
         companyName,
         facilityName,
-        inviteUrl, // 生成されたマジックリンクを含める
+        inviteUrl,
       });
 
       await sendWithGas({

@@ -110,7 +110,8 @@ export async function GET() {
 
 /**
  * POST /api/admin/companies
- * 会社+施設+代表者ユーザー作成（site_adminのみ）
+ * 会社 + 会社管理者ユーザー作成（site_adminのみ）
+ * 施設は別途 /api/admin/companies/[companyId]/facilities で登録する
  */
 export async function POST(request: NextRequest) {
   try {
@@ -133,12 +134,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // 必須パラメータチェック
-    if (!body.company?.name || !body.facility?.name || !body.admin_user?.name || !body.admin_user?.email) {
+    // 必須パラメータチェック（施設は不要）
+    if (!body.company?.name || !body.admin_user?.name || !body.admin_user?.email) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Missing required parameters: company.name, facility.name, admin_user.name, and admin_user.email are required'
+          error: 'Missing required parameters: company.name, admin_user.name, and admin_user.email are required'
         },
         { status: 400 }
       );
@@ -180,103 +181,38 @@ export async function POST(request: NextRequest) {
       throw companyError;
     }
 
-    // Step 2: 施設作成
-    const { data: newFacility, error: facilityError } = await supabase
-      .from('m_facilities')
-      .insert({
-        company_id: newCompany.id,
-        name: body.facility.name,
-        name_kana: body.facility.name_kana,
-        postal_code: body.facility.postal_code,
-        address: body.facility.address,
-        phone: body.facility.phone,
-        email: body.facility.email,
-        capacity: body.facility.capacity,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (facilityError) {
-      // ロールバック: 会社削除
-      const { error: rollbackError } = await supabase
-        .from('m_companies')
-        .delete()
-        .eq('id', newCompany.id);
-      if (rollbackError) {
-        console.error('Rollback failed for company:', newCompany.id, rollbackError);
-      }
-
-      throw facilityError;
-    }
-
-    // Step 3: Supabase Auth ユーザー作成
+    // Step 2: Supabase Auth ユーザー作成（current_facility_id は null: 施設はまだない）
     const supabaseAdmin = await createAdminClient();
 
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email: body.admin_user.email,
-      email_confirm: false, // メール確認は招待リンクで行う
+      email_confirm: false,
       app_metadata: {
         role: 'company_admin',
         company_id: newCompany.id,
-        current_facility_id: newFacility.id,
+        current_facility_id: null,
       },
     });
 
     if (authCreateError || !authData.user) {
-      // ロールバック: 施設削除 → 会社削除
-      const { error: rollbackFacilityError } = await supabase
-        .from('m_facilities')
-        .delete()
-        .eq('id', newFacility.id);
-      if (rollbackFacilityError) {
-        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
-      }
-
-      const { error: rollbackCompanyError } = await supabase
-        .from('m_companies')
-        .delete()
-        .eq('id', newCompany.id);
-      if (rollbackCompanyError) {
-        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
-      }
-
+      // ロールバック: 会社削除
+      await supabase.from('m_companies').delete().eq('id', newCompany.id);
       throw authCreateError || new Error('Failed to create auth user');
     }
 
-    // Step 4: 招待リンク生成
+    // Step 3: 招待リンク生成
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'invite',
       email: body.admin_user.email,
     });
 
     if (linkError || !linkData) {
-      // ロールバック: Auth ユーザー削除 → 施設削除 → 会社削除
-      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      if (rollbackAuthError) {
-        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
-      }
-
-      const { error: rollbackFacilityError } = await supabase
-        .from('m_facilities')
-        .delete()
-        .eq('id', newFacility.id);
-      if (rollbackFacilityError) {
-        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
-      }
-
-      const { error: rollbackCompanyError } = await supabase
-        .from('m_companies')
-        .delete()
-        .eq('id', newCompany.id);
-      if (rollbackCompanyError) {
-        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
-      }
-
+      // ロールバック
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabase.from('m_companies').delete().eq('id', newCompany.id);
       throw linkError || new Error('Failed to generate invite link');
     }
 
-    // トークンハッシュの抽出
     const supabaseUrl = linkData.properties.action_link;
     const urlObj = new URL(supabaseUrl);
     const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
@@ -284,44 +220,18 @@ export async function POST(request: NextRequest) {
 
     if (!tokenHash) {
       console.error('Failed to extract token from invite link for email:', body.admin_user.email);
-
-      // ロールバック: Auth ユーザー削除 → 施設削除 → 会社削除
-      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      if (rollbackAuthError) {
-        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
-      }
-
-      const { error: rollbackFacilityError } = await supabase
-        .from('m_facilities')
-        .delete()
-        .eq('id', newFacility.id);
-      if (rollbackFacilityError) {
-        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
-      }
-
-      const { error: rollbackCompanyError } = await supabase
-        .from('m_companies')
-        .delete()
-        .eq('id', newCompany.id);
-      if (rollbackCompanyError) {
-        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
-      }
-
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabase.from('m_companies').delete().eq('id', newCompany.id);
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to generate valid invite link',
-          message: 'Token hash is missing from the generated link',
-        },
+        { success: false, error: 'Failed to generate valid invite link' },
         { status: 500 }
       );
     }
 
-    // 招待URLの構築
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
-    // Step 5: m_users テーブルにユーザー情報を登録
+    // Step 4: m_users テーブルにユーザー情報を登録
     const hireDateValue = body.admin_user.hire_date || getCurrentDateJST();
 
     const { data: newUser, error: createUserError } = await supabase
@@ -341,84 +251,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (createUserError) {
-      // ロールバック: Auth ユーザー削除 → 施設削除 → 会社削除
-      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      if (rollbackAuthError) {
-        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
-      }
-
-      const { error: rollbackFacilityError } = await supabase
-        .from('m_facilities')
-        .delete()
-        .eq('id', newFacility.id);
-      if (rollbackFacilityError) {
-        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
-      }
-
-      const { error: rollbackCompanyError } = await supabase
-        .from('m_companies')
-        .delete()
-        .eq('id', newCompany.id);
-      if (rollbackCompanyError) {
-        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
-      }
-
+      // ロールバック
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabase.from('m_companies').delete().eq('id', newCompany.id);
       throw createUserError;
     }
 
-    // Step 6: _user_facility に紐付け
-    const { error: userFacilityError } = await supabase
-      .from('_user_facility')
-      .insert({
-        user_id: newUser.id,
-        facility_id: newFacility.id,
-        start_date: hireDateValue,
-        is_current: true,
-        is_primary: true,
-      });
-
-    if (userFacilityError) {
-      // ロールバック: m_users削除 → Auth ユーザー削除 → 施設削除 → 会社削除
-      const { error: rollbackUserError } = await supabase
-        .from('m_users')
-        .delete()
-        .eq('id', newUser.id);
-      if (rollbackUserError) {
-        console.error('Rollback failed for user:', newUser.id, rollbackUserError);
-      }
-
-      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      if (rollbackAuthError) {
-        console.error('Rollback failed for auth user:', authData.user.id, rollbackAuthError);
-      }
-
-      const { error: rollbackFacilityError } = await supabase
-        .from('m_facilities')
-        .delete()
-        .eq('id', newFacility.id);
-      if (rollbackFacilityError) {
-        console.error('Rollback failed for facility:', newFacility.id, rollbackFacilityError);
-      }
-
-      const { error: rollbackCompanyError } = await supabase
-        .from('m_companies')
-        .delete()
-        .eq('id', newCompany.id);
-      if (rollbackCompanyError) {
-        console.error('Rollback failed for company:', newCompany.id, rollbackCompanyError);
-      }
-
-      throw userFacilityError;
-    }
-
-    // Step 7: 招待メール送信
+    // Step 5: 招待メール送信
     try {
       const emailHtml = buildUserInvitationEmailHtml({
         userName: newUser.name,
         userEmail: newUser.email,
         role: newUser.role,
         companyName: newCompany.name,
-        facilityName: newFacility.name,
         inviteUrl,
       });
 
@@ -429,7 +274,6 @@ export async function POST(request: NextRequest) {
         senderName: 'のびレコ',
       });
     } catch (emailError) {
-      // メール送信エラーはログに記録するが、処理自体は成功とする
       console.error('Failed to send invitation email:', emailError);
     }
 
@@ -438,14 +282,12 @@ export async function POST(request: NextRequest) {
       data: {
         company_id: newCompany.id,
         company_name: newCompany.name,
-        facility_id: newFacility.id,
-        facility_name: newFacility.name,
         admin_user_id: newUser.id,
       },
-      message: '会社、施設、代表者ユーザーを作成しました',
+      message: '会社と管理者ユーザーを作成しました。続けて施設を登録してください。',
     });
   } catch (error) {
-    console.error('Error creating company, facility, and admin user:', error);
+    console.error('Error creating company and admin user:', error);
     return NextResponse.json(
       {
         success: false,

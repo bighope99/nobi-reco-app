@@ -105,16 +105,13 @@ function validateForm(
     errors.companyName = "会社名は必須です"
   }
 
-  // Facility and admin user are required only for create mode
+  // Admin user is required only for create mode
   if (mode === "create") {
-    if (!facility.name.trim()) {
-      errors.facilityName = "施設名は必須です"
-    }
     if (!adminUser.name.trim()) {
-      errors.adminUserName = "代表者氏名は必須です"
+      errors.adminUserName = "会社管理者氏名は必須です"
     }
     if (!adminUser.email.trim()) {
-      errors.adminUserEmail = "代表者メールアドレスは必須です"
+      errors.adminUserEmail = "会社管理者メールアドレスは必須です"
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(adminUser.email.trim())) {
@@ -188,7 +185,7 @@ export function CompanyForm({
     try {
       const submitData: CompanyFormSubmitData = {
         company,
-        ...(mode === "create" && { facility, adminUser }),
+        ...(mode === "create" && { adminUser }),
       }
       await onSubmit(submitData)
     } catch (err) {
@@ -280,92 +277,16 @@ export function CompanyForm({
         </CardContent>
       </Card>
 
-      {/* Facility Section (Create mode only) */}
-      {mode === "create" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>初期施設情報</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="facility-name">
-                施設名 <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="facility-name"
-                placeholder="例: 〇〇学童クラブ"
-                value={facility.name}
-                onChange={(e) => handleFacilityChange("name", e.target.value)}
-                disabled={isDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="facility-name-kana">施設名カナ</Label>
-              <Input
-                id="facility-name-kana"
-                placeholder="例: マルマルガクドウクラブ"
-                value={facility.name_kana}
-                onChange={(e) => handleFacilityChange("name_kana", e.target.value)}
-                disabled={isDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="facility-postal-code">郵便番号</Label>
-              <Input
-                id="facility-postal-code"
-                placeholder="例: 100-0001"
-                value={facility.postal_code}
-                onChange={(e) => handleFacilityChange("postal_code", e.target.value)}
-                disabled={isDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="facility-address">住所</Label>
-              <Input
-                id="facility-address"
-                placeholder="例: 東京都千代田区..."
-                value={facility.address}
-                onChange={(e) => handleFacilityChange("address", e.target.value)}
-                disabled={isDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="facility-phone">電話番号</Label>
-              <Input
-                id="facility-phone"
-                type="tel"
-                placeholder="例: 03-1234-5678"
-                value={facility.phone}
-                onChange={(e) => handleFacilityChange("phone", e.target.value)}
-                disabled={isDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="facility-capacity">定員</Label>
-              <Input
-                id="facility-capacity"
-                type="number"
-                min="0"
-                placeholder="例: 40"
-                value={facility.capacity}
-                onChange={(e) => handleFacilityChange("capacity", e.target.value)}
-                disabled={isDisabled}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Admin User Section (Create mode only) */}
       {mode === "create" && (
         <Card>
           <CardHeader>
-            <CardTitle>代表者情報</CardTitle>
+            <CardTitle>会社管理者情報</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="admin-name">
-                代表者氏名 <span className="text-red-500">*</span>
+                管理者氏名 <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="admin-name"
@@ -376,7 +297,7 @@ export function CompanyForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="admin-name-kana">代表者氏名カナ</Label>
+              <Label htmlFor="admin-name-kana">管理者氏名カナ</Label>
               <Input
                 id="admin-name-kana"
                 placeholder="例: ヤマダ タロウ"
