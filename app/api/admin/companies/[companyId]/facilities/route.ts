@@ -50,6 +50,40 @@ export async function POST(
       );
     }
 
+    // 入力値バリデーション
+    const facilityName = String(body.facility.name).trim();
+    const adminEmail = String(body.facility_admin.email).trim();
+    const adminName = String(body.facility_admin.name).trim();
+
+    if (facilityName.length > 255) {
+      return NextResponse.json(
+        { success: false, error: '施設名は255文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminEmail)) {
+      return NextResponse.json(
+        { success: false, error: 'メールアドレスの形式が正しくありません' },
+        { status: 400 }
+      );
+    }
+
+    if (adminEmail.length > 255) {
+      return NextResponse.json(
+        { success: false, error: 'メールアドレスは255文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
+    if (adminName.length > 100) {
+      return NextResponse.json(
+        { success: false, error: '管理者氏名は100文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
     const supabase = await createClient();
 
     // 会社の存在確認
@@ -71,7 +105,7 @@ export async function POST(
     const { data: existingUser } = await supabase
       .from('m_users')
       .select('id')
-      .eq('email', body.facility_admin.email)
+      .eq('email', adminEmail)
       .is('deleted_at', null)
       .single();
 
@@ -87,8 +121,8 @@ export async function POST(
       .from('m_facilities')
       .insert({
         company_id: companyId,
-        name: body.facility.name,
-        name_kana: body.facility.name_kana || null,
+        name: facilityName,
+        name_kana: body.facility.name_kana?.trim() || null,
         postal_code: body.facility.postal_code || null,
         address: body.facility.address || null,
         phone: body.facility.phone || null,
@@ -106,7 +140,7 @@ export async function POST(
     const supabaseAdmin = await createAdminClient();
 
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
-      email: body.facility_admin.email,
+      email: adminEmail,
       email_confirm: false,
       app_metadata: {
         role: 'facility_admin',
@@ -117,20 +151,20 @@ export async function POST(
 
     if (authCreateError || !authData.user) {
       // ロールバック: 施設削除
-      await supabase.from('m_facilities').delete().eq('id', newFacility.id);
+      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw authCreateError || new Error('Failed to create auth user');
     }
 
     // Step 3: 招待リンク生成
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'invite',
-      email: body.facility_admin.email,
+      email: adminEmail,
     });
 
     if (linkError || !linkData) {
       // ロールバック
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_facilities').delete().eq('id', newFacility.id);
+      try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
+      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw linkError || new Error('Failed to generate invite link');
     }
 
@@ -140,9 +174,9 @@ export async function POST(
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link for email:', body.facility_admin.email);
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_facilities').delete().eq('id', newFacility.id);
+      console.error('Failed to extract token from invite link for email:', adminEmail);
+      try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
+      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       return NextResponse.json(
         { success: false, error: 'Failed to generate valid invite link' },
         { status: 500 }
@@ -160,9 +194,9 @@ export async function POST(
       .insert({
         id: authData.user.id,
         company_id: companyId,
-        email: body.facility_admin.email,
-        name: body.facility_admin.name,
-        name_kana: body.facility_admin.name_kana || null,
+        email: adminEmail,
+        name: adminName,
+        name_kana: body.facility_admin.name_kana?.trim() || null,
         role: 'facility_admin',
         is_active: true,
         hire_date: hireDateValue,
@@ -173,8 +207,8 @@ export async function POST(
 
     if (createUserError || !newUser) {
       // ロールバック
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_facilities').delete().eq('id', newFacility.id);
+      try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
+      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw createUserError || new Error('Failed to create user');
     }
 
@@ -191,9 +225,9 @@ export async function POST(
 
     if (userFacilityError) {
       // ロールバック
-      await supabase.from('m_users').delete().eq('id', newUser.id);
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_facilities').delete().eq('id', newFacility.id);
+      try { await supabase.from('m_users').delete().eq('id', newUser.id); } catch (e) { console.error('Rollback failed (m_users):', e); }
+      try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
+      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw userFacilityError;
     }
 
@@ -208,26 +242,24 @@ export async function POST(
       });
     }
 
-    // Step 6: 招待メール送信
-    try {
-      const emailHtml = buildUserInvitationEmailHtml({
-        userName: newUser.name,
-        userEmail: newUser.email,
-        role: newUser.role,
-        companyName: company.name,
-        facilityName: newFacility.name,
-        inviteUrl,
-      });
+    // Step 6: 招待メール送信（fire-and-forget: レスポンスをブロックしない）
+    const emailHtml = buildUserInvitationEmailHtml({
+      userName: newUser.name,
+      userEmail: newUser.email,
+      role: newUser.role,
+      companyName: company.name,
+      facilityName: newFacility.name,
+      inviteUrl,
+    });
 
-      await sendWithGas({
-        to: newUser.email,
-        subject: '【のびレコ】アカウント登録のご案内',
-        htmlBody: emailHtml,
-        senderName: 'のびレコ',
-      });
-    } catch (emailError) {
+    sendWithGas({
+      to: newUser.email,
+      subject: '【のびレコ】アカウント登録のご案内',
+      htmlBody: emailHtml,
+      senderName: 'のびレコ',
+    }).catch((emailError) => {
       console.error('Failed to send invitation email:', emailError);
-    }
+    });
 
     return NextResponse.json({
       success: true,

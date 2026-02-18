@@ -257,25 +257,23 @@ export async function POST(request: NextRequest) {
       throw createUserError;
     }
 
-    // Step 5: 招待メール送信
-    try {
-      const emailHtml = buildUserInvitationEmailHtml({
-        userName: newUser.name,
-        userEmail: newUser.email,
-        role: newUser.role,
-        companyName: newCompany.name,
-        inviteUrl,
-      });
+    // Step 5: 招待メール送信（fire-and-forget: レスポンスをブロックしない）
+    const emailHtml = buildUserInvitationEmailHtml({
+      userName: newUser.name,
+      userEmail: newUser.email,
+      role: newUser.role,
+      companyName: newCompany.name,
+      inviteUrl,
+    });
 
-      await sendWithGas({
-        to: newUser.email,
-        subject: '【のびレコ】アカウント登録のご案内',
-        htmlBody: emailHtml,
-        senderName: 'のびレコ',
-      });
-    } catch (emailError) {
+    sendWithGas({
+      to: newUser.email,
+      subject: '【のびレコ】アカウント登録のご案内',
+      htmlBody: emailHtml,
+      senderName: 'のびレコ',
+    }).catch((emailError) => {
       console.error('Failed to send invitation email:', emailError);
-    }
+    });
 
     return NextResponse.json({
       success: true,

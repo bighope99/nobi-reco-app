@@ -4,7 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { normalizePhotos } from '@/lib/utils/photos';
-import { findInvalidUUIDs } from '@/lib/utils/validation';
+import { findInvalidUUIDs, isValidUUID } from '@/lib/utils/validation';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
@@ -337,6 +337,30 @@ export async function POST(request: NextRequest) {
       if (mentionedChildrenError || !mentionedChildrenData || mentionedChildrenData.length !== mentioned_children.length) {
         return NextResponse.json(
           { success: false, error: 'One or more child IDs are invalid or do not belong to this facility' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // recorded_by のUUID形式検証 + 同一会社の有効スタッフか確認
+    if (recorded_by) {
+      if (!isValidUUID(recorded_by)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid recorded_by ID format' },
+          { status: 400 }
+        );
+      }
+      const { data: recorder } = await supabase
+        .from('m_users')
+        .select('id')
+        .eq('id', recorded_by)
+        .eq('company_id', metadata.company_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .single();
+      if (!recorder) {
+        return NextResponse.json(
+          { success: false, error: 'recorded_by user not found or not in your company' },
           { status: 400 }
         );
       }

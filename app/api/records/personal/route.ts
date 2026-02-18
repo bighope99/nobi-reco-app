@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
+import { isValidUUID } from '@/lib/utils/validation';
 
 // Content validation constants
 const MAX_CONTENT_LENGTH = 5000;
@@ -68,6 +69,30 @@ export async function POST(request: NextRequest) {
         { success: false, error: `Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters` },
         { status: 400 }
       );
+    }
+
+    // recorded_by のUUID形式検証 + 同一会社の有効スタッフか確認
+    if (recorded_by) {
+      if (!isValidUUID(recorded_by)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid recorded_by ID format' },
+          { status: 400 }
+        );
+      }
+      const { data: recorder } = await supabase
+        .from('m_users')
+        .select('id')
+        .eq('id', recorded_by)
+        .eq('company_id', session.company_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .single();
+      if (!recorder) {
+        return NextResponse.json(
+          { success: false, error: 'recorded_by user not found or not in your company' },
+          { status: 400 }
+        );
+      }
     }
 
     // 子どもが現在の施設に所属しているか確認

@@ -5,6 +5,33 @@ import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 
+interface ClassAssignmentInput {
+  class_id: string;
+  class_role?: string;
+  is_main?: boolean;
+  start_date?: string;
+}
+
+function buildClassAssignments(
+  userId: string,
+  assignments: ClassAssignmentInput[],
+  defaultStartDate: string | null
+) {
+  return assignments.map((assignment) => ({
+    user_id: userId,
+    class_id: assignment.class_id,
+    class_role:
+      assignment.class_role ??
+      (assignment.is_main === undefined
+        ? null
+        : assignment.is_main
+          ? 'main'
+          : 'sub'),
+    start_date: assignment.start_date || defaultStartDate,
+    is_current: true,
+  }));
+}
+
 /**
  * GET /api/users
  * 職員一覧取得
@@ -93,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     // 各ユーザーの担当クラスを取得
     const usersWithDetails = await Promise.all(
-      (usersData || []).map(async (u: any) => {
+      (usersData || []).map(async (u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => {
         // 担当クラス取得
         const { data: classAssignments } = await supabase
           .from('_user_class')
@@ -110,7 +137,7 @@ export async function GET(request: NextRequest) {
           .eq('is_current', true);
 
         const assignedClasses =
-          classAssignments?.map((ca: any) => ({
+          classAssignments?.map((ca: { class_role: string | null; m_classes: { id: string; name: string } }) => ({
             class_id: ca.m_classes.id,
             class_name: ca.m_classes.name,
             is_main: ca.class_role === 'main',
@@ -136,7 +163,7 @@ export async function GET(request: NextRequest) {
     // 統計情報
     const totalUsers = usersWithDetails.length;
     const activeUsers = usersWithDetails.filter((u) => u.is_active).length;
-    const byRole = usersWithDetails.reduce((acc: any, u) => {
+    const byRole = usersWithDetails.reduce<Record<string, number>>((acc, u) => {
       acc[u.role] = (acc[u.role] || 0) + 1;
       return acc;
     }, {});
@@ -255,20 +282,7 @@ export async function POST(request: NextRequest) {
 
       // クラス担当設定（任意）
       if (body.assigned_classes && body.assigned_classes.length > 0) {
-        const classAssignments = body.assigned_classes.map((assignment: { class_id: string; class_role?: string; is_main?: boolean; start_date?: string }) => ({
-          user_id: newStaff.id,
-          class_id: assignment.class_id,
-          class_role:
-            assignment.class_role ??
-            (assignment.is_main === undefined
-              ? null
-              : assignment.is_main
-                ? 'main'
-                : 'sub'),
-          start_date: assignment.start_date || newStaff.hire_date,
-          is_current: true,
-        }));
-
+        const classAssignments = buildClassAssignments(newStaff.id, body.assigned_classes, newStaff.hire_date);
         await supabase.from('_user_class').insert(classAssignments);
       }
 
@@ -393,20 +407,7 @@ export async function POST(request: NextRequest) {
 
     // クラス担当設定（任意）
     if (body.assigned_classes && body.assigned_classes.length > 0) {
-      const classAssignments = body.assigned_classes.map((assignment: { class_id: string; class_role?: string; is_main?: boolean; start_date?: string }) => ({
-        user_id: newUser.id,
-        class_id: assignment.class_id,
-        class_role:
-          assignment.class_role ??
-          (assignment.is_main === undefined
-            ? null
-            : assignment.is_main
-              ? 'main'
-              : 'sub'),
-        start_date: assignment.start_date || newUser.hire_date,
-        is_current: true,
-      }));
-
+      const classAssignments = buildClassAssignments(newUser.id, body.assigned_classes, newUser.hire_date);
       await supabase.from('_user_class').insert(classAssignments);
     }
 
@@ -440,15 +441,17 @@ export async function POST(request: NextRequest) {
         inviteUrl,
       });
 
-      await sendWithGas({
+      sendWithGas({
         to: newUser.email,
         subject: '【のびレコ】アカウント登録のご案内',
         htmlBody: emailHtml,
         senderName: 'のびレコ',
+      }).catch((emailError) => {
+        console.error('Failed to send custom invitation email:', emailError);
       });
     } catch (emailError) {
-      // メール送信エラーはログに記録するが、ユーザー登録自体は成功とする
-      console.error('Failed to send custom invitation email:', emailError);
+      // メールHTML生成エラーはログに記録するが、ユーザー登録自体は成功とする
+      console.error('Failed to prepare invitation email:', emailError);
     }
 
     return NextResponse.json({

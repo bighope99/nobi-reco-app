@@ -678,7 +678,8 @@ export default function ActivityRecordClient() {
 
       // 記録者をCookieに保存（30日間）
       if (selectedRecorder) {
-        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`
+        const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`
       }
 
       const response = await fetch('/api/activities', {

@@ -422,7 +422,7 @@ export default function UsersSettingsPage() {
                     type="email"
                     placeholder="example@email.com"
                     value={newUser.email}
-                    onChange={(e: any) => setNewUser({ ...newUser, email: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUser({ ...newUser, email: e.target.value })}
                   />
                   {!isEmailRequired && (
                     <p className="text-xs text-slate-500 mt-1">
