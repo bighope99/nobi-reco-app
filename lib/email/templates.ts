@@ -15,6 +15,7 @@ export const buildUserInvitationEmailHtml = (params: {
 }): string => {
   const roleNameMap: Record<string, string> = {
     site_admin: 'サイト管理者',
+    company_admin: '会社管理者',
     facility_admin: '施設管理者',
     staff: 'スタッフ',
   }
