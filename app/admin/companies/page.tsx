@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
-import { Search, Plus, Edit, Mail, Loader2, AlertCircle } from "lucide-react"
+import { Search, Plus, Eye, Mail, Loader2, AlertCircle } from "lucide-react"
 
 interface AdminUser {
   id: string
@@ -165,9 +165,9 @@ export default function CompaniesPage() {
                           {resendingId === company.id ? "送信中..." : "招待再送信"}
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" asChild aria-label={`${company.name}を編集`}>
-                        <Link href={`/admin/companies/${company.id}/edit`}>
-                          <Edit className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" asChild aria-label={`${company.name}の詳細`}>
+                        <Link href={`/admin/companies/${company.id}`}>
+                          <Eye className="h-4 w-4" />
                         </Link>
                       </Button>
                     </div>
