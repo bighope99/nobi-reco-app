@@ -17,7 +17,6 @@ export interface CompanyFormData {
   postal_code: string
   address: string
   phone: string
-  email: string
 }
 
 export interface FacilityFormData {
@@ -63,7 +62,6 @@ const defaultCompanyData: CompanyFormData = {
   postal_code: "",
   address: "",
   phone: "",
-  email: "",
 }
 
 const defaultFacilityData: FacilityFormData = {
@@ -260,17 +258,6 @@ export function CompanyForm({
               placeholder="例: 03-1234-5678"
               value={company.phone}
               onChange={(e) => handleCompanyChange("phone", e.target.value)}
-              disabled={isDisabled}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="company-email">メールアドレス</Label>
-            <Input
-              id="company-email"
-              type="email"
-              placeholder="例: info@example.com"
-              value={company.email}
-              onChange={(e) => handleCompanyChange("email", e.target.value)}
               disabled={isDisabled}
             />
           </div>

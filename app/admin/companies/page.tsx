@@ -143,7 +143,7 @@ export default function CompaniesPage() {
                           <>
                             <span className="hidden sm:inline">|</span>
                             <span>
-                              代表者: {company.admin_user.name} ({company.admin_user.email})
+                              代表者: {company.admin_user.name}
                             </span>
                           </>
                         )}
