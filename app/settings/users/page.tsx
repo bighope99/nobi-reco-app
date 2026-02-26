@@ -356,7 +356,7 @@ export default function UsersSettingsPage() {
                           <td className="px-6 py-4">
                             <Select
                               value={user.role}
-                              onChange={(e: any) => handleUpdateUserRole(user.user_id, e.target.value)}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateUserRole(user.user_id, e.target.value)}
                               className="max-w-[140px] text-xs"
                             >
                               {roleOptions.map(option => (
@@ -420,7 +420,7 @@ export default function UsersSettingsPage() {
                   <Input
                     placeholder="例: 田中太郎"
                     value={newUser.name}
-                    onChange={(e: any) => setNewUser({ ...newUser, name: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUser({ ...newUser, name: e.target.value })}
                   />
                 </FieldGroup>
 
@@ -445,14 +445,14 @@ export default function UsersSettingsPage() {
                     type="tel"
                     placeholder="090-1234-5678"
                     value={newUser.phone}
-                    onChange={(e: any) => setNewUser({ ...newUser, phone: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUser({ ...newUser, phone: e.target.value })}
                   />
                 </FieldGroup>
 
                 <FieldGroup label="権限" required>
                   <Select
                     value={newUser.role}
-                    onChange={(e: any) => setNewUser({ ...newUser, role: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, role: e.target.value })}
                   >
                     {roleOptions.map(option => (
                       <option key={option.value} value={option.value}>

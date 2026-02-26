@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       .is('deleted_at', null)
       .single();
 
-    if (companyCheckError) {
+    if (companyCheckError && companyCheckError.code !== 'PGRST116') {
       console.error('Database error checking company existence:', companyCheckError);
       return NextResponse.json(
         { success: false, error: 'Internal Server Error' },
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!existingCompany) {
+    if (!existingCompany || companyCheckError?.code === 'PGRST116') {
       return NextResponse.json(
         { success: false, error: 'Company not found' },
         { status: 404 }
