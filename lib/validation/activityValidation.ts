@@ -307,19 +307,24 @@ export const validateSnack = (
 export const validateHandover = (
   handover: unknown
 ): { valid: true; data: string | null } | { valid: false; error: string } => {
-  if (handover === null || handover === undefined || handover === '') {
+  if (handover === null || handover === undefined) {
     return { valid: true, data: null };
   }
 
   if (typeof handover !== 'string') {
-    return { valid: false, error: '引継ぎ事項 must be a string' };
+    return { valid: false, error: '引継ぎ事項は文字列で入力してください' };
   }
 
-  if (handover.length > MAX_HANDOVER_LENGTH) {
-    return { valid: false, error: `引継ぎ事項 exceeds ${MAX_HANDOVER_LENGTH} characters` };
+  const normalizedHandover = handover.trim();
+  if (normalizedHandover === '') {
+    return { valid: true, data: null };
   }
 
-  return { valid: true, data: handover };
+  if (normalizedHandover.length > MAX_HANDOVER_LENGTH) {
+    return { valid: false, error: `引継ぎ事項は${MAX_HANDOVER_LENGTH}文字以内で入力してください` };
+  }
+
+  return { valid: true, data: normalizedHandover };
 };
 
 /**
