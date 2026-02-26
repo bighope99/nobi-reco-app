@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -142,6 +142,7 @@ export function CompanyForm({
     initialData?.adminUser ?? defaultAdminUserData
   )
   const [error, setError] = useState<string | null>(null)
+  const submittingRef = useRef(false)
 
   // Sync state when initialData changes (for edit mode)
   useEffect(() => {
@@ -170,6 +171,8 @@ export function CompanyForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     setError(null)
 
     // Validation
@@ -177,6 +180,7 @@ export function CompanyForm({
     const firstError = Object.values(errors)[0]
     if (firstError) {
       setError(firstError)
+      submittingRef.current = false
       return
     }
 
@@ -188,6 +192,7 @@ export function CompanyForm({
       await onSubmit(submitData)
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました")
+      submittingRef.current = false
     }
   }
 

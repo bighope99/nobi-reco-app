@@ -28,7 +28,6 @@ export default function NewCompanyPage() {
             postal_code: data.company.postal_code.trim() || undefined,
             address: data.company.address.trim() || undefined,
             phone: data.company.phone.trim() || undefined,
-            email: data.company.email.trim() || undefined,
           },
           admin_user: data.adminUser
             ? {
