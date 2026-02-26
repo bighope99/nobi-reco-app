@@ -350,14 +350,21 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const { data: recorder } = await supabase
+      const { data: recorder, error: recorderError } = await supabase
         .from('m_users')
         .select('id')
         .eq('id', recorded_by)
         .eq('company_id', metadata.company_id)
         .eq('is_active', true)
         .is('deleted_at', null)
-        .single();
+        .maybeSingle();
+      if (recorderError) {
+        console.error('recorded_by validation query failed:', recorderError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to validate recorded_by' },
+          { status: 500 }
+        );
+      }
       if (!recorder) {
         return NextResponse.json(
           { success: false, error: 'recorded_by user not found or not in your company' },

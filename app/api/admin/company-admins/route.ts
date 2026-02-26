@@ -51,7 +51,15 @@ export async function POST(request: NextRequest) {
       .is('deleted_at', null)
       .single();
 
-    if (companyCheckError || !existingCompany) {
+    if (companyCheckError) {
+      console.error('Database error checking company existence:', companyCheckError);
+      return NextResponse.json(
+        { success: false, error: 'Internal Server Error' },
+        { status: 500 }
+      );
+    }
+
+    if (!existingCompany) {
       return NextResponse.json(
         { success: false, error: 'Company not found' },
         { status: 404 }
@@ -59,12 +67,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: メールアドレス重複チェック
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: emailCheckError } = await supabase
       .from('m_users')
       .select('id')
       .eq('email', body.admin_user.email)
       .is('deleted_at', null)
       .single();
+
+    if (emailCheckError && emailCheckError.code !== 'PGRST116') {
+      console.error('Database error checking email uniqueness:', emailCheckError);
+      return NextResponse.json(
+        { success: false, error: 'Internal Server Error' },
+        { status: 500 }
+      );
+    }
 
     if (existingUser) {
       return NextResponse.json(
@@ -108,7 +124,7 @@ export async function POST(request: NextRequest) {
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link for email:', body.admin_user.email);
+      console.error('Failed to extract token from invite link for company admin registration');
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       return NextResponse.json(
         { success: false, error: 'Failed to generate valid invite link' },
@@ -116,7 +132,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (!baseUrl) {
+      console.error('NEXT_PUBLIC_SITE_URL is not configured');
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      return NextResponse.json(
+        { success: false, error: 'Internal Server Error' },
+        { status: 500 }
+      );
+    }
+
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // Step 5: m_users テーブルにユーザー情報を登録

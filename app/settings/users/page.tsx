@@ -139,6 +139,7 @@ export default function UsersSettingsPage() {
   const handleAddUser = async () => {
     const normalizedName = newUser.name.trim();
     const normalizedEmail = newUser.email.trim();
+    const normalizedPhone = (newUser.phone || '').trim() || null;
     if (!normalizedName || (isEmailRequired && !normalizedEmail)) return;
 
     try {
@@ -149,6 +150,7 @@ export default function UsersSettingsPage() {
           ...newUser,
           name: normalizedName,
           email: normalizedEmail || null,
+          phone: normalizedPhone,
         }),
       });
 

@@ -11,8 +11,10 @@ import {
 export default function NewCompanyPage() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (data: CompanyFormSubmitData) => {
+    setError(null)
     setIsSubmitting(true)
 
     try {
@@ -51,6 +53,8 @@ export default function NewCompanyPage() {
         throw new Error("会社IDの取得に失敗しました")
       }
       router.push(`/admin/companies/${companyId}/complete`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました")
     } finally {
       setIsSubmitting(false)
     }
@@ -63,6 +67,11 @@ export default function NewCompanyPage() {
   return (
     <AdminLayout title="会社登録" subtitle="新しい会社を登録">
       <div className="mx-auto max-w-2xl">
+        {error && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            {error}
+          </div>
+        )}
         <CompanyForm
           mode="create"
           onSubmit={handleSubmit}
