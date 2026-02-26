@@ -174,7 +174,7 @@ export async function POST(
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link for email:', adminEmail);
+      console.error('Failed to extract token from invite link for facility admin user');
       try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
       try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       return NextResponse.json(
@@ -233,13 +233,16 @@ export async function POST(
 
     // Step 5: company_admin の current_facility_id が null の場合、この施設で更新
     if (metadata.role === 'company_admin' && !metadata.current_facility_id) {
-      await supabaseAdmin.auth.admin.updateUserById(metadata.user_id, {
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(metadata.user_id, {
         app_metadata: {
           role: metadata.role,
           company_id: metadata.company_id,
           current_facility_id: newFacility.id,
         },
       });
+      if (updateError) {
+        console.error('Failed to update company_admin current_facility_id:', updateError);
+      }
     }
 
     // Step 6: 招待メール送信（fire-and-forget: レスポンスをブロックしない）
@@ -276,7 +279,6 @@ export async function POST(
       {
         success: false,
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );

@@ -10,9 +10,9 @@ ALTER TABLE m_users ALTER COLUMN email DROP NOT NULL;
 -- created_by: APIを叩いたログインユーザー（監査用、変更なし）
 -- recorded_by: 実際に記録を書いたスタッフ（業務上の意味）
 
-ALTER TABLE r_activity ADD COLUMN recorded_by UUID REFERENCES m_users(id);
-ALTER TABLE r_observation ADD COLUMN recorded_by UUID REFERENCES m_users(id);
-ALTER TABLE r_voice ADD COLUMN recorded_by UUID REFERENCES m_users(id);
+ALTER TABLE r_activity ADD COLUMN recorded_by UUID REFERENCES m_users(id) ON DELETE SET NULL;
+ALTER TABLE r_observation ADD COLUMN recorded_by UUID REFERENCES m_users(id) ON DELETE SET NULL;
+ALTER TABLE r_voice ADD COLUMN recorded_by UUID REFERENCES m_users(id) ON DELETE SET NULL;
 
 -- インデックス
 CREATE INDEX idx_activity_recorded_by ON r_activity(recorded_by) WHERE recorded_by IS NOT NULL;

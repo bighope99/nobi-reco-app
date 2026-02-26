@@ -31,6 +31,7 @@ export default function NewCompanyAdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<SuccessResult | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -57,6 +58,7 @@ export default function NewCompanyAdminPage() {
 
   const handleSubmit = async (formData: CompanyAdminFormData) => {
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const response = await fetch("/api/admin/company-admins", {
         method: "POST",
@@ -77,6 +79,9 @@ export default function NewCompanyAdminPage() {
         admin_user_name: result.data.admin_user_name,
         admin_user_email: result.data.admin_user_email,
       });
+    } catch (error) {
+      console.error("Registration failed:", error);
+      setSubmitError(error instanceof Error ? error.message : "登録に失敗しました");
     } finally {
       setIsSubmitting(false);
     }
@@ -120,12 +125,19 @@ export default function NewCompanyAdminPage() {
         ) : isLoading ? (
           <p className="text-muted-foreground">読み込み中...</p>
         ) : (
-          <CompanyAdminForm
-            companies={companies}
-            onSubmit={handleSubmit}
-            onCancel={() => window.history.back()}
-            isSubmitting={isSubmitting}
-          />
+          <>
+            {submitError && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600 mb-4">
+                {submitError}
+              </div>
+            )}
+            <CompanyAdminForm
+              companies={companies}
+              onSubmit={handleSubmit}
+              onCancel={() => window.history.back()}
+              isSubmitting={isSubmitting}
+            />
+          </>
         )}
       </div>
     </AdminLayout>

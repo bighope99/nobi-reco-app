@@ -46,7 +46,10 @@ export default function NewCompanyPage() {
       }
 
       // 完了画面にリダイレクト
-      const companyId = result.data.company_id
+      const companyId = result.data?.company_id
+      if (!companyId) {
+        throw new Error("会社IDの取得に失敗しました")
+      }
       router.push(`/admin/companies/${companyId}/complete`)
     } finally {
       setIsSubmitting(false)

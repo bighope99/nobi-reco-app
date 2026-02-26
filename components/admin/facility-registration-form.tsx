@@ -77,6 +77,13 @@ export function FacilityRegistrationForm({
       setError("メールアドレスの形式が正しくありません")
       return
     }
+    const parsedCapacity = facilityCapacity.trim()
+      ? parseInt(facilityCapacity.trim(), 10)
+      : null
+    if (parsedCapacity !== null && (isNaN(parsedCapacity) || parsedCapacity <= 0)) {
+      setError("定員は1以上の整数を入力してください")
+      return
+    }
 
     try {
       await onSubmit({

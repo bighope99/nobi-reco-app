@@ -487,6 +487,7 @@ export async function POST(request: NextRequest) {
               observation_date: activity_date,
               content: observationContent,
               created_by: user_id,
+              recorded_by: recorded_by || null,
             })
             .select()
             .single();

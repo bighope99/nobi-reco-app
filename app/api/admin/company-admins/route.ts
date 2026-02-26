@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: '会社管理者の登録に失敗しました',
       },
       { status: 500 }
     );

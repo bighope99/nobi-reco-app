@@ -998,6 +998,7 @@ export default function ActivityRecordClient() {
           ai_action: aiResult.data?.objective ?? '',
           ai_opinion: aiResult.data?.subjective ?? '',
           tag_flags: aiResult.data?.flags ?? {},
+          recorded_by: selectedRecorder || undefined,
         }),
       })
 

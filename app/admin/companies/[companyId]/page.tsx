@@ -95,12 +95,16 @@ export default function CompanyDetailPage(props: {
 
   const getRoleLabel = (role: string): string => {
     switch (role) {
+      case "site_admin":
+        return "システム管理者"
       case "company_admin":
         return "会社管理者"
       case "facility_admin":
         return "施設管理者"
+      case "staff":
+        return "職員"
       default:
-        return role
+        return "不明"
     }
   }
 

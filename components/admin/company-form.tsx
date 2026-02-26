@@ -192,6 +192,7 @@ export function CompanyForm({
       await onSubmit(submitData)
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました")
+    } finally {
       submittingRef.current = false
     }
   }

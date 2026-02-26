@@ -101,7 +101,6 @@ export async function GET() {
       {
         success: false,
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
@@ -219,7 +218,7 @@ export async function POST(request: NextRequest) {
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link for email:', body.admin_user.email);
+      console.error('Failed to extract token from invite link for company admin user');
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       await supabase.from('m_companies').delete().eq('id', newCompany.id);
       return NextResponse.json(
@@ -290,7 +289,6 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );

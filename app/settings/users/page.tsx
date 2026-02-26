@@ -137,13 +137,19 @@ export default function UsersSettingsPage() {
   const isEmailRequired = newUser.role !== 'staff';
 
   const handleAddUser = async () => {
-    if (!newUser.name || (isEmailRequired && !newUser.email)) return;
+    const normalizedName = newUser.name.trim();
+    const normalizedEmail = newUser.email.trim();
+    if (!normalizedName || (isEmailRequired && !normalizedEmail)) return;
 
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify({
+          ...newUser,
+          name: normalizedName,
+          email: normalizedEmail || null,
+        }),
       });
 
       const data = await response.json();
@@ -468,7 +474,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  disabled={!newUser.name || (isEmailRequired && !newUser.email)}
+                  disabled={!newUser.name.trim() || (isEmailRequired && !newUser.email.trim())}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus size={16} />
