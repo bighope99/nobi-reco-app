@@ -604,6 +604,7 @@ CREATE TABLE IF NOT EXISTS r_activity (
   title VARCHAR(200),                            -- タイトル（例: 公園で外遊び）
   content TEXT NOT NULL,                         -- 活動内容（本文）
   snack TEXT,                                    -- おやつ
+  handover TEXT,                                 -- 翌日スタッフへの引継ぎ事項
   mentioned_children TEXT[],                     -- メンションされた子供の暗号化トークンの配列
 
   -- 写真（JSONBで複数枚保存）

@@ -40,7 +40,7 @@ export async function PATCH(
 
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+      event_name, daily_schedule, role_assignments, special_notes, handover, meal } = body;
 
     // Content length validation
     if (content !== undefined && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
@@ -150,6 +150,7 @@ export async function PATCH(
       daily_schedule,
       role_assignments,
       special_notes,
+      handover,
       snack,
       meal,
     });
@@ -180,6 +181,7 @@ export async function PATCH(
     if (daily_schedule !== undefined) updateData.daily_schedule = validatedFields.daily_schedule;
     if (role_assignments !== undefined) updateData.role_assignments = validatedFields.role_assignments;
     if (special_notes !== undefined) updateData.special_notes = validatedFields.special_notes;
+    if (handover !== undefined) updateData.handover = validatedFields.handover;
     if (meal !== undefined) updateData.meal = validatedFields.meal;
 
     // 活動記録を更新

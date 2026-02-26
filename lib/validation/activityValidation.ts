@@ -7,6 +7,7 @@ import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 // 定数
 export const MAX_EVENT_NAME_LENGTH = 200;
 export const MAX_SPECIAL_NOTES_LENGTH = 2000;
+export const MAX_HANDOVER_LENGTH = 2000;
 export const MAX_SNACK_LENGTH = 200;
 export const MAX_DAILY_SCHEDULE_ITEMS = 50;
 export const MAX_ROLE_ASSIGNMENTS = 20;
@@ -301,6 +302,27 @@ export const validateSnack = (
 };
 
 /**
+ * handover の検証
+ */
+export const validateHandover = (
+  handover: unknown
+): { valid: true; data: string | null } | { valid: false; error: string } => {
+  if (handover === null || handover === undefined || handover === '') {
+    return { valid: true, data: null };
+  }
+
+  if (typeof handover !== 'string') {
+    return { valid: false, error: '引継ぎ事項 must be a string' };
+  }
+
+  if (handover.length > MAX_HANDOVER_LENGTH) {
+    return { valid: false, error: `引継ぎ事項 exceeds ${MAX_HANDOVER_LENGTH} characters` };
+  }
+
+  return { valid: true, data: handover };
+};
+
+/**
  * 全ての新規フィールドを一括検証
  */
 export const validateActivityExtendedFields = (body: {
@@ -310,6 +332,7 @@ export const validateActivityExtendedFields = (body: {
   special_notes?: unknown;
   snack?: unknown;
   meal?: unknown;
+  handover?: unknown;
 }): {
   valid: true;
   data: {
@@ -319,6 +342,7 @@ export const validateActivityExtendedFields = (body: {
     special_notes: string | null;
     snack: string | null;
     meal: Meal | null;
+    handover: string | null;
   };
 } | { valid: false; error: string } => {
   const eventNameResult = validateEventName(body.event_name);
@@ -339,6 +363,9 @@ export const validateActivityExtendedFields = (body: {
   const mealResult = validateMeal(body.meal);
   if (!mealResult.valid) return mealResult;
 
+  const handoverResult = validateHandover(body.handover);
+  if (!handoverResult.valid) return handoverResult;
+
   return {
     valid: true,
     data: {
@@ -348,6 +375,7 @@ export const validateActivityExtendedFields = (body: {
       special_notes: specialNotesResult.data,
       snack: snackResult.data,
       meal: mealResult.data,
+      handover: handoverResult.data,
     },
   };
 };

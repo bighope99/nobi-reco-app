@@ -2,7 +2,7 @@
  * Activity Extended Fields Sanitization
  *
  * Provides sanitization logic for activity record extended fields
- * (daily_schedule, role_assignments, snack, meal, special_notes, event_name).
+ * (daily_schedule, role_assignments, snack, meal, special_notes, event_name, handover).
  *
  * Rules:
  * - daily_schedule: Remove rows where both time and content are empty/whitespace
@@ -11,6 +11,7 @@
  * - meal: Return null if all fields (menu, notes, items_to_bring) are empty/whitespace
  * - special_notes: Return null if empty/whitespace
  * - event_name: Return null if empty/whitespace
+ * - handover: Return null if empty/whitespace
  */
 
 import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from '@/lib/security/sanitize'
@@ -23,6 +24,7 @@ export interface ExtendedFieldsInput {
   meal: Meal | null
   specialNotes: string
   eventName: string
+  handover?: string
 }
 
 export interface SanitizedExtendedFields {
@@ -32,6 +34,7 @@ export interface SanitizedExtendedFields {
   daily_schedule: DailyScheduleItem[] | null
   role_assignments: RoleAssignment[] | null
   meal: Meal | null
+  handover: string | null
 }
 
 /**
@@ -79,6 +82,11 @@ export function getSanitizedExtendedFields(input: ExtendedFieldsInput): Sanitize
     ? sanitizeText(input.eventName)
     : null
 
+  // 7. handover: 空文字列・空白のみの場合はnull
+  const sanitizedHandover = input.handover && input.handover.trim() !== ""
+    ? sanitizeText(input.handover)
+    : null
+
   return {
     event_name: sanitizedEventName,
     special_notes: sanitizedSpecialNotes,
@@ -86,5 +94,6 @@ export function getSanitizedExtendedFields(input: ExtendedFieldsInput): Sanitize
     daily_schedule: sanitizedSchedule,
     role_assignments: sanitizedRoles,
     meal: sanitizedMeal,
+    handover: sanitizedHandover,
   }
 }
