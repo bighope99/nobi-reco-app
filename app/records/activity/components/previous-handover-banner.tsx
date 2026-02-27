@@ -67,6 +67,9 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
     }
   }, [activityDate, selectedClass])
 
+  // データなし＋ロード完了 → 非表示
+  if (items.length === 0 && !loading) return null
+
   // ローディング中はスケルトン表示
   if (loading) {
     return (
@@ -85,8 +88,6 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
       </div>
     )
   }
-
-  if (items.length === 0) return null
 
   return (
     <div className="rounded-xl border border-orange-200 bg-orange-50 shadow-md overflow-hidden">
