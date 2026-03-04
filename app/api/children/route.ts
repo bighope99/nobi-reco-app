@@ -148,8 +148,18 @@ export async function GET(request: NextRequest) {
     }
 
     // ソート
-    const sortColumn = sort_by === 'name' ? 'family_name_kana' : sort_by;
-    childrenQuery = childrenQuery.order(sortColumn, { ascending: sort_order === 'asc' });
+    let sortColumn = sort_by;
+    let orderRule = sort_order === 'asc';
+
+    if (sort_by === 'grade') {
+      sortColumn = 'birth_date';
+      // 学年昇順(asc) = 年齢が若い順 = 誕生日が遅い順(desc)
+      orderRule = sort_order !== 'asc'; 
+    } else if (sort_by === 'name') {
+      sortColumn = 'family_name_kana';
+    }
+
+    childrenQuery = childrenQuery.order(sortColumn, { ascending: orderRule });
 
     // ページネーション
     childrenQuery = childrenQuery.range(offset, offset + limit - 1);
