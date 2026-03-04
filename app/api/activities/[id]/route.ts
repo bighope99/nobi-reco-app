@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
+import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -17,6 +18,24 @@ type RouteContext = {
     id: string;
   }>;
 };
+
+interface ActivityUpdateData {
+  updated_by: string;
+  updated_at: string;
+  activity_date?: string;
+  class_id?: string;
+  title?: string;
+  content?: string;
+  snack?: string | null;
+  mentioned_children?: string[];
+  photos?: Array<{ url: string; caption?: string | null; thumbnail_url?: string | null; file_id?: string; file_path?: string }>;
+  event_name?: string | null;
+  daily_schedule?: DailyScheduleItem[] | null;
+  role_assignments?: RoleAssignment[] | null;
+  special_notes?: string | null;
+  handover?: string | null;
+  meal?: Meal | null;
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -165,7 +184,7 @@ export async function PATCH(
     const validatedFields = extendedFieldsResult.data;
 
     // 更新データの準備
-    const updateData: any = {
+    const updateData: ActivityUpdateData = {
       updated_by: user_id,
       updated_at: new Date().toISOString(),
     };
@@ -207,6 +226,13 @@ export async function PATCH(
         activity_date: updatedActivity.activity_date,
         title: updatedActivity.title,
         content: updatedActivity.content,
+        snack: updatedActivity.snack,
+        event_name: updatedActivity.event_name,
+        daily_schedule: updatedActivity.daily_schedule,
+        role_assignments: updatedActivity.role_assignments,
+        special_notes: updatedActivity.special_notes,
+        handover: updatedActivity.handover,
+        meal: updatedActivity.meal,
       },
     });
 

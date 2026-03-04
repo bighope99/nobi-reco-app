@@ -81,6 +81,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // class_id の施設所属チェック
+    if (class_id) {
+      const { data: classData, error: classError } = await supabase
+        .from('m_classes')
+        .select('id')
+        .eq('id', class_id)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null)
+        .single();
+
+      if (classError || !classData) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid class_id or class does not belong to this facility' },
+          { status: 400 }
+        );
+      }
+    }
+
     // handover が存在する最新の活動を検索（1クエリで完結）
     let query = supabase
       .from('r_activity')
