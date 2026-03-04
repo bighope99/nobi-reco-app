@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
+interface UserFacilityRelation {
+  facility_id: string;
+  is_primary: boolean;
+  m_facilities: { name: string } | null;
+}
+
 /**
  * GET /api/admin/companies/[companyId]
  * 会社詳細取得（site_adminのみ）
@@ -107,7 +113,7 @@ export async function GET(
       email: user.email,
       role: user.role,
       is_active: user.is_active,
-      facilities: (user._user_facility || []).map((uf: any) => ({
+      facilities: (user._user_facility || []).map((uf: UserFacilityRelation) => ({
         facility_id: uf.facility_id,
         facility_name: uf.m_facilities?.name || '',
         is_primary: uf.is_primary,

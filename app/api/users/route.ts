@@ -66,6 +66,14 @@ export async function GET(request: NextRequest) {
     const isActiveFilter = searchParams.get('is_active');
     const search = searchParams.get('search') || '';
 
+    // 検索パラメータの長さ制限
+    if (search.length > 100) {
+      return NextResponse.json(
+        { success: false, error: '検索文字列は100文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
     // ユーザー一覧取得クエリ
     let query = supabase
       .from('m_users')
@@ -107,8 +115,9 @@ export async function GET(request: NextRequest) {
 
     // 検索フィルター
     if (search) {
+      const escapedSearch = search.replace(/[%_\\]/g, '\\$&');
       query = query.or(
-        `name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
+        `name.ilike.%${escapedSearch}%,email.ilike.%${escapedSearch}%,phone.ilike.%${escapedSearch}%`
       );
     }
 
@@ -118,14 +127,15 @@ export async function GET(request: NextRequest) {
       throw usersError;
     }
 
-    // 各ユーザーの担当クラスを取得
-    const usersWithDetails = await Promise.all(
-      (usersData || []).map(async (u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => {
-        // 担当クラス取得
-        const { data: classAssignments } = await supabase
+    // 担当クラスを一括取得（N+1クエリ防止）
+    const userIds = (usersData || []).map((u: { id: string }) => u.id);
+
+    const { data: allClassAssignments } = userIds.length > 0
+      ? await supabase
           .from('_user_class')
           .select(
             `
+            user_id,
             class_role,
             m_classes!inner (
               id,
@@ -133,32 +143,38 @@ export async function GET(request: NextRequest) {
             )
           `
           )
-          .eq('user_id', u.id)
-          .eq('is_current', true);
+          .in('user_id', userIds)
+          .eq('is_current', true)
+      : { data: [] };
 
-        const assignedClasses =
-          classAssignments?.map((ca: { class_role: string | null; m_classes: { id: string; name: string } }) => ({
-            class_id: ca.m_classes.id,
-            class_name: ca.m_classes.name,
-            is_main: ca.class_role === 'main',
-          })) || [];
+    // ユーザーごとのクラス割当マップ構築
+    const classAssignmentMap = new Map<string, { class_id: string; class_name: string; is_main: boolean }[]>();
+    (allClassAssignments || []).forEach((ca: { user_id: string; class_role: string | null; m_classes: { id: string; name: string } }) => {
+      const entry = {
+        class_id: ca.m_classes.id,
+        class_name: ca.m_classes.name,
+        is_main: ca.class_role === 'main',
+      };
+      const existing = classAssignmentMap.get(ca.user_id) || [];
+      existing.push(entry);
+      classAssignmentMap.set(ca.user_id, existing);
+    });
 
-        return {
-          user_id: u.id,
-          email: u.email,
-          name: u.name,
-          name_kana: u.name_kana,
-          role: u.role,
-          phone: u.phone,
-          hire_date: u.hire_date,
-          is_active: u.is_active,
-          assigned_classes: assignedClasses,
-          last_login_at: u.last_login_at,
-          created_at: u.created_at,
-          updated_at: u.updated_at,
-        };
-      })
-    );
+    // 同期的にデータを結合
+    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => ({
+      user_id: u.id,
+      email: u.email,
+      name: u.name,
+      name_kana: u.name_kana,
+      role: u.role,
+      phone: u.phone,
+      hire_date: u.hire_date,
+      is_active: u.is_active,
+      assigned_classes: classAssignmentMap.get(u.id) || [],
+      last_login_at: u.last_login_at,
+      created_at: u.created_at,
+      updated_at: u.updated_at,
+    }));
 
     // 統計情報
     const totalUsers = usersWithDetails.length;
@@ -239,6 +255,28 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // 入力値バリデーション
+    const userName = String(body.name).trim();
+    if (userName.length > 100) {
+      return NextResponse.json(
+        { success: false, error: '氏名は100文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
+    if (body.email) {
+      const userEmail = String(body.email).trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userEmail) || userEmail.length > 255) {
+        return NextResponse.json(
+          { success: false, error: 'メールアドレスの形式が正しくないか、255文字を超えています' },
+          { status: 400 }
+        );
+      }
+      body.email = userEmail;
+    }
+    body.name = userName;
 
     // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
     const targetFacilityId = role === 'site_admin'
@@ -354,7 +392,7 @@ export async function POST(request: NextRequest) {
 
     // トークンハッシュの検証
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link:', supabaseUrl);
+      console.error('Failed to extract token from invite link for user creation');
       // Authユーザーをロールバック
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       return NextResponse.json(
@@ -368,7 +406,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 独自のパスワード設定ページURLを構築
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (!baseUrl) {
+      console.error('NEXT_PUBLIC_SITE_URL is not configured');
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）

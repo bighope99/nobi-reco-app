@@ -97,7 +97,7 @@ describe('GET /api/admin/companies', () => {
     const companiesQuery: any = {
       select: jest.fn(() => companiesQuery),
       is: jest.fn(() => companiesQuery),
-      order: jest.fn(() => companiesQuery),
+      order: jest.fn(),
     };
 
     companiesQuery.order.mockResolvedValue({
@@ -105,41 +105,41 @@ describe('GET /api/admin/companies', () => {
       error: null,
     });
 
-    const facilitiesCountQuery1: any = {
-      select: jest.fn(() => facilitiesCountQuery1),
-      eq: jest.fn(() => facilitiesCountQuery1),
-      is: jest.fn(() => facilitiesCountQuery1),
+    // Batch facility query (returns all facilities with company_id)
+    const facilitiesQuery: any = {
+      select: jest.fn(() => facilitiesQuery),
+      in: jest.fn(() => facilitiesQuery),
+      is: jest.fn(),
     };
-    facilitiesCountQuery1.is.mockResolvedValue({ count: 3 });
+    facilitiesQuery.is.mockResolvedValue({
+      data: [
+        { company_id: 'company-1' },
+        { company_id: 'company-1' },
+        { company_id: 'company-1' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+      ],
+    });
 
-    const facilitiesCountQuery2: any = {
-      select: jest.fn(() => facilitiesCountQuery2),
-      eq: jest.fn(() => facilitiesCountQuery2),
-      is: jest.fn(() => facilitiesCountQuery2),
-    };
-    facilitiesCountQuery2.is.mockResolvedValue({ count: 5 });
-
+    // Batch admin user query
     const adminUserQuery: any = {
       select: jest.fn(() => adminUserQuery),
+      in: jest.fn(() => adminUserQuery),
       eq: jest.fn(() => adminUserQuery),
-      is: jest.fn(() => adminUserQuery),
-      limit: jest.fn(() => adminUserQuery),
-      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      is: jest.fn(),
     };
+    adminUserQuery.is.mockResolvedValue({
+      data: [],
+    });
 
-    let facilityQueryCallCount = 0;
-    let userQueryCallCount = 0;
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_companies') return companiesQuery;
-        if (table === 'm_facilities') {
-          facilityQueryCallCount++;
-          return facilityQueryCallCount === 1 ? facilitiesCountQuery1 : facilitiesCountQuery2;
-        }
-        if (table === 'm_users') {
-          userQueryCallCount++;
-          return adminUserQuery;
-        }
+        if (table === 'm_facilities') return facilitiesQuery;
+        if (table === 'm_users') return adminUserQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -190,7 +190,7 @@ describe('GET /api/admin/companies', () => {
     const companiesQuery: any = {
       select: jest.fn(() => companiesQuery),
       is: jest.fn(() => companiesQuery),
-      order: jest.fn(() => companiesQuery),
+      order: jest.fn(),
     };
 
     companiesQuery.order.mockResolvedValue({
@@ -198,26 +198,33 @@ describe('GET /api/admin/companies', () => {
       error: null,
     });
 
-    const facilitiesCountQuery: any = {
-      select: jest.fn(() => facilitiesCountQuery),
-      eq: jest.fn(() => facilitiesCountQuery),
-      is: jest.fn(() => facilitiesCountQuery),
+    const facilitiesQuery: any = {
+      select: jest.fn(() => facilitiesQuery),
+      in: jest.fn(() => facilitiesQuery),
+      is: jest.fn(),
     };
-    facilitiesCountQuery.is.mockResolvedValue({ count: 2 });
+    facilitiesQuery.is.mockResolvedValue({
+      data: [
+        { company_id: 'company-1' },
+        { company_id: 'company-1' },
+      ],
+    });
 
-    const adminUserQuery2: any = {
-      select: jest.fn(() => adminUserQuery2),
-      eq: jest.fn(() => adminUserQuery2),
-      is: jest.fn(() => adminUserQuery2),
-      limit: jest.fn(() => adminUserQuery2),
-      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    const adminUserQuery: any = {
+      select: jest.fn(() => adminUserQuery),
+      in: jest.fn(() => adminUserQuery),
+      eq: jest.fn(() => adminUserQuery),
+      is: jest.fn(),
     };
+    adminUserQuery.is.mockResolvedValue({
+      data: [],
+    });
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_companies') return companiesQuery;
-        if (table === 'm_facilities') return facilitiesCountQuery;
-        if (table === 'm_users') return adminUserQuery2;
+        if (table === 'm_facilities') return facilitiesQuery;
+        if (table === 'm_users') return adminUserQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -229,8 +236,8 @@ describe('GET /api/admin/companies', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.companies[0].facilities_count).toBe(2);
-    expect(facilitiesCountQuery.eq).toHaveBeenCalledWith('company_id', 'company-1');
-    expect(facilitiesCountQuery.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(facilitiesQuery.in).toHaveBeenCalledWith('company_id', ['company-1']);
+    expect(facilitiesQuery.is).toHaveBeenCalledWith('deleted_at', null);
   });
 
   it('should return 500 when database error occurs', async () => {
@@ -274,9 +281,21 @@ describe('POST /api/admin/companies', () => {
   >;
   const mockedSendWithGas = sendWithGas as jest.MockedFunction<typeof sendWithGas>;
 
+  let originalEnv: string | undefined;
+
   beforeEach(() => {
     jest.resetAllMocks();
     mockedSendWithGas.mockResolvedValue(undefined);
+    originalEnv = process.env.NEXT_PUBLIC_SITE_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = 'https://example.com';
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.NEXT_PUBLIC_SITE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SITE_URL = originalEnv;
+    }
   });
 
   it('should return 401 when user is not authenticated', async () => {
@@ -472,6 +491,7 @@ describe('POST /api/admin/companies', () => {
             data: { user: { id: 'user-new-1', email: 'admin@example.com' } },
             error: null,
           }),
+          deleteUser: jest.fn().mockResolvedValue({ error: null }),
           generateLink: jest.fn().mockResolvedValue({
             data: {
               properties: {
@@ -573,6 +593,7 @@ describe('POST /api/admin/companies', () => {
       auth: {
         admin: {
           createUser: mockCreateUser,
+          deleteUser: jest.fn().mockResolvedValue({ error: null }),
           generateLink: jest.fn().mockResolvedValue({
             data: {
               properties: {

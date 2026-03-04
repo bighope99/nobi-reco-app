@@ -54,39 +54,51 @@ export async function GET() {
       throw companiesError;
     }
 
-    // 各会社の施設数と代表者情報を並列取得
-    const companiesWithFacilityCount = await Promise.all(
-      (companies || []).map(async (company) => {
-        const [
-          { count: facilityCount },
-          { data: adminUser }
-        ] = await Promise.all([
-          supabase
+    // 会社IDリストを抽出
+    const companyIds = (companies || []).map((c) => c.id);
+
+    // 施設数と管理者を一括取得（N+1クエリ防止）
+    const [facilitiesResult, adminUsersResult] = await Promise.all([
+      companyIds.length > 0
+        ? supabase
             .from('m_facilities')
-            .select('*', { count: 'exact', head: true })
-            .eq('company_id', company.id)
-            .is('deleted_at', null),
-          supabase
+            .select('company_id')
+            .in('company_id', companyIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [] }),
+      companyIds.length > 0
+        ? supabase
             .from('m_users')
-            .select('id, name, email')
-            .eq('company_id', company.id)
+            .select('id, name, email, company_id')
+            .in('company_id', companyIds)
             .eq('role', 'company_admin')
             .is('deleted_at', null)
-            .limit(1)
-            .maybeSingle()
-        ]);
+        : Promise.resolve({ data: [] }),
+    ]);
 
-        return {
-          ...company,
-          facilities_count: facilityCount || 0,
-          admin_user: adminUser ? {
-            id: adminUser.id,
-            name: adminUser.name,
-            email: adminUser.email,
-          } : null,
-        };
-      })
-    );
+    // 施設数マップ構築
+    const facilityCountMap = new Map<string, number>();
+    (facilitiesResult.data || []).forEach((f: { company_id: string }) => {
+      facilityCountMap.set(f.company_id, (facilityCountMap.get(f.company_id) || 0) + 1);
+    });
+
+    // 管理者マップ構築（会社ごとに最初の1人）
+    const adminUserMap = new Map<string, { id: string; name: string; email: string }>();
+    (adminUsersResult.data || []).forEach((u: { id: string; name: string; email: string; company_id: string }) => {
+      if (!adminUserMap.has(u.company_id)) {
+        adminUserMap.set(u.company_id, { id: u.id, name: u.name, email: u.email });
+      }
+    });
+
+    // 同期的にデータを結合
+    const companiesWithFacilityCount = (companies || []).map((company) => {
+      const adminUser = adminUserMap.get(company.id);
+      return {
+        ...company,
+        facilities_count: facilityCountMap.get(company.id) || 0,
+        admin_user: adminUser || null,
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -144,13 +156,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 入力値バリデーション
+    const companyName = String(body.company.name).trim();
+    const adminName = String(body.admin_user.name).trim();
+    const adminEmail = String(body.admin_user.email).trim();
+
+    if (companyName.length > 100) {
+      return NextResponse.json(
+        { success: false, error: '会社名は100文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
+    if (adminName.length > 100) {
+      return NextResponse.json(
+        { success: false, error: '管理者氏名は100文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminEmail) || adminEmail.length > 255) {
+      return NextResponse.json(
+        { success: false, error: 'メールアドレスの形式が正しくないか、255文字を超えています' },
+        { status: 400 }
+      );
+    }
+
     const supabase = await createClient();
 
     // メールアドレス重複チェック
     const { data: existingUser } = await supabase
       .from('m_users')
       .select('id')
-      .eq('email', body.admin_user.email)
+      .eq('email', adminEmail)
       .is('deleted_at', null)
       .single();
 
@@ -165,7 +204,7 @@ export async function POST(request: NextRequest) {
     const { data: newCompany, error: companyError } = await supabase
       .from('m_companies')
       .insert({
-        name: body.company.name,
+        name: companyName,
         name_kana: body.company.name_kana,
         postal_code: body.company.postal_code,
         address: body.company.address,
@@ -184,7 +223,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = await createAdminClient();
 
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
-      email: body.admin_user.email,
+      email: adminEmail,
       email_confirm: false,
       app_metadata: {
         role: 'company_admin',
@@ -202,7 +241,7 @@ export async function POST(request: NextRequest) {
     // Step 3: 招待リンク生成
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'invite',
-      email: body.admin_user.email,
+      email: adminEmail,
     });
 
     if (linkError || !linkData) {
@@ -227,7 +266,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (!baseUrl) {
+      console.error('NEXT_PUBLIC_SITE_URL is not configured');
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabase.from('m_companies').delete().eq('id', newCompany.id);
+      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // Step 4: m_users テーブルにユーザー情報を登録
@@ -238,8 +283,8 @@ export async function POST(request: NextRequest) {
       .insert({
         id: authData.user.id,
         company_id: newCompany.id,
-        email: body.admin_user.email,
-        name: body.admin_user.name,
+        email: adminEmail,
+        name: adminName,
         name_kana: body.admin_user.name_kana || null,
         role: 'company_admin',
         is_active: true,

@@ -41,6 +41,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 入力値バリデーション
+    const adminName = String(body.admin_user.name).trim();
+    const adminEmail = String(body.admin_user.email).trim();
+
+    if (adminName.length > 100) {
+      return NextResponse.json(
+        { success: false, error: '管理者氏名は100文字以内で入力してください' },
+        { status: 400 }
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminEmail) || adminEmail.length > 255) {
+      return NextResponse.json(
+        { success: false, error: 'メールアドレスの形式が正しくないか、255文字を超えています' },
+        { status: 400 }
+      );
+    }
+
     const supabase = await createClient();
 
     // Step 1: 会社の存在確認
@@ -70,7 +89,7 @@ export async function POST(request: NextRequest) {
     const { data: existingUser, error: emailCheckError } = await supabase
       .from('m_users')
       .select('id')
-      .eq('email', body.admin_user.email)
+      .eq('email', adminEmail)
       .is('deleted_at', null)
       .single();
 
@@ -93,7 +112,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = await createAdminClient();
 
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
-      email: body.admin_user.email,
+      email: adminEmail,
       email_confirm: false,
       app_metadata: {
         role: 'company_admin',
@@ -109,7 +128,7 @@ export async function POST(request: NextRequest) {
     // Step 4: 招待リンク生成
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'invite',
-      email: body.admin_user.email,
+      email: adminEmail,
     });
 
     if (linkError || !linkData) {
@@ -152,8 +171,8 @@ export async function POST(request: NextRequest) {
       .insert({
         id: authData.user.id,
         company_id: body.company_id,
-        email: body.admin_user.email,
-        name: body.admin_user.name,
+        email: adminEmail,
+        name: adminName,
         name_kana: body.admin_user.name_kana || null,
         role: 'company_admin',
         is_active: true,
