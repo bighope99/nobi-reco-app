@@ -104,6 +104,8 @@ export interface ActivityRecord {
   role_assignments?: RoleAssignment[];
   /** 特記事項 */
   special_notes?: string | null;
+  /** 翌日への引継ぎ事項 */
+  handover?: string | null;
   /** ごはん情報 */
   meal?: Meal | null;
 

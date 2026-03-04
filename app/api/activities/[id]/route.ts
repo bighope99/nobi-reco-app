@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
+import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -17,6 +18,24 @@ type RouteContext = {
     id: string;
   }>;
 };
+
+interface ActivityUpdateData {
+  updated_by: string;
+  updated_at: string;
+  activity_date?: string;
+  class_id?: string | null;
+  title?: string;
+  content?: string;
+  snack?: string | null;
+  mentioned_children?: string[];
+  photos?: Array<{ url: string; caption?: string | null; thumbnail_url?: string | null; file_id?: string; file_path?: string }>;
+  event_name?: string | null;
+  daily_schedule?: DailyScheduleItem[] | null;
+  role_assignments?: RoleAssignment[] | null;
+  special_notes?: string | null;
+  handover?: string | null;
+  meal?: Meal | null;
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -40,7 +59,7 @@ export async function PATCH(
 
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+      event_name, daily_schedule, role_assignments, special_notes, handover, meal } = body;
 
     // Content length validation
     if (content !== undefined && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
@@ -126,12 +145,15 @@ export async function PATCH(
 
     const normalizedPhotos = normalizePhotos(photos) ?? undefined;
 
+    // class_id の空文字を null に正規化
+    const normalizedClassId = class_id === '' ? null : class_id;
+
     // class_id が指定されている場合、facility に所属しているか確認
-    if (class_id) {
+    if (normalizedClassId) {
       const { data: classData, error: classError } = await supabase
         .from('m_classes')
         .select('id')
-        .eq('id', class_id)
+        .eq('id', normalizedClassId)
         .eq('facility_id', facility_id)
         .is('deleted_at', null)
         .single();
@@ -150,6 +172,7 @@ export async function PATCH(
       daily_schedule,
       role_assignments,
       special_notes,
+      handover,
       snack,
       meal,
     });
@@ -164,13 +187,13 @@ export async function PATCH(
     const validatedFields = extendedFieldsResult.data;
 
     // 更新データの準備
-    const updateData: any = {
+    const updateData: ActivityUpdateData = {
       updated_by: user_id,
       updated_at: new Date().toISOString(),
     };
 
     if (activity_date !== undefined) updateData.activity_date = activity_date;
-    if (class_id !== undefined) updateData.class_id = class_id;
+    if (class_id !== undefined) updateData.class_id = normalizedClassId;
     if (title !== undefined) updateData.title = title;
     if (content !== undefined) updateData.content = content;
     if (snack !== undefined) updateData.snack = validatedFields.snack;
@@ -180,6 +203,7 @@ export async function PATCH(
     if (daily_schedule !== undefined) updateData.daily_schedule = validatedFields.daily_schedule;
     if (role_assignments !== undefined) updateData.role_assignments = validatedFields.role_assignments;
     if (special_notes !== undefined) updateData.special_notes = validatedFields.special_notes;
+    if (handover !== undefined) updateData.handover = validatedFields.handover;
     if (meal !== undefined) updateData.meal = validatedFields.meal;
 
     // 活動記録を更新
@@ -205,6 +229,13 @@ export async function PATCH(
         activity_date: updatedActivity.activity_date,
         title: updatedActivity.title,
         content: updatedActivity.content,
+        snack: updatedActivity.snack,
+        event_name: updatedActivity.event_name,
+        daily_schedule: updatedActivity.daily_schedule,
+        role_assignments: updatedActivity.role_assignments,
+        special_notes: updatedActivity.special_notes,
+        handover: updatedActivity.handover,
+        meal: updatedActivity.meal,
       },
     });
 

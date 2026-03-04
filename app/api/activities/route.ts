@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
         daily_schedule,
         role_assignments,
         special_notes,
+        handover,
         meal,
         created_at,
         updated_at,
@@ -248,6 +249,7 @@ export async function GET(request: NextRequest) {
         daily_schedule: activity.daily_schedule,
         role_assignments: activity.role_assignments,
         special_notes: activity.special_notes,
+        handover: activity.handover,
         meal: activity.meal,
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
@@ -291,7 +293,7 @@ export async function POST(request: NextRequest) {
     const user_id = metadata.user_id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+      event_name, daily_schedule, role_assignments, special_notes, handover, meal } = body;
 
     if (!activity_date) {
       return NextResponse.json(
@@ -382,6 +384,7 @@ export async function POST(request: NextRequest) {
       daily_schedule,
       role_assignments,
       special_notes,
+      handover,
       snack,
       meal,
     });
@@ -413,6 +416,7 @@ export async function POST(request: NextRequest) {
         daily_schedule: validatedFields.daily_schedule,
         role_assignments: validatedFields.role_assignments,
         special_notes: validatedFields.special_notes,
+        handover: validatedFields.handover,
         meal: validatedFields.meal,
       })
       .select()

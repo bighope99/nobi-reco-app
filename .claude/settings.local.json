@@ -1,7 +1,6 @@
 {
   "env": {
-    "ENABLE_TOOL_SEARCH": "true",
-    "ENABLE_EXPERIMENTAL_MCP_CLI": "false"
+    "ENABLE_TOOL_SEARCH": "true"
   },
   "permissions": {
     "allow": [
@@ -73,6 +72,5 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ],
-  "env": {"ENABLE_TOOL_SEARCH": "true"}
+  ]
 }

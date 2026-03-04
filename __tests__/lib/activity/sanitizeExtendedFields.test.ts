@@ -566,6 +566,88 @@ describe('getSanitizedExtendedFields', () => {
     })
   })
 
+  describe('handover sanitization', () => {
+    it('should return null when handover is undefined', () => {
+      const input = {
+        roleAssignments: [],
+        dailySchedule: [],
+        snack: '',
+        meal: null,
+        specialNotes: '',
+        eventName: '',
+      }
+
+      const result = getSanitizedExtendedFields(input)
+
+      expect(result.handover).toBeNull()
+    })
+
+    it('should return null when handover is empty string', () => {
+      const input = {
+        roleAssignments: [],
+        dailySchedule: [],
+        snack: '',
+        meal: null,
+        specialNotes: '',
+        eventName: '',
+        handover: '',
+      }
+
+      const result = getSanitizedExtendedFields(input)
+
+      expect(result.handover).toBeNull()
+    })
+
+    it('should return null when handover is whitespace only', () => {
+      const input = {
+        roleAssignments: [],
+        dailySchedule: [],
+        snack: '',
+        meal: null,
+        specialNotes: '',
+        eventName: '',
+        handover: '   ',
+      }
+
+      const result = getSanitizedExtendedFields(input)
+
+      expect(result.handover).toBeNull()
+    })
+
+    it('should return sanitized value when handover has content', () => {
+      const input = {
+        roleAssignments: [],
+        dailySchedule: [],
+        snack: '',
+        meal: null,
+        specialNotes: '',
+        eventName: '',
+        handover: 'Tomorrow please check on Taro',
+      }
+
+      const result = getSanitizedExtendedFields(input)
+
+      expect(result.handover).toBe('Tomorrow please check on Taro')
+    })
+
+    it('should sanitize HTML in handover', () => {
+      const input = {
+        roleAssignments: [],
+        dailySchedule: [],
+        snack: '',
+        meal: null,
+        specialNotes: '',
+        eventName: '',
+        handover: '<script>alert("xss")</script>',
+      }
+
+      const result = getSanitizedExtendedFields(input)
+
+      expect(result.handover).toContain('&lt;script&gt;')
+      expect(result.handover).not.toContain('<script>')
+    })
+  })
+
   describe('comprehensive integration tests', () => {
     it('should handle all fields with valid data', () => {
       const input = {
@@ -583,6 +665,7 @@ describe('getSanitizedExtendedFields', () => {
         },
         specialNotes: 'Good weather today',
         eventName: 'Field Trip',
+        handover: 'Check on Taro tomorrow',
       }
 
       const result = getSanitizedExtendedFields(input)
@@ -593,6 +676,7 @@ describe('getSanitizedExtendedFields', () => {
       expect(result.meal?.menu).toBe('Curry Rice')
       expect(result.special_notes).toBe('Good weather today')
       expect(result.event_name).toBe('Field Trip')
+      expect(result.handover).toBe('Check on Taro tomorrow')
     })
 
     it('should handle all fields with empty/null data', () => {
@@ -603,6 +687,7 @@ describe('getSanitizedExtendedFields', () => {
         meal: null,
         specialNotes: '',
         eventName: '',
+        handover: '',
       }
 
       const result = getSanitizedExtendedFields(input)
@@ -613,6 +698,7 @@ describe('getSanitizedExtendedFields', () => {
       expect(result.meal).toBeNull()
       expect(result.special_notes).toBeNull()
       expect(result.event_name).toBeNull()
+      expect(result.handover).toBeNull()
     })
 
     it('should handle mixed valid and invalid data', () => {
@@ -633,6 +719,7 @@ describe('getSanitizedExtendedFields', () => {
         },
         specialNotes: 'Note',
         eventName: '',
+        handover: 'Valid handover',
       }
 
       const result = getSanitizedExtendedFields(input)
@@ -643,6 +730,7 @@ describe('getSanitizedExtendedFields', () => {
       expect(result.meal).not.toBeNull()
       expect(result.special_notes).toBe('Note')
       expect(result.event_name).toBeNull()
+      expect(result.handover).toBe('Valid handover')
     })
   })
 
@@ -664,6 +752,7 @@ describe('getSanitizedExtendedFields', () => {
         },
         specialNotes: xssPayload,
         eventName: xssPayload,
+        handover: xssPayload,
       }
 
       const result = getSanitizedExtendedFields(input)
@@ -676,6 +765,7 @@ describe('getSanitizedExtendedFields', () => {
       expect(result.meal?.items_to_bring).not.toContain('<script>')
       expect(result.special_notes).not.toContain('<script>')
       expect(result.event_name).not.toContain('<script>')
+      expect(result.handover).not.toContain('<script>')
     })
   })
 })
