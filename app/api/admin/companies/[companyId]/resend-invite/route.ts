@@ -115,7 +115,7 @@ export async function POST(
     }
 
     // 招待URLの構築
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     if (!baseUrl) {
       console.error('NEXT_PUBLIC_SITE_URL is not configured');
       return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });

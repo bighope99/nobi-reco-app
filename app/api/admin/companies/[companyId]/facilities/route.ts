@@ -183,7 +183,7 @@ export async function POST(
       );
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     if (!baseUrl) {
       console.error('NEXT_PUBLIC_SITE_URL is not configured');
       try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }

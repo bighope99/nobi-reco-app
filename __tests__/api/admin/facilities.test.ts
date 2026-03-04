@@ -54,15 +54,15 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     mockedSendWithGas.mockResolvedValue(undefined);
-    originalEnv = process.env.NEXT_PUBLIC_SITE_URL;
-    process.env.NEXT_PUBLIC_SITE_URL = 'https://example.com';
+    originalEnv = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    `${request.nextUrl.protocol}//${request.nextUrl.host}` = 'https://example.com';
   });
 
   afterEach(() => {
     if (originalEnv === undefined) {
-      delete process.env.NEXT_PUBLIC_SITE_URL;
+      delete `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     } else {
-      process.env.NEXT_PUBLIC_SITE_URL = originalEnv;
+      `${request.nextUrl.protocol}//${request.nextUrl.host}` = originalEnv;
     }
   });
 

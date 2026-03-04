@@ -406,7 +406,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 独自のパスワード設定ページURLを構築
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     if (!baseUrl) {
       console.error('NEXT_PUBLIC_SITE_URL is not configured');
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
