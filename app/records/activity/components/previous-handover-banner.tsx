@@ -22,12 +22,18 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    if (!activityDate) return
+    if (!activityDate) {
+      setHandoverDate(null)
+      setItems([])
+      return
+    }
 
     // Clear previous timer
     if (timerRef.current) {
       clearTimeout(timerRef.current)
     }
+
+    const abortController = new AbortController()
 
     // Set debounced timer (300ms)
     timerRef.current = setTimeout(() => {
@@ -37,7 +43,9 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
           const params = new URLSearchParams({ date: activityDate })
           if (selectedClass) params.set("class_id", selectedClass)
 
-          const response = await fetch(`/api/handover?${params}`)
+          const response = await fetch(`/api/handover?${params}`, {
+            signal: abortController.signal,
+          })
           const result = await response.json()
 
           if (response.ok && result.success && result.data) {
@@ -48,11 +56,14 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
             setItems([])
           }
         } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') return
           console.error('Failed to fetch handover:', error)
           setHandoverDate(null)
           setItems([])
         } finally {
-          setLoading(false)
+          if (!abortController.signal.aborted) {
+            setLoading(false)
+          }
         }
       }
 
@@ -64,6 +75,7 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
       if (timerRef.current) {
         clearTimeout(timerRef.current)
       }
+      abortController.abort()
     }
   }, [activityDate, selectedClass])
 

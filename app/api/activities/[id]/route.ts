@@ -23,7 +23,7 @@ interface ActivityUpdateData {
   updated_by: string;
   updated_at: string;
   activity_date?: string;
-  class_id?: string;
+  class_id?: string | null;
   title?: string;
   content?: string;
   snack?: string | null;
@@ -145,12 +145,15 @@ export async function PATCH(
 
     const normalizedPhotos = normalizePhotos(photos) ?? undefined;
 
+    // class_id の空文字を null に正規化
+    const normalizedClassId = class_id === '' ? null : class_id;
+
     // class_id が指定されている場合、facility に所属しているか確認
-    if (class_id) {
+    if (normalizedClassId) {
       const { data: classData, error: classError } = await supabase
         .from('m_classes')
         .select('id')
-        .eq('id', class_id)
+        .eq('id', normalizedClassId)
         .eq('facility_id', facility_id)
         .is('deleted_at', null)
         .single();
@@ -190,7 +193,7 @@ export async function PATCH(
     };
 
     if (activity_date !== undefined) updateData.activity_date = activity_date;
-    if (class_id !== undefined) updateData.class_id = class_id;
+    if (class_id !== undefined) updateData.class_id = normalizedClassId;
     if (title !== undefined) updateData.title = title;
     if (content !== undefined) updateData.content = content;
     if (snack !== undefined) updateData.snack = validatedFields.snack;
