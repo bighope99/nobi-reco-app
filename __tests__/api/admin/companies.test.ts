@@ -281,21 +281,9 @@ describe('POST /api/admin/companies', () => {
   >;
   const mockedSendWithGas = sendWithGas as jest.MockedFunction<typeof sendWithGas>;
 
-  let originalEnv: string | undefined;
-
   beforeEach(() => {
     jest.resetAllMocks();
     mockedSendWithGas.mockResolvedValue(undefined);
-    originalEnv = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    `${request.nextUrl.protocol}//${request.nextUrl.host}` = 'https://example.com';
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    } else {
-      `${request.nextUrl.protocol}//${request.nextUrl.host}` = originalEnv;
-    }
   });
 
   it('should return 401 when user is not authenticated', async () => {

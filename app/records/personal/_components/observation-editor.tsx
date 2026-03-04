@@ -291,7 +291,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const aiFlagsInitializedRef = useRef(false);
   const previousSelectedChildIdRef = useRef('');
   // 記録日選択用の状態
-  const [observationDate, setObservationDate] = useState<Date>(new Date());
+  const [observationDate, setObservationDate] = useState<Date | null>(null);
   // 音声入力用の状態
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -300,6 +300,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
+
+  // 日付の初期化（クライアント側でのみ実行）
+  useEffect(() => {
+    if (!observationDate) {
+      setObservationDate(new Date());
+    }
+  }, [observationDate]);
 
   const nameByIdMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -916,7 +923,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: text,
-          observation_date: format(observationDate, 'yyyy-MM-dd'),
+          observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
         }),
       });
 
@@ -987,7 +994,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDateStr = format(observationDate, 'yyyy-MM-dd');
+      const observationDateStr = format(observationDate ?? new Date(), 'yyyy-MM-dd');
 
       // APIに保存
       const response = await fetch('/api/records/personal', {
@@ -1382,7 +1389,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     {isNew || isEditing ? (
                       <div className="min-w-[180px]">
                         <DatePicker
-                          date={observationDate}
+                          date={observationDate ?? undefined}
                           onSelect={(date) => date && setObservationDate(date)}
                           placeholder="記録日を選択"
                           disabled={savingEdit}
