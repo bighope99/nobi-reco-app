@@ -7,7 +7,7 @@ import { AdminLayout } from "@/components/layout/admin-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin } from "lucide-react"
+import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus } from "lucide-react"
 
 interface Facility {
   id: string
@@ -294,7 +294,13 @@ export default function CompanyDetailPage(props: {
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">施設一覧</CardTitle>
-              <Badge variant="outline" className="ml-auto">
+              <Button size="sm" asChild className="ml-auto gap-2">
+                <Link href={`/admin/companies/${companyId}/facilities/new`}>
+                  <Plus className="h-4 w-4" />
+                  施設を登録
+                </Link>
+              </Button>
+              <Badge variant="outline">
                 {facilities.length}件
               </Badge>
             </div>
