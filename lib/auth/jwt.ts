@@ -8,7 +8,7 @@ export interface JWTMetadata {
   user_id: string;
   role: 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
   company_id: string;
-  current_facility_id: string | null; // site_adminの場合はnullの可能性あり
+  current_facility_id: string | null; // site_admin・company_adminの場合はnullの可能性あり
 }
 
 /**
@@ -55,9 +55,9 @@ export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null
     return null;
   }
 
-  if (role !== 'site_admin' && !current_facility_id) {
-    // site_admin以外は施設IDが必須
-    console.error('Missing required JWT claim: current_facility_id for non-site_admin user');
+  if (role !== 'site_admin' && role !== 'company_admin' && !current_facility_id) {
+    // site_admin・company_admin以外は施設IDが必須
+    console.error('Missing required JWT claim: current_facility_id for non-site_admin/company_admin user');
     return null;
   }
 
