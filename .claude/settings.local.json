@@ -69,7 +69,14 @@
       "Bash(GIT_DIR=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app/.git\" GIT_WORK_TREE=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app\" git diff --stat 2>&1)",
       "Bash(git --git-dir=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app/.git\" --work-tree=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app\" diff --stat 2>&1)",
       "Bash(git worktree list --porcelain 2>&1 | head -30 || true; GIT_DISCOVERY_ACROSS_FILESYSTEM=1 git -C \"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app\" status 2>&1 | head -20)",
-      "Bash(GIT_DIR=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app/.git\" git --work-tree=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app\" status 2>&1 | head -30)"
+      "Bash(GIT_DIR=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app/.git\" git --work-tree=\"/mnt/c/Users/nakamura taiki/Documents/_personal_develop/nobi-reco-app\" status 2>&1 | head -30)",
+      "Read(//home/nakamura_taiki/.claude/hooks/**)",
+      "Bash(xxd)",
+      "Bash(/home/nakamura_taiki/.claude/hooks/notify.sh Claude Code:*)",
+      "Bash(bash:*)",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "Skill(commit-commands:commit)"
     ],
     "deny": [],
     "ask": []
