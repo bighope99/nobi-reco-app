@@ -69,7 +69,7 @@ export default function FacilityListPage() {
   };
 
   return (
-    <StaffLayout title="施設管理">
+    <StaffLayout title="施設情報">
       <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -82,7 +82,7 @@ export default function FacilityListPage() {
             <div>
               <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <Building2 className="text-indigo-500" />
-                施設管理
+                施設情報
               </h1>
               <p className="text-sm text-slate-500 mt-1">
                 {loading ? '読み込み中...' : `全 ${facilities.length} 施設を管理`}

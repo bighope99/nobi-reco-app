@@ -131,7 +131,7 @@ export default function StatusPage() {
     const [selectedClass, setSelectedClass] = useState('all')
     const [searchTerm, setSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
-    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'name', order: 'asc' })
+    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'asc' })
 
     // 日付の初期化（クライアント側でのみ実行）
     useEffect(() => {
@@ -295,7 +295,7 @@ export default function StatusPage() {
 
     if (loading) {
         return (
-            <StaffLayout title="全児童 月間記録管理">
+            <StaffLayout title="記録状況一覧">
                 <div className="min-h-screen flex items-center justify-center">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
@@ -308,7 +308,7 @@ export default function StatusPage() {
 
     if (error || !recordsData) {
         return (
-            <StaffLayout title="全児童 月間記録管理">
+            <StaffLayout title="記録状況一覧">
                 <div className="min-h-screen flex items-center justify-center">
                     <div className="text-center">
                         <AlertTriangle className="h-12 w-12 text-red-500 mx-auto" />
@@ -320,7 +320,7 @@ export default function StatusPage() {
     }
 
     return (
-        <StaffLayout title="全児童 月間記録管理">
+        <StaffLayout title="記録状況一覧">
             <div className="max-w-[1600px] mx-auto">
                 {/* Title */}
                 <div>
@@ -331,7 +331,7 @@ export default function StatusPage() {
                     </div>
                     <h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
                         <FileText className="w-6 h-6 text-indigo-600" />
-                        全児童 月間記録管理
+                        記録状況一覧
                     </h1>
                 </div>
 

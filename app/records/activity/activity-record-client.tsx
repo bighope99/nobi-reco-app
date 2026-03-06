@@ -37,6 +37,7 @@ import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/s
 import {
   MAX_EVENT_NAME_LENGTH,
   MAX_SPECIAL_NOTES_LENGTH,
+  MAX_HANDOVER_LENGTH,
   MAX_SNACK_LENGTH,
   MAX_SCHEDULE_CONTENT_LENGTH,
   MAX_ROLE_LENGTH,
@@ -45,6 +46,7 @@ import {
   MAX_MEAL_NOTES_LENGTH,
 } from "@/lib/validation/activityValidation"
 import { getSanitizedExtendedFields as getSanitizedExtendedFieldsUtil } from "@/lib/activity/sanitizeExtendedFields"
+import { PreviousHandoverBanner } from "./components/previous-handover-banner"
 
 interface IndividualRecord {
   observation_id: string
@@ -74,6 +76,7 @@ interface Activity {
   role_assignments?: RoleAssignment[]
   special_notes?: string | null
   meal?: Meal | null
+  handover?: string | null
 }
 
 interface MentionSuggestion {
@@ -140,7 +143,7 @@ export default function ActivityRecordClient() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
-  const [transcriptionTarget, setTranscriptionTarget] = useState<'activityContent' | 'specialNotes'>('activityContent')
+  const [transcriptionTarget, setTranscriptionTarget] = useState<'activityContent' | 'specialNotes' | 'handover'>('activityContent')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
@@ -175,6 +178,7 @@ export default function ActivityRecordClient() {
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
   const [specialNotes, setSpecialNotes] = useState("")
+  const [handover, setHandover] = useState("")
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
@@ -525,6 +529,7 @@ export default function ActivityRecordClient() {
       meal,
       specialNotes,
       eventName,
+      handover,
     })
   }
 
@@ -583,6 +588,7 @@ export default function ActivityRecordClient() {
             snack: sanitizedFields.snack,
             meal: sanitizedFields.meal,
             special_notes: sanitizedFields.special_notes,
+            handover: sanitizedFields.handover,
           }),
         })
 
@@ -613,6 +619,7 @@ export default function ActivityRecordClient() {
             snack: sanitizedFields.snack,
             meal: sanitizedFields.meal,
             special_notes: sanitizedFields.special_notes,
+            handover: sanitizedFields.handover,
           }),
         })
 
@@ -703,6 +710,7 @@ export default function ActivityRecordClient() {
           snack: sanitizedFields.snack,
           meal: sanitizedFields.meal,
           special_notes: sanitizedFields.special_notes,
+          handover: sanitizedFields.handover,
         }),
       })
 
@@ -788,6 +796,7 @@ export default function ActivityRecordClient() {
           snack: sanitizedFields.snack,
           meal: sanitizedFields.meal,
           special_notes: sanitizedFields.special_notes,
+          handover: sanitizedFields.handover,
         }),
       })
 
@@ -866,6 +875,7 @@ export default function ActivityRecordClient() {
     setSnack(activity.snack || "")
     setMeal(activity.meal || null)
     setSpecialNotes(activity.special_notes || "")
+    setHandover(activity.handover || "")
 
     // メンション復元: クラスの児童リストから名前情報を取得
     if (activity.mentioned_children && activity.mentioned_children.length > 0) {
@@ -1053,6 +1063,7 @@ export default function ActivityRecordClient() {
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
+    setHandover("")
   }
 
   const handleRestart = () => {
@@ -1068,6 +1079,7 @@ export default function ActivityRecordClient() {
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
+    setHandover("")
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
@@ -1175,7 +1187,7 @@ export default function ActivityRecordClient() {
     })
   }
 
-  const startRecording = async (target: 'activityContent' | 'specialNotes' = 'activityContent') => {
+  const startRecording = async (target: 'activityContent' | 'specialNotes' | 'handover' = 'activityContent') => {
     try {
       setTranscriptionTarget(target)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1230,7 +1242,9 @@ export default function ActivityRecordClient() {
       }
 
       const transcribedText = result.text
-      if (transcriptionTarget === 'specialNotes') {
+      if (transcriptionTarget === 'handover') {
+        setHandover((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      } else if (transcriptionTarget === 'specialNotes') {
         setSpecialNotes((prev) => prev + (prev ? '\n' : '') + transcribedText)
       } else {
         setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
@@ -1291,6 +1305,7 @@ export default function ActivityRecordClient() {
   return (
     <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
+        <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
             <CardTitle>活動記録の入力</CardTitle>
@@ -1793,6 +1808,31 @@ export default function ActivityRecordClient() {
               />
             </div>
 
+            {/* 翌日への引継ぎ */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="handover">翌日への引継ぎ</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isRecording && transcriptionTarget === 'handover' ? "destructive" : "outline"}
+                  onClick={isRecording && transcriptionTarget === 'handover' ? stopRecording : () => startRecording('handover')}
+                  disabled={isTranscribing || (isRecording && transcriptionTarget !== 'handover')}
+                >
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording && transcriptionTarget === 'handover' ? 'animate-pulse' : ''}`} />
+                  {isRecording && transcriptionTarget === 'handover' ? '停止' : isTranscribing && transcriptionTarget === 'handover' ? '文字起こし中...' : '音声入力'}
+                </Button>
+              </div>
+              <Textarea
+                id="handover"
+                rows={4}
+                value={handover}
+                onChange={(e) => setHandover(e.target.value)}
+                placeholder="翌日のスタッフへの引継ぎ事項を入力してください"
+                maxLength={MAX_HANDOVER_LENGTH}
+              />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex flex-wrap gap-3 flex-1">
                 {isEditMode ? (
@@ -1884,6 +1924,12 @@ export default function ActivityRecordClient() {
                                   </div>
                                 )
                               })}
+                            </div>
+                          )}
+                          {activity.handover && (
+                            <div className="mt-3 p-3 rounded-md bg-amber-50 border border-amber-200">
+                              <p className="text-xs font-medium text-amber-800 mb-1">引継ぎ</p>
+                              <p className="text-sm text-amber-900 whitespace-pre-wrap">{activity.handover}</p>
                             </div>
                           )}
                         </div>

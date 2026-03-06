@@ -392,7 +392,7 @@ export default function ScheduleSettingsPage() {
   };
 
   return (
-    <StaffLayout title="スケジュール設定">
+    <StaffLayout title="通所設定">
       <div className="min-h-screen text-slate-900 font-sans pb-24">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -405,7 +405,7 @@ export default function ScheduleSettingsPage() {
             <div>
               <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <Clock className="text-indigo-500" />
-                登校時刻設定
+                通所設定
               </h1>
               <p className="text-sm text-slate-500 mt-1">
                 学校ごと、学年ごと、曜日ごとに来校時刻を設定
@@ -562,7 +562,7 @@ export default function ScheduleSettingsPage() {
                                           <Clock size={14} className="text-slate-400 shrink-0" />
                                           <Input
                                             type="time"
-                                            value={schedule.weekdayTimes[day.id] || ''}
+                                            value={schedule.weekdayTimes[day.id as keyof typeof schedule.weekdayTimes] || ''}
                                             onChange={(e: any) =>
                                               handleUpdateWeekdayTime(school.id, schedule.scheduleId, day.id, e.target.value)
                                             }
