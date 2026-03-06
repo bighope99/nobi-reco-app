@@ -35,6 +35,7 @@ interface ActivityUpdateData {
   special_notes?: string | null;
   handover?: string | null;
   meal?: Meal | null;
+  recorded_by?: string | null;
 }
 
 export async function PATCH(
@@ -59,7 +60,6 @@ export async function PATCH(
 
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal, recorded_by } = body;
       event_name, daily_schedule, role_assignments, special_notes, handover, meal, recorded_by } = body;
 
     // Content length validation
