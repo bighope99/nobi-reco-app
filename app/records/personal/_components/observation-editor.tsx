@@ -66,6 +66,11 @@ const AlertDescription = ({ children }: { children: React.ReactNode }) => <div>{
 const OBSERVATION_BODY_MAX = 5000
 const AI_RESULT_MAX = 5000
 
+interface StaffMember {
+  user_id: string
+  name: string
+}
+
 // TODO: 実装予定のフック・コンポーネント（今後開発）
 // 接続監視フック - オフライン対応実装時に置き換え
 const getConnectionMonitor = () => ({
@@ -113,6 +118,7 @@ interface Observation {
   tag_flags?: Record<string, boolean>;
   created_by: string;
   created_by_name?: string;
+  recorded_by_name?: string;
   created_at: string;
   updated_at: string;
   addenda: Addendum[];
@@ -297,6 +303,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [selectedRecorder, setSelectedRecorder] = useState<string>('');
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
@@ -307,6 +315,38 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setObservationDate(new Date());
     }
   }, [observationDate]);
+
+  // スタッフ一覧取得
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const response = await fetch('/api/users?is_active=true');
+        const result = await response.json();
+        if (response.ok && result.success) {
+          const users = result.data?.users || [];
+          const mapped = users.map((u: { user_id: string; name: string }) => ({
+            user_id: u.user_id,
+            name: u.name,
+          }));
+          setStaffList(mapped);
+
+          // Cookie から前回選択した記録者を復元（新規作成時のみ）
+          if (isNew) {
+            const lastRecorder = document.cookie
+              .split('; ')
+              .find(row => row.startsWith('nobi_last_recorder='))
+              ?.split('=')[1];
+            if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
+              setSelectedRecorder(lastRecorder);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch staff:', err);
+      }
+    };
+    fetchStaff();
+  }, []);
 
   const nameByIdMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -727,12 +767,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         tag_flags: data.tag_flags || {},
         created_by: data.created_by || '',
         created_by_name: data.created_by_name || '',
+        recorded_by_name: data.recorded_by_name || '',
         created_at: data.created_at || new Date().toISOString(),
         updated_at: data.updated_at || new Date().toISOString(),
         addenda: [],
       };
 
       setObservation(observationRecord);
+
+      // 既存の記録者を復元
+      if (data.recorded_by) {
+        setSelectedRecorder(data.recorded_by);
+      }
+
       setAiEditForm({
         ai_action: observationRecord.ai_action,
         ai_opinion: observationRecord.ai_opinion,
@@ -924,6 +971,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         body: JSON.stringify({
           content: text,
           observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
+          recorded_by: selectedRecorder || null,
         }),
       });
 
@@ -1008,6 +1056,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           ai_action: aiResult.ai_action,
           ai_opinion: aiResult.ai_opinion,
           tag_flags: aiResult.flags,
+          recorded_by: selectedRecorder || undefined,
         }),
       });
 
@@ -1017,8 +1066,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '保存に失敗しました');
       }
 
+      // 記録者をCookieに保存（30日間）
+      if (selectedRecorder) {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`;
+      }
+
       // 保存成功時、観察記録を設定
       const resolvedChildName = lockedChildName || selectedChild?.name || '不明';
+      const recorderName = staffList.find(s => s.user_id === selectedRecorder)?.name || '';
       const newObservation: Observation = {
         id: result.data.id,
         child_id: selectedChildId,
@@ -1029,6 +1085,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ai_opinion: toDisplayText(aiResult.ai_opinion),
         tag_flags: aiResult.flags,
         created_by: user?.id || '',
+        recorded_by_name: recorderName,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         addenda: [],
@@ -1245,7 +1302,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const childDisplayName = isNew
     ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
     : observation?.child_name || observation?.child_id;
-  const createdByName =
+  const recorderDisplayName =
+    observation?.recorded_by_name ||
     observation?.created_by_name ||
     (observation?.created_by === user?.id
       ? user?.display_name || user?.email || '現在のユーザー'
@@ -1402,6 +1460,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </>
                     )}
                   </div>
+                  {(isNew || isEditing) && staffList.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <User className="h-4 w-4" />
+                      <Select value={selectedRecorder} onValueChange={setSelectedRecorder}>
+                        <SelectTrigger className="h-8 w-[160px]">
+                          <SelectValue placeholder="記録者を選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {staffList.map((staff) => (
+                            <SelectItem key={staff.user_id} value={staff.user_id}>
+                              {staff.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
                     記録: {observation ? formatDateTime(observation.created_at) : '未保存'}
@@ -1714,7 +1789,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <div className="flex items-center gap-2 text-sm">
                     <User className="h-4 w-4 text-orange-600" />
                     <span className="text-gray-600">記録者</span>
-                    <span className="font-medium">{createdByName}</span>
+                    <span className="font-medium">{recorderDisplayName}</span>
                   </div>
                 )}
               </CardContent>
