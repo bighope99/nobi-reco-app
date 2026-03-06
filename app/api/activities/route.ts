@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
         role_assignments,
         special_notes,
         meal,
+        recorded_by,
         created_at,
         updated_at,
         m_classes (
@@ -249,6 +250,7 @@ export async function GET(request: NextRequest) {
         role_assignments: activity.role_assignments,
         special_notes: activity.special_notes,
         meal: activity.meal,
+        recorded_by: activity.recorded_by || null,
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,

@@ -61,6 +61,7 @@ interface Activity {
   photos: Array<ActivityPhoto | string>
   class_name: string
   class_id?: string
+  recorded_by?: string
   created_by: string
   created_at: string
   individual_record_count: number
@@ -574,6 +575,7 @@ export default function ActivityRecordClient() {
             content: activityContent,
             mentioned_children: selectedMentions.map((child) => child.child_id),
             photos,
+            recorded_by: selectedRecorder || undefined,
             // 新規フィールド（サニタイズ済み）
             event_name: sanitizedFields.event_name,
             daily_schedule: sanitizedFields.daily_schedule,
@@ -778,6 +780,7 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
+          recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
           event_name: sanitizedFields.event_name,
           daily_schedule: sanitizedFields.daily_schedule,
@@ -842,6 +845,7 @@ export default function ActivityRecordClient() {
     setActivityContent(displayContent)
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
+    setSelectedRecorder(activity.recorded_by || "")
     setOriginalMentionedChildren(activity.mentioned_children || [])
     setOriginalContent(activity.content || "")
 

@@ -40,7 +40,7 @@ export async function PATCH(
 
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+      event_name, daily_schedule, role_assignments, special_notes, meal, recorded_by } = body;
 
     // Content length validation
     if (content !== undefined && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
@@ -163,6 +163,9 @@ export async function PATCH(
 
     const validatedFields = extendedFieldsResult.data;
 
+    const sanitizeUuid = (value: unknown): string | null =>
+      (typeof value === 'string' && value.trim()) ? value : null;
+
     // 更新データの準備
     const updateData: any = {
       updated_by: user_id,
@@ -170,7 +173,7 @@ export async function PATCH(
     };
 
     if (activity_date !== undefined) updateData.activity_date = activity_date;
-    if (class_id !== undefined) updateData.class_id = class_id;
+    if (class_id !== undefined) updateData.class_id = sanitizeUuid(class_id);
     if (title !== undefined) updateData.title = title;
     if (content !== undefined) updateData.content = content;
     if (snack !== undefined) updateData.snack = validatedFields.snack;
@@ -181,6 +184,7 @@ export async function PATCH(
     if (role_assignments !== undefined) updateData.role_assignments = validatedFields.role_assignments;
     if (special_notes !== undefined) updateData.special_notes = validatedFields.special_notes;
     if (meal !== undefined) updateData.meal = validatedFields.meal;
+    if (recorded_by !== undefined) updateData.recorded_by = sanitizeUuid(recorded_by);
 
     // 活動記録を更新
     const { data: updatedActivity, error: updateError } = await supabase
