@@ -5,8 +5,8 @@ export interface NormalizedPhoto {
   url: string;
   caption: string | null;
   thumbnail_url: string | null;
-  file_id: string | null;
-  file_path: string | null;
+  file_id?: string;
+  file_path?: string;
 }
 
 /**
@@ -28,8 +28,8 @@ export function normalizePhotos(photos: unknown): NormalizedPhoto[] | null {
         url: photo.url,
         caption: typeof photo.caption === 'string' ? photo.caption : null,
         thumbnail_url: typeof photo.thumbnail_url === 'string' ? photo.thumbnail_url : null,
-        file_id: typeof photo.file_id === 'string' ? photo.file_id : null,
-        file_path: typeof photo.file_path === 'string' ? photo.file_path : null,
+        file_id: typeof photo.file_id === 'string' ? photo.file_id : undefined,
+        file_path: typeof photo.file_path === 'string' ? photo.file_path : undefined,
       };
     })
     .filter((p): p is NormalizedPhoto => p !== null);

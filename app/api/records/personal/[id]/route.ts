@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { isValidUUID } from '@/lib/utils/validation';
 
 export async function GET(
   request: NextRequest,
@@ -34,6 +35,7 @@ export async function GET(
         created_by,
         created_at,
         updated_at,
+        recorded_by,
         m_children!inner (
           facility_id,
           family_name,
@@ -82,9 +84,10 @@ export async function GET(
       return acc;
     }, {});
 
-    // 作成者名と最近の観察記録を並列取得
+    // 作成者名・記録者名と最近の観察記録を並列取得
     const [
       { data: createdByUser },
+      { data: recordedByUser },
       { data: recentObservations, error: recentError }
     ] = await Promise.all([
       supabase
@@ -92,6 +95,14 @@ export async function GET(
         .select('name')
         .eq('id', data.created_by)
         .single(),
+      data.recorded_by
+        ? supabase
+            .from('m_users')
+            .select('name')
+            .eq('id', data.recorded_by)
+            .single()
+            .then(res => res)
+        : Promise.resolve({ data: null }),
       supabase
         .from('r_observation')
         .select(
@@ -157,6 +168,8 @@ export async function GET(
         created_by_name: createdByName,
         created_at: data.created_at,
         updated_at: data.updated_at,
+        recorded_by: data.recorded_by || null,
+        recorded_by_name: recordedByUser?.name || null,
         recent_observations: (recentObservations || []).map((obs) => ({
           id: obs.id,
           observation_date: obs.observation_date,
@@ -202,6 +215,7 @@ export async function PATCH(
     const body = await request.json();
     const content = typeof body?.content === 'string' ? body.content.trim() : '';
     const observationDate = typeof body?.observation_date === 'string' ? body.observation_date.trim() : null;
+    const recorded_by = typeof body?.recorded_by === 'string' ? body.recorded_by.trim() : null;
 
     if (!content) {
       return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
@@ -217,6 +231,16 @@ export async function PATCH(
       const dateObj = new Date(observationDate);
       if (isNaN(dateObj.getTime()) || dateObj.toISOString().slice(0, 10) !== observationDate) {
         return NextResponse.json({ success: false, error: '無効な日付です' }, { status: 400 });
+      }
+    }
+
+    // recorded_by のUUID形式検証
+    if (recorded_by) {
+      if (!isValidUUID(recorded_by)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid recorded_by ID format' },
+          { status: 400 }
+        );
       }
     }
 
@@ -256,6 +280,10 @@ export async function PATCH(
 
     if (observationDate) {
       updateData.observation_date = observationDate;
+    }
+
+    if (recorded_by !== null) {
+      updateData.recorded_by = recorded_by || null;
     }
 
     const { data: updated, error: updateError } = await supabase

@@ -400,7 +400,7 @@ CREATE TABLE IF NOT EXISTS m_users (
   company_id UUID REFERENCES m_companies(id),  -- 所属会社（site_adminはNULL）
   name VARCHAR(100) NOT NULL,                  -- 氏名（漢字）
   name_kana VARCHAR(100),                      -- 氏名（カナ）
-  email VARCHAR(255) NOT NULL,                 -- メールアドレス（auth.usersと同期、一意制約なし）
+  email VARCHAR(255),                          -- メールアドレス（NULLable: メールなしスタッフ登録用）
   phone VARCHAR(20),                           -- 電話番号
   hire_date DATE,                              -- 入社日
   role user_role NOT NULL DEFAULT 'staff',     -- 権限
@@ -420,8 +420,9 @@ CREATE INDEX idx_users_is_active ON m_users(is_active) WHERE deleted_at IS NULL;
 
 **認証との連携**:
 
-- `id` は Supabase Auth の `auth.users.id` と同じ値
-- ユーザー作成時に `m_users` にも同時登録
+- `id` は Supabase Auth の `auth.users.id` と同じ値（メールなしスタッフの場合は `crypto.randomUUID()` で生成）
+- ユーザー作成時に `m_users` にも同時登録（メールなしスタッフは auth.users に登録しない）
+- `email` は NULL 許容: メールなしスタッフは個別ログインアカウントを持たず、記録者選択用の名前エントリとして機能する
 
 ---
 
@@ -620,6 +621,7 @@ CREATE TABLE IF NOT EXISTS r_activity (
   -- 記録者情報
   created_by UUID NOT NULL REFERENCES m_users(id),
   updated_by UUID REFERENCES m_users(id),
+  recorded_by UUID REFERENCES m_users(id),       -- 実際に記録を書いたスタッフ（created_byはAPIコール者）
 
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
@@ -636,6 +638,7 @@ CREATE INDEX idx_activity_facility_id ON r_activity(facility_id) WHERE deleted_a
 CREATE INDEX idx_activity_class_id ON r_activity(class_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_date ON r_activity(activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_created_by ON r_activity(created_by);
+CREATE INDEX idx_activity_recorded_by ON r_activity(recorded_by) WHERE recorded_by IS NOT NULL;
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
 ```
@@ -706,7 +709,8 @@ CREATE TABLE IF NOT EXISTS r_observation (
   -- 記録者情報
   created_by UUID NOT NULL REFERENCES m_users(id),
   updated_by UUID REFERENCES m_users(id),
-  
+  recorded_by UUID REFERENCES m_users(id),       -- 実際に記録を書いたスタッフ（created_byはAPIコール者）
+
   -- 共通カラム
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -718,6 +722,7 @@ CREATE INDEX idx_observation_child_id ON r_observation(child_id) WHERE deleted_a
 CREATE INDEX idx_observation_activity_id ON r_observation(activity_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_observation_date ON r_observation(observation_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_observation_created_by ON r_observation(created_by);
+CREATE INDEX idx_observation_recorded_by ON r_observation(recorded_by) WHERE recorded_by IS NOT NULL;
 CREATE INDEX idx_observation_child_date ON r_observation(child_id, observation_date) WHERE deleted_at IS NULL;
 ```
 
@@ -739,7 +744,8 @@ CREATE TABLE IF NOT EXISTS r_voice (
   
   -- 記録者情報
   created_by UUID NOT NULL REFERENCES m_users(id),
-  
+  recorded_by UUID REFERENCES m_users(id),       -- 実際に記録を書いたスタッフ（created_byはAPIコール者）
+
   -- 共通カラム
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -749,6 +755,7 @@ CREATE TABLE IF NOT EXISTS r_voice (
 -- インデックス
 CREATE INDEX idx_voice_child_id ON r_voice(child_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_voice_date ON r_voice(voice_date) WHERE deleted_at IS NULL;
+CREATE INDEX idx_voice_recorded_by ON r_voice(recorded_by) WHERE recorded_by IS NOT NULL;
 CREATE INDEX idx_voice_child_date ON r_voice(child_id, voice_date) WHERE deleted_at IS NULL;
 ```
 

@@ -16,7 +16,7 @@ import {
 
 interface User {
   user_id: string;
-  email: string;
+  email: string | null;
   name: string;
   name_kana?: string;
   phone?: string;
@@ -130,18 +130,28 @@ export default function UsersSettingsPage() {
 
   const filteredUsers = users.filter(user =>
     user.name.includes(searchTerm) ||
-    user.email.includes(searchTerm) ||
+    (user.email && user.email.includes(searchTerm)) ||
     (user.phone && user.phone.includes(searchTerm))
   );
 
+  const isEmailRequired = newUser.role !== 'staff';
+
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email) return;
+    const normalizedName = newUser.name.trim();
+    const normalizedEmail = newUser.email.trim();
+    const normalizedPhone = (newUser.phone || '').trim() || null;
+    if (!normalizedName || (isEmailRequired && !normalizedEmail)) return;
 
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify({
+          ...newUser,
+          name: normalizedName,
+          email: normalizedEmail || null,
+          phone: normalizedPhone,
+        }),
       });
 
       const data = await response.json();
@@ -150,7 +160,7 @@ export default function UsersSettingsPage() {
         throw new Error(data.error || 'Failed to create user');
       }
 
-      alert(`職員を追加しました。初期パスワード: ${data.data.initial_password}`);
+      alert(data.message || '職員を追加しました。');
       setNewUser({ name: '', email: '', phone: '', role: 'staff' });
       setShowAddModal(false);
       fetchUsers();
@@ -324,10 +334,14 @@ export default function UsersSettingsPage() {
 
                           {/* Email */}
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2 text-sm text-slate-600">
-                              <Mail size={14} className="text-slate-400" />
-                              <span>{user.email}</span>
-                            </div>
+                            {user.email ? (
+                              <div className="flex items-center gap-2 text-sm text-slate-600">
+                                <Mail size={14} className="text-slate-400" />
+                                <span>{user.email}</span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">ログインなし</span>
+                            )}
                           </td>
 
                           {/* Phone */}
@@ -342,7 +356,7 @@ export default function UsersSettingsPage() {
                           <td className="px-6 py-4">
                             <Select
                               value={user.role}
-                              onChange={(e: any) => handleUpdateUserRole(user.user_id, e.target.value)}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateUserRole(user.user_id, e.target.value)}
                               className="max-w-[140px] text-xs"
                             >
                               {roleOptions.map(option => (
@@ -406,18 +420,23 @@ export default function UsersSettingsPage() {
                   <Input
                     placeholder="例: 田中太郎"
                     value={newUser.name}
-                    onChange={(e: any) => setNewUser({ ...newUser, name: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUser({ ...newUser, name: e.target.value })}
                   />
                 </FieldGroup>
 
-                <FieldGroup label="メールアドレス" required>
+                <FieldGroup label="メールアドレス" required={isEmailRequired}>
                   <Input
                     icon={Mail}
                     type="email"
                     placeholder="example@email.com"
                     value={newUser.email}
-                    onChange={(e: any) => setNewUser({ ...newUser, email: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUser({ ...newUser, email: e.target.value })}
                   />
+                  {!isEmailRequired && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      メールアドレスを入力しない場合、個別ログインアカウントは作成されません
+                    </p>
+                  )}
                 </FieldGroup>
 
                 <FieldGroup label="電話番号">
@@ -426,14 +445,14 @@ export default function UsersSettingsPage() {
                     type="tel"
                     placeholder="090-1234-5678"
                     value={newUser.phone}
-                    onChange={(e: any) => setNewUser({ ...newUser, phone: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUser({ ...newUser, phone: e.target.value })}
                   />
                 </FieldGroup>
 
                 <FieldGroup label="権限" required>
                   <Select
                     value={newUser.role}
-                    onChange={(e: any) => setNewUser({ ...newUser, role: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, role: e.target.value })}
                   >
                     {roleOptions.map(option => (
                       <option key={option.value} value={option.value}>
@@ -457,7 +476,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  disabled={!newUser.name || !newUser.email}
+                  disabled={!newUser.name.trim() || (isEmailRequired && !newUser.email.trim())}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus size={16} />

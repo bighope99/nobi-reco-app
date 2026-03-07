@@ -63,6 +63,7 @@ interface Activity {
   photos: Array<ActivityPhoto | string>
   class_name: string
   class_id?: string
+  recorded_by?: string
   created_by: string
   created_at: string
   individual_record_count: number
@@ -180,6 +181,7 @@ export default function ActivityRecordClient() {
   const [handover, setHandover] = useState("")
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
+  const [selectedRecorder, setSelectedRecorder] = useState<string>("")
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -231,10 +233,20 @@ export default function ActivityRecordClient() {
 
         if (response.ok && result.success) {
           const users = result.data?.users || []
-          setStaffList(users.map((u: { user_id: string; name: string }) => ({
+          const mapped = users.map((u: { user_id: string; name: string }) => ({
             user_id: u.user_id,
             name: u.name,
-          })))
+          }))
+          setStaffList(mapped)
+
+          // Cookie から前回選択した記録者を復元
+          const lastRecorder = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('nobi_last_recorder='))
+            ?.split('=')[1]
+          if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
+            setSelectedRecorder(lastRecorder)
+          }
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)
@@ -568,6 +580,7 @@ export default function ActivityRecordClient() {
             content: activityContent,
             mentioned_children: selectedMentions.map((child) => child.child_id),
             photos,
+            recorded_by: selectedRecorder || undefined,
             // 新規フィールド（サニタイズ済み）
             event_name: sanitizedFields.event_name,
             daily_schedule: sanitizedFields.daily_schedule,
@@ -672,6 +685,12 @@ export default function ActivityRecordClient() {
 
       const sanitizedFields = getSanitizedExtendedFields()
 
+      // 記録者をCookieに保存（30日間）
+      if (selectedRecorder) {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`
+      }
+
       const response = await fetch('/api/activities', {
         method: 'POST',
         headers: {
@@ -683,6 +702,7 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
+          recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
           event_name: sanitizedFields.event_name,
           daily_schedule: sanitizedFields.daily_schedule,
@@ -768,6 +788,7 @@ export default function ActivityRecordClient() {
           content: contentForDB,
           mentioned_children: selectedMentions.map((child) => child.child_id),
           photos,
+          recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
           event_name: sanitizedFields.event_name,
           daily_schedule: sanitizedFields.daily_schedule,
@@ -833,6 +854,7 @@ export default function ActivityRecordClient() {
     setActivityContent(displayContent)
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
+    setSelectedRecorder(activity.recorded_by || "")
     setOriginalMentionedChildren(activity.mentioned_children || [])
     setOriginalContent(activity.content || "")
 
@@ -990,6 +1012,7 @@ export default function ActivityRecordClient() {
           ai_action: aiResult.data?.objective ?? '',
           ai_opinion: aiResult.data?.subjective ?? '',
           tag_flags: aiResult.data?.flags ?? {},
+          recorded_by: selectedRecorder || undefined,
         }),
       })
 
@@ -1314,6 +1337,25 @@ export default function ActivityRecordClient() {
                   value={activityDate}
                   onChange={(event) => setActivityDate(event.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="recorder">記録者</Label>
+                <Select
+                  value={selectedRecorder}
+                  onValueChange={(value) => setSelectedRecorder(value)}
+                >
+                  <SelectTrigger id="recorder">
+                    <SelectValue placeholder="記録者を選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffList.map((staff) => (
+                      <SelectItem key={staff.user_id} value={staff.user_id}>
+                        {staff.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

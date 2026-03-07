@@ -126,12 +126,19 @@ export default function StatusPage() {
     const [error, setError] = useState<string | null>(null)
     const [recordsData, setRecordsData] = useState<RecordsData | null>(null)
 
-    const [year, setYear] = useState(new Date().getFullYear())
-    const [month, setMonth] = useState(new Date().getMonth() + 1)
+    const [year, setYear] = useState(0)
+    const [month, setMonth] = useState(0)
     const [selectedClass, setSelectedClass] = useState('all')
     const [searchTerm, setSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
     const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'asc' })
+
+    // 日付の初期化（クライアント側でのみ実行）
+    useEffect(() => {
+        const now = new Date()
+        setYear(now.getFullYear())
+        setMonth(now.getMonth() + 1)
+    }, [])
 
     // 履歴モーダル用の状態
     const [historyModalOpen, setHistoryModalOpen] = useState(false)
@@ -142,6 +149,7 @@ export default function StatusPage() {
 
     // データ取得
     useEffect(() => {
+        if (year === 0 || month === 0) return  // Wait for client-side date initialization
         const fetchRecordsData = async () => {
             try {
                 setLoading(true)
@@ -568,7 +576,7 @@ export default function StatusPage() {
                                             <span className="text-sm font-medium text-slate-700">
                                                 {record.observation_date}
                                             </span>
-                                            <span className="text-xs text-slate-400">
+                                            <span className="text-xs text-slate-400" suppressHydrationWarning>
                                                 作成: {new Date(record.created_at).toLocaleString('ja-JP')}
                                             </span>
                                         </div>

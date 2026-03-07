@@ -650,6 +650,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           onChange={(e: any) => setFormData({ ...formData, birth_year: e.target.value })}
                           min="1900"
                           max={new Date().getFullYear()}
+                          suppressHydrationWarning
                         />
                         <span className="text-slate-500">年</span>
                         <Input

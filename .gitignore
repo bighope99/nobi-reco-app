@@ -40,3 +40,7 @@ coverage/
 *.png
 *.jpg
 *.jpeg
+# git worktree directories
+/checksource
+/.work
+/.worktree

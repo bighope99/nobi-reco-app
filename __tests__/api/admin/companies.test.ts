@@ -97,7 +97,7 @@ describe('GET /api/admin/companies', () => {
     const companiesQuery: any = {
       select: jest.fn(() => companiesQuery),
       is: jest.fn(() => companiesQuery),
-      order: jest.fn(() => companiesQuery),
+      order: jest.fn(),
     };
 
     companiesQuery.order.mockResolvedValue({
@@ -105,28 +105,41 @@ describe('GET /api/admin/companies', () => {
       error: null,
     });
 
-    const facilitiesCountQuery1: any = {
-      select: jest.fn(() => facilitiesCountQuery1),
-      eq: jest.fn(() => facilitiesCountQuery1),
-      is: jest.fn(() => facilitiesCountQuery1),
+    // Batch facility query (returns all facilities with company_id)
+    const facilitiesQuery: any = {
+      select: jest.fn(() => facilitiesQuery),
+      in: jest.fn(() => facilitiesQuery),
+      is: jest.fn(),
     };
-    facilitiesCountQuery1.is.mockResolvedValue({ count: 3 });
+    facilitiesQuery.is.mockResolvedValue({
+      data: [
+        { company_id: 'company-1' },
+        { company_id: 'company-1' },
+        { company_id: 'company-1' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+        { company_id: 'company-2' },
+      ],
+    });
 
-    const facilitiesCountQuery2: any = {
-      select: jest.fn(() => facilitiesCountQuery2),
-      eq: jest.fn(() => facilitiesCountQuery2),
-      is: jest.fn(() => facilitiesCountQuery2),
+    // Batch admin user query
+    const adminUserQuery: any = {
+      select: jest.fn(() => adminUserQuery),
+      in: jest.fn(() => adminUserQuery),
+      eq: jest.fn(() => adminUserQuery),
+      is: jest.fn(),
     };
-    facilitiesCountQuery2.is.mockResolvedValue({ count: 5 });
+    adminUserQuery.is.mockResolvedValue({
+      data: [],
+    });
 
-    let facilityQueryCallCount = 0;
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_companies') return companiesQuery;
-        if (table === 'm_facilities') {
-          facilityQueryCallCount++;
-          return facilityQueryCallCount === 1 ? facilitiesCountQuery1 : facilitiesCountQuery2;
-        }
+        if (table === 'm_facilities') return facilitiesQuery;
+        if (table === 'm_users') return adminUserQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -177,7 +190,7 @@ describe('GET /api/admin/companies', () => {
     const companiesQuery: any = {
       select: jest.fn(() => companiesQuery),
       is: jest.fn(() => companiesQuery),
-      order: jest.fn(() => companiesQuery),
+      order: jest.fn(),
     };
 
     companiesQuery.order.mockResolvedValue({
@@ -185,17 +198,33 @@ describe('GET /api/admin/companies', () => {
       error: null,
     });
 
-    const facilitiesCountQuery: any = {
-      select: jest.fn(() => facilitiesCountQuery),
-      eq: jest.fn(() => facilitiesCountQuery),
-      is: jest.fn(() => facilitiesCountQuery),
+    const facilitiesQuery: any = {
+      select: jest.fn(() => facilitiesQuery),
+      in: jest.fn(() => facilitiesQuery),
+      is: jest.fn(),
     };
-    facilitiesCountQuery.is.mockResolvedValue({ count: 2 });
+    facilitiesQuery.is.mockResolvedValue({
+      data: [
+        { company_id: 'company-1' },
+        { company_id: 'company-1' },
+      ],
+    });
+
+    const adminUserQuery: any = {
+      select: jest.fn(() => adminUserQuery),
+      in: jest.fn(() => adminUserQuery),
+      eq: jest.fn(() => adminUserQuery),
+      is: jest.fn(),
+    };
+    adminUserQuery.is.mockResolvedValue({
+      data: [],
+    });
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_companies') return companiesQuery;
-        if (table === 'm_facilities') return facilitiesCountQuery;
+        if (table === 'm_facilities') return facilitiesQuery;
+        if (table === 'm_users') return adminUserQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -207,8 +236,8 @@ describe('GET /api/admin/companies', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.companies[0].facilities_count).toBe(2);
-    expect(facilitiesCountQuery.eq).toHaveBeenCalledWith('company_id', 'company-1');
-    expect(facilitiesCountQuery.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(facilitiesQuery.in).toHaveBeenCalledWith('company_id', ['company-1']);
+    expect(facilitiesQuery.is).toHaveBeenCalledWith('deleted_at', null);
   });
 
   it('should return 500 when database error occurs', async () => {
@@ -262,7 +291,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 
@@ -283,7 +311,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 
@@ -304,7 +331,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: {},
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 
@@ -314,49 +340,6 @@ describe('POST /api/admin/companies', () => {
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
     expect(json.error).toContain('company.name');
-  });
-
-  it('should return 400 when facility name is missing', async () => {
-    mockedGetMetadata.mockResolvedValue({
-      role: 'site_admin',
-      company_id: null,
-      current_facility_id: null,
-    });
-
-    const request = buildRequest({
-      company: { name: 'テスト株式会社' },
-      facility: {},
-      admin_user: { name: '管理者太郎', email: 'admin@example.com' },
-    });
-
-    const response = await POST(request);
-    const json = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(json.success).toBe(false);
-    expect(json.error).toContain('facility.name');
-  });
-
-  it('should return 400 when both company and facility names are missing', async () => {
-    mockedGetMetadata.mockResolvedValue({
-      role: 'site_admin',
-      company_id: null,
-      current_facility_id: null,
-    });
-
-    const request = buildRequest({
-      company: {},
-      facility: {},
-      admin_user: { name: '管理者太郎', email: 'admin@example.com' },
-    });
-
-    const response = await POST(request);
-    const json = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(json.success).toBe(false);
-    expect(json.error).toContain('company.name');
-    expect(json.error).toContain('facility.name');
   });
 
   it('should return 400 when admin_user name is missing', async () => {
@@ -368,7 +351,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { email: 'admin@example.com' },
     });
 
@@ -389,7 +371,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎' },
     });
 
@@ -426,7 +407,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'existing@example.com' },
     });
 
@@ -438,7 +418,7 @@ describe('POST /api/admin/companies', () => {
     expect(json.error).toBe('Email already exists');
   });
 
-  it('should create company, facility and admin user with required fields', async () => {
+  it('should create company and admin user (without facility)', async () => {
     mockedGetMetadata.mockResolvedValue({
       role: 'site_admin',
       company_id: null,
@@ -468,19 +448,6 @@ describe('POST /api/admin/companies', () => {
       }),
     };
 
-    const facilityInsertQuery: any = {
-      insert: jest.fn(() => facilityInsertQuery),
-      select: jest.fn(() => facilityInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'facility-new-1',
-          name: 'テスト施設',
-          company_id: 'company-new-1',
-        },
-        error: null,
-      }),
-    };
-
     const userInsertQuery: any = {
       insert: jest.fn(() => userInsertQuery),
       select: jest.fn(() => userInsertQuery),
@@ -496,18 +463,11 @@ describe('POST /api/admin/companies', () => {
       }),
     };
 
-    const userFacilityInsertQuery: any = {
-      insert: jest.fn(() => userFacilityInsertQuery),
-    };
-    userFacilityInsertQuery.insert.mockResolvedValue({ error: null });
-
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_users' && !companyInsertQuery.insert.mock.calls.length) return usersCheckQuery;
         if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_facilities') return facilityInsertQuery;
         if (table === 'm_users') return userInsertQuery;
-        if (table === '_user_facility') return userFacilityInsertQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -519,6 +479,7 @@ describe('POST /api/admin/companies', () => {
             data: { user: { id: 'user-new-1', email: 'admin@example.com' } },
             error: null,
           }),
+          deleteUser: jest.fn().mockResolvedValue({ error: null }),
           generateLink: jest.fn().mockResolvedValue({
             data: {
               properties: {
@@ -536,7 +497,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 
@@ -547,10 +507,10 @@ describe('POST /api/admin/companies', () => {
     expect(json.success).toBe(true);
     expect(json.data.company_id).toBe('company-new-1');
     expect(json.data.company_name).toBe('テスト株式会社');
-    expect(json.data.facility_id).toBe('facility-new-1');
-    expect(json.data.facility_name).toBe('テスト施設');
     expect(json.data.admin_user_id).toBe('user-new-1');
-    expect(json.message).toContain('会社、施設、代表者ユーザーを作成しました');
+    // 施設は別ステップで登録するため、レスポンスに含まれない
+    expect(json.data.facility_id).toBeUndefined();
+    expect(json.message).toContain('会社と管理者ユーザーを作成しました');
     expect(mockedSendWithGas).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'admin@example.com',
@@ -559,7 +519,7 @@ describe('POST /api/admin/companies', () => {
     );
   });
 
-  it('should create company, facility and admin user with all optional fields', async () => {
+  it('should create company and admin user with company_admin current_facility_id as null', async () => {
     mockedGetMetadata.mockResolvedValue({
       role: 'site_admin',
       company_id: null,
@@ -583,25 +543,6 @@ describe('POST /api/admin/companies', () => {
         data: {
           id: 'company-new-1',
           name: 'テスト株式会社',
-          name_kana: 'テストカブシキガイシャ',
-          postal_code: '100-0001',
-          address: '東京都千代田区',
-          phone: '03-1234-5678',
-          email: 'test@example.com',
-          is_active: true,
-        },
-        error: null,
-      }),
-    };
-
-    const facilityInsertQuery: any = {
-      insert: jest.fn(() => facilityInsertQuery),
-      select: jest.fn(() => facilityInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'facility-new-1',
-          name: 'テスト施設',
-          company_id: 'company-new-1',
         },
         error: null,
       }),
@@ -622,178 +563,25 @@ describe('POST /api/admin/companies', () => {
       }),
     };
 
-    const userFacilityInsertQuery: any = {
-      insert: jest.fn(() => userFacilityInsertQuery),
-    };
-    userFacilityInsertQuery.insert.mockResolvedValue({ error: null });
-
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_users' && !companyInsertQuery.insert.mock.calls.length) return usersCheckQuery;
         if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_facilities') return facilityInsertQuery;
         if (table === 'm_users') return userInsertQuery;
-        if (table === '_user_facility') return userFacilityInsertQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
 
-    const mockAdminClient = {
-      auth: {
-        admin: {
-          createUser: jest.fn().mockResolvedValue({
-            data: { user: { id: 'user-new-1', email: 'admin@example.com' } },
-            error: null,
-          }),
-          generateLink: jest.fn().mockResolvedValue({
-            data: {
-              properties: {
-                action_link: 'https://test.supabase.co/auth/v1/verify?token_hash=test-token&type=invite',
-              },
-            },
-            error: null,
-          }),
-        },
-      },
-    };
-
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
-    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
-
-    const request = buildRequest({
-      company: {
-        name: 'テスト株式会社',
-        name_kana: 'テストカブシキガイシャ',
-        postal_code: '100-0001',
-        address: '東京都千代田区',
-        phone: '03-1234-5678',
-        email: 'test@example.com',
-      },
-      facility: {
-        name: 'テスト施設',
-        name_kana: 'テストシセツ',
-        postal_code: '200-0002',
-        address: '東京都新宿区',
-        phone: '03-9876-5432',
-        email: 'facility@example.com',
-        capacity: 100,
-      },
-      admin_user: {
-        name: '管理者太郎',
-        name_kana: 'カンリシャタロウ',
-        email: 'admin@example.com',
-        hire_date: '2024-01-01',
-      },
+    const mockCreateUser = jest.fn().mockResolvedValue({
+      data: { user: { id: 'user-new-1', email: 'admin@example.com' } },
+      error: null,
     });
-
-    const response = await POST(request);
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(companyInsertQuery.insert).toHaveBeenCalledWith({
-      name: 'テスト株式会社',
-      name_kana: 'テストカブシキガイシャ',
-      postal_code: '100-0001',
-      address: '東京都千代田区',
-      phone: '03-1234-5678',
-      email: 'test@example.com',
-      is_active: true,
-    });
-    expect(facilityInsertQuery.insert).toHaveBeenCalledWith({
-      company_id: 'company-new-1',
-      name: 'テスト施設',
-      name_kana: 'テストシセツ',
-      postal_code: '200-0002',
-      address: '東京都新宿区',
-      phone: '03-9876-5432',
-      email: 'facility@example.com',
-      capacity: 100,
-      is_active: true,
-    });
-    expect(json.success).toBe(true);
-    expect(json.data.admin_user_id).toBe('user-new-1');
-  });
-
-  it('should associate facility and user with created company_id', async () => {
-    mockedGetMetadata.mockResolvedValue({
-      role: 'site_admin',
-      company_id: null,
-      current_facility_id: null,
-    });
-
-    const usersCheckQuery: any = {
-      select: jest.fn(() => usersCheckQuery),
-      eq: jest.fn(() => usersCheckQuery),
-      is: jest.fn(() => usersCheckQuery),
-      single: jest.fn().mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116' },
-      }),
-    };
-
-    const companyInsertQuery: any = {
-      insert: jest.fn(() => companyInsertQuery),
-      select: jest.fn(() => companyInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'company-xyz-123',
-          name: 'テスト株式会社',
-        },
-        error: null,
-      }),
-    };
-
-    const facilityInsertQuery: any = {
-      insert: jest.fn(() => facilityInsertQuery),
-      select: jest.fn(() => facilityInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'facility-abc-456',
-          name: 'テスト施設',
-          company_id: 'company-xyz-123',
-        },
-        error: null,
-      }),
-    };
-
-    const userInsertQuery: any = {
-      insert: jest.fn(() => userInsertQuery),
-      select: jest.fn(() => userInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'user-new-1',
-          name: '管理者太郎',
-          email: 'admin@example.com',
-          role: 'company_admin',
-          company_id: 'company-xyz-123',
-        },
-        error: null,
-      }),
-    };
-
-    const userFacilityInsertQuery: any = {
-      insert: jest.fn(() => userFacilityInsertQuery),
-    };
-    userFacilityInsertQuery.insert.mockResolvedValue({ error: null });
-
-    const mockSupabase = {
-      from: jest.fn((table: string) => {
-        if (table === 'm_users' && !companyInsertQuery.insert.mock.calls.length) return usersCheckQuery;
-        if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_facilities') return facilityInsertQuery;
-        if (table === 'm_users') return userInsertQuery;
-        if (table === '_user_facility') return userFacilityInsertQuery;
-        throw new Error(`Unexpected table: ${table}`);
-      }),
-    };
 
     const mockAdminClient = {
       auth: {
         admin: {
-          createUser: jest.fn().mockResolvedValue({
-            data: { user: { id: 'user-new-1', email: 'admin@example.com' } },
-            error: null,
-          }),
+          createUser: mockCreateUser,
+          deleteUser: jest.fn().mockResolvedValue({ error: null }),
           generateLink: jest.fn().mockResolvedValue({
             data: {
               properties: {
@@ -811,100 +599,20 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 
     const response = await POST(request);
-    const json = await response.json();
-
     expect(response.status).toBe(200);
-    expect(facilityInsertQuery.insert).toHaveBeenCalledWith(
+
+    // company_admin の current_facility_id が null で作成されること
+    expect(mockCreateUser).toHaveBeenCalledWith(
       expect.objectContaining({
-        company_id: 'company-xyz-123',
-        name: 'テスト施設',
+        app_metadata: expect.objectContaining({
+          current_facility_id: null,
+        }),
       })
     );
-    expect(userInsertQuery.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        company_id: 'company-xyz-123',
-        name: '管理者太郎',
-        email: 'admin@example.com',
-      })
-    );
-    expect(json.data.company_id).toBe('company-xyz-123');
-    expect(json.data.facility_id).toBe('facility-abc-456');
-    expect(json.data.admin_user_id).toBe('user-new-1');
-  });
-
-  it('should rollback company when facility creation fails', async () => {
-    mockedGetMetadata.mockResolvedValue({
-      role: 'site_admin',
-      company_id: null,
-      current_facility_id: null,
-    });
-
-    const usersCheckQuery: any = {
-      select: jest.fn(() => usersCheckQuery),
-      eq: jest.fn(() => usersCheckQuery),
-      is: jest.fn(() => usersCheckQuery),
-      single: jest.fn().mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116' },
-      }),
-    };
-
-    const companyDeleteQuery: any = {
-      delete: jest.fn(() => companyDeleteQuery),
-      eq: jest.fn(() => companyDeleteQuery),
-    };
-    companyDeleteQuery.eq.mockResolvedValue({ error: null });
-
-    const companyInsertQuery: any = {
-      insert: jest.fn(() => companyInsertQuery),
-      select: jest.fn(() => companyInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: {
-          id: 'company-rollback-1',
-          name: 'テスト株式会社',
-        },
-        error: null,
-      }),
-      delete: jest.fn(() => companyDeleteQuery),
-    };
-
-    const facilityInsertQuery: any = {
-      insert: jest.fn(() => facilityInsertQuery),
-      select: jest.fn(() => facilityInsertQuery),
-      single: jest.fn().mockResolvedValue({
-        data: null,
-        error: { message: 'Facility creation failed' },
-      }),
-    };
-
-    const mockSupabase = {
-      from: jest.fn((table: string) => {
-        if (table === 'm_users') return usersCheckQuery;
-        if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_facilities') return facilityInsertQuery;
-        throw new Error(`Unexpected table: ${table}`);
-      }),
-    };
-
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
-
-    const request = buildRequest({
-      company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
-      admin_user: { name: '管理者太郎', email: 'admin@example.com' },
-    });
-
-    const response = await POST(request);
-    const json = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(json.success).toBe(false);
-    expect(companyDeleteQuery.eq).toHaveBeenCalledWith('id', 'company-rollback-1');
   });
 
   it('should return 500 when company creation fails', async () => {
@@ -945,7 +653,6 @@ describe('POST /api/admin/companies', () => {
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
-      facility: { name: 'テスト施設' },
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 

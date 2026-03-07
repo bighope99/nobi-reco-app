@@ -82,6 +82,7 @@ const adminNavItems: NavItem[] = [
     children: [
       { label: "会社一覧", href: "/admin/companies" },
       { label: "会社登録", href: "/admin/companies/new" },
+      { label: "管理者登録", href: "/admin/company-admins/new" },
     ],
   },
   {
