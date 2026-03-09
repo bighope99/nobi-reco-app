@@ -146,21 +146,48 @@ function PasswordSetupContent() {
     setIsSubmitting(true);
 
     try {
+      const supabase = createClient();
+
       // Check if we're in test mode (using test token)
       if (token === "valid-token") {
         // In test mode, skip updateUser and redirect directly
-        console.log("[Password Setup] Test mode: skipping updateUser, redirecting to dashboard");
-        router.replace("/dashboard");
+        console.log("[Password Setup] Test mode: skipping updateUser, redirecting based on linkType");
+        const redirectPath = linkType === "recovery" ? "/login" : "/dashboard";
+        router.replace(redirectPath);
         return;
       }
 
       // Production path: update password via Supabase
-      const supabase = createClient();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         throw updateError;
       }
-      router.replace("/dashboard");
+
+      // パスワードリセット（recovery）の場合はログインページへ、
+      // 招待（invite）の場合はロールに基づいてリダイレクト
+      if (linkType === "recovery") {
+        // リセット後はログインページへ（セッション切り替えのため）
+        await supabase.auth.signOut();
+        router.replace("/login");
+      } else {
+        // 招待からの初回パスワード設定：ロールに応じたリダイレクト
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const accessToken = currentSession?.access_token;
+        let role: string | undefined;
+        if (accessToken) {
+          try {
+            const parts = accessToken.split(".");
+            if (parts.length === 3) {
+              const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+              role = payload?.app_metadata?.role;
+            }
+          } catch {
+            // fallback: redirect to dashboard
+          }
+        }
+        const redirectPath = (role === "site_admin" || role === "company_admin") ? "/admin" : "/dashboard";
+        router.replace(redirectPath);
+      }
     } catch (err) {
       console.error("Password update failed:", err);
       setError("パスワードの更新に失敗しました。もう一度お試しください。");
@@ -178,9 +205,13 @@ function PasswordSetupContent() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground">
             の
           </div>
-          <h1 className="leading-none font-semibold text-2xl">パスワード設定</h1>
+          <h1 className="leading-none font-semibold text-2xl">
+            {linkType === "recovery" ? "パスワード再設定" : "パスワード設定"}
+          </h1>
           <CardDescription>
-            パスワードを設定してログインを完了してください。
+            {linkType === "recovery"
+              ? "新しいパスワードを入力してください。"
+              : "パスワードを設定してログインを完了してください。"}
           </CardDescription>
         </CardHeader>
         <CardContent>
