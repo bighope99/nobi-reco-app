@@ -4,6 +4,33 @@ import { buildPasswordResetEmailHtml } from '@/lib/email/templates';
 import { sendWithGas } from '@/lib/email/gas';
 
 /**
+ * インメモリレート制限
+ * 同一メールアドレスに対して RATE_LIMIT_WINDOW_MS 以内に RATE_LIMIT_MAX_REQUESTS 回まで
+ */
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5分
+const RATE_LIMIT_MAX_REQUESTS = 3; // 5分間に3回まで
+
+/** @internal テスト用にエクスポート */
+export const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+
+  entry.count += 1;
+  return true;
+}
+
+/**
  * POST /api/auth/reset-password
  * パスワード再設定メールを送信する（認証不要）
  */
@@ -26,6 +53,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'メールアドレスの形式が正しくありません' },
         { status: 400 }
+      );
+    }
+
+    // レート制限チェック（メールアドレスベース）
+    if (!checkRateLimit(trimmedEmail)) {
+      return NextResponse.json(
+        { error: 'リクエストが多すぎます。しばらく待ってから再度お試しください。' },
+        { status: 429 }
       );
     }
 

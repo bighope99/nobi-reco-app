@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { POST } from '@/app/api/auth/reset-password/route';
+import { POST, rateLimitMap } from '@/app/api/auth/reset-password/route';
 import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { sendWithGas } from '@/lib/email/gas';
 
@@ -26,6 +26,7 @@ describe('POST /api/auth/reset-password', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    rateLimitMap.clear();
   });
 
   it('should return 400 when email is missing', async () => {
@@ -116,6 +117,33 @@ describe('POST /api/auth/reset-password', () => {
     // Verify the reset URL points to /password/setup with recovery type
     const sendCall = mockedSendWithGas.mock.calls[0][0];
     expect(sendCall.htmlBody).toContain('/password/setup?token_hash=abc123&type=recovery');
+  });
+
+  it('should return 429 when rate limit is exceeded', async () => {
+    const mockSelect = jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        is: jest.fn().mockReturnValue({
+          single: jest.fn().mockResolvedValue({ data: null }),
+        }),
+      }),
+    });
+    const mockSupabase = { from: jest.fn().mockReturnValue({ select: mockSelect }) };
+    mockedCreateClient.mockResolvedValue(mockSupabase as never);
+
+    const email = 'ratelimit@example.com';
+
+    // First 3 requests should succeed
+    for (let i = 0; i < 3; i++) {
+      const response = await POST(buildRequest({ email }));
+      expect(response.status).toBe(200);
+    }
+
+    // 4th request should be rate limited
+    const response = await POST(buildRequest({ email }));
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.error).toBe('リクエストが多すぎます。しばらく待ってから再度お試しください。');
   });
 
   it('should return 500 when link generation fails', async () => {

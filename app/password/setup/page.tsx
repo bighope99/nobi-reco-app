@@ -14,8 +14,20 @@ export const dynamic = 'force-dynamic';
 
 type AuthStatus = "verifying" | "ready" | "error";
 
-const isPasswordAlnumMixed = (value: string) => 
+const isPasswordAlnumMixed = (value: string) =>
   value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
+
+/** JWTペイロードからロールを抽出する */
+function getRoleFromAccessToken(accessToken: string): string | undefined {
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length !== 3) return undefined;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.app_metadata?.role as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function PasswordSetupContent() {
   const router = useRouter();
@@ -25,6 +37,7 @@ function PasswordSetupContent() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const linkError = searchParams.get("error_description") || searchParams.get("error");
   const code = searchParams.get("code");
@@ -60,9 +73,12 @@ function PasswordSetupContent() {
         const supabase = createClient();
         if (code) {
           console.log("[Password Setup] Using code for session exchange");
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
             throw exchangeError;
+          }
+          if (exchangeData.session?.access_token) {
+            setAccessToken(exchangeData.session.access_token);
           }
         } else if (token && linkType) {
           // Use relative URL to allow test mocking via API route
@@ -106,6 +122,10 @@ function PasswordSetupContent() {
             throw sessionError;
           } else if (sessionError) {
             console.log("[Password Setup] Test mode: ignoring setSession error");
+          }
+
+          if (sessionData.access_token) {
+            setAccessToken(sessionData.access_token);
           }
         }
 
@@ -170,21 +190,8 @@ function PasswordSetupContent() {
         await supabase.auth.signOut();
         router.replace("/login");
       } else {
-        // 招待からの初回パスワード設定：ロールに応じたリダイレクト
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        const accessToken = currentSession?.access_token;
-        let role: string | undefined;
-        if (accessToken) {
-          try {
-            const parts = accessToken.split(".");
-            if (parts.length === 3) {
-              const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-              role = payload?.app_metadata?.role;
-            }
-          } catch {
-            // fallback: redirect to dashboard
-          }
-        }
+        // 招待からの初回パスワード設定：verify時に保存したJWTからロールを取得
+        const role = accessToken ? getRoleFromAccessToken(accessToken) : undefined;
         const redirectPath = (role === "site_admin" || role === "company_admin") ? "/admin" : "/dashboard";
         router.replace(redirectPath);
       }
