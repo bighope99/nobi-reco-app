@@ -350,10 +350,13 @@ export default function StatusPage() {
                         </button>
                     </div>
 
-                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2">
+                    <Link
+                        href="/records/activity"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2"
+                    >
                         <FileText className="w-4 h-4" />
                         <span className="hidden sm:inline">一括作成</span>
-                    </button>
+                    </Link>
                 </div>
 
                 {/* Filter Bar */}
