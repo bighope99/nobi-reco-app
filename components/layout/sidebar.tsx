@@ -119,6 +119,22 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
 
+  /**
+   * 子メニュー項目のアクティブ状態を判定する。
+   * 同一親メニュー内の兄弟アイテムでより具体的にマッチするものがある場合はそちらを優先する。
+   * @param href - メニュー項目のhref
+   * @param siblings - 同一親メニュー内の兄弟アイテムのhref配列
+   * @returns アクティブ状態かどうか
+   */
+  const isChildActive = (href: string, siblings: { href: string }[]) => {
+    if (pathname === href) return true
+    if (!pathname.startsWith(href + "/")) return false
+    // 自分よりも具体的にマッチする兄弟がいればfalse
+    return !siblings.some(
+      (sibling) => sibling.href !== href && (pathname === sibling.href || pathname.startsWith(sibling.href + "/"))
+    )
+  }
+
   return (
     <>
       {/* モバイル用バックドロップ */}
@@ -182,7 +198,7 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                               "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
-                              isActive(child.href) && "bg-sidebar-accent font-medium",
+                              isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
                               child.hidden && "hidden",
                             )}
                           >
