@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { FileText, ChevronLeft, Calendar, ChevronRight, ChevronDown, Search, Filter, History, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
@@ -350,13 +351,12 @@ export default function StatusPage() {
                         </button>
                     </div>
 
-                    <Link
-                        href="/records/activity"
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2"
-                    >
-                        <FileText className="w-4 h-4" />
-                        <span className="hidden sm:inline">一括作成</span>
-                    </Link>
+                    <Button asChild className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2">
+                        <Link href="/records/activity" aria-label="一括作成">
+                            <FileText className="w-4 h-4" />
+                            <span className="hidden sm:inline">一括作成</span>
+                        </Link>
+                    </Button>
                 </div>
 
                 {/* Filter Bar */}

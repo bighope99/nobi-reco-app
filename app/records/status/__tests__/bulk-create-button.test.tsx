@@ -17,6 +17,13 @@ jest.mock("next/link", () => {
   }
 })
 
+jest.mock("@/components/ui/button", () => ({
+  Button: ({ children, asChild, ...props }: { children: React.ReactNode; asChild?: boolean; [key: string]: unknown }) => {
+    if (asChild) return <>{children}</>
+    return <button {...props}>{children}</button>
+  },
+}))
+
 jest.mock("@/components/layout/staff-layout", () => ({
   StaffLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
@@ -62,5 +69,8 @@ describe("記録状況一覧 - 一括作成ボタン", () => {
     const linkElement = bulkCreateLink.closest("a")
     expect(linkElement).not.toBeNull()
     expect(linkElement?.getAttribute("href")).toBe("/records/activity")
+
+    // aria-labelがアクセシビリティのため設定されていること
+    expect(linkElement?.getAttribute("aria-label")).toBe("一括作成")
   })
 })
