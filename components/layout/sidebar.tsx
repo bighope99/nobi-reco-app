@@ -118,7 +118,13 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
 
-  // 子メニュー項目のアクティブ判定: 同一親内でより具体的にマッチする兄弟がある場合はそちらを優先
+  /**
+   * 子メニュー項目のアクティブ状態を判定する。
+   * 同一親メニュー内の兄弟アイテムでより具体的にマッチするものがある場合はそちらを優先する。
+   * @param href - メニュー項目のhref
+   * @param siblings - 同一親メニュー内の兄弟アイテムのhref配列
+   * @returns アクティブ状態かどうか
+   */
   const isChildActive = (href: string, siblings: { href: string }[]) => {
     if (pathname === href) return true
     if (!pathname.startsWith(href + "/")) return false
