@@ -99,7 +99,7 @@ PRを作成したとき、対応するチケットのステータスを「レビ
 
 **ステップ1: ステータスを「レビュー依頼」に更新**
 
-```
+```yaml
 ツール: notion-update-page
 page_id: <チケットのID>
 properties:
@@ -108,10 +108,10 @@ properties:
 
 **ステップ2: PRリンクをコメントとして追加**
 
-```
+```yaml
 ツール: notion-create-comment
 page_id: <チケットのID>
-content: "PR #<PR番号> を作成しました\nhttps://github.com/bighope99/nobi-reco-app/pull/<PR番号>"
+content: "PR #<PR番号> を作成しました\n<PR URL>"
 ```
 
 ### 4. 新規バグチケットの作成

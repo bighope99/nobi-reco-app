@@ -14,7 +14,7 @@ nobi-reco-app プロジェクトにおける `.claude/` ディレクトリの設
 
 ## ディレクトリ構成
 
-```
+```text
 .claude/
 ├── skills/
 │   ├── <skill-name>/SKILL.md   # ディレクトリ型スキル（推奨）
@@ -123,7 +123,7 @@ description: |
 
 ## コミット前チェックリスト
 
-- [ ] Skill: frontmatter（name, description, triggers）が完備
+- [ ] Skill: frontmatter（name, description）が完備
 - [ ] Rule: 簡潔かつアクション可能
 - [ ] 既存スキル・ルールとの重複なし
 - [ ] トリガーキーワードが想定ユースケースに合致
