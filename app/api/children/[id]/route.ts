@@ -255,7 +255,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid enrollment_status' }, { status: 400 });
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError, count } = await supabase
       .from('m_children')
       .update({
         enrollment_status,
@@ -263,11 +263,16 @@ export async function PATCH(
       })
       .eq('id', child_id)
       .eq('facility_id', current_facility_id)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .select('id', { count: 'exact', head: true });
 
     if (updateError) {
       console.error('Child status update error:', updateError.message);
       return NextResponse.json({ error: 'Failed to update status' }, { status: 500 });
+    }
+
+    if (count === 0) {
+      return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, message: 'ステータスを更新しました' });
