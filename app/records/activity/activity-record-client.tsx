@@ -64,6 +64,7 @@ interface Activity {
   class_name: string
   class_id?: string
   recorded_by?: string
+  recorded_by_name?: string | null
   created_by: string
   created_at: string
   individual_record_count: number
@@ -673,14 +674,42 @@ export default function ActivityRecordClient() {
     }
   }
 
+  // コンテンツ内の@名前をスキャンし、未登録のメンションを検出して補完する（チケット#2: コピペ対応）
+  const resolveContentMentions = (content: string, currentMentions: MentionSuggestion[]) => {
+    const displayNamePattern = /@([^\s@\[\]]+)/g
+    const resolvedMentions = [...currentMentions]
+    let match: RegExpExecArray | null
+
+    while ((match = displayNamePattern.exec(content)) !== null) {
+      const displayName = match[1]
+      // 既に選択済みかチェック
+      const alreadySelected = resolvedMentions.find(
+        (m) => m.display_name === displayName || m.name === displayName
+      )
+      if (!alreadySelected) {
+        // classChildrenから名前で検索
+        const found = classChildren.find(
+          (c) => c.display_name === displayName || c.name === displayName
+        )
+        if (found) {
+          resolvedMentions.push(found)
+        }
+      }
+    }
+
+    return resolvedMentions
+  }
+
   const handleSave = async () => {
     setIsSaving(true)
     setSaveError(null)
     setSaveMessage(null)
 
     try {
+      // コピペなどで追加された@名前メンションを自動解決
+      const resolvedMentions = resolveContentMentions(activityContent, selectedMentions)
       // 保存用にメンションをプレースホルダー形式に変換
-      const nameToIdMap = buildNameToIdMap(selectedMentions)
+      const nameToIdMap = buildNameToIdMap(resolvedMentions)
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
 
       const sanitizedFields = getSanitizedExtendedFields()
@@ -700,7 +729,7 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           activity_date: activityDate,
           content: contentForDB,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: resolvedMentions.map((child) => child.child_id),
           photos,
           recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
@@ -725,11 +754,15 @@ export default function ActivityRecordClient() {
       setEditingActivityId(savedActivityId)
       setIsEditMode(true)
       setOriginalContent(contentForDB)
+      // コピペで追加されたメンションをstateにも反映
+      if (resolvedMentions.length !== selectedMentions.length) {
+        setSelectedMentions(resolvedMentions)
+      }
       setSaveMessage('保存しました')
       fetchActivities()
 
       // AI分析自動実行（観察記録+メンションがある場合のみ）
-      if (contentForDB.trim() && selectedMentions.length > 0) {
+      if (contentForDB.trim() && resolvedMentions.length > 0) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -739,7 +772,7 @@ export default function ActivityRecordClient() {
               class_id: selectedClass || null,
               content: contentForDB,
               activity_date: activityDate,
-              mentioned_children: selectedMentions.map((child) => child.child_id),
+              mentioned_children: resolvedMentions.map((child) => child.child_id),
               activity_id: savedActivityId,
             }),
           })
@@ -771,8 +804,10 @@ export default function ActivityRecordClient() {
     setSaveMessage(null)
 
     try {
+      // コピペなどで追加された@名前メンションを自動解決
+      const resolvedMentions = resolveContentMentions(activityContent, selectedMentions)
       // 更新用にメンションをプレースホルダー形式に変換
-      const nameToIdMap = buildNameToIdMap(selectedMentions)
+      const nameToIdMap = buildNameToIdMap(resolvedMentions)
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
 
       const sanitizedFields = getSanitizedExtendedFields()
@@ -786,7 +821,7 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           activity_date: activityDate,
           content: contentForDB,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: resolvedMentions.map((child) => child.child_id),
           photos,
           recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
@@ -806,11 +841,15 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '更新に失敗しました')
       }
 
+      // コピペで追加されたメンションをstateにも反映
+      if (resolvedMentions.length !== selectedMentions.length) {
+        setSelectedMentions(resolvedMentions)
+      }
       setSaveMessage('更新しました')
       fetchActivities()
 
       // AI分析は内容が変更された場合のみ実行
-      if (contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
+      if (contentForDB.trim() && resolvedMentions.length > 0 && contentForDB !== originalContent) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -820,7 +859,7 @@ export default function ActivityRecordClient() {
               class_id: selectedClass || null,
               content: contentForDB,
               activity_date: activityDate,
-              mentioned_children: selectedMentions.map((child) => child.child_id),
+              mentioned_children: resolvedMentions.map((child) => child.child_id),
               activity_id: editingActivityId,
             }),
           })
@@ -848,9 +887,10 @@ export default function ActivityRecordClient() {
   const handleEdit = async (activity: Activity) => {
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
-    // @[child_id] 形式を @表示名 形式に変換して表示
+    // @[child_id] 形式と child:child_id 形式の両方を @表示名 形式に変換して表示
     const idToNameMap = new Map(Object.entries(activity.mentioned_children_names || {}))
-    const displayContent = convertToDisplayNames(activity.content, idToNameMap)
+    const withPlaceholderConverted = convertToDisplayNames(activity.content, idToNameMap)
+    const displayContent = replaceChildIdsWithNames(withPlaceholderConverted, idToNameMap)
     setActivityContent(displayContent)
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
@@ -1067,6 +1107,11 @@ export default function ActivityRecordClient() {
   }
 
   const handleRestart = () => {
+    // 編集モードを終了して新規作成状態に戻す（チケット#3: 上書き防止）
+    setIsEditMode(false)
+    setEditingActivityId(null)
+    setOriginalMentionedChildren([])
+    setOriginalContent("")
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1267,11 +1312,14 @@ export default function ActivityRecordClient() {
       .replace(/\n\n/gim, "<br/><br/>")
       .replace(/\n/gim, "<br/>")
 
-  // 表示用にcontentを変換（@[child_id]を表示名に変換）
+  // 表示用にcontentを変換（@[child_id] および child:child_id 形式の両方を表示名に変換）
   const getDisplayContent = (activity: Activity) => {
     if (!activity.mentioned_children_names) return activity.content
     const idToNameMap = new Map(Object.entries(activity.mentioned_children_names))
-    return convertToDisplayNames(activity.content, idToNameMap)
+    // まず @[child_id] 形式を変換（mentionFormatter）
+    const withPlaceholderConverted = convertToDisplayNames(activity.content, idToNameMap)
+    // 次に child:child_id 形式も変換（childIdFormatter）
+    return replaceChildIdsWithNames(withPlaceholderConverted, idToNameMap)
   }
 
   const formatAnalysisContentForResult = (
@@ -1975,9 +2023,16 @@ export default function ActivityRecordClient() {
                             </div>
                           )}
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          作成: {activity.created_by}
-                        </span>
+                        <div className="flex flex-col items-end gap-0.5">
+                          {activity.recorded_by_name && (
+                            <span className="text-xs text-muted-foreground">
+                              記録者: {activity.recorded_by_name}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            作成: {activity.created_by}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </CardContent>

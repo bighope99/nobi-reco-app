@@ -120,6 +120,10 @@ export async function GET(request: NextRequest) {
         m_users!r_activity_created_by_fkey (
           id,
           name
+        ),
+        recorder:m_users!r_activity_recorded_by_fkey (
+          id,
+          name
         )
       `)
       .eq('facility_id', facility_id)
@@ -253,6 +257,7 @@ export async function GET(request: NextRequest) {
         handover: activity.handover,
         meal: activity.meal,
         recorded_by: activity.recorded_by || null,
+        recorded_by_name: activity.recorder?.name || null,
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
