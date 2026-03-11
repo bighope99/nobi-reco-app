@@ -76,7 +76,20 @@
       "Bash(bash:*)",
       "mcp__claude_ai_Notion__notion-search",
       "mcp__claude_ai_Notion__notion-fetch",
-      "Skill(commit-commands:commit)"
+      "Skill(commit-commands:commit)",
+      "Bash(git gtr:*)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-status && node_modules/.bin/tsc --noEmit 2>&1 | head -30)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-records-status && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | head -30)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-records-personal-new && node_modules/.bin/next build 2>&1 | tail -50)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-status && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | head -30)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-records-status && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | grep \"records/status\")",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-records-personal-new && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | head -30)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-status && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | grep -E \"app/api/children/\\\\[id\\\\]/route|app/children/page\" | head -20)",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-records-personal-new && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | grep \"observation-editor\")",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-records-personal-new && /home/nakamura_taiki/workspace/nobi-reco-app/node_modules/.bin/tsc --noEmit 2>&1 | grep \"app/records/personal/_components/observation-editor.tsx\")",
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-status && gh pr create --title \"fix: 施設管理者の子どもステータス更新権限を修正 \\(#208, #209\\)\" --base main --body \"$\\(cat <<'EOF'\n## 概要\n\n施設管理者（facility_admin）が `/children` ページで子どもの在籍ステータス（在籍↔退所）を変更しようとすると「ステータスの更新に失敗しました」エラーが発生していた問題を修正。\n\n## 原因\n\nステータス切り替え処理がPUTエンドポイント（`handleChildSave`）を呼び出していたが、このエンドポイントは `family_name`・`given_name`・`birth_date`・`enrolled_at` を必須フィールドとして要求する。ステータスのみ送信していたため、必須フィールド不足で400エラーが返っていた。\n\n## 変更内容\n\n### API変更\n- `PATCH /api/children/:id` を新規追加（`enrollment_status` のみを更新する専用エンドポイント）\n  - 認証: `getAuthenticatedUserMetadata\\(\\)` 使用\n  - バリデーション: `enrolled` / `withdrawn` のみ許可\n  - `facility_id` フィルタで自施設の子どものみ更新可能\n\n### UI変更\n- `app/children/page.tsx` の `toggleStatus` 関数をPUT→PATCHに変更\n- リクエストボディを `{ enrollment_status: ... }` に簡素化\n\n## テスト\n\n- [ ] facility_admin で在籍→退所への変更が成功することを確認\n- [ ] facility_admin で退所→在籍への変更が成功することを確認\n- [ ] 他施設の子どもは変更できないことを確認\n\n## レビュー観点\n\n1. **app/api/children/[id]/route.ts**: PATCHエンドポイントの認可・バリデーションロジック\n2. **app/children/page.tsx**: フロントエンドのリクエスト変更\n\n## チェックリスト\n\n- [x] `getAuthenticatedUserMetadata\\(\\)` を使用（`getSession\\(\\)` 不使用）\n- [x] TypeScript strict（`any` 不使用）\n- [x] `facility_id` によるデータ分離\n- [x] バリデーション実装（`enrolled` / `withdrawn` のみ許可）\nEOF\n\\)\")",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__claude_ai_Notion__notion-create-comment"
     ],
     "deny": [],
     "ask": []
