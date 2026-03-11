@@ -346,11 +346,10 @@ export default function StatusPage() {
         )
     }
 
-    // チケット4: 年月ドロップダウン用の選択肢を生成（useMemoで安定化）
-    const yearOptions = useMemo(() => {
-        const base = new Date().getFullYear()
-        return Array.from({ length: 5 }, (_, i) => base - 2 + i) // 2年前〜2年後
-    }, [])
+    // チケット4: 年月ドロップダウン用の選択肢を生成
+    // （変化しない定数なので通常変数で定義。useMemoは早期returnの後に置けないため使用不可）
+    const currentYear = new Date().getFullYear()
+    const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i) // 2年前〜2年後
     const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
     return (
