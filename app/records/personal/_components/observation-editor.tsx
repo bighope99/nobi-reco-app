@@ -1491,9 +1491,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           />
                         </div>
                       )
-                    ) : (
-                      <span>{childDisplayName}</span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-1">
                     {isNew || isEditing ? (
@@ -1505,12 +1503,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           disabled={savingEdit}
                         />
                       </div>
-                    ) : (
-                      <>
-                        <Calendar className="h-4 w-4" />
-                        {observation ? formatDate(observation.observed_at) : '未保存'}
-                      </>
-                    )}
+                    ) : null}
                   </div>
                   {(isNew || isEditing) && staffList.length > 0 && (
                     <div className="flex items-center gap-1">
@@ -1529,10 +1522,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </Select>
                     </div>
                   )}
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    記録: {observation ? formatDateTime(observation.created_at) : '未保存'}
-                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1827,6 +1816,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <span className="text-gray-600">対象児童:</span>
                   <span className="font-medium">{childDisplayName}</span>
                 </div>
+                {!isNew && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4 text-green-600" />
+                    <span className="text-gray-600">観察日</span>
+                    <span>{observation ? formatDate(observation.observed_at) : '未保存'}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-purple-600" />
                   <span className="text-gray-600">記録日時</span>
