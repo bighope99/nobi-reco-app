@@ -674,30 +674,49 @@ export default function ActivityRecordClient() {
     }
   }
 
-  // コンテンツ内の@名前をスキャンし、未登録のメンションを検出して補完する（チケット#2: コピペ対応）
+  // コンテンツ内の@名前をスキャンし、未登録のメンションを自動補完する（チケット#2: コピペ対応）
+  // - 全角@（＠）も正規化して検出
+  // - classChildrenからO(1)ルックアップ用Mapを構築
+  // - resolvedMentions と resolvedTokens を両方返す
   const resolveContentMentions = (content: string, currentMentions: MentionSuggestion[]) => {
-    const displayNamePattern = /@([^\s@\[\]]+)/g
-    const resolvedMentions = [...currentMentions]
-    let match: RegExpExecArray | null
+    // 全角@を半角に正規化してスキャン
+    const normalizedContent = content.replace(/＠/g, '@')
+    // 末尾の句読点を除いた名前を抽出するパターン
+    const displayNamePattern = /@([^\s@\[\]、。,.!?！？]+)/g
 
-    while ((match = displayNamePattern.exec(content)) !== null) {
+    // classChildrenからdisplay_name/nameでO(1)検索できるMapを構築
+    const childByDisplayName = new Map<string, MentionSuggestion>()
+    classChildren.forEach((c) => {
+      childByDisplayName.set(c.display_name, c)
+      if (c.name !== c.display_name) {
+        childByDisplayName.set(c.name, c)
+      }
+    })
+
+    // 既存のメンションをkeyのSetで管理
+    const resolvedMentions = [...currentMentions]
+    const resolvedKeys = new Set(currentMentions.map((m) => m.unique_key))
+
+    let match: RegExpExecArray | null
+    const pattern = new RegExp(displayNamePattern.source, 'g')
+    while ((match = pattern.exec(normalizedContent)) !== null) {
       const displayName = match[1]
-      // 既に選択済みかチェック
-      const alreadySelected = resolvedMentions.find(
-        (m) => m.display_name === displayName || m.name === displayName
-      )
-      if (!alreadySelected) {
-        // classChildrenから名前で検索
-        const found = classChildren.find(
-          (c) => c.display_name === displayName || c.name === displayName
-        )
-        if (found) {
-          resolvedMentions.push(found)
-        }
+      const found = childByDisplayName.get(displayName)
+      if (found && !resolvedKeys.has(found.unique_key)) {
+        resolvedMentions.push(found)
+        resolvedKeys.add(found.unique_key)
       }
     }
 
-    return resolvedMentions
+    // mentionTokensも同期: @[child_id] 形式のトークンを生成
+    const resolvedTokens = new Map(mentionTokens)
+    resolvedMentions.forEach((m) => {
+      if (!resolvedTokens.has(m.unique_key)) {
+        resolvedTokens.set(m.unique_key, `@[${m.child_id}]`)
+      }
+    })
+
+    return { resolvedMentions, resolvedTokens }
   }
 
   const handleSave = async () => {
@@ -706,8 +725,8 @@ export default function ActivityRecordClient() {
     setSaveMessage(null)
 
     try {
-      // コピペなどで追加された@名前メンションを自動解決
-      const resolvedMentions = resolveContentMentions(activityContent, selectedMentions)
+      // コピペなどで追加された@名前メンションを自動解決（selectedMentions・mentionTokens両方を同期）
+      const { resolvedMentions, resolvedTokens } = resolveContentMentions(activityContent, selectedMentions)
       // 保存用にメンションをプレースホルダー形式に変換
       const nameToIdMap = buildNameToIdMap(resolvedMentions)
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
@@ -754,9 +773,10 @@ export default function ActivityRecordClient() {
       setEditingActivityId(savedActivityId)
       setIsEditMode(true)
       setOriginalContent(contentForDB)
-      // コピペで追加されたメンションをstateにも反映
+      // コピペで追加されたメンションをstate（selectedMentions・mentionTokens）にも反映
       if (resolvedMentions.length !== selectedMentions.length) {
         setSelectedMentions(resolvedMentions)
+        setMentionTokens(resolvedTokens)
       }
       setSaveMessage('保存しました')
       fetchActivities()
@@ -804,8 +824,8 @@ export default function ActivityRecordClient() {
     setSaveMessage(null)
 
     try {
-      // コピペなどで追加された@名前メンションを自動解決
-      const resolvedMentions = resolveContentMentions(activityContent, selectedMentions)
+      // コピペなどで追加された@名前メンションを自動解決（selectedMentions・mentionTokens両方を同期）
+      const { resolvedMentions, resolvedTokens } = resolveContentMentions(activityContent, selectedMentions)
       // 更新用にメンションをプレースホルダー形式に変換
       const nameToIdMap = buildNameToIdMap(resolvedMentions)
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
@@ -841,9 +861,10 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '更新に失敗しました')
       }
 
-      // コピペで追加されたメンションをstateにも反映
+      // コピペで追加されたメンションをstate（selectedMentions・mentionTokens）にも反映
       if (resolvedMentions.length !== selectedMentions.length) {
         setSelectedMentions(resolvedMentions)
+        setMentionTokens(resolvedTokens)
       }
       setSaveMessage('更新しました')
       fetchActivities()
