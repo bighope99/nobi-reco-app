@@ -18,25 +18,25 @@ description: |
 | Role | モデル | 台数 | 責務 |
 |------|--------|------|------|
 | **Leader** | Opus | 1 | ユーザー対話、グルーピング承認、タスク振り分け最終決定、エスカレーション対応 |
-| **Planner** | Sonnet | 1 | チケット取得、グルーピング案作成、Coderへの指示出し、軽微な判断 |
-| **Coder** | Sonnet | 最大3 | worktreeでの実装、コミット。1 worktree = 1ブランチ = 1グループ |
-| **Reviewer** | Sonnet | 1 | /pr-review実行、PR作成、CodeRabbitループ、Notionステータス更新 |
+| **Planner** | Sonnet | 1 | チケット取得、グルーピング案作成、**worktree作成**、Coderへの指示出し、軽微な判断 |
+| **Coder** | Sonnet | 最大3 | 実装、テスト、コミット、**PR作成**、**CodeRabbitループ**、**Notionステータス更新**。自分のブランチは自分で完結 |
+| **Reviewer** | Sonnet | 1 | **/pr-review のみ**。第三者視点でコード品質を評価し、指摘をCoderに返す |
 
 ## 全体フロー
 
 ```
-Phase 1: 計画
+Phase 1: 計画（Planner担当）
   Planner → Notionチケット取得 → グルーピング案作成 → Leaderに報告
   Leader → 承認 / 調整 → Plannerに指示
+  Planner → worktree作成 → Coderへタスク指示
 
-Phase 2: 実装（最大3並列）
-  Planner → 各Coderにworktree + タスク指示
-  Coder → 実装 → コミット → 完了報告
-  ※ Coderからのエスカレーション → Planner判断 → 無理ならLeaderへ
+Phase 2: 実装（Coder担当、最大3並列）
+  Coder → 実装 → テスト → コミット
+  ※ エスカレーション → Planner判断 → 無理ならLeaderへ
 
-Phase 3: レビュー（各ブランチ順番に）
-  Reviewer → /pr-review → 指摘修正 → PR作成 → CodeRabbitループ(最大3回)
-  Reviewer → Notionステータスを「レビュー依頼」に更新 + PRリンクコメント
+Phase 3: レビュー & PR（Reviewer + Coder担当）
+  Reviewer → /pr-review → 指摘をCoderに返す
+  Coder → 指摘修正 → PR作成 → CodeRabbitループ(最大3回) → Notionステータス更新
 ```
 
 ## Phase 1: 計画（Planner）
@@ -88,18 +88,18 @@ Plannerがグルーピング案をLeaderに報告。Leaderが：
 - **調整** → Plannerがグルーピングを修正して再提出
 - **却下** → ユーザーに確認
 
-## Phase 2: 実装（Coder × 最大3並列）
+## Phase 2: 準備 & 実装（Planner → Coder）
 
-### Step 1: worktree作成
+### Step 1: worktree作成（Planner担当）
 
-各グループに対してworktreeを作成する。
+Leader承認後、Plannerが各グループに対してworktreeを作成する。
 
 ```bash
 git gtr new <ブランチ名> --yes
 # 例: git gtr new fix/records-status-improvements --yes
 ```
 
-### Step 2: Coderへの指示
+### Step 2: Coderへの指示出し（Planner担当）
 
 Plannerが各Coderに以下を伝達:
 - worktreeパス（`git gtr go <ブランチ名>` で取得）
@@ -107,7 +107,7 @@ Plannerが各Coderに以下を伝達:
 - 具体的な修正内容
 - 関連ファイルのパス
 
-### Step 3: 実装
+### Step 3: 実装（Coder担当、最大3並列）
 
 各Coderは自分のworktreeで:
 1. チケットの修正内容を実装
@@ -124,19 +124,28 @@ Coderが以下に該当する場合、Plannerに戻す:
 
 Plannerで判断できない場合 → Leaderにエスカレーション
 
-## Phase 3: レビュー（Reviewer）
+## Phase 3: レビュー & PR（Reviewer + Coder）
 
-各ブランチに対して**順番に**以下を実行する。
+各ブランチに対して以下を実行する。
 
-### Step 1: 内部レビュー（/pr-review）
+### Step 1: 内部レビュー（Reviewer担当）
+
+Reviewerは**第三者視点でコード品質を評価する専門エージェント**。
 
 ```
 /pr-review を実行
-→ 指摘があれば修正（Coderのworktreeで）
-→ 修正をコミット＆プッシュ
+→ 指摘リストをCoderに返す
+→ Reviewer自身はコードを修正しない
 ```
 
-### Step 2: PR作成
+### Step 2: レビュー指摘の修正（Coder担当）
+
+```
+Coderが自分のworktreeでReviewerの指摘を修正
+→ 修正をコミット
+```
+
+### Step 3: PR作成（Coder担当）
 
 ```
 /create-pr を実行
@@ -144,7 +153,7 @@ Plannerで判断できない場合 → Leaderにエスカレーション
 → PR本文に対応チケット一覧を含める
 ```
 
-### Step 3: CodeRabbitループ（最大3回転）
+### Step 4: CodeRabbitループ（Coder担当、最大3回転）
 
 ```
 Loop (max 3):
@@ -156,7 +165,7 @@ Loop (max 3):
   6. 未対応コメントが0件 → ループ終了
 ```
 
-### Step 4: Notionステータス更新
+### Step 5: Notionステータス更新（Coder担当）
 
 PRが作成できたチケットすべてに対して:
 
@@ -192,16 +201,25 @@ Agent tool (並列):
            [具体的なチケット情報と修正指示]"
 ```
 
-### 3. Coder完了後、Reviewerを起動
+### 3. Coder完了後、Reviewerを起動（/pr-reviewのみ）
 
 ```
 Agent tool:
   subagent_type: general-purpose
   model: sonnet
   prompt: "あなたはReviewerです。以下のブランチに対して
-           /pr-review → PR作成 → CodeRabbitループ を実行してください。
+           /pr-review を実行し、指摘リストをまとめてください。
+           コード修正は行わず、指摘のみ返してください。
            [ブランチ一覧と対応チケット情報]"
 ```
+
+### 4. Reviewer指摘後、Coderが修正 → PR作成 → CodeRabbitループ
+
+Reviewerの指摘を受けて、各Coderが自分のブランチで:
+1. 指摘を修正してコミット
+2. /create-pr でPR作成
+3. CodeRabbitループ（最大3回転）
+4. Notionステータスを「レビュー依頼」に更新
 
 ## 制約事項
 
