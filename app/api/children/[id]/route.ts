@@ -229,6 +229,54 @@ export async function PUT(
   return handleChildSave(request, child_id);
 }
 
+// PATCH /api/children/:id - 子どものステータス更新（enrollment_statusのみ）
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createClient();
+
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { current_facility_id } = metadata;
+    if (!current_facility_id) {
+      return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+    }
+
+    const { id: child_id } = await params;
+    const body = await request.json();
+    const { enrollment_status } = body;
+
+    if (!enrollment_status || !['enrolled', 'withdrawn'].includes(enrollment_status)) {
+      return NextResponse.json({ error: 'Invalid enrollment_status' }, { status: 400 });
+    }
+
+    const { error: updateError } = await supabase
+      .from('m_children')
+      .update({
+        enrollment_status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', child_id)
+      .eq('facility_id', current_facility_id)
+      .is('deleted_at', null);
+
+    if (updateError) {
+      console.error('Child status update error:', updateError.message);
+      return NextResponse.json({ error: 'Failed to update status' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: 'ステータスを更新しました' });
+  } catch (error) {
+    console.error('Child PATCH API Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
 // DELETE /api/children/:id - 子ども削除（論理削除）
 export async function DELETE(
   request: NextRequest,

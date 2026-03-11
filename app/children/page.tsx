@@ -209,11 +209,9 @@ export default function StudentList() {
         if (confirm(`${currentStatus === 'active' ? '退所済みに変更' : '所属中に復帰'}しますか？`)) {
             try {
                 const response = await fetch(`/api/children/${id}`, {
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        affiliation: { enrollment_status: newEnrollmentStatus }
-                    }),
+                    body: JSON.stringify({ enrollment_status: newEnrollmentStatus }),
                 });
 
                 if (!response.ok) {
