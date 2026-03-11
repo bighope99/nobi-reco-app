@@ -195,6 +195,7 @@ export default function AttendanceListPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [canEditTime, setCanEditTime] = useState(false)
   const [editingTime, setEditingTime] = useState<{ childId: string; field: 'in' | 'out'; value: string } | null>(null)
+  const [timeLoading, setTimeLoading] = useState<{ childId: string; field: 'in' | 'out' } | null>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
 
   // クライアント側でのみ初期日付・ロールを設定
@@ -325,6 +326,7 @@ export default function AttendanceListPage() {
     setActionError(null)
     setActionLoading(prev => ({ ...prev, [childId]: true }))
     setEditingTime(null)
+    setTimeLoading({ childId, field })
 
     try {
       const dbField = field === 'in' ? 'checked_in_at' : 'checked_out_at'
@@ -352,6 +354,7 @@ export default function AttendanceListPage() {
       setActionError(err instanceof Error ? err.message : '時刻の更新に失敗しました')
     } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))
+      setTimeLoading(null)
     }
   }
 
@@ -562,7 +565,12 @@ export default function AttendanceListPage() {
                         />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
+                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
+                          <span className="inline-flex items-center gap-1 text-indigo-500">
+                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                            <span className="text-xs">更新中</span>
+                          </span>
+                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
                           <input
                             type="time"
                             defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
@@ -579,9 +587,9 @@ export default function AttendanceListPage() {
                           />
                         ) : child.checked_in_at ? (
                           <span
-                            className={`text-emerald-600 font-medium${canEditTime ? ' cursor-pointer hover:underline' : ''}`}
-                            onClick={() => canEditTime && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
-                            title={canEditTime ? 'クリックして時刻を修正' : undefined}
+                            className={`text-emerald-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
+                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
+                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
                           >
                             {formatTime(child.checked_in_at)}
                           </span>
@@ -590,7 +598,12 @@ export default function AttendanceListPage() {
                         )}
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
+                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
+                          <span className="inline-flex items-center gap-1 text-indigo-500">
+                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                            <span className="text-xs">更新中</span>
+                          </span>
+                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
                           <input
                             type="time"
                             defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
@@ -607,9 +620,9 @@ export default function AttendanceListPage() {
                           />
                         ) : child.checked_out_at ? (
                           <span
-                            className={`text-slate-600 font-medium${canEditTime ? ' cursor-pointer hover:underline' : ''}`}
-                            onClick={() => canEditTime && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
-                            title={canEditTime ? 'クリックして時刻を修正' : undefined}
+                            className={`text-slate-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
+                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
+                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
                           >
                             {formatTime(child.checked_out_at)}
                           </span>
@@ -659,7 +672,12 @@ export default function AttendanceListPage() {
                         <div>
                           <div className="text-slate-400 mb-1">チェックイン</div>
                           <div className="text-slate-600">
-                            {child.checked_in_at ? (
+                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
+                              <span className="inline-flex items-center gap-1 text-indigo-500">
+                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                                <span>更新中</span>
+                              </span>
+                            ) : child.checked_in_at ? (
                               <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
                             ) : (
                               <span className="text-slate-400">-</span>
@@ -669,7 +687,12 @@ export default function AttendanceListPage() {
                         <div>
                           <div className="text-slate-400 mb-1">チェックアウト</div>
                           <div className="text-slate-600">
-                            {child.checked_out_at ? (
+                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
+                              <span className="inline-flex items-center gap-1 text-indigo-500">
+                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                                <span>更新中</span>
+                              </span>
+                            ) : child.checked_out_at ? (
                               <span className="font-medium">{formatTime(child.checked_out_at)}</span>
                             ) : (
                               <span className="text-slate-400">-</span>
