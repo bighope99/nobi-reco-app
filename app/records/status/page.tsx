@@ -346,9 +346,11 @@ export default function StatusPage() {
         )
     }
 
-    // チケット4: 年月ドロップダウン用の選択肢を生成
-    const currentYear = new Date().getFullYear()
-    const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i) // 2年前〜2年後
+    // チケット4: 年月ドロップダウン用の選択肢を生成（useMemoで安定化）
+    const yearOptions = useMemo(() => {
+        const base = new Date().getFullYear()
+        return Array.from({ length: 5 }, (_, i) => base - 2 + i) // 2年前〜2年後
+    }, [])
     const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
     return (
@@ -484,7 +486,7 @@ export default function StatusPage() {
                 {/* --- Scrollable Table Wrapper --- */}
                 {/* チケット7: モバイルでのスクロール対応 */}
                 <div className="w-full bg-white border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                    <div className="overflow-x-auto">
                         <table className="min-w-[700px] w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50 border-b border-slate-200">
                                 <tr>
