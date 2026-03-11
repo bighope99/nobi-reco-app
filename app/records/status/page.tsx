@@ -200,8 +200,9 @@ export default function StatusPage() {
         setCommittedSearchTerm(inputSearchTerm)
     }
 
-    // チケット1: Enterキーでも検索を実行
+    // チケット1: Enterキーでも検索を実行（IME変換中のEnterは無視）
     const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.nativeEvent.isComposing) return
         if (e.key === 'Enter') {
             handleSearch()
         }
@@ -347,9 +348,11 @@ export default function StatusPage() {
     }
 
     // チケット4: 年月ドロップダウン用の選択肢を生成
-    // （変化しない定数なので通常変数で定義。useMemoは早期returnの後に置けないため使用不可）
+    // changeMonth()でyearが currentYear±2 の範囲外に移動した場合もドロップダウンに含める
     const currentYear = new Date().getFullYear()
-    const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i) // 2年前〜2年後
+    const yearStart = Math.min(currentYear - 2, year - 2)
+    const yearEnd = Math.max(currentYear + 2, year + 2)
+    const yearOptions = Array.from({ length: yearEnd - yearStart + 1 }, (_, i) => yearStart + i)
     const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
     return (

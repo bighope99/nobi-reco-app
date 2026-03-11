@@ -169,8 +169,9 @@ describe('月間記録率とヒートマップの連動', () => {
     expect(presentCount).toBe(2);
     expect(lateCount).toBe(1);
 
-    // 月間記録率: 2/3 = 66.7%
-    const rate = calcMonthlyRate(attendanceDates.size, observationDates.size);
+    // 月間記録率: 出席日×記録日の交差 / 出席日数 = 2/3 = 66.7%
+    const recordCountIntersected = [...observationDates].filter(d => attendanceDates.has(d)).length;
+    const rate = calcMonthlyRate(attendanceDates.size, recordCountIntersected);
     expect(rate).toBe(66.7);
 
     // 連動確認: present数 / (present + late) = 記録率に一致

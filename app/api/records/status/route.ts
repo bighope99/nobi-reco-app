@@ -229,7 +229,10 @@ export async function GET(request: NextRequest) {
 
       const monthlyObservations = monthlyObservationsByChild.get(child.id) || [];
       const monthlyObservationDates = new Set(monthlyObservations.map((o: any) => o.observation_date));
-      const monthlyRecordCount = monthlyObservationDates.size;
+      // 出席日と記録日の交差のみカウント（非出席日の記録は記録率に含めない）
+      const monthlyRecordCount = [...monthlyObservationDates].filter((date) =>
+        monthlyAttendanceDates.has(date)
+      ).length;
 
       // チケット6: 月間記録率の計算
       // = 記録済み出席日数 / 総出席日数 × 100
@@ -272,7 +275,10 @@ export async function GET(request: NextRequest) {
 
       const yearlyObservations = yearlyObservationsByChild.get(child.id) || [];
       const yearlyObservationDates = new Set(yearlyObservations.map((o: any) => o.observation_date));
-      const yearlyRecordCount = yearlyObservationDates.size;
+      // 出席日と記録日の交差のみカウント（非出席日の記録は記録率に含めない）
+      const yearlyRecordCount = [...yearlyObservationDates].filter((date) =>
+        yearlyAttendanceDates.has(date)
+      ).length;
 
       // チケット6: 年間割合の計算
       // = 年間の記録済み出席日数 / 年間の総出席日数 × 100
