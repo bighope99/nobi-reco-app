@@ -224,4 +224,41 @@ describe('POST /api/dashboard/attendance - action_timestamp permission', () => {
       expect(Math.abs(usedTime - expectedTime)).toBeLessThan(1000);
     });
   });
+
+  describe('site_admin role', () => {
+    beforeEach(() => {
+      mockedGetMeta.mockResolvedValue({
+        user_id: userId,
+        role: 'site_admin',
+        company_id: 'company-1',
+        current_facility_id: facilityId,
+      });
+    });
+
+    it('should USE action_timestamp within ±5 min for site_admin', async () => {
+      const attendanceInsert = jest.fn().mockResolvedValue({ error: null });
+      const dailyInsert = jest.fn().mockResolvedValue({ error: null });
+      mockedCreateClient.mockResolvedValue(buildMockSupabase(attendanceInsert, dailyInsert) as any);
+
+      const oneMinuteAgo = new Date(Date.now() - 1 * 60 * 1000).toISOString();
+
+      const request = buildRequest({
+        action: 'check_in',
+        child_id: childId,
+        action_timestamp: oneMinuteAgo,
+      });
+
+      const response = await POST(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+
+      const insertCall = attendanceInsert.mock.calls[0][0];
+      const usedTime = new Date(insertCall.checked_in_at).getTime();
+      const expectedTime = new Date(oneMinuteAgo).getTime();
+
+      expect(Math.abs(usedTime - expectedTime)).toBeLessThan(1000);
+    });
+  });
 });
