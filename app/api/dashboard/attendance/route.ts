@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out';
@@ -112,9 +112,11 @@ export async function POST(request: NextRequest) {
     };
 
     const actionType = action as AttendanceAction;
+    // action_timestampの使用は管理者権限（facility_admin以上）のみ許可
+    const canUseCustomTimestamp = hasPermission(metadata, ['site_admin', 'company_admin', 'facility_admin']);
     const resolvedTimestamp = (() => {
       const now = new Date();
-      if (action_timestamp) {
+      if (canUseCustomTimestamp && action_timestamp) {
         const parsed = new Date(action_timestamp);
         const diffMinutes = Math.abs(now.getTime() - parsed.getTime()) / 60000;
 
