@@ -201,12 +201,12 @@ export default function AttendanceListPage() {
     }
   }, [selectedDate])
 
-  const fetchAttendance = useCallback(async () => {
+  const fetchAttendance = useCallback(async (silent = false) => {
     // 日付が設定されるまで待つ
     if (!selectedDate) return
 
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setError(null)
 
       const response = await fetch(`/api/attendance/list?date=${selectedDate}`)
@@ -223,7 +223,7 @@ export default function AttendanceListPage() {
       console.error('Failed to fetch attendance:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch attendance')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [selectedDate])
 
@@ -298,7 +298,7 @@ export default function AttendanceListPage() {
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
 
-      await fetchAttendance()
+      await fetchAttendance(true)
     } catch (err) {
       console.error('Failed to update attendance status:', err)
       setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
@@ -362,12 +362,19 @@ export default function AttendanceListPage() {
                   <ChevronLeft size={18} className="text-slate-600" />
                 </button>
 
-                <div className="flex items-center gap-3 px-3 min-w-[200px] justify-center">
+                <label className="flex items-center gap-3 px-3 min-w-[200px] justify-center cursor-pointer hover:bg-gray-50 rounded transition-colors py-1 relative">
                   <Calendar size={16} className="text-indigo-600" />
                   <span className="text-base font-bold text-slate-800">
                     {formatDisplayDate(selectedDate)}
                   </span>
-                </div>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    aria-label="日付を選択"
+                  />
+                </label>
 
                 <button
                   onClick={() => changeDate(1)}
@@ -392,13 +399,6 @@ export default function AttendanceListPage() {
                   明日
                 </button>
               </div>
-
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
             </div>
           </header>
 
