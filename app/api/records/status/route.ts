@@ -35,11 +35,11 @@ export async function GET(request: NextRequest) {
     const endDateStr = getLastDayOfMonthJST(year, month);
     const daysInMonth = new Date(year, month, 0).getDate();
 
-    // 今日から過去365日（1年間）の開始日
+    // 今日から過去365日（1年間）の開始日（JSTベースで一貫して計算）
     const today = getCurrentDateJST();
-    const yearAgo = new Date();
-    yearAgo.setDate(yearAgo.getDate() - 365);
-    const yearStartStr = toDateStringJST(yearAgo);
+    const todayDate = new Date(`${today}T00:00:00+09:00`);
+    todayDate.setDate(todayDate.getDate() - 365);
+    const yearStartStr = toDateStringJST(todayDate);
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase
