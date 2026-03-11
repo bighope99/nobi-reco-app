@@ -1196,12 +1196,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   );
 
   const handleReanalyze = async () => {
-    const sourceText = observation?.body_text || editText;
+    const sourceText = isEditing ? editText : (observation?.body_text || editText);
     if (!sourceText.trim()) return;
 
-    // 抽出された事実または解釈・所感に既存入力がある場合は確認ダイアログを表示
+    // 抽出された事実・解釈・所感・フラグに既存入力がある場合は確認ダイアログを表示
     const hasExistingAiContent =
-      aiEditForm.ai_action.trim().length > 0 || aiEditForm.ai_opinion.trim().length > 0;
+      aiEditForm.ai_action.trim().length > 0 ||
+      aiEditForm.ai_opinion.trim().length > 0 ||
+      Object.values(aiEditForm.flags).some(Boolean);
     if (hasExistingAiContent) {
       setShowReanalyzeConfirmDialog(true);
       return;
@@ -1211,7 +1213,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const runReanalyze = async () => {
-    const sourceText = observation?.body_text || editText;
+    const sourceText = isEditing ? editText : (observation?.body_text || editText);
     if (!sourceText.trim()) return;
     setAiProcessing(true);
     try {
@@ -1410,14 +1412,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => {
-                  const hasUnsaved = isNew && !observation && editText.trim().length > 0;
-                  if (hasUnsaved) {
-                    setShowUnsavedDialog(true);
-                  } else {
-                    router.back();
-                  }
-                }}>
+                <Button
+                  variant="outline"
+                  disabled={savingEdit || aiEditSaving || aiProcessing}
+                  onClick={() => {
+                    if (savingEdit || aiEditSaving || aiProcessing) return;
+                    const hasUnsaved = isNew && !observation && editText.trim().length > 0;
+                    if (hasUnsaved) {
+                      setShowUnsavedDialog(true);
+                    } else {
+                      router.back();
+                    }
+                  }}
+                >
                   戻る
                 </Button>
               </div>
