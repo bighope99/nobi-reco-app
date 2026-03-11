@@ -18,9 +18,20 @@ description: |
 | Role | モデル | 台数 | 責務 |
 |------|--------|------|------|
 | **Leader** | Opus | 1 | ユーザー対話、グルーピング承認、タスク振り分け最終決定、エスカレーション対応 |
-| **Planner** | Sonnet | 1 | チケット取得、グルーピング案作成、**worktree作成**、Coderへの指示出し、軽微な判断 |
-| **Coder** | Sonnet | 最大3 | 実装、テスト、コミット、**PR作成**、**CodeRabbitループ**、**Notionステータス更新**。自分のブランチは自分で完結 |
-| **Reviewer** | Sonnet | 1 | **/pr-review のみ**。第三者視点でコード品質を評価し、指摘をCoderに返す |
+| **Planner** | Sonnet | 1 | チケット取得、グルーピング案作成、**worktree作成**、Coderへの指示出し、軽微な判断、**Notionステータス一括更新** |
+| **Coder** | Sonnet | 最大3 | 実装、テスト、コミット、**/pr-review実行・修正**、**PR作成**、**CodeRabbitループ**。自分のブランチは自分で完結 |
+
+### 大規模変更時のReviewer増員
+
+以下のいずれかに該当するグループは「大規模変更」とみなし、専任Reviewerを1名追加する:
+- **変更ファイル数が7ファイル以上**
+- **変更行数が200行以上**（追加+削除、テストコードを除く）
+- **新規ファイル追加を含む機能開発**（バグ修正ではない）
+- **DBスキーマ変更を伴う**
+
+大規模変更グループが複数ある場合、**グループごとに1名ずつ**Reviewerを追加する（例: 大規模2グループ → Reviewer 2名）。
+
+Reviewerは必ず `/pr-review` スキルを使い、**複数視点（アーキテクチャ・セキュリティ・パフォーマンス）** でレビューを実施する。Coderへ指摘リストを返し、Reviewer自身はコードを修正しない。
 
 ## 全体フロー
 
@@ -34,9 +45,10 @@ Phase 2: 実装（Coder担当、最大3並列）
   Coder → 実装 → テスト → コミット
   ※ エスカレーション → Planner判断 → 無理ならLeaderへ
 
-Phase 3: レビュー & PR（Reviewer + Coder担当）
-  Reviewer → /pr-review → 指摘をCoderに返す
-  Coder → 指摘修正 → PR作成 → CodeRabbitループ(最大3回) → Notionステータス更新
+Phase 3: レビュー & PR（Coder + Planner担当、大規模時はReviewer追加）
+  通常: Coder → /pr-review実行 → 指摘修正 → PR作成 → CodeRabbitループ(最大3回) → PR URLをPlannerに報告
+  大規模: Reviewer → /pr-review（複数視点） → 指摘をCoderに返す → Coder修正 → PR作成 → CodeRabbitループ → PR URLをPlannerに報告
+  Planner → 全チケットのNotionステータスを一括更新（スクリプト使用）
 ```
 
 ## Phase 1: 計画（Planner）
@@ -121,28 +133,17 @@ Coderが以下に該当する場合、Plannerに戻す:
 
 Plannerで判断できない場合 → Leaderにエスカレーション
 
-## Phase 3: レビュー & PR（Reviewer + Coder）
+## Phase 3: レビュー & PR（Coder + Planner、大規模時はReviewer追加）
 
 各ブランチに対して以下を実行する。
 
-### Step 1: 内部レビュー（Reviewer担当）
+### Step 1: 内部レビュー
 
-Reviewerは**第三者視点でコード品質を評価する専門エージェント**。
+**通常変更**: 各Coderが自分のブランチで `/pr-review` を実行し、指摘を自分で修正する。
 
-```
-/pr-review を実行
-→ 指摘リストをCoderに返す
-→ Reviewer自身はコードを修正しない
-```
+**大規模変更**: 専任Reviewerが `/pr-review` を実行し、複数視点（アーキテクチャ・セキュリティ・パフォーマンス）で指摘リストを作成。Coderに返して修正させる。
 
-### Step 2: レビュー指摘の修正（Coder担当）
-
-```
-Coderが自分のworktreeでReviewerの指摘を修正
-→ 修正をコミット
-```
-
-### Step 3: PR作成（Coder担当）
+### Step 2: PR作成（Coder担当）
 
 ```
 /create-pr を実行
@@ -150,7 +151,7 @@ Coderが自分のworktreeでReviewerの指摘を修正
 → PR本文に対応チケット一覧を含める
 ```
 
-### Step 4: CodeRabbitループ（Coder担当、最大3回転）
+### Step 3: CodeRabbitループ（Coder担当、最大3回転）
 
 ```
 Loop (max 3):
@@ -162,14 +163,17 @@ Loop (max 3):
   6. 未対応コメントが0件 → ループ終了
 ```
 
-### Step 5: Notionステータス更新（Coder担当）
+### Step 4: Notionステータス更新（Planner担当）
 
-PRが作成できたチケットすべてに対して:
+各CoderがPR作成を完了したらPR URLをPlannerに報告する。
+Plannerが全チケットのステータスを一括更新する:
 
-```
-1. notion-update-page でステータスを「レビュー依頼」に更新
-2. notion-create-comment でPRリンクを追加
-   "PR #<番号> を作成しました\nhttps://github.com/bighope99/nobi-reco-app/pull/<番号>"
+```bash
+# チケットごとにスクリプトを実行
+npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
+  --page-id <チケットID> \
+  --status "レビュー依頼" \
+  --pr-url <PR URL>
 ```
 
 ## 起動方法（エージェントチーム）
@@ -194,7 +198,8 @@ Agent tool:
   team_name: "ticket-team"
   model: sonnet
   prompt: "あなたはCoder-1です。Plannerから指示されたチケットを実装します。
-           実装完了後は自分で /pr-review の指摘修正、PR作成、CodeRabbitループ、Notion更新まで行います。
+           実装完了後は自分で /pr-review の指摘修正、PR作成、CodeRabbitループまで行い、
+           PR作成後はPR URLをPlannerに報告してください。
            Plannerからの指示を待ってください。"
 
 Agent tool:
@@ -208,14 +213,6 @@ Agent tool:
   team_name: "ticket-team"
   model: sonnet
   prompt: "（Coder-1と同様）"
-
-Agent tool:
-  name: "Reviewer"
-  team_name: "ticket-team"
-  model: sonnet
-  prompt: "あなたはReviewerです。第三者視点でコード品質を評価する専門エージェントです。
-           /pr-review を実行し、指摘リストをまとめてCoderに返してください。
-           コード修正は行わず、指摘のみ返してください。"
 ```
 
 ### 2. ワークフロー進行
@@ -235,10 +232,10 @@ Phase 2:
   → 完了報告はPlannerに返す
 
 Phase 3:
-  → Reviewer にメッセージ: "Coder-1のブランチをレビューしてください"
-  → Reviewer → 指摘をCoder-1に返す
-  → Coder-1 → 修正 → PR作成 → CodeRabbitループ → Notion更新
-  → 次のブランチへ
+  → 各Coderが自分のブランチで /pr-review を実行し、指摘を修正
+  → Coder → PR作成 → CodeRabbitループ → PR URLをPlannerに報告
+  → 複数ブランチは並列で処理
+  → 全Coderの完了後、Plannerが全チケットのNotionステータスをスクリプトで一括更新
 ```
 
 ### チーム操作
@@ -251,6 +248,7 @@ Phase 3:
 ## 制約事項
 
 - **最大並列数**: Coder 3台まで
+- **チーム構成**: Leader 1 + Planner 1 + Coder 最大3 + Reviewer 0〜2（大規模変更グループごとに1名）
 - **CodeRabbitループ**: 最大3回転
 - **グループ数**: 1回の実行で最大3グループ（超える場合は優先度順に選定）
 - **エスカレーション**: Planner → Leader → ユーザーの順
