@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { Button } from "@/components/ui/button"
@@ -193,11 +193,25 @@ export default function AttendanceListPage() {
   const [filterClass, setFilterClass] = useState<string>('all')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
+  const [canEditTime, setCanEditTime] = useState(false)
+  const [editingTime, setEditingTime] = useState<{ childId: string; field: 'in' | 'out'; value: string } | null>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
-  // クライアント側でのみ初期日付を設定
+  // クライアント側でのみ初期日付・ロールを設定
   useEffect(() => {
     if (!selectedDate) {
       setSelectedDate(getTomorrowDateJST())
+    }
+    // sessionStorageからロールを取得して時刻編集権限を判定
+    try {
+      const raw = sessionStorage.getItem('user_session')
+      if (raw) {
+        const session = JSON.parse(raw)
+        const role = session.role as string
+        setCanEditTime(['site_admin', 'company_admin', 'facility_admin'].includes(role))
+      }
+    } catch {
+      // sessionStorageが使えない場合は権限なし
     }
   }, [selectedDate])
 
@@ -307,6 +321,40 @@ export default function AttendanceListPage() {
     }
   }
 
+  const handleTimeEdit = async (childId: string, field: 'in' | 'out', timeValue: string) => {
+    setActionError(null)
+    setActionLoading(prev => ({ ...prev, [childId]: true }))
+    setEditingTime(null)
+
+    try {
+      const dbField = field === 'in' ? 'checked_in_at' : 'checked_out_at'
+
+      const response = await fetch('/api/attendance/time', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          field: dbField,
+          time: timeValue,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '時刻の更新に失敗しました')
+      }
+
+      await fetchAttendance(true)
+    } catch (err) {
+      console.error('Failed to update time:', err)
+      setActionError(err instanceof Error ? err.message : '時刻の更新に失敗しました')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [childId]: false }))
+    }
+  }
+
   if (loading) {
     return (
       <StaffLayout title="出席予定一覧">
@@ -362,19 +410,25 @@ export default function AttendanceListPage() {
                   <ChevronLeft size={18} className="text-slate-600" />
                 </button>
 
-                <label className="flex items-center gap-3 px-3 min-w-[200px] justify-center cursor-pointer hover:bg-gray-50 rounded transition-colors py-1 relative">
+                <button
+                  onClick={() => dateInputRef.current?.showPicker()}
+                  className="flex items-center gap-3 px-3 min-w-[200px] justify-center cursor-pointer hover:bg-gray-50 rounded transition-colors py-1 relative"
+                  aria-label="日付を選択"
+                >
                   <Calendar size={16} className="text-indigo-600" />
                   <span className="text-base font-bold text-slate-800">
                     {formatDisplayDate(selectedDate)}
                   </span>
                   <input
+                    ref={dateInputRef}
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    aria-label="日付を選択"
+                    className="absolute inset-0 opacity-0 w-0 h-0 pointer-events-none"
+                    tabIndex={-1}
+                    aria-hidden="true"
                   />
-                </label>
+                </button>
 
                 <button
                   onClick={() => changeDate(1)}
@@ -508,15 +562,57 @@ export default function AttendanceListPage() {
                         />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {child.checked_in_at ? (
-                          <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
+                        {editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
+                          <input
+                            type="time"
+                            defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
+                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            onBlur={(e) => {
+                              if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
+                              else setEditingTime(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                              if (e.key === 'Escape') setEditingTime(null)
+                            }}
+                            autoFocus
+                          />
+                        ) : child.checked_in_at ? (
+                          <span
+                            className={`text-emerald-600 font-medium${canEditTime ? ' cursor-pointer hover:underline' : ''}`}
+                            onClick={() => canEditTime && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
+                            title={canEditTime ? 'クリックして時刻を修正' : undefined}
+                          >
+                            {formatTime(child.checked_in_at)}
+                          </span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {child.checked_out_at ? (
-                          <span className="text-slate-600 font-medium">{formatTime(child.checked_out_at)}</span>
+                        {editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
+                          <input
+                            type="time"
+                            defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
+                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            onBlur={(e) => {
+                              if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
+                              else setEditingTime(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                              if (e.key === 'Escape') setEditingTime(null)
+                            }}
+                            autoFocus
+                          />
+                        ) : child.checked_out_at ? (
+                          <span
+                            className={`text-slate-600 font-medium${canEditTime ? ' cursor-pointer hover:underline' : ''}`}
+                            onClick={() => canEditTime && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
+                            title={canEditTime ? 'クリックして時刻を修正' : undefined}
+                          >
+                            {formatTime(child.checked_out_at)}
+                          </span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
