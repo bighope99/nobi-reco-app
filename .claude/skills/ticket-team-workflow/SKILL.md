@@ -255,17 +255,20 @@ Phase 3:
 - **Leaderは実装しない**: 判断と承認のみ
 - **Plannerは実装しない**: 計画と指示出しのみ
 
-## クリーンアップ
+## クリーンアップ（チーム解散時に必ず実行）
 
-全Phase完了後:
+全Phase完了後、**チーム解散前にPlannerが必ず実行する**:
 
 ```bash
-# マージ済みworktreeの削除
-git gtr clean --merged --yes
-
-# 個別削除
+# 使用した全worktreeを削除
 git gtr rm <ブランチ名> --delete-branch --yes
+# ※ 各グループのブランチに対して実行
+
+# または、マージ済みworktreeを一括削除
+git gtr clean --merged --yes
 ```
+
+> ※ worktreeを残したままチームを解散しない。ディスクとブランチが散乱する原因になる。
 
 ## トラブルシューティング
 
