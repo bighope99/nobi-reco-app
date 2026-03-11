@@ -43,17 +43,14 @@ Phase 3: レビュー & PR（Reviewer + Coder担当）
 
 ### Step 1: チケット取得
 
-Plannerが以下の手順でNotionから承認OKチケットを取得する。
+Plannerが `notion-ticket-workflow` のスクリプトを使って承認OKチケットを一括取得する。
 
+```bash
+# 承認OKチケットを本文・コメント付きで一括取得
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status "承認OK"
 ```
-1. notion-search で承認OKチケットを検索
-   query: "承認OK のびレコ開発"
-   data_source_url: "collection://2b2092aa-b014-8033-a92f-000bbe0df3cd"
 
-2. 各チケットを notion-fetch で詳細取得（本文・プロパティ）
-
-3. 必要に応じて notion-get-comments でコメントも取得
-```
+このスクリプトは Notion API でステータスを**完全一致フィルタ**し、各チケットの本文・コメント・全プロパティを並列取得してJSON出力する。詳細は `notion-ticket-workflow` スキルを参照。
 
 ### Step 2: グルーピング
 
@@ -175,51 +172,81 @@ PRが作成できたチケットすべてに対して:
    "PR #<番号> を作成しました\nhttps://github.com/bighope99/nobi-reco-app/pull/<番号>"
 ```
 
-## 起動方法
+## 起動方法（エージェントチーム）
 
-Leaderが以下の順で起動する:
+チームメンバーは永続的で、セッション中ずっと生き続ける。
+Leaderがチームを作成し、メンバーに指示を送りながらワークフローを進行する。
 
-### 1. Plannerを起動
-
-```
-Agent tool:
-  subagent_type: general-purpose
-  model: sonnet
-  prompt: "あなたはPlannerです。Notionから承認OKチケットを取得し、
-           パス別にグルーピングして報告してください。
-           [notion-ticket-workflow スキルの手順に従う]"
-```
-
-### 2. Leader承認後、Coderを起動（最大3並列）
-
-```
-Agent tool (並列):
-  subagent_type: code-modifier
-  model: sonnet
-  isolation: worktree
-  prompt: "あなたはCoder-1です。以下のチケットを実装してください。
-           [具体的なチケット情報と修正指示]"
-```
-
-### 3. Coder完了後、Reviewerを起動（/pr-reviewのみ）
+### 1. チーム作成
 
 ```
 Agent tool:
-  subagent_type: general-purpose
+  name: "Planner"
+  team_name: "ticket-team"
   model: sonnet
-  prompt: "あなたはReviewerです。以下のブランチに対して
-           /pr-review を実行し、指摘リストをまとめてください。
-           コード修正は行わず、指摘のみ返してください。
-           [ブランチ一覧と対応チケット情報]"
+  prompt: "あなたはPlannerです。チームのPlanner役として、
+           Notionチケットの取得・グルーピング・worktree作成・Coderへの指示出しを担当します。
+           まずはNotionから承認OKチケットを取得し、パス別にグルーピングして報告してください。
+           notion-ticket-workflow スキルの手順に従ってください。"
+
+Agent tool:
+  name: "Coder-1"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "あなたはCoder-1です。Plannerから指示されたチケットを実装します。
+           実装完了後は自分で /pr-review の指摘修正、PR作成、CodeRabbitループ、Notion更新まで行います。
+           Plannerからの指示を待ってください。"
+
+Agent tool:
+  name: "Coder-2"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "（Coder-1と同様）"
+
+Agent tool:
+  name: "Coder-3"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "（Coder-1と同様）"
+
+Agent tool:
+  name: "Reviewer"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "あなたはReviewerです。第三者視点でコード品質を評価する専門エージェントです。
+           /pr-review を実行し、指摘リストをまとめてCoderに返してください。
+           コード修正は行わず、指摘のみ返してください。"
 ```
 
-### 4. Reviewer指摘後、Coderが修正 → PR作成 → CodeRabbitループ
+### 2. ワークフロー進行
 
-Reviewerの指摘を受けて、各Coderが自分のブランチで:
-1. 指摘を修正してコミット
-2. /create-pr でPR作成
-3. CodeRabbitループ（最大3回転）
-4. Notionステータスを「レビュー依頼」に更新
+チームメンバーへの指示はメッセージで行う:
+
+```
+Phase 1:
+  → Plannerにメッセージ: "チケットを取得してグルーピングしてください"
+  → Plannerが結果を報告
+  → Leaderが承認
+  → Plannerにメッセージ: "承認OK。worktreeを作成してCoderに指示を出してください"
+
+Phase 2:
+  → Planner → 各Coderにメッセージで具体的なタスク指示
+  → 各Coderが並列で実装
+  → 完了報告はPlannerに返す
+
+Phase 3:
+  → Reviewer にメッセージ: "Coder-1のブランチをレビューしてください"
+  → Reviewer → 指摘をCoder-1に返す
+  → Coder-1 → 修正 → PR作成 → CodeRabbitループ → Notion更新
+  → 次のブランチへ
+```
+
+### チーム操作
+
+- **Shift+Down** — チームメンバーを切り替え
+- **Escape** — メンバーの現在の作業を中断
+- **Ctrl+T** — タスクリスト表示
+- メンバーに直接メッセージを送るには、そのメンバーに切り替えてから入力
 
 ## 制約事項
 

@@ -50,9 +50,48 @@ description: |
 
 ## 操作パターン
 
-### 1. チケット一覧の取得
+### 1. チケット一覧の取得（スクリプト推奨）
 
-`notion-search` ツールで `data_source_url` を指定して検索する。
+**方法A: query-tickets スクリプト（推奨）**
+
+Notion APIで**ステータスプロパティを完全一致フィルタ**して一括取得する。本文・コメント・全プロパティを含む。
+
+```bash
+# 承認OKチケットを取得（デフォルト）
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts
+
+# ステータスを指定
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status "進行中"
+
+# 件数制限
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status "承認OK" --limit 10
+
+# JSON出力をファイルに保存
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts > /tmp/tickets.json
+```
+
+前提: `.env.local` に `NOTION_TOKEN=secret_xxx` を設定済みであること。
+
+出力JSON:
+```json
+{
+  "status_filter": "承認OK",
+  "total": 10,
+  "tickets": [
+    {
+      "id": "page-uuid",
+      "url": "https://notion.so/...",
+      "properties": { "名前": "...", "ステータス": "承認OK", "パス": "/records/status", ... },
+      "content": "ページ本文...",
+      "comments": [{ "author": "...", "text": "...", "created_at": "..." }]
+    }
+  ]
+}
+```
+
+**方法B: notion-search（MCP、フォールバック用）**
+
+`notion-search` ツールで `data_source_url` を指定して検索する。セマンティック検索のためプロパティ完全一致ではない。
 
 ```
 ツール: notion-search
@@ -61,6 +100,7 @@ data_source_url: "collection://2b2092aa-b014-8033-a92f-000bbe0df3cd"
 ```
 
 検索結果から各チケットを `notion-fetch` で詳細取得し、ステータスを確認する。
+
 承認OKのチケットをパス別にグルーピングして表示する。
 
 表示フォーマット:
