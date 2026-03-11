@@ -576,12 +576,17 @@ export default function AttendanceListPage() {
                             defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
                             className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                             onBlur={(e) => {
-                              if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
-                              else setEditingTime(null)
+                              if (editingTime?.childId === child.child_id && editingTime?.field === 'in') {
+                                if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
+                                else setEditingTime(null)
+                              }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                              if (e.key === 'Escape') setEditingTime(null)
+                              if (e.key === 'Escape') {
+                                setEditingTime(null)
+                                e.currentTarget.blur()
+                              }
                             }}
                             autoFocus
                           />
@@ -609,12 +614,17 @@ export default function AttendanceListPage() {
                             defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
                             className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                             onBlur={(e) => {
-                              if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
-                              else setEditingTime(null)
+                              if (editingTime?.childId === child.child_id && editingTime?.field === 'out') {
+                                if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
+                                else setEditingTime(null)
+                              }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                              if (e.key === 'Escape') setEditingTime(null)
+                              if (e.key === 'Escape') {
+                                setEditingTime(null)
+                                e.currentTarget.blur()
+                              }
                             }}
                             autoFocus
                           />
