@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST, toDateStringJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,9 +35,11 @@ export async function GET(request: NextRequest) {
     const endDateStr = getLastDayOfMonthJST(year, month);
     const daysInMonth = new Date(year, month, 0).getDate();
 
-    // 年初
-    const yearStartStr = `${year}-01-01`;
+    // 今日から過去365日（1年間）の開始日
     const today = getCurrentDateJST();
+    const yearAgo = new Date();
+    yearAgo.setDate(yearAgo.getDate() - 365);
+    const yearStartStr = toDateStringJST(yearAgo);
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase
