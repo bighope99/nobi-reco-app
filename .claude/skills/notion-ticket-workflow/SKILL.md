@@ -135,23 +135,25 @@ properties:
 
 ### 3. PR作成時のチケット更新
 
-PRを作成したとき、対応するチケットのステータスを「レビュー依頼」に更新し、PRリンクをコメントとして追加する。
+PRを作成したとき、対応するチケットのステータスを「レビュー依頼」に更新し、PRプロパティにURLを設定する。
 
-**ステップ1: ステータスを「レビュー依頼」に更新**
+**スクリプト使用（推奨）:**
+
+```bash
+npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
+  --page-id <チケットのID> \
+  --status "レビュー依頼" \
+  --pr-url <PR URL>
+```
+
+**MCPツール使用（フォールバック）:**
 
 ```yaml
 ツール: notion-update-page
 page_id: <チケットのID>
 properties:
   ステータス: "レビュー依頼"
-```
-
-**ステップ2: PRリンクをコメントとして追加**
-
-```yaml
-ツール: notion-create-comment
-page_id: <チケットのID>
-content: "PR #<PR番号> を作成しました\n<PR URL>"
+  PR: "<PR URL>"
 ```
 
 ### 4. 新規バグチケットの作成

@@ -30,10 +30,6 @@ interface UpdatePageResponse {
   url: string;
 }
 
-interface CreateCommentResponse {
-  id: string;
-}
-
 interface OutputResult {
   page_id: string;
   status: string;
@@ -112,31 +108,27 @@ async function updatePageStatus(
   process.stderr.write(`Status updated successfully.\n`);
 }
 
-async function addPrUrlComment(
+async function updatePrUrl(
   token: string,
   pageId: string,
   prUrl: string
 ): Promise<void> {
-  process.stderr.write(`Adding PR URL comment: ${prUrl}...\n`);
+  process.stderr.write(`Setting PR URL: ${prUrl}...\n`);
 
-  await notionFetch<CreateCommentResponse>(
-    `${NOTION_API_BASE}/comments`,
+  await notionFetch<UpdatePageResponse>(
+    `${NOTION_API_BASE}/pages/${pageId}`,
     token,
     {
-      method: "POST",
+      method: "PATCH",
       body: JSON.stringify({
-        parent: { page_id: pageId },
-        rich_text: [
-          {
-            type: "text",
-            text: { content: prUrl },
-          },
-        ],
+        properties: {
+          PR: { url: prUrl },
+        },
       }),
     }
   );
 
-  process.stderr.write(`Comment added successfully.\n`);
+  process.stderr.write(`PR URL set successfully.\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +153,7 @@ async function main(): Promise<void> {
 
   // Step 2: Add PR URL comment if provided
   if (args.prUrl !== null) {
-    await addPrUrlComment(token, args.pageId, args.prUrl);
+    await updatePrUrl(token, args.pageId, args.prUrl);
   }
 
   const output: OutputResult = {
