@@ -118,6 +118,23 @@ export function extractChildIdsFromContent(content: string): string[] {
 }
 
 /**
+ * メンションプレースホルダーを除去し、テキスト部分のみを返す
+ *
+ * @example
+ * ```typescript
+ * const content = "@[123e4567-e89b-12d3-a456-426614174000] 今日は元気でした";
+ * stripMentionPlaceholders(content); // => " 今日は元気でした"
+ *
+ * const mentionOnly = "@[123e4567-e89b-12d3-a456-426614174000]";
+ * stripMentionPlaceholders(mentionOnly); // => ""
+ * ```
+ */
+export function stripMentionPlaceholders(content: string): string {
+  if (!content) return '';
+  return content.replace(new RegExp(PLACEHOLDER_PATTERN.source, 'g'), '');
+}
+
+/**
  * 子ども情報からID→表示名のMapを構築
  *
  * @example

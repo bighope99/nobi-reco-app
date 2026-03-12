@@ -4,6 +4,7 @@ import {
   extractChildIdsFromContent,
   buildIdToNameMap,
   buildNameToIdMap,
+  stripMentionPlaceholders,
 } from '@/lib/mention/mentionFormatter';
 
 describe('mentionFormatter', () => {
@@ -378,6 +379,46 @@ describe('mentionFormatter', () => {
       expect(display1).toBe(content);
       expect(display2).toBe(content);
       expect(placeholder1).toBe(placeholder2);
+    });
+  });
+
+  describe('stripMentionPlaceholders', () => {
+    it('should remove mention placeholders and return remaining text', () => {
+      const content = '@[123e4567-e89b-12d3-a456-426614174000] 今日は元気でした';
+      const result = stripMentionPlaceholders(content);
+      expect(result).toBe(' 今日は元気でした');
+    });
+
+    it('should return empty string when content is only mentions', () => {
+      const content = '@[123e4567-e89b-12d3-a456-426614174000]';
+      const result = stripMentionPlaceholders(content);
+      expect(result.trim()).toBe('');
+    });
+
+    it('should return empty string when content has multiple mentions only', () => {
+      const content = '@[123e4567-e89b-12d3-a456-426614174000] @[223e4567-e89b-12d3-a456-426614174001]';
+      const result = stripMentionPlaceholders(content);
+      expect(result.trim()).toBe('');
+    });
+
+    it('should preserve text between mentions', () => {
+      const content = '@[123e4567-e89b-12d3-a456-426614174000]と@[223e4567-e89b-12d3-a456-426614174001]が遊びました';
+      const result = stripMentionPlaceholders(content);
+      expect(result).toBe('とが遊びました');
+    });
+
+    it('should return empty string for empty content', () => {
+      expect(stripMentionPlaceholders('')).toBe('');
+    });
+
+    it('should return content as-is when no placeholders exist', () => {
+      const content = '今日はみんな元気でした';
+      expect(stripMentionPlaceholders(content)).toBe(content);
+    });
+
+    it('should handle null/undefined gracefully', () => {
+      expect(stripMentionPlaceholders(null as any)).toBe('');
+      expect(stripMentionPlaceholders(undefined as any)).toBe('');
     });
   });
 

@@ -31,7 +31,7 @@ import {
   persistAiDraftsToCookie,
 } from "@/lib/drafts/aiDraftCookie"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
-import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap } from "@/lib/mention/mentionFormatter"
+import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap, stripMentionPlaceholders } from "@/lib/mention/mentionFormatter"
 import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from "@/types/activity"
 import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/security/sanitize"
 import {
@@ -728,8 +728,8 @@ export default function ActivityRecordClient() {
       setSaveMessage('保存しました')
       fetchActivities()
 
-      // AI分析自動実行（観察記録+メンションがある場合のみ）
-      if (contentForDB.trim() && selectedMentions.length > 0) {
+      // AI分析自動実行（メンション以外のテキストがある場合のみ）
+      if (stripMentionPlaceholders(contentForDB).trim() && selectedMentions.length > 0) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -809,8 +809,8 @@ export default function ActivityRecordClient() {
       setSaveMessage('更新しました')
       fetchActivities()
 
-      // AI分析は内容が変更された場合のみ実行
-      if (contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
+      // AI分析は内容が変更された場合のみ実行（メンション以外のテキストがある場合のみ）
+      if (stripMentionPlaceholders(contentForDB).trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {

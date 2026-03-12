@@ -208,11 +208,12 @@ export async function GET(request: NextRequest) {
             observationsByActivity[obs.activity_id] = [];
           }
 
-          // 子ども名の取得（nicknameを優先、なければ姓名）
+          // 子ども名の取得（nicknameを優先、なければ復号化した姓名）
           const child = Array.isArray(obs.m_children) ? obs.m_children[0] : obs.m_children;
-          const childName = child?.nickname ||
-                            [child?.family_name, child?.given_name].filter(Boolean).join(' ') ||
-                            '不明';
+          const childName = child?.nickname || formatName([
+            decryptOrFallback(child?.family_name ?? null),
+            decryptOrFallback(child?.given_name ?? null),
+          ]) || '不明';
 
           observationsByActivity[obs.activity_id].push({
             observation_id: obs.id,
