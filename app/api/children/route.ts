@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
       sortColumn = 'birth_date';
       // 学年昇順(asc) = 年齢が若い順 = 誕生日が遅い順(desc)
       orderRule = sort_order !== 'asc';
-    } else if (sort_by in serverSortColumns) {
+    } else if (Object.hasOwn(serverSortColumns, sort_by)) {
       sortColumn = serverSortColumns[sort_by];
     } else if (clientOnlySortKeys.has(sort_by)) {
       // クライアント側でソートするためデフォルトのソートを使用
