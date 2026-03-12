@@ -211,7 +211,7 @@ export default function StudentList() {
         return () => {
             abortController.abort();
         };
-    }, [activeTab, filterClass, searchTerm]);
+    }, [activeTab, filterClass, searchTerm, sortKey, sortOrder]);
 
     // Toggle Status Function (Now updates via API)
     const toggleStatus = async (id: string, currentStatus: StatusType) => {
