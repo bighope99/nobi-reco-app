@@ -1958,26 +1958,28 @@ export default function ActivityRecordClient() {
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t">
-                        <div className="flex flex-col gap-2 flex-1">
-                          <span className="text-xs text-muted-foreground">
-                            {activity.individual_record_count}件の児童記録
-                          </span>
-                          {activity.individual_records && activity.individual_records.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {activity.individual_records.map((record) => (
-                                <Button
-                                  key={record.observation_id}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-xs hover:bg-primary/10"
-                                  onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
-                                >
-                                  {record.child_name}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {MENTION_ENABLED && (
+                          <div className="flex flex-col gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground">
+                              {activity.individual_record_count}件の児童記録
+                            </span>
+                            {activity.individual_records && activity.individual_records.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {activity.individual_records.map((record) => (
+                                  <Button
+                                    key={record.observation_id}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs hover:bg-primary/10"
+                                    onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
+                                  >
+                                    {record.child_name}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           作成: {activity.created_by}
                         </span>
