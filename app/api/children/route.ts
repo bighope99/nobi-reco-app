@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
               has_sibling_count: 0,
             },
             filters: {
-              classes: (emptyClassesData || []).map((cls: any) => ({
+              classes: (emptyClassesData || []).map((cls: { id: string; name: string }) => ({
                 class_id: cls.id,
                 class_name: cls.name,
                 children_count: 0,

@@ -36,7 +36,7 @@ interface APIChild {
     class_id: string | null;
     class_name: string;
     enrollment_status: EnrollmentStatus;
-    contract_type: ContractType;
+    enrollment_type: ContractType;
     has_allergy: boolean;
     allergy_detail: string | null;
     photo_allowed: boolean;
@@ -52,21 +52,18 @@ interface ChildrenAPIResponse {
     success: boolean;
     data: {
         children: APIChild[];
-        pagination: {
-            total: number;
-            page: number;
-            limit: number;
-            total_pages: number;
-        };
         summary: {
             total_children: number;
-            enrolled: number;
-            withdrawn: number;
-            suspended: number;
+            enrolled_count: number;
+            withdrawn_count: number;
+            has_allergy_count: number;
+            has_sibling_count: number;
         };
         filters: {
-            classes: Array<{ class_id: string; class_name: string }>;
+            classes: Array<{ class_id: string; class_name: string; children_count: number }>;
         };
+        total: number;
+        has_more: boolean;
     };
     error?: string;
 }
@@ -125,7 +122,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         photoAllowed: apiChild.photo_allowed,
         reportAllowed: apiChild.report_allowed,
         status,
-        contractType: apiChild.contract_type,
+        contractType: apiChild.enrollment_type,
     };
 };
 
