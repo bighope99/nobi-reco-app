@@ -6,7 +6,7 @@ import {
     Search,
     Filter,
     Plus,
-    MoreHorizontal,
+
     Phone,
     ChevronRight,
     ArrowUpDown,
@@ -151,6 +151,8 @@ export default function StudentList() {
 
     // Fetch children data from API
     useEffect(() => {
+        const abortController = new AbortController();
+
         const fetchChildren = async () => {
             try {
                 setLoading(true);
@@ -177,7 +179,9 @@ export default function StudentList() {
                 params.append('sort_by', sortKey);
                 params.append('sort_order', sortOrder);
 
-                const response = await fetch(`/api/children?${params.toString()}`);
+                const response = await fetch(`/api/children?${params.toString()}`, {
+                    signal: abortController.signal,
+                });
                 const result: ChildrenAPIResponse = await response.json();
 
                 if (!response.ok) {
@@ -187,18 +191,27 @@ export default function StudentList() {
                 if (result.success) {
                     const convertedStudents = result.data.children.map(convertAPIChildToStudent);
                     setStudents(convertedStudents);
-                    setClassOptions(result.data.filters.classes);
-                    setTotalCount(result.data.summary.total_children);
+                    setClassOptions(result.data?.filters?.classes || []);
+                    setTotalCount(result.data?.summary?.total_children || 0);
                 }
             } catch (err) {
+                if (err instanceof DOMException && err.name === 'AbortError') {
+                    return; // リクエストがキャンセルされた場合は何もしない
+                }
                 console.error('Failed to fetch children:', err);
                 setError(err instanceof Error ? err.message : 'Failed to fetch children');
             } finally {
-                setLoading(false);
+                if (!abortController.signal.aborted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchChildren();
+
+        return () => {
+            abortController.abort();
+        };
     }, [activeTab, filterClass, searchTerm]);
 
     // Toggle Status Function (Now updates via API)
@@ -243,23 +256,9 @@ export default function StudentList() {
 
     // Filter & Sort Logic
     const processedStudents = useMemo(() => {
-        // 1. Filter
-        let result = students.filter(student => {
-            // Status Tab Filter
-            if (student.status !== activeTab) return false;
-
-            // Search Text
-            const matchText =
-                student.name.includes(searchTerm) ||
-                student.kana.includes(searchTerm) ||
-                student.parentName.includes(searchTerm);
-            if (!matchText) return false;
-
-            // Class Filter
-            if (filterClass !== 'all' && student.className !== filterClass) return false;
-
-            return true;
-        });
+        // APIがstatus/search/class_idでフィルター済みのデータを返すため
+        // クライアント側では追加フィルターは不要
+        let result = [...students];
 
         // 2. Sort
         result.sort((a, b) => {
@@ -291,7 +290,7 @@ export default function StudentList() {
         });
 
         return result;
-    }, [students, searchTerm, filterClass, activeTab, sortKey, sortOrder]);
+    }, [students, sortKey, sortOrder]);
 
     const parseFilename = (contentDisposition: string | null, fallback: string) => {
         if (!contentDisposition) return fallback;
@@ -485,9 +484,6 @@ export default function StudentList() {
                             >
                                 {batchGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                                 QR一括出力
-                            </button>
-                            <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" >
-                                <MoreHorizontal size={20} />
                             </button>
                         </div>
                     </div>

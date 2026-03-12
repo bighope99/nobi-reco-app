@@ -116,18 +116,36 @@ export async function GET(request: NextRequest) {
       searchChildIds = [...new Set([...nameIds, ...kanaIds])];
 
       if (searchChildIds.length === 0) {
-        // 検索結果がない場合は空の結果を返す
+        // 検索結果がない場合でもクラス一覧は返す
+        const { data: emptyClassesData } = await supabase
+          .from('m_classes')
+          .select('id, name')
+          .eq('facility_id', facility_id)
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .order('name');
+
         return NextResponse.json({
           success: true,
           data: {
             children: [],
             total: 0,
             summary: {
-              total: 0,
-              enrolled: 0,
-              withdrawn: 0,
-              has_allergy: 0,
+              total_children: 0,
+              enrolled_count: 0,
+              withdrawn_count: 0,
+              has_allergy_count: 0,
+              has_sibling_count: 0,
             },
+            filters: {
+              classes: (emptyClassesData || []).map((cls: any) => ({
+                class_id: cls.id,
+                class_name: cls.name,
+                children_count: 0,
+              })),
+              enrollment_types: [],
+            },
+            has_more: false,
           },
         });
       }
@@ -148,15 +166,23 @@ export async function GET(request: NextRequest) {
     }
 
     // ソート
+    // クライアント側のみでソートするキー（DBカラムに対応しないもの）
+    const clientOnlySortKeys = ['className', 'allergy', 'siblings'];
     let sortColumn = sort_by;
     let orderRule = sort_order === 'asc';
 
     if (sort_by === 'grade') {
       sortColumn = 'birth_date';
       // 学年昇順(asc) = 年齢が若い順 = 誕生日が遅い順(desc)
-      orderRule = sort_order !== 'asc'; 
+      orderRule = sort_order !== 'asc';
     } else if (sort_by === 'name') {
       sortColumn = 'family_name_kana';
+    } else if (sort_by === 'contractType') {
+      sortColumn = 'enrollment_type';
+    } else if (clientOnlySortKeys.includes(sort_by)) {
+      // クライアント側でソートするためデフォルトのソートを使用
+      sortColumn = 'family_name_kana';
+      orderRule = true;
     }
 
     childrenQuery = childrenQuery.order(sortColumn, { ascending: orderRule });
