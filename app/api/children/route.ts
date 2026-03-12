@@ -31,12 +31,31 @@ export async function GET(request: NextRequest) {
     const has_allergy = searchParams.get('has_allergy');
     const has_sibling = searchParams.get('has_sibling');
     const enrollment_type = searchParams.get('enrollment_type') || null;
-    const sort_by = searchParams.get('sort_by') || 'name';
-    const sort_order = searchParams.get('sort_order') || 'asc';
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '200');
     const offset = parseInt(searchParams.get('offset') || '0');
 
     // 1. 子ども一覧取得
+    // class_idフィルター時は !inner JOINで該当クラスの子のみに絞る
+    const childClassJoin = class_id && class_id !== 'none'
+      ? `_child_class!inner (
+          class_id,
+          is_current,
+          m_classes (
+            id,
+            name,
+            age_group
+          )
+        )`
+      : `_child_class (
+          class_id,
+          is_current,
+          m_classes (
+            id,
+            name,
+            age_group
+          )
+        )`;
+
     let childrenQuery = supabase
       .from('m_children')
       .select(`
@@ -58,15 +77,7 @@ export async function GET(request: NextRequest) {
         allergies,
         photo_permission_public,
         report_name_permission,
-        _child_class (
-          class_id,
-          is_current,
-          m_classes (
-            id,
-            name,
-            age_group
-          )
-        ),
+        ${childClassJoin},
         _child_guardian (
           relationship,
           is_primary,
@@ -84,8 +95,10 @@ export async function GET(request: NextRequest) {
       .eq('enrollment_status', status)
       .is('deleted_at', null);
 
-    if (class_id) {
-      childrenQuery = childrenQuery.eq('_child_class.class_id', class_id);
+    if (class_id && class_id !== 'none') {
+      childrenQuery = childrenQuery
+        .eq('_child_class.class_id', class_id)
+        .eq('_child_class.is_current', true);
     }
 
     // 名前検索: 漢字名は検索用ハッシュテーブル経由、カナは直接DB検索（平文のため）
@@ -165,29 +178,8 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
-    // ソート（ホワイトリストで不正な値を防止）
-    const clientOnlySortKeys = new Set(['className', 'allergy', 'siblings']);
-    const serverSortColumns: Record<string, string> = {
-      name: 'family_name_kana',
-      contractType: 'enrollment_type',
-    };
-    const defaultSortColumn = 'family_name_kana';
-    let sortColumn = defaultSortColumn;
-    let orderRule = sort_order === 'asc';
-
-    if (sort_by === 'grade') {
-      sortColumn = 'birth_date';
-      // 学年昇順(asc) = 年齢が若い順 = 誕生日が遅い順(desc)
-      orderRule = sort_order !== 'asc';
-    } else if (Object.hasOwn(serverSortColumns, sort_by)) {
-      sortColumn = serverSortColumns[sort_by];
-    } else if (clientOnlySortKeys.has(sort_by)) {
-      // クライアント側でソートするためデフォルトのソートを使用
-      sortColumn = defaultSortColumn;
-      orderRule = true;
-    }
-
-    childrenQuery = childrenQuery.order(sortColumn, { ascending: orderRule });
+    // ソートはクライアント側で処理するため、デフォルトのカナ順で返す
+    childrenQuery = childrenQuery.order('family_name_kana', { ascending: true });
 
     // ページネーション
     childrenQuery = childrenQuery.range(offset, offset + limit - 1);
@@ -354,9 +346,14 @@ export async function GET(request: NextRequest) {
     });
 
     // has_siblingフィルター適用（兄弟データ取得後）
-    const filteredChildren = has_sibling !== null
+    let filteredChildren = has_sibling !== null
       ? children.filter(c => c.has_sibling === (has_sibling === 'true'))
       : children;
+
+    // 「クラスなし」フィルター: is_current=trueのクラス所属がない子のみ
+    if (class_id === 'none') {
+      filteredChildren = filteredChildren.filter(c => c.class_id === null);
+    }
 
     // サマリー取得
     const { data: summaryData } = await supabase

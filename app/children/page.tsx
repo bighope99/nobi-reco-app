@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 
 import {
@@ -145,6 +145,24 @@ export default function StudentList() {
     const [sortKey, setSortKey] = useState<SortKey>('grade');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
+    // Debounced search term
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+        debounceTimerRef.current = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, [searchTerm]);
+
     // Fetch children data from API
     useEffect(() => {
         const abortController = new AbortController();
@@ -167,13 +185,9 @@ export default function StudentList() {
                     params.append('class_id', filterClass);
                 }
 
-                if (searchTerm) {
-                    params.append('search', searchTerm);
+                if (debouncedSearch) {
+                    params.append('search', debouncedSearch);
                 }
-
-                // Add sort params
-                params.append('sort_by', sortKey);
-                params.append('sort_order', sortOrder);
 
                 const response = await fetch(`/api/children?${params.toString()}`, {
                     signal: abortController.signal,
@@ -208,7 +222,7 @@ export default function StudentList() {
         return () => {
             abortController.abort();
         };
-    }, [activeTab, filterClass, searchTerm, sortKey, sortOrder]);
+    }, [activeTab, filterClass, debouncedSearch]);
 
     // Toggle Status Function (Now updates via API)
     const toggleStatus = async (id: string, currentStatus: StatusType) => {
@@ -272,7 +286,7 @@ export default function StudentList() {
                     comparison = a.className.localeCompare(b.className);
                     break;
                 case 'contractType':
-                    comparison = a.contractType.localeCompare(b.contractType);
+                    comparison = (a.contractType || '').localeCompare(b.contractType || '');
                     break;
                 case 'allergy':
                     comparison = (a.hasAllergy === b.hasAllergy) ? 0 : a.hasAllergy ? -1 : 1;
@@ -459,6 +473,7 @@ export default function StudentList() {
                                     onChange={(e) => setFilterClass(e.target.value)}
                                 >
                                     <option value="all" > 全クラス </option>
+                                    <option value="none" > クラスなし </option>
                                     {
                                         classOptions.map(cls => (
                                             <option key={cls.class_id} value={cls.class_id} > {cls.class_name} </option>
