@@ -165,23 +165,25 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
-    // ソート
-    // クライアント側のみでソートするキー（DBカラムに対応しないもの）
-    const clientOnlySortKeys = ['className', 'allergy', 'siblings'];
-    let sortColumn = sort_by;
+    // ソート（ホワイトリストで不正な値を防止）
+    const clientOnlySortKeys = new Set(['className', 'allergy', 'siblings']);
+    const serverSortColumns: Record<string, string> = {
+      name: 'family_name_kana',
+      contractType: 'enrollment_type',
+    };
+    const defaultSortColumn = 'family_name_kana';
+    let sortColumn = defaultSortColumn;
     let orderRule = sort_order === 'asc';
 
     if (sort_by === 'grade') {
       sortColumn = 'birth_date';
       // 学年昇順(asc) = 年齢が若い順 = 誕生日が遅い順(desc)
       orderRule = sort_order !== 'asc';
-    } else if (sort_by === 'name') {
-      sortColumn = 'family_name_kana';
-    } else if (sort_by === 'contractType') {
-      sortColumn = 'enrollment_type';
-    } else if (clientOnlySortKeys.includes(sort_by)) {
+    } else if (sort_by in serverSortColumns) {
+      sortColumn = serverSortColumns[sort_by];
+    } else if (clientOnlySortKeys.has(sort_by)) {
       // クライアント側でソートするためデフォルトのソートを使用
-      sortColumn = 'family_name_kana';
+      sortColumn = defaultSortColumn;
       orderRule = true;
     }
 
@@ -198,6 +200,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (!childrenData || childrenData.length === 0) {
+      // 結果0件でもクラス一覧は返す
+      const { data: emptyClassesData2 } = await supabase
+        .from('m_classes')
+        .select('id, name')
+        .eq('facility_id', facility_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('name');
+
       return NextResponse.json({
         success: true,
         data: {
@@ -210,7 +221,11 @@ export async function GET(request: NextRequest) {
           },
           children: [],
           filters: {
-            classes: [],
+            classes: (emptyClassesData2 || []).map((cls: any) => ({
+              class_id: cls.id,
+              class_name: cls.name,
+              children_count: 0,
+            })),
             enrollment_types: [],
           },
           total: 0,
