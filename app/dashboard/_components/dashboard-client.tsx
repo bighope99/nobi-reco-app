@@ -30,6 +30,7 @@ import {
   AttendanceListSkeleton,
   RecordSupportSkeleton,
 } from './skeletons';
+import { updateAlertsAndKpi } from '@/lib/dashboard/optimistic-updates';
 
 export default function DashboardClient() {
   // Phase 1: Priority data (KPI + Alerts + Action Required)
@@ -177,28 +178,12 @@ export default function DashboardClient() {
           if (!prev) return prev;
 
           // Update alerts: remove resolved child from alert lists
-          const updatedAlerts = { ...prev.alerts };
-          const updatedKpi = { ...prev.kpi };
-
-          switch (action) {
-            case 'check_in':
-              updatedAlerts.late = prev.alerts.late.filter((a) => a.child_id !== childId);
-              updatedKpi.present_now += 1;
-              updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1);
-              break;
-            case 'check_out':
-              updatedAlerts.overdue = prev.alerts.overdue.filter((a) => a.child_id !== childId);
-              updatedKpi.present_now = Math.max(0, updatedKpi.present_now - 1);
-              updatedKpi.checked_out += 1;
-              break;
-            case 'mark_absent':
-              updatedAlerts.late = prev.alerts.late.filter((a) => a.child_id !== childId);
-              updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1);
-              break;
-            case 'confirm_unexpected':
-              updatedAlerts.unexpected = prev.alerts.unexpected.filter((a) => a.child_id !== childId);
-              break;
-          }
+          const { alerts: updatedAlerts, kpi: updatedKpi } = updateAlertsAndKpi(
+            prev.alerts,
+            prev.kpi,
+            action,
+            childId
+          );
 
           return {
             ...prev,

@@ -1,40 +1,5 @@
 import type { Alert, KPI } from "@/app/dashboard/_components/types"
-
-/**
- * Mirrors the optimistic update logic in dashboard-client.tsx
- * for alert and KPI updates after attendance actions.
- */
-function updateAlertsAndKpi(
-  alerts: Alert,
-  kpi: KPI,
-  action: string,
-  childId: string
-): { alerts: Alert; kpi: KPI } {
-  const updatedAlerts = { ...alerts }
-  const updatedKpi = { ...kpi }
-
-  switch (action) {
-    case "check_in":
-      updatedAlerts.late = alerts.late.filter((a) => a.child_id !== childId)
-      updatedKpi.present_now += 1
-      updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1)
-      break
-    case "check_out":
-      updatedAlerts.overdue = alerts.overdue.filter((a) => a.child_id !== childId)
-      updatedKpi.present_now = Math.max(0, updatedKpi.present_now - 1)
-      updatedKpi.checked_out += 1
-      break
-    case "mark_absent":
-      updatedAlerts.late = alerts.late.filter((a) => a.child_id !== childId)
-      updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1)
-      break
-    case "confirm_unexpected":
-      updatedAlerts.unexpected = alerts.unexpected.filter((a) => a.child_id !== childId)
-      break
-  }
-
-  return { alerts: updatedAlerts, kpi: updatedKpi }
-}
+import { updateAlertsAndKpi } from "@/lib/dashboard/optimistic-updates"
 
 describe("Dashboard optimistic update - alerts and KPI", () => {
   const baseAlerts: Alert = {
@@ -167,10 +132,11 @@ describe("Dashboard optimistic update - alerts and KPI", () => {
       expect(kpi.present_now).toBe(0)
     })
 
-    it("handles non-matching child_id gracefully", () => {
+    it("does not modify KPI when child_id is not in alerts", () => {
       const { alerts, kpi } = updateAlertsAndKpi(baseAlerts, baseKpi, "check_in", "non-existent")
       expect(alerts.late).toHaveLength(1)
-      expect(kpi.present_now).toBe(11) // still increments
+      expect(kpi.present_now).toBe(10)
+      expect(kpi.not_arrived).toBe(5)
     })
   })
 })
