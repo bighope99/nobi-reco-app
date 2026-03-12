@@ -169,14 +169,41 @@ export default function DashboardClient() {
       timeZone: 'Asia/Tokyo',
     });
 
-    // Optimistic update for action_required
+    // Optimistic update for action_required + alerts + KPI
     const previousPriorityData = priorityData;
     if (priorityData) {
       startTransition(() => {
         setPriorityData((prev) => {
           if (!prev) return prev;
+
+          // Update alerts: remove resolved child from alert lists
+          const updatedAlerts = { ...prev.alerts };
+          const updatedKpi = { ...prev.kpi };
+
+          switch (action) {
+            case 'check_in':
+              updatedAlerts.late = prev.alerts.late.filter((a) => a.child_id !== childId);
+              updatedKpi.present_now += 1;
+              updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1);
+              break;
+            case 'check_out':
+              updatedAlerts.overdue = prev.alerts.overdue.filter((a) => a.child_id !== childId);
+              updatedKpi.present_now = Math.max(0, updatedKpi.present_now - 1);
+              updatedKpi.checked_out += 1;
+              break;
+            case 'mark_absent':
+              updatedAlerts.late = prev.alerts.late.filter((a) => a.child_id !== childId);
+              updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1);
+              break;
+            case 'confirm_unexpected':
+              updatedAlerts.unexpected = prev.alerts.unexpected.filter((a) => a.child_id !== childId);
+              break;
+          }
+
           return {
             ...prev,
+            alerts: updatedAlerts,
+            kpi: updatedKpi,
             action_required: prev.action_required.map((child) => {
               if (child.child_id !== childId) return child;
 
@@ -855,7 +882,15 @@ export default function DashboardClient() {
                     <>
                       {/* Desktop Table */}
                       <div className="hidden lg:block">
-                        <table className="w-full text-left border-collapse text-sm">
+                        <table className="w-full text-left border-collapse text-sm table-fixed">
+                          <colgroup>
+                            <col className="w-[25%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[20%]" />
+                          </colgroup>
                           <thead>
                             <tr className="bg-white border-b border-gray-100 text-slate-500 text-xs uppercase tracking-wider">
                               <th className="px-5 py-3 font-medium">児童名 / クラス</th>
@@ -909,7 +944,15 @@ export default function DashboardClient() {
                     <>
                       {/* Desktop Table */}
                       <div className="hidden lg:block">
-                        <table className="w-full text-left border-collapse text-sm">
+                        <table className="w-full text-left border-collapse text-sm table-fixed">
+                          <colgroup>
+                            <col className="w-[25%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[20%]" />
+                          </colgroup>
                           <tbody className="divide-y divide-gray-100">
                             {filteredOtherChildren.map((child) => (
                               <ChildRow key={child.child_id} child={child} isDesktop={true} />
