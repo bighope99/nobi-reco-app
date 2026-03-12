@@ -6,7 +6,6 @@ import {
     Search,
     Filter,
     Plus,
-
     Phone,
     ChevronRight,
     ArrowUpDown,
