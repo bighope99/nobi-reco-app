@@ -1,22 +1,3 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
-
-These instructions are for AI assistants working in this project.
-
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
-
-Use `@/openspec/AGENTS.md` to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
-
 # Project Context
 **Name**: Nobi-Reco (のびレコ)
 **Target**: After-school care programs (学童保育) for elementary school children
@@ -43,22 +24,6 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | Query Patterns | `.claude/skills/supabase-query-patterns` |
 | Session Interface | `/lib/auth/session.ts` |
 | Code Improvement | `.claude/skills/incremental-code-improvement` |
-
-# Coding Rules
-- **Supabase Import**: Use `@/utils/supabase/server` (NOT `@/lib/supabase/server`)
-- **Next.js 15 Params**: `params` are async - use `props: { params: Promise<T> }` and `await`
-- **Auth in API**: Use `getAuthenticatedUserMetadata()` from `@/lib/auth/jwt`
-  - `supabase.auth.getSession()` は**使用禁止** → セキュリティ警告が出る
-  - 新規APIルート作成時は必ず `getAuthenticatedUserMetadata()` を使用
-  - 既存の `getSession()` + `getUserSession()` パターンを見つけたら置き換える
-  - 詳細: `.claude/skills/supabase-jwt-auth`
-- **TypeScript**: Strict types, avoid `any`
-- **Components**: Server Components by default, `use client` only when needed
-- **Dependencies**: 新しいパッケージの追加は最小限に。既存の依存関係で実現できないか検討すること
-- **Mention Display**: 記録本文を表示する際、メンション（`child:childId`形式）を名前（`@児童名`）に変換すること
-  - `replaceChildIdsWithNames` を `@/lib/ai/childIdFormatter` からインポート
-  - 児童リストから `nameByIdMap: Map<string, string>` を構築
-  - 表示時に `replaceChildIdsWithNames(content, nameByIdMap)` を適用
 
 ## Incremental Code Improvement (編集時の段階的改善)
 
