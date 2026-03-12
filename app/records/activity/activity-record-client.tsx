@@ -185,6 +185,7 @@ export default function ActivityRecordClient() {
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
+  const MENTION_ENABLED = false  // TODO: メンション機能復活時にtrueに変更
   const MENTION_TRIGGERS = ['@', '＠']
   const mentionTriggerRef = useRef<'textarea' | 'button'>('button')
   const DOMPURIFY_CONFIG = {
@@ -399,7 +400,7 @@ export default function ActivityRecordClient() {
 
     // @検出：カーソル位置の直前の文字を確認（テキスト中間でも検出可能）
     const justTypedChar = cursorPos > 0 ? value.charAt(cursorPos - 1) : ''
-    if (MENTION_TRIGGERS.includes(justTypedChar)) {
+    if (MENTION_ENABLED && MENTION_TRIGGERS.includes(justTypedChar)) {
       setMentionStartIndex(cursorPos - 1)
       mentionTriggerRef.current = 'textarea'
       setShowMentionPicker(true)
@@ -409,7 +410,7 @@ export default function ActivityRecordClient() {
     }
 
     // メンション中：@以降の文字を検索クエリに
-    if (showMentionPicker && mentionStartIndex !== null) {
+    if (MENTION_ENABLED && showMentionPicker && mentionStartIndex !== null) {
       const query = value.slice(mentionStartIndex + 1, cursorPos)
       setMentionSearchQuery(query)
       setSelectedIndex(0)
@@ -1605,38 +1606,40 @@ export default function ActivityRecordClient() {
               <div className="flex items-center justify-between">
                 <Label htmlFor="activityContent" className="text-base font-semibold">観察記録</Label>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{selectedMentions.length}人</span>
-                  <span>・</span>
+                  {MENTION_ENABLED && <span>{selectedMentions.length}人</span>}
+                  {MENTION_ENABLED && <span>・</span>}
                   <span>{activityContent.length}/{ACTIVITY_CONTENT_MAX}文字</span>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // @を末尾に挿入
-                    const newContent = activityContent + '@'
-                    setActivityContent(newContent)
-                    // mentionStartIndexを設定
-                    setMentionStartIndex(newContent.length - 1)
-                    mentionTriggerRef.current = 'button'
-                    setShowMentionPicker(true)
-                    setMentionSearchQuery('')
-                    setSelectedIndex(0)
-                    // フォーカスしてカーソルを末尾に
-                    setTimeout(() => {
-                      textareaRef.current?.focus()
-                      textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
-                    }, 0)
-                  }}
-                  disabled={classOptions.length > 0 && !selectedClass || classChildren.length === 0}
-                >
-                  <span className="mr-1">@</span>
-                  児童をメンション
-                </Button>
+                {MENTION_ENABLED && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // @を末尾に挿入
+                      const newContent = activityContent + '@'
+                      setActivityContent(newContent)
+                      // mentionStartIndexを設定
+                      setMentionStartIndex(newContent.length - 1)
+                      mentionTriggerRef.current = 'button'
+                      setShowMentionPicker(true)
+                      setMentionSearchQuery('')
+                      setSelectedIndex(0)
+                      // フォーカスしてカーソルを末尾に
+                      setTimeout(() => {
+                        textareaRef.current?.focus()
+                        textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
+                      }, 0)
+                    }}
+                    disabled={classOptions.length > 0 && !selectedClass || classChildren.length === 0}
+                  >
+                    <span className="mr-1">@</span>
+                    児童をメンション
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="sm"
@@ -1658,11 +1661,11 @@ export default function ActivityRecordClient() {
                 onChange={handleContentChange}
                 onKeyDown={handleTextareaKeyDown}
                 maxLength={ACTIVITY_CONTENT_MAX}
-                placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+                placeholder="園での活動内容を入力してください"
                 className="min-h-[300px]"
               />
 
-              {showMentionPicker && (
+              {MENTION_ENABLED && showMentionPicker && (
                 <div
                   ref={mentionPickerRef}
                   className="absolute top-full left-0 mt-2 z-50 w-64 max-h-[300px] p-2 bg-popover border rounded-md shadow-md"
@@ -1699,7 +1702,7 @@ export default function ActivityRecordClient() {
                 </div>
               )}
             </div>
-              {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
+              {MENTION_ENABLED && mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
             </div>
 
             <div className="space-y-3">
@@ -1760,7 +1763,7 @@ export default function ActivityRecordClient() {
               )}
             </div>
 
-            {selectedMentions.length > 0 && (
+            {MENTION_ENABLED && selectedMentions.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">メンション中の児童</Label>
                 <div className="flex flex-wrap gap-2">
