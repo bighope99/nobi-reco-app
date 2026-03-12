@@ -65,6 +65,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ファイル編集時は周辺の `any` 型やエラーハンドリングも改善する。
 詳細: `.claude/skills/incremental-code-improvement`
 
+# Workflow Rules
+- **ALWAYS use a worktree**: Never work directly on the main branch. Create a NEW worktree at the start of each new task.
+- **Worktree cleanup**: Delete the worktree ONLY after the user explicitly says the PR is published/merged. Never assume it's done on your own.
+- **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
+- **Code change workflow**: 実装完了後は必ず以下の順で実行する
+  1. `/pr-review` でコードレビュー → 指摘を修正
+  2. `/create-pr` でPR作成 → CodeRabbitレビューループ（最大3回）
+  3. PR URLをユーザーに報告
+
 # Agent Guidelines
 
 **原則**: サブエージェントに委譲し、並列処理を活用する
