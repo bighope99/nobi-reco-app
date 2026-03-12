@@ -48,6 +48,8 @@ import {
 import { getSanitizedExtendedFields as getSanitizedExtendedFieldsUtil } from "@/lib/activity/sanitizeExtendedFields"
 import { PreviousHandoverBanner } from "./components/previous-handover-banner"
 
+const MENTION_ENABLED = false  // TODO: メンション機能復活時にtrueに変更
+
 interface IndividualRecord {
   observation_id: string
   child_id: string
@@ -185,7 +187,6 @@ export default function ActivityRecordClient() {
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
-  const MENTION_ENABLED = false  // TODO: メンション機能復活時にtrueに変更
   const MENTION_TRIGGERS = ['@', '＠']
   const mentionTriggerRef = useRef<'textarea' | 'button'>('button')
   const DOMPURIFY_CONFIG = {
@@ -396,7 +397,7 @@ export default function ActivityRecordClient() {
     const value = event.target.value
     const cursorPos = event.target.selectionStart
     setActivityContent(value)
-    updateMentionedChildren(value)
+    if (MENTION_ENABLED) updateMentionedChildren(value)
 
     // @検出：カーソル位置の直前の文字を確認（テキスト中間でも検出可能）
     const justTypedChar = cursorPos > 0 ? value.charAt(cursorPos - 1) : ''
@@ -579,7 +580,7 @@ export default function ActivityRecordClient() {
             class_id: selectedClass,
             activity_date: activityDate,
             content: activityContent,
-            mentioned_children: selectedMentions.map((child) => child.child_id),
+            mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
             photos,
             recorded_by: selectedRecorder || undefined,
             // 新規フィールド（サニタイズ済み）
@@ -611,7 +612,7 @@ export default function ActivityRecordClient() {
             class_id: selectedClass,
             activity_date: activityDate,
             content: activityContent,
-            mentioned_children: selectedMentions.map((child) => child.child_id),
+            mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
             photos,
             // 新規フィールド（サニタイズ済み）
             event_name: sanitizedFields.event_name,
@@ -648,7 +649,7 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           content: activityContent,
           activity_date: activityDate,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
           activity_id: savedActivityId, // 保存した活動記録IDを紐付け
         }),
       })
@@ -701,7 +702,7 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           activity_date: activityDate,
           content: contentForDB,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
           photos,
           recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
@@ -740,7 +741,7 @@ export default function ActivityRecordClient() {
               class_id: selectedClass || null,
               content: contentForDB,
               activity_date: activityDate,
-              mentioned_children: selectedMentions.map((child) => child.child_id),
+              mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
               activity_id: savedActivityId,
             }),
           })
@@ -787,7 +788,7 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           activity_date: activityDate,
           content: contentForDB,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
           photos,
           recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
@@ -821,7 +822,7 @@ export default function ActivityRecordClient() {
               class_id: selectedClass || null,
               content: contentForDB,
               activity_date: activityDate,
-              mentioned_children: selectedMentions.map((child) => child.child_id),
+              mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
               activity_id: editingActivityId,
             }),
           })
