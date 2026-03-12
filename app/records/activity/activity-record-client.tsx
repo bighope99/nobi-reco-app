@@ -730,7 +730,7 @@ export default function ActivityRecordClient() {
       fetchActivities()
 
       // AI分析自動実行（観察記録+メンションがある場合のみ）
-      if (contentForDB.trim() && selectedMentions.length > 0) {
+      if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -811,7 +811,7 @@ export default function ActivityRecordClient() {
       fetchActivities()
 
       // AI分析は内容が変更された場合のみ実行
-      if (contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
+      if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -879,7 +879,7 @@ export default function ActivityRecordClient() {
     setHandover(activity.handover || "")
 
     // メンション復元: クラスの児童リストから名前情報を取得
-    if (activity.mentioned_children && activity.mentioned_children.length > 0) {
+    if (MENTION_ENABLED && activity.mentioned_children && activity.mentioned_children.length > 0) {
       // クラスが異なる場合は児童リストを再取得する必要があるため、APIから取得
       let children = classChildren
       if (activity.class_id && activity.class_id !== selectedClass) {
