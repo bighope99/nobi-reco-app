@@ -9,11 +9,9 @@ import {
     Phone,
     ChevronRight,
     ArrowUpDown,
-    Baby,
     Power,
     RotateCcw,
     Users,
-    QrCode,
     Download,
     Loader2
 } from 'lucide-react';
@@ -150,9 +148,6 @@ export default function StudentList() {
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
         debounceTimerRef.current = setTimeout(() => {
             setDebouncedSearch(searchTerm);
         }, 300);
