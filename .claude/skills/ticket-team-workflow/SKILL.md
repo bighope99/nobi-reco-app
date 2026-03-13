@@ -18,9 +18,20 @@ description: |
 | Role | モデル | 台数 | 責務 |
 |------|--------|------|------|
 | **Leader** | Opus | 1 | ユーザー対話、グルーピング承認、タスク振り分け最終決定、エスカレーション対応 |
-| **Planner** | Sonnet | 1 | チケット取得、グルーピング案作成、**worktree作成**、Coderへの指示出し、軽微な判断 |
-| **Coder** | Sonnet | 最大3 | 実装、テスト、コミット、**PR作成**、**CodeRabbitループ**、**Notionステータス更新**。自分のブランチは自分で完結 |
-| **Reviewer** | Sonnet | 1 | **/pr-review のみ**。第三者視点でコード品質を評価し、指摘をCoderに返す |
+| **Planner** | Sonnet | 1 | チケット取得、グルーピング案作成、**worktree作成**、Coderへの指示出し、軽微な判断、**Notionステータス一括更新** |
+| **Coder** | Sonnet | 最大3 | 実装、テスト、コミット、**/pr-review実行・修正**、**PR作成**、**CodeRabbitループ**。自分のブランチは自分で完結 |
+
+### 大規模変更時のReviewer増員
+
+以下のいずれかに該当するグループは「大規模変更」とみなし、専任Reviewerを1名追加する:
+- **変更ファイル数が7ファイル以上**
+- **変更行数が200行以上**（追加+削除、テストコードを除く）
+- **新規ファイル追加を含む機能開発**（バグ修正ではない）
+- **DBスキーマ変更を伴う**
+
+大規模変更グループが複数ある場合、**グループごとに1名ずつ**Reviewerを追加する（例: 大規模2グループ → Reviewer 2名）。
+
+Reviewerは必ず `/pr-review` スキルを使い、**複数視点（アーキテクチャ・セキュリティ・パフォーマンス）** でレビューを実施する。Coderへ指摘リストを返し、Reviewer自身はコードを修正しない。
 
 ## 全体フロー
 
@@ -34,26 +45,24 @@ Phase 2: 実装（Coder担当、最大3並列）
   Coder → 実装 → テスト → コミット
   ※ エスカレーション → Planner判断 → 無理ならLeaderへ
 
-Phase 3: レビュー & PR（Reviewer + Coder担当）
-  Reviewer → /pr-review → 指摘をCoderに返す
-  Coder → 指摘修正 → PR作成 → CodeRabbitループ(最大3回) → Notionステータス更新
+Phase 3: レビュー & PR（Coder + Planner担当、大規模時はReviewer追加）
+  通常: Coder → /pr-review実行 → 指摘修正 → PR作成 → CodeRabbitループ(最大3回) → PR URLをPlannerに報告
+  大規模: Reviewer → /pr-review（複数視点） → 指摘をCoderに返す → Coder修正 → PR作成 → CodeRabbitループ → PR URLをPlannerに報告
+  Planner → 全チケットのNotionステータスを一括更新（スクリプト使用）
 ```
 
 ## Phase 1: 計画（Planner）
 
 ### Step 1: チケット取得
 
-Plannerが以下の手順でNotionから承認OKチケットを取得する。
+Plannerが `notion-ticket-workflow` のスクリプトを使って承認OKチケットを一括取得する。
 
+```bash
+# 承認OKチケットを本文・コメント付きで一括取得
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status "承認OK"
 ```
-1. notion-search で承認OKチケットを検索
-   query: "承認OK のびレコ開発"
-   data_source_url: "collection://2b2092aa-b014-8033-a92f-000bbe0df3cd"
 
-2. 各チケットを notion-fetch で詳細取得（本文・プロパティ）
-
-3. 必要に応じて notion-get-comments でコメントも取得
-```
+このスクリプトは Notion API でステータスを**完全一致フィルタ**し、各チケットの本文・コメント・全プロパティを並列取得してJSON出力する。詳細は `notion-ticket-workflow` スキルを参照。
 
 ### Step 2: グルーピング
 
@@ -110,10 +119,18 @@ Plannerが各Coderに以下を伝達:
 ### Step 3: 実装（Coder担当、最大3並列）
 
 各Coderは自分のworktreeで:
-1. チケットの修正内容を実装
-2. テストを追加/修正（TDD）
-3. コミット
-4. 完了報告をPlannerに返す
+1. **`EnterPlanMode`ツールを呼んでプランモードに入る**（プランモード中はファイル編集不可）
+   プランには以下を含めてユーザーが確認しやすくする：
+   - 対象チケット一覧（ID・タイトル・本文・コメントの要約）
+   - Plannerから受け取った修正指示の内容
+   - 対象ファイル・パス
+   - 実装方針（何をどう変えるか、変更理由）
+   - テスト方針
+   - 懸念事項・不明点（あれば）
+2. **ユーザーがUIでプランを承認**したら`ExitPlanMode`で通常モードに戻り実装開始
+3. テストを追加/修正（TDD）
+4. コミット
+5. 完了報告をPlannerに返す
 
 ### エスカレーションルール
 
@@ -124,28 +141,17 @@ Coderが以下に該当する場合、Plannerに戻す:
 
 Plannerで判断できない場合 → Leaderにエスカレーション
 
-## Phase 3: レビュー & PR（Reviewer + Coder）
+## Phase 3: レビュー & PR（Coder + Planner、大規模時はReviewer追加）
 
 各ブランチに対して以下を実行する。
 
-### Step 1: 内部レビュー（Reviewer担当）
+### Step 1: 内部レビュー
 
-Reviewerは**第三者視点でコード品質を評価する専門エージェント**。
+**通常変更**: 各Coderが自分のブランチで `/pr-review` を実行し、指摘を自分で修正する。
 
-```
-/pr-review を実行
-→ 指摘リストをCoderに返す
-→ Reviewer自身はコードを修正しない
-```
+**大規模変更**: 専任Reviewerが `/pr-review` を実行し、複数視点（アーキテクチャ・セキュリティ・パフォーマンス）で指摘リストを作成。Coderに返して修正させる。
 
-### Step 2: レビュー指摘の修正（Coder担当）
-
-```
-Coderが自分のworktreeでReviewerの指摘を修正
-→ 修正をコミット
-```
-
-### Step 3: PR作成（Coder担当）
+### Step 2: PR作成（Coder担当）
 
 ```
 /create-pr を実行
@@ -153,7 +159,7 @@ Coderが自分のworktreeでReviewerの指摘を修正
 → PR本文に対応チケット一覧を含める
 ```
 
-### Step 4: CodeRabbitループ（Coder担当、最大3回転）
+### Step 3: CodeRabbitループ（Coder担当、最大3回転）
 
 ```
 Loop (max 3):
@@ -165,82 +171,122 @@ Loop (max 3):
   6. 未対応コメントが0件 → ループ終了
 ```
 
-### Step 5: Notionステータス更新（Coder担当）
+### Step 4: Notionステータス更新（Planner担当）
 
-PRが作成できたチケットすべてに対して:
+各CoderがPR作成を完了したらPR URLをPlannerに報告する。
+Plannerが全チケットのステータスを一括更新する:
 
-```
-1. notion-update-page でステータスを「レビュー依頼」に更新
-2. notion-create-comment でPRリンクを追加
-   "PR #<番号> を作成しました\nhttps://github.com/bighope99/nobi-reco-app/pull/<番号>"
-```
-
-## 起動方法
-
-Leaderが以下の順で起動する:
-
-### 1. Plannerを起動
-
-```
-Agent tool:
-  subagent_type: general-purpose
-  model: sonnet
-  prompt: "あなたはPlannerです。Notionから承認OKチケットを取得し、
-           パス別にグルーピングして報告してください。
-           [notion-ticket-workflow スキルの手順に従う]"
+```bash
+# チケットごとにスクリプトを実行
+npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
+  --page-id <チケットID> \
+  --status "レビュー依頼" \
+  --pr-url <PR URL>
 ```
 
-### 2. Leader承認後、Coderを起動（最大3並列）
+## 起動方法（エージェントチーム）
 
-```
-Agent tool (並列):
-  subagent_type: code-modifier
-  model: sonnet
-  isolation: worktree
-  prompt: "あなたはCoder-1です。以下のチケットを実装してください。
-           [具体的なチケット情報と修正指示]"
-```
+チームメンバーは永続的で、セッション中ずっと生き続ける。
+Leaderがチームを作成し、メンバーに指示を送りながらワークフローを進行する。
 
-### 3. Coder完了後、Reviewerを起動（/pr-reviewのみ）
+### 1. チーム作成
 
 ```
 Agent tool:
-  subagent_type: general-purpose
+  name: "Planner"
+  team_name: "ticket-team"
   model: sonnet
-  prompt: "あなたはReviewerです。以下のブランチに対して
-           /pr-review を実行し、指摘リストをまとめてください。
-           コード修正は行わず、指摘のみ返してください。
-           [ブランチ一覧と対応チケット情報]"
+  prompt: "あなたはPlannerです。チームのPlanner役として、
+           Notionチケットの取得・グルーピング・worktree作成・Coderへの指示出しを担当します。
+           まずはNotionから承認OKチケットを取得し、パス別にグルーピングして報告してください。
+           notion-ticket-workflow スキルの手順に従ってください。"
+
+Agent tool:
+  name: "Coder-1"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "あなたはCoder-1です。Plannerから指示されたチケットを実装します。
+           Plannerから指示を受けたら、まずEnterPlanModeツールを呼んでプランモードに入ってください。
+           プランモード中はファイル編集できません。プランには必ず以下を含めてください
+           （ユーザーがチケットを見に行かなくて済むよう）:
+           1. 対象チケット一覧（ID・タイトル・本文・コメントの要約）
+           2. Plannerから受け取った修正指示の内容
+           3. 対象ファイル・パス
+           4. 実装方針（何をどう変えるか、変更理由）
+           5. テスト方針
+           6. 懸念事項・不明点（あれば）
+           ユーザーがUIでプランを承認したらExitPlanModeで通常モードに戻り実装を開始してください。承認前に実装してはいけません。
+           実装完了後は自分で /pr-review の指摘修正、PR作成、CodeRabbitループまで行い、
+           PR作成後はPR URLをPlannerに報告してください。
+           Plannerからの指示を待ってください。"
+
+Agent tool:
+  name: "Coder-2"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "（Coder-1と同様）"
+
+Agent tool:
+  name: "Coder-3"
+  team_name: "ticket-team"
+  model: sonnet
+  prompt: "（Coder-1と同様）"
 ```
 
-### 4. Reviewer指摘後、Coderが修正 → PR作成 → CodeRabbitループ
+### 2. ワークフロー進行
 
-Reviewerの指摘を受けて、各Coderが自分のブランチで:
-1. 指摘を修正してコミット
-2. /create-pr でPR作成
-3. CodeRabbitループ（最大3回転）
-4. Notionステータスを「レビュー依頼」に更新
+チームメンバーへの指示はメッセージで行う:
+
+```
+Phase 1:
+  → Plannerにメッセージ: "チケットを取得してグルーピングしてください"
+  → Plannerが結果を報告
+  → Leaderが承認
+  → Plannerにメッセージ: "承認OK。worktreeを作成してCoderに指示を出してください"
+
+Phase 2:
+  → Planner → 各Coderにメッセージで具体的なタスク指示
+  → 各Coderが並列で実装
+  → 完了報告はPlannerに返す
+
+Phase 3:
+  → 各Coderが自分のブランチで /pr-review を実行し、指摘を修正
+  → Coder → PR作成 → CodeRabbitループ → PR URLをPlannerに報告
+  → 複数ブランチは並列で処理
+  → 全Coderの完了後、Plannerが全チケットのNotionステータスをスクリプトで一括更新
+```
+
+### チーム操作
+
+- **Shift+Down** — チームメンバーを切り替え
+- **Escape** — メンバーの現在の作業を中断
+- **Ctrl+T** — タスクリスト表示
+- メンバーに直接メッセージを送るには、そのメンバーに切り替えてから入力
 
 ## 制約事項
 
 - **最大並列数**: Coder 3台まで
+- **チーム構成**: Leader 1 + Planner 1 + Coder 最大3 + Reviewer 0〜2（大規模変更グループごとに1名）
 - **CodeRabbitループ**: 最大3回転
 - **グループ数**: 1回の実行で最大3グループ（超える場合は優先度順に選定）
 - **エスカレーション**: Planner → Leader → ユーザーの順
 - **Leaderは実装しない**: 判断と承認のみ
 - **Plannerは実装しない**: 計画と指示出しのみ
 
-## クリーンアップ
+## クリーンアップ（チーム解散時に必ず実行）
 
-全Phase完了後:
+全Phase完了後、**チーム解散前にPlannerが必ず実行する**:
 
 ```bash
-# マージ済みworktreeの削除
-git gtr clean --merged --yes
-
-# 個別削除
+# 使用した全worktreeを削除
 git gtr rm <ブランチ名> --delete-branch --yes
+# ※ 各グループのブランチに対して実行
+
+# または、マージ済みworktreeを一括削除
+git gtr clean --merged --yes
 ```
+
+> ※ worktreeを残したままチームを解散しない。ディスクとブランチが散乱する原因になる。
 
 ## トラブルシューティング
 
