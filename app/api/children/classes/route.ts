@@ -29,6 +29,10 @@ export async function GET(request: NextRequest) {
       }
       facility_id = current_facility_id;
     } else {
+      // site_admin/company_adminのみが施設パラメータを使用可能
+      if (role !== 'site_admin' && role !== 'company_admin') {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
       facility_id = facilityIdParam || current_facility_id || '';
       if (!facility_id) {
         return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });

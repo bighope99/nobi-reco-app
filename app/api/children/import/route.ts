@@ -111,6 +111,10 @@ export async function POST(request: NextRequest) {
       }
       targetFacilityId = current_facility_id;
     } else {
+      // site_admin/company_adminのみが施設パラメータを使用可能
+      if (role !== 'site_admin' && role !== 'company_admin') {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
       targetFacilityId = facilityId || current_facility_id || '';
     }
 

@@ -175,9 +175,6 @@ export default function ChildImportPage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null
     setSelectedFile(file)
-    if (file) {
-      requestPreview(file)
-    }
   }
 
   useEffect(() => {
@@ -201,7 +198,6 @@ export default function ChildImportPage() {
     const file = event.dataTransfer.files?.[0]
     if (file && file.name.endsWith('.csv')) {
       setSelectedFile(file)
-      requestPreview(file)
     }
   }
 
@@ -234,7 +230,9 @@ export default function ChildImportPage() {
       }
 
       setImportResult(json.data)
-      setSelectedFacilityId("")
+      if (session?.role !== 'facility_admin' && session?.role !== 'staff') {
+        setSelectedFacilityId("")
+      }
       setSelectedSchoolId("")
       setSelectedClassId("")
       setSelectedFile(null)
