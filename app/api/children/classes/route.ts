@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { role, current_facility_id } = metadata;
+    const { role, current_facility_id, company_id } = metadata;
 
     // リクエストパラメータ取得（facility_idパラメータがあればそれを使用）
     const searchParams = request.nextUrl.searchParams;
@@ -32,6 +32,18 @@ export async function GET(request: NextRequest) {
       facility_id = facilityIdParam || current_facility_id || '';
       if (!facility_id) {
         return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
+      }
+      if (role === 'company_admin') {
+        const { data: scopedFacility, error: scopeError } = await supabase
+          .from('m_facilities')
+          .select('id')
+          .eq('id', facility_id)
+          .eq('company_id', company_id)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (scopeError || !scopedFacility) {
+          return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+        }
       }
     }
 

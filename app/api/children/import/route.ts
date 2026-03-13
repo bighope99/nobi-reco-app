@@ -101,18 +101,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'CSVファイルが必要です' }, { status: 400 });
     }
 
-    const { role, current_facility_id } = metadata;
+    const { role, current_facility_id, company_id } = metadata;
 
     // facility_admin/staffは自施設のみ（フロントからのfacility_idパラメータを無視）
     let targetFacilityId: string;
     if (role === 'facility_admin' || role === 'staff') {
-      targetFacilityId = current_facility_id!;
+      if (!current_facility_id) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      targetFacilityId = current_facility_id;
     } else {
       targetFacilityId = facilityId || current_facility_id || '';
     }
 
     if (!targetFacilityId) {
       return NextResponse.json({ success: false, error: '施設が未選択です' }, { status: 400 });
+    }
+
+    if (role === 'company_admin') {
+      const { data: scopedFacility, error: scopeError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', targetFacilityId)
+        .eq('company_id', company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (scopeError || !scopedFacility) {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     const [schoolCheck, classCheck] = await Promise.all([
