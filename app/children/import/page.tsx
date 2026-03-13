@@ -64,6 +64,7 @@ export default function ChildImportPage() {
   } | null>(null)
   const [approvedSiblingPhones, setApprovedSiblingPhones] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -208,7 +209,7 @@ export default function ChildImportPage() {
     }
 
     try {
-      setLoading(true)
+      setImporting(true)
       setError(null)
       setImportResult(null)
 
@@ -245,7 +246,7 @@ export default function ChildImportPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "インポートに失敗しました")
     } finally {
-      setLoading(false)
+      setImporting(false)
     }
   }
 
@@ -274,6 +275,14 @@ export default function ChildImportPage() {
       title="CSV一括登録"
       subtitle="CSVファイルから子どもを一括登録"
     >
+      {/* 保存中オーバーレイ */}
+      {importing && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="h-12 w-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <p className="mt-4 text-sm font-medium text-foreground">取り込み中...</p>
+          <p className="mt-1 text-xs text-muted-foreground">完了するまでページを移動しないでください</p>
+        </div>
+      )}
       <div className="mx-auto max-w-5xl space-y-6">
         {/* CSVアップロードとテンプレート（プレビュー非表示時のみ） */}
         {!selectedFile && !previewLoading && !previewResult && (
@@ -358,19 +367,19 @@ export default function ChildImportPage() {
                   className="font-semibold shadow-sm transition-all hover:shadow-md min-w-[120px]"
                   onClick={handleImport}
                   disabled={
-                    loading ||
+                    importing ||
                     previewLoading ||
                     !previewResult ||
                     previewResult.failure_count > 0
                   }
                 >
-                  {loading ? "取り込み中..." : "保存する"}
+                  {importing ? "取り込み中..." : "保存する"}
                 </Button>
                 <Button
                   variant="outline"
                   className="font-semibold min-w-[120px]"
                   onClick={handleCancel}
-                  disabled={loading || previewLoading}
+                  disabled={importing || previewLoading}
                 >
                   キャンセル
                 </Button>
