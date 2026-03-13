@@ -112,3 +112,68 @@
 - （必要に応じて追記）
 
 ---
+
+## セッション: 2026-03-13T00:33:43Z
+
+- session_id: `bceb1def-6520-4188-a07f-0876ffa95871`
+- project: `nobi-reco-app`
+- branch: `test/notion-agents`
+- started_at: `2026-03-13T00:26:21Z`
+- ended_at: `2026-03-13T00:33:43Z`
+- duration_minutes: 7
+- changes: 0
+
+### 変更ファイル
+- （なし）
+
+### 重要な変更（important=true）
+- （なし）
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---
+
+## セッション: 2026-03-13T06:52:36Z
+
+- session_id: `f45d7ae0-c2b3-4798-9d09-290bebef7cdb`
+- project: `nobi-reco-app`
+- branch: `test/notion-agents`
+- started_at: `2026-03-13T06:46:58Z`
+- ended_at: `2026-03-13T06:52:36Z`
+- duration_minutes: 5
+- changes: 3
+- important_changes: 1
+
+### 変更ファイル
+- `.claude/skills/create-pr/SKILL.md`
+- `.claude/skills/pr-review/SKILL.md`
+- `CLAUDE.md`
+
+### 重要な変更（important=true）
+- `CLAUDE.md`
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---
+
+## セッション: 2026-03-13T07:01:40Z
+
+- session_id: `65a2fe81-1cc7-4fd9-b9a9-f06c008ce8e5`
+- project: `nobi-reco-app`
+- branch: `test/notion-agents`
+- started_at: `2026-03-13T07:01:06Z`
+- ended_at: `2026-03-13T07:01:40Z`
+- changes: 0
+
+### 変更ファイル
+- （なし）
+
+### 重要な変更（important=true）
+- （なし）
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---
