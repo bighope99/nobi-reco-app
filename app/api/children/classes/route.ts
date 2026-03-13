@@ -9,11 +9,31 @@ export async function GET(request: NextRequest) {
 
     // 認証チェック（JWT方式に統一）
     const metadata = await getAuthenticatedUserMetadata();
-    if (!metadata || !metadata.current_facility_id) {
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const facility_id = metadata.current_facility_id;
+    const { role, current_facility_id } = metadata;
+
+    // リクエストパラメータ取得（facility_idパラメータがあればそれを使用）
+    const searchParams = request.nextUrl.searchParams;
+    const facilityIdParam = searchParams.get('facility_id');
+
+    // 施設IDの決定
+    // facility_admin/staffは自施設のみ（パラメータは無視）
+    // site_admin/company_adminはパラメータ優先、なければJWTから
+    let facility_id: string;
+    if (role === 'facility_admin' || role === 'staff') {
+      if (!current_facility_id) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      facility_id = current_facility_id;
+    } else {
+      facility_id = facilityIdParam || current_facility_id || '';
+      if (!facility_id) {
+        return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
+      }
+    }
 
     // クラス一覧取得（施設に紐づくクラス）
     const { data: classesData, error: classesError } = await supabase

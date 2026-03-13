@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Upload, Download } from "lucide-react"
+import { useSession } from "@/hooks/useSession"
 
 type FacilityOption = { facility_id: string; name: string }
 type SchoolOption = { school_id: string; name: string }
@@ -40,6 +41,7 @@ type SiblingCandidate = {
 }
 
 export default function ChildImportPage() {
+  const session = useSession()
   const [facilities, setFacilities] = useState<FacilityOption[]>([])
   const [schools, setSchools] = useState<SchoolOption[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
@@ -64,40 +66,63 @@ export default function ChildImportPage() {
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  // 初期ロード: 施設一覧のみ取得
   useEffect(() => {
-    const fetchOptions = async () => {
+    const fetchFacilities = async () => {
       try {
         setLoading(true)
         setError(null)
+        const response = await fetch("/api/facilities")
+        const json = await response.json()
+        if (!response.ok || !json.success) {
+          throw new Error(json.error || "施設の取得に失敗しました")
+        }
+        setFacilities(json.data?.facilities ?? [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "取得に失敗しました")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchFacilities()
+  }, [])
 
-        const [facilitiesResponse, schoolsResponse, classesResponse] =
-          await Promise.all([
-            fetch("/api/facilities"),
-            fetch("/api/schools"),
-            fetch("/api/children/classes"),
-          ])
+  // sessionロード時: facility_admin/staffは自施設を自動選択
+  useEffect(() => {
+    if (!session) return
+    if (session.role === 'facility_admin' || session.role === 'staff') {
+      if (session.current_facility_id) {
+        setSelectedFacilityId(session.current_facility_id)
+      }
+    }
+  }, [session])
 
-        const [facilitiesJson, schoolsJson, classesJson] = await Promise.all([
-          facilitiesResponse.json(),
+  // 施設変更時: 学校・クラスを再取得
+  useEffect(() => {
+    if (!selectedFacilityId) {
+      setSchools([])
+      setClasses([])
+      return
+    }
+    const fetchSchoolsAndClasses = async () => {
+      try {
+        const [schoolsResponse, classesResponse] = await Promise.all([
+          fetch(`/api/schools?facility_id=${selectedFacilityId}`),
+          fetch(`/api/children/classes?facility_id=${selectedFacilityId}`),
+        ])
+        const [schoolsJson, classesJson] = await Promise.all([
           schoolsResponse.json(),
           classesResponse.json(),
         ])
-
-        if (!facilitiesResponse.ok || !facilitiesJson.success) {
-          throw new Error(facilitiesJson.error || "施設の取得に失敗しました")
-        }
-
         if (!schoolsResponse.ok || !schoolsJson.success) {
           throw new Error(schoolsJson.error || "学校の取得に失敗しました")
         }
-
         if (!classesResponse.ok || !classesJson.success) {
           throw new Error(classesJson.error || "クラスの取得に失敗しました")
         }
-
-        setFacilities(facilitiesJson.data?.facilities ?? [])
         setSchools(
           (schoolsJson.data?.schools ?? []).map((school: any) => ({
             school_id: school.school_id,
@@ -107,15 +132,15 @@ export default function ChildImportPage() {
         setClasses(classesJson.data?.classes ?? [])
       } catch (err) {
         setError(err instanceof Error ? err.message : "取得に失敗しました")
-      } finally {
-        setLoading(false)
       }
     }
+    // 施設変更時は学校・クラス選択をリセット
+    setSelectedSchoolId("")
+    setSelectedClassId("")
+    fetchSchoolsAndClasses()
+  }, [selectedFacilityId])
 
-    fetchOptions()
-  }, [])
-
-  const requestPreview = async (file: File) => {
+  const requestPreview = useCallback(async (file: File) => {
     try {
       setPreviewLoading(true)
       setError(null)
@@ -145,7 +170,7 @@ export default function ChildImportPage() {
     } finally {
       setPreviewLoading(false)
     }
-  }
+  }, [selectedFacilityId, selectedSchoolId, selectedClassId])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null
@@ -159,7 +184,26 @@ export default function ChildImportPage() {
     if (selectedFile) {
       requestPreview(selectedFile)
     }
-  }, [selectedFacilityId, selectedSchoolId, selectedClassId])
+  }, [selectedFile, selectedFacilityId, selectedSchoolId, selectedClassId, requestPreview])
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file && file.name.endsWith('.csv')) {
+      setSelectedFile(file)
+      requestPreview(file)
+    }
+  }
 
   const handleImport = async () => {
     if (!selectedFile) {
@@ -241,7 +285,12 @@ export default function ChildImportPage() {
                 <CardTitle className="text-lg font-semibold">CSVファイル</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex h-44 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-gradient-to-br from-muted/30 to-muted/60 transition-all hover:border-primary/50 hover:bg-muted/80">
+                <div
+                  className={`flex h-44 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-gradient-to-br from-muted/30 to-muted/60 transition-all hover:border-primary/50 hover:bg-muted/80 ${isDragging ? 'border-primary bg-primary/5' : ''}`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                   <Upload className="mb-3 h-10 w-10 text-muted-foreground/70" />
                   <p className="text-sm font-medium text-foreground/80">
                     CSVファイルをドラッグ＆ドロップ
@@ -373,7 +422,7 @@ export default function ChildImportPage() {
                     <Select
                       value={selectedFacilityId}
                       onValueChange={setSelectedFacilityId}
-                      disabled={loading || previewLoading}
+                      disabled={loading || previewLoading || session?.role === 'facility_admin' || session?.role === 'staff'}
                     >
                       <SelectTrigger className="bg-background/80 backdrop-blur">
                         <SelectValue placeholder="施設を選択" />
