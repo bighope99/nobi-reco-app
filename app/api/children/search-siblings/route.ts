@@ -60,9 +60,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to search guardians' }, { status: 500 });
     }
 
-    const childIds = (guardians || []).flatMap((g: { _child_guardian: Array<{ child_id: string }> }) =>
-      g._child_guardian.map((link) => link.child_id)
-    );
+    const childIds = [...new Set(
+      (guardians || []).flatMap((g: { _child_guardian: Array<{ child_id: string }> }) =>
+        g._child_guardian.map((link) => link.child_id)
+      )
+    )];
 
     if (childIds.length === 0) {
       return NextResponse.json({
@@ -106,9 +108,6 @@ export async function POST(request: NextRequest) {
       console.error('Children search error:', childrenError);
       return NextResponse.json({ error: 'Failed to search children' }, { status: 500 });
     }
-
-    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-  
 
     // フィルタリング（編集モードの場合は本人を除外）
     const candidates = (childrenData || [])
