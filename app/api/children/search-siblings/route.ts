@@ -33,9 +33,37 @@ export async function POST(request: NextRequest) {
     // 電話番号の正規化
     const normalizedPhone = normalizePhone(phone);
 
-    // 検索用ハッシュテーブルから電話番号で検索
-    const childIds = await searchByPhone(supabase, 'child', normalizedPhone);
-    
+    // guardian エンティティタイプで電話番号検索（phone は guardian でのみインデックスされている）
+    const guardianIds = await searchByPhone(supabase, 'guardian', normalizedPhone);
+
+    if (guardianIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          found: false,
+          candidates: [],
+          total_found: 0,
+        },
+      });
+    }
+
+    // 対象施設の guardian を取得し、linked child_ids を取得
+    const { data: guardians, error: guardiansError } = await supabase
+      .from('m_guardians')
+      .select('id, _child_guardian(child_id)')
+      .eq('facility_id', facility_id)
+      .in('id', guardianIds)
+      .is('deleted_at', null);
+
+    if (guardiansError) {
+      console.error('Guardians search error:', guardiansError);
+      return NextResponse.json({ error: 'Failed to search guardians' }, { status: 500 });
+    }
+
+    const childIds = (guardians || []).flatMap((g: { _child_guardian: Array<{ child_id: string }> }) =>
+      g._child_guardian.map((link) => link.child_id)
+    );
+
     if (childIds.length === 0) {
       return NextResponse.json({
         success: true,
