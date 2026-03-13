@@ -33,6 +33,8 @@
     ├── 📝 記録管理 (/records)
     │   ├── /records/status - 記録状況一覧（本日の入力状況）
     │   ├── /records/activity - 活動記録入力（今日の全体活動）
+    │   ├── /records/activity/history - 活動記録履歴（過去記録の検索・閲覧）
+    │   ├── /records/personal/history - 個別観察記録履歴（過去記録の検索・閲覧）
     │   ├── /records/observation/:childId - 子ども観察記録（個別の様子）
     │   └── /records/voice/:childId - 子どもの声記録
     │
