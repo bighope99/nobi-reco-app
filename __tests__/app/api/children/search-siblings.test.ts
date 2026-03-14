@@ -38,15 +38,40 @@ const mockSearchByPhone = searchByPhone as jest.MockedFunction<typeof searchByPh
 
 /**
  * Supabase Mock Builder for POST /api/children/search-siblings
+ *
+ * The route executes two queries in sequence:
+ *   1. m_guardians: .select('id, _child_guardian(child_id)').eq('facility_id', ...).in('id', guardianIds).is('deleted_at', null)
+ *   2. m_children:  .select(...).eq(...).eq(...).in(...).is(...)
  */
 const createSupabaseMock = (options: {
   childrenData?: any[];
   childrenError?: any;
+  guardiansData?: Array<{ id: string; _child_guardian: Array<{ child_id: string }> }>;
+  guardiansError?: any;
 }) => {
-  const { childrenData = [], childrenError = null } = options;
+  const {
+    childrenData = [],
+    childrenError = null,
+    guardiansData,
+    guardiansError = null,
+  } = options;
 
   return {
     from: jest.fn((table: string) => {
+      if (table === 'm_guardians') {
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              in: jest.fn().mockReturnValue({
+                is: jest.fn().mockResolvedValue({
+                  data: guardiansData ?? [],
+                  error: guardiansError,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
       if (table === 'm_children') {
         return {
           select: jest.fn().mockReturnValue({
@@ -99,7 +124,11 @@ describe('POST /api/children/search-siblings', () => {
         },
       ];
 
-      const supabase = createSupabaseMock({ childrenData });
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
+      const supabase = createSupabaseMock({
+        childrenData,
+        guardiansData: [{ id: 'guardian-1', _child_guardian: [{ child_id: 'child-1' }] }],
+      });
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
@@ -108,7 +137,6 @@ describe('POST /api/children/search-siblings', () => {
         current_facility_id: 'facility-1',
         current_company_id: 'company-1',
       });
-      mockSearchByPhone.mockResolvedValue(['child-1']);
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
         method: 'POST',
@@ -149,7 +177,11 @@ describe('POST /api/children/search-siblings', () => {
         },
       ];
 
-      const supabase = createSupabaseMock({ childrenData });
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
+      const supabase = createSupabaseMock({
+        childrenData,
+        guardiansData: [{ id: 'guardian-1', _child_guardian: [{ child_id: 'child-2' }] }],
+      });
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
@@ -158,7 +190,6 @@ describe('POST /api/children/search-siblings', () => {
         current_facility_id: 'facility-1',
         current_company_id: 'company-1',
       });
-      mockSearchByPhone.mockResolvedValue(['child-2']);
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
         method: 'POST',
@@ -220,7 +251,16 @@ describe('POST /api/children/search-siblings', () => {
         },
       ];
 
-      const supabase = createSupabaseMock({ childrenData });
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
+      const supabase = createSupabaseMock({
+        childrenData,
+        guardiansData: [
+          {
+            id: 'guardian-1',
+            _child_guardian: [{ child_id: 'child-1' }, { child_id: 'child-2' }],
+          },
+        ],
+      });
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
@@ -229,7 +269,6 @@ describe('POST /api/children/search-siblings', () => {
         current_facility_id: 'facility-1',
         current_company_id: 'company-1',
       });
-      mockSearchByPhone.mockResolvedValue(['child-1', 'child-2']);
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
         method: 'POST',
@@ -290,7 +329,16 @@ describe('POST /api/children/search-siblings', () => {
         },
       ];
 
-      const supabase = createSupabaseMock({ childrenData });
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
+      const supabase = createSupabaseMock({
+        childrenData,
+        guardiansData: [
+          {
+            id: 'guardian-1',
+            _child_guardian: [{ child_id: 'child-1' }, { child_id: 'child-2' }],
+          },
+        ],
+      });
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
@@ -299,7 +347,6 @@ describe('POST /api/children/search-siblings', () => {
         current_facility_id: 'facility-1',
         current_company_id: 'company-1',
       });
-      mockSearchByPhone.mockResolvedValue(['child-1', 'child-2']);
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
         method: 'POST',
@@ -318,7 +365,9 @@ describe('POST /api/children/search-siblings', () => {
       expect(json.data.candidates[0].child_id).toBe('child-2');
     });
 
-    it('should return empty candidates when no phone match', async () => {
+    it('should return empty candidates when no phone match (guardianIds is empty)', async () => {
+      // guardianIds が空 → m_guardians クエリは実行されずに早期 return
+      mockSearchByPhone.mockResolvedValue([]); // 該当 guardian なし
       const supabase = createSupabaseMock({ childrenData: [] });
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
@@ -328,7 +377,6 @@ describe('POST /api/children/search-siblings', () => {
         current_facility_id: 'facility-1',
         current_company_id: 'company-1',
       });
-      mockSearchByPhone.mockResolvedValue([]); // 検索結果なし
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
         method: 'POST',
@@ -346,6 +394,92 @@ describe('POST /api/children/search-siblings', () => {
       expect(json.data.found).toBe(false);
       expect(json.data.candidates).toEqual([]);
       expect(json.data.total_found).toBe(0);
+    });
+
+    it('should return empty candidates when guardian exists but has no linked children', async () => {
+      // guardian は見つかったが _child_guardian に紐付く child がいない
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
+      const supabase = createSupabaseMock({
+        guardiansData: [{ id: 'guardian-1', _child_guardian: [] }], // 紐付く child なし
+      });
+      mockCreateClient.mockResolvedValue(supabase as any);
+      mockGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-1',
+        email: 'test@example.com',
+        role: 'staff',
+        current_facility_id: 'facility-1',
+        current_company_id: 'company-1',
+      });
+
+      const request = new NextRequest('http://localhost/api/children/search-siblings', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: '090-1234-5678',
+          child_id: null,
+        }),
+      });
+
+      const response = await POST(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.data.found).toBe(false);
+      expect(json.data.candidates).toEqual([]);
+      expect(json.data.total_found).toBe(0);
+    });
+
+    it('should deduplicate children when multiple guardians share the same child', async () => {
+      // 複数の guardian が同じ child を持つ場合、child は重複なく1件だけ返る
+      const childrenData = [
+        {
+          id: 'child-1',
+          family_name: 'Ito',
+          given_name: 'Saburo',
+          family_name_kana: 'イトウ',
+          given_name_kana: 'サブロウ',
+          birth_date: '2016-07-01',
+          enrollment_status: 'enrolled',
+          photo_url: null,
+          parent_phone: '09033334444',
+          _child_class: [],
+        },
+      ];
+
+      mockSearchByPhone.mockResolvedValue(['guardian-1', 'guardian-2']);
+      const supabase = createSupabaseMock({
+        childrenData,
+        // 両親それぞれが child-1 に紐付いている → Set で重複排除される
+        guardiansData: [
+          { id: 'guardian-1', _child_guardian: [{ child_id: 'child-1' }] },
+          { id: 'guardian-2', _child_guardian: [{ child_id: 'child-1' }] }, // same child
+        ],
+      });
+      mockCreateClient.mockResolvedValue(supabase as any);
+      mockGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-1',
+        email: 'test@example.com',
+        role: 'staff',
+        current_facility_id: 'facility-1',
+        current_company_id: 'company-1',
+      });
+
+      const request = new NextRequest('http://localhost/api/children/search-siblings', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: '090-3333-4444',
+          child_id: null,
+        }),
+      });
+
+      const response = await POST(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.data.found).toBe(true);
+      expect(json.data.candidates).toHaveLength(1);
+      expect(json.data.candidates[0].child_id).toBe('child-1');
     });
   });
 
@@ -450,12 +584,12 @@ describe('POST /api/children/search-siblings', () => {
   });
 
   describe('エラーハンドリング', () => {
-    it('should return 500 when database query fails', async () => {
+    it('should return 500 when m_guardians query fails', async () => {
+      // m_guardians クエリ自体がエラーになるケース
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
       const supabase = createSupabaseMock({
-        childrenData: null,
-        childrenError: { message: 'Database error' },
+        guardiansError: { message: 'Database error' },
       });
-
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
@@ -464,7 +598,37 @@ describe('POST /api/children/search-siblings', () => {
         current_facility_id: 'facility-1',
         current_company_id: 'company-1',
       });
-      mockSearchByPhone.mockResolvedValue(['child-1']);
+
+      const request = new NextRequest('http://localhost/api/children/search-siblings', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: '090-1234-5678',
+        }),
+      });
+
+      const response = await POST(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(json.error).toBe('Failed to search guardians');
+    });
+
+    it('should return 500 when m_children query fails', async () => {
+      // m_guardians は成功するが m_children クエリがエラーになるケース
+      mockSearchByPhone.mockResolvedValue(['guardian-1']);
+      const supabase = createSupabaseMock({
+        childrenData: null,
+        childrenError: { message: 'Database error' },
+        guardiansData: [{ id: 'guardian-1', _child_guardian: [{ child_id: 'child-1' }] }],
+      });
+      mockCreateClient.mockResolvedValue(supabase as any);
+      mockGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-1',
+        email: 'test@example.com',
+        role: 'staff',
+        current_facility_id: 'facility-1',
+        current_company_id: 'company-1',
+      });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
         method: 'POST',

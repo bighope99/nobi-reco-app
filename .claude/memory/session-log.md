@@ -177,3 +177,32 @@
 - （必要に応じて追記）
 
 ---
+
+## セッション: 2026-03-14T08:13:34Z
+
+- session_id: `session-1773472836`
+- project: `fix-sibling-search-bugs`
+- branch: `(no git)`
+- started_at: `2026-03-14T07:20:36Z`
+- ended_at: `2026-03-14T08:13:34Z`
+- duration_minutes: 53
+- changes: 9
+- important_changes: 3
+
+### 変更ファイル
+- `C:\Users\bigho\.bashrc`
+- `C:\Users\bigho\.claude\plans\happy-seeking-mitten.md`
+- `app/api/children/route.ts`
+- `app/api/children/search-siblings/route.ts`
+- `app/api/children/[id]/summary/route.ts`
+- `__tests__/app/api/children/search-siblings.test.ts`
+- `__tests__/app/api/children/summary-classless.test.ts`
+
+### 重要な変更（important=true）
+- `__tests__/app/api/children/search-siblings.test.ts`
+- `__tests__/app/api/children/summary-classless.test.ts`
+
+### 次回への引き継ぎ（任意）
+- （必要に応じて追記）
+
+---

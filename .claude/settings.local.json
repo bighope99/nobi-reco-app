@@ -128,7 +128,13 @@
       "Bash(which codex:*)",
       "Bash(node_modules/.bin/tsc --noEmit --pretty -p /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-list-bugs/tsconfig.json 2>&1 | head -80)",
       "Bash(node_modules/.bin/tsc --noEmit --pretty -p /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-list-bugs/tsconfig.json 2>&1 | grep -E \"\\(children/page|api/children/route\\)\" | head -20)",
-      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-list-bugs && gh pr view 211 --comments --json comments --jq '[.comments[] | select\\(.author.login == \"coderabbitai[bot]\"\\) | .body]' 2>&1 | tail -200)"
+      "Bash(cd /home/nakamura_taiki/workspace/nobi-reco-app-worktrees/fix-children-list-bugs && gh pr view 211 --comments --json comments --jq '[.comments[] | select\\(.author.login == \"coderabbitai[bot]\"\\) | .body]' 2>&1 | tail -200)",
+      "Bash(powershell.exe -Command \"Test-Path $PROFILE\")",
+      "Bash(powershell.exe -Command \"Get-Content $PROFILE 2>$null\")",
+      "Bash(tasklist.exe:*)",
+      "Bash(powershell.exe -Command \"Get-ScheduledTask | Where-Object {$_TaskName -like ''*code*'' -or $_TaskName -like ''*vscode*''} | Select-Object TaskName, State\")",
+      "Bash(powershell.exe -Command \"Get-Process Code | Select-Object -First 1 | Format-List Path, CommandLine\")",
+      "Bash(wmic:*)"
     ],
     "deny": [],
     "ask": []

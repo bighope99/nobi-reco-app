@@ -140,6 +140,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
   const [siblingResult, setSiblingResult] = useState<any>(null);
+  const [siblings, setSiblings] = useState<Array<{child_id: string; name: string; relationship: string}>>([]);
   const [loading, setLoading] = useState(isEditMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,6 +286,11 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                 };
               })
             );
+          }
+
+          // 紐付け済み兄弟の初期化
+          if (data.siblings && data.siblings.length > 0) {
+            setSiblings(data.siblings);
           }
         }
       } catch (err) {
@@ -806,6 +812,26 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         onChange={(e: any) => setFormData({ ...formData, parent_email: e.target.value })}
                       />
                     </FieldGroup>
+
+                    {/* 紐付け済み兄弟リスト */}
+                    {siblings.length > 0 && (
+                      <div className="sm:col-span-2">
+                        <p className="text-xs font-medium text-slate-700 mb-2">紐付け済みの兄弟・姉妹</p>
+                        <div className="space-y-2">
+                          {siblings.map((sibling) => (
+                            <div key={sibling.child_id} className="flex items-center gap-3 bg-indigo-50/50 border border-indigo-100 rounded-lg px-3 py-2">
+                              <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                <Users size={14} className="text-indigo-500" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{sibling.name}</p>
+                                <p className="text-xs text-slate-500">{sibling.relationship}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* 兄弟紐づけトリガー */}
                     <FieldGroup label="携帯電話番号" required className="relative sm:col-span-2">
