@@ -206,7 +206,7 @@ export async function GET(request: NextRequest) {
           id,
           family_name,
           given_name,
-          _child_class!inner (
+          _child_class (
             m_classes (
               name,
               age_group

@@ -90,9 +90,9 @@ export async function POST(request: NextRequest) {
         enrollment_status,
         photo_url,
         parent_phone,
-        _child_class!inner (
+        _child_class (
           is_current,
-          m_classes!inner (
+          m_classes (
             id,
             name,
             age_group
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         return true;
       })
       .map((child: any) => {
-      const classInfo = child._child_class[0]?.m_classes;
+      const classInfo = child._child_class?.[0]?.m_classes;
 
       // 年齢計算
       const birthDate = new Date(child.birth_date);
