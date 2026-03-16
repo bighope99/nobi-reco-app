@@ -1,14 +1,21 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
-import { mockActivityHistory, mockClasses, mockStaff } from "@/lib/mock-data"
-import { Search, Calendar, ChevronDown } from "lucide-react"
+import { Search, ChevronDown } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
-const ITEMS_PER_PAGE = 20
+interface ActivityItem {
+  id: string
+  date: string
+  className: string
+  title: string
+  content: string
+  staffName: string
+  personalRecordCount: number
+}
 
 export default function ActivityHistoryClient() {
   const [fromDate, setFromDate] = useState("")
@@ -16,37 +23,80 @@ export default function ActivityHistoryClient() {
   const [selectedClass, setSelectedClass] = useState("all")
   const [selectedStaff, setSelectedStaff] = useState("all")
   const [keyword, setKeyword] = useState("")
-  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE)
 
-  const filteredHistory = useMemo(() => {
-    return mockActivityHistory.filter((item) => {
-      // Date filter
-      if (fromDate && item.date < fromDate) return false
-      if (toDate && item.date > toDate) return false
+  const [items, setItems] = useState<ActivityItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [loading, setLoading] = useState(false)
 
-      // Class filter
-      if (selectedClass !== "all" && item.className !== selectedClass) return false
+  const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
+  const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
 
-      // Staff filter
-      if (selectedStaff !== "all" && item.staffName !== selectedStaff) return false
+  useEffect(() => {
+    const fetchMeta = async () => {
+      const classRes = await fetch('/api/classes')
+      const classJson = await classRes.json()
+      if (classJson.success) setClasses(classJson.data?.classes || [])
 
-      // Keyword filter
-      if (keyword) {
-        const lowerKeyword = keyword.toLowerCase()
-        const matchesTitle = item.title.toLowerCase().includes(lowerKeyword)
-        const matchesContent = item.content.toLowerCase().includes(lowerKeyword)
-        if (!matchesTitle && !matchesContent) return false
+      const staffRes = await fetch('/api/users?is_active=true')
+      if (staffRes.ok) {
+        const staffJson = await staffRes.json()
+        if (staffJson.success) setStaffList(staffJson.data?.users || [])
       }
+    }
+    fetchMeta()
+  }, [])
 
-      return true
-    })
+  const fetchActivities = useCallback(async (newOffset: number, append: boolean) => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ limit: '20', offset: String(newOffset) })
+      if (fromDate) params.set('from_date', fromDate)
+      if (toDate) params.set('to_date', toDate)
+      if (selectedClass !== 'all') params.set('class_id', selectedClass)
+      if (selectedStaff !== 'all') params.set('staff_id', selectedStaff)
+      if (keyword.trim()) params.set('keyword', keyword.trim())
+
+      const res = await fetch(`/api/activities?${params}`)
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error)
+
+      const newItems: ActivityItem[] = json.data.activities.map((a: {
+        activity_id: string
+        activity_date: string
+        class_name?: string
+        title: string
+        content: string
+        created_by?: string
+        individual_record_count?: number
+      }) => ({
+        id: a.activity_id,
+        date: a.activity_date,
+        className: a.class_name || '',
+        title: a.title,
+        content: a.content,
+        staffName: a.created_by || '',
+        personalRecordCount: a.individual_record_count || 0,
+      }))
+
+      setItems(prev => append ? [...prev, ...newItems] : newItems)
+      setTotal(json.data.total)
+      setHasMore(json.data.has_more)
+      setOffset(newOffset)
+    } catch (err) {
+      console.error('Failed to fetch activities:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [fromDate, toDate, selectedClass, selectedStaff, keyword])
 
-  const displayedItems = filteredHistory.slice(0, displayCount)
-  const hasMore = displayCount < filteredHistory.length
+  useEffect(() => {
+    fetchActivities(0, false)
+  }, [fetchActivities])
 
   const handleLoadMore = () => {
-    setDisplayCount((prev) => prev + ITEMS_PER_PAGE)
+    fetchActivities(offset + 20, true)
   }
 
   return (
@@ -95,8 +145,8 @@ export default function ActivityHistoryClient() {
                 onChange={(e) => setSelectedClass(e.target.value)}
               >
                 <option value="all">すべて</option>
-                {mockClasses.map((c) => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -112,8 +162,8 @@ export default function ActivityHistoryClient() {
                 onChange={(e) => setSelectedStaff(e.target.value)}
               >
                 <option value="all">すべて</option>
-                {mockStaff.map((s) => (
-                  <option key={s.id} value={s.name}>{s.name}</option>
+                {staffList.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -138,10 +188,15 @@ export default function ActivityHistoryClient() {
         {/* List */}
         <div className="flex flex-col gap-4">
           <div className="text-sm text-slate-500 font-medium">
-            全 <span className="font-bold text-slate-800">{filteredHistory.length}</span> 件中 <span className="font-bold text-slate-800">{displayedItems.length}</span> 件を表示
+            全 <span className="font-bold text-slate-800">{total}</span> 件中{' '}
+            <span className="font-bold text-slate-800">{items.length}</span> 件を表示
           </div>
-          
-          {displayedItems.length === 0 ? (
+
+          {loading && items.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 border border-slate-200 rounded-xl bg-white">
+              読み込み中...
+            </div>
+          ) : items.length === 0 ? (
             <div className="py-12 text-center text-slate-500 border border-slate-200 rounded-xl bg-white">
               条件に一致する記録がありません。
             </div>
@@ -155,11 +210,11 @@ export default function ActivityHistoryClient() {
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[120px]">クラス</th>
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[300px]">活動内容</th>
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[120px]">記入者</th>
-                      {false && <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[100px]">個別記録</th>}
+                      <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[100px]">個別記録</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
-                    {displayedItems.map((item) => (
+                    {items.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
@@ -169,15 +224,13 @@ export default function ActivityHistoryClient() {
                           <div className="text-slate-700 line-clamp-3">{item.content}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{item.staffName}</td>
-                        {false && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                            {item.personalRecordCount > 0 ? (
-                              <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-bold text-xs">{item.personalRecordCount} 件</span>
-                            ) : (
-                              <span className="text-slate-400 bg-slate-50 px-3 py-1 rounded-full text-xs font-medium">--</span>
-                            )}
-                          </td>
-                        )}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          {item.personalRecordCount > 0 ? (
+                            <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-bold text-xs">{item.personalRecordCount} 件</span>
+                          ) : (
+                            <span className="text-slate-400 bg-slate-50 px-3 py-1 rounded-full text-xs font-medium">--</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -191,8 +244,9 @@ export default function ActivityHistoryClient() {
               variant="outline"
               className="mt-4 w-full border-slate-300 text-slate-600 py-6 font-bold hover:bg-slate-50 shadow-sm bg-white"
               onClick={handleLoadMore}
+              disabled={loading}
             >
-              もっと見る
+              {loading ? '読み込み中...' : 'もっと見る'}
             </Button>
           )}
         </div>

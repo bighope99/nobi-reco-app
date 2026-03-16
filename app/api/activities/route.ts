@@ -72,6 +72,10 @@ export async function GET(request: NextRequest) {
     const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
     const class_id = searchParams.get('class_id');
+    const from_date = searchParams.get('from_date');
+    const to_date = searchParams.get('to_date');
+    const staff_id = searchParams.get('staff_id');
+    const keyword = searchParams.get('keyword');
 
     // Parse pagination parameters
     const parsedLimit = parseInt(searchParams.get('limit') || '20');
@@ -121,7 +125,7 @@ export async function GET(request: NextRequest) {
           id,
           name
         )
-      `)
+      `, { count: 'exact' })
       .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .order('activity_date', { ascending: false })
@@ -136,6 +140,24 @@ export async function GET(request: NextRequest) {
     // クラスフィルター
     if (class_id) {
       query = query.eq('class_id', class_id);
+    }
+
+    // 日付範囲フィルター
+    if (from_date) {
+      query = query.gte('activity_date', from_date);
+    }
+    if (to_date) {
+      query = query.lte('activity_date', to_date);
+    }
+
+    // スタッフフィルター（created_by または recorded_by）
+    if (staff_id) {
+      query = query.or(`created_by.eq.${staff_id},recorded_by.eq.${staff_id}`);
+    }
+
+    // キーワードフィルター（content または title の部分一致）
+    if (keyword) {
+      query = query.or(`content.ilike.%${keyword}%,title.ilike.%${keyword}%`);
     }
 
     const { data: activities, error, count } = await query;

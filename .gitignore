@@ -30,6 +30,10 @@ yarn-error.log*
 .ui_file
 .mcp.json
 .work
+.claude/state
+.claude/sessions
+.claude/memory
+.claude/logs
 setting.local.json
 
 # typescript

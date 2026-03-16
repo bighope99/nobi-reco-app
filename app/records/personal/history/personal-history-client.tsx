@@ -1,15 +1,34 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
-import { mockPersonalHistory, mockClasses, mockStaff } from "@/lib/mock-data"
-import { Search, Calendar, ChevronDown, User } from "lucide-react"
+import { Search, ChevronDown, User } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
-const ITEMS_PER_PAGE = 20
-const GRADES = ["すべて", "0歳児", "1歳児", "2歳児", "3歳児", "4歳児", "5歳児"]
+const GRADES = [
+  { value: "", label: "すべて" },
+  { value: "1", label: "1年生" },
+  { value: "2", label: "2年生" },
+  { value: "3", label: "3年生" },
+  { value: "4", label: "4年生" },
+  { value: "5", label: "5年生" },
+  { value: "6", label: "6年生" },
+]
+
+interface PersonalItem {
+  id: string
+  date: string
+  childName: string
+  className: string | null
+  grade: number | null
+  gradeLabel: string
+  category: string | null
+  categoryColor: string | null
+  content: string
+  staffName: string
+}
 
 export default function PersonalHistoryClient() {
   const [fromDate, setFromDate] = useState("")
@@ -17,46 +36,90 @@ export default function PersonalHistoryClient() {
   const [selectedClass, setSelectedClass] = useState("all")
   const [selectedStaff, setSelectedStaff] = useState("all")
   const [childName, setChildName] = useState("")
-  const [selectedGrade, setSelectedGrade] = useState("すべて")
+  const [selectedGrade, setSelectedGrade] = useState("")
   const [keyword, setKeyword] = useState("")
-  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE)
 
-  const filteredHistory = useMemo(() => {
-    return mockPersonalHistory.filter((item) => {
-      // Date filter
-      if (fromDate && item.date < fromDate) return false
-      if (toDate && item.date > toDate) return false
+  const [items, setItems] = useState<PersonalItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [loading, setLoading] = useState(false)
 
-      // Class filter
-      if (selectedClass !== "all" && item.className !== selectedClass) return false
+  const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
+  const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
 
-      // Staff filter
-      if (selectedStaff !== "all" && item.staffName !== selectedStaff) return false
+  const fetchObservations = useCallback(async (newOffset: number, append: boolean) => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ limit: '20', offset: String(newOffset) })
+      if (fromDate) params.set('from_date', fromDate)
+      if (toDate) params.set('to_date', toDate)
+      if (selectedClass !== 'all') params.set('class_id', selectedClass)
+      if (selectedStaff !== 'all') params.set('staff_id', selectedStaff)
+      if (childName.trim()) params.set('child_name', childName.trim())
+      if (selectedGrade) params.set('grade', selectedGrade)
+      if (keyword.trim()) params.set('keyword', keyword.trim())
 
-      // Grade filter
-      if (selectedGrade !== "すべて" && item.grade !== selectedGrade) return false
+      const res = await fetch(`/api/records/personal?${params}`)
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error)
 
-      // Child Name filter (partial match)
-      if (childName) {
-        const lowerName = childName.toLowerCase()
-        if (!item.childName.toLowerCase().includes(lowerName)) return false
-      }
+      const newItems: PersonalItem[] = json.data.observations.map((o: {
+        id: string
+        observation_date: string
+        child_name: string
+        class_name?: string
+        grade?: number
+        grade_label?: string
+        category?: string
+        category_color?: string
+        content: string
+        staff_name?: string
+      }) => ({
+        id: o.id,
+        date: o.observation_date,
+        childName: o.child_name,
+        className: o.class_name || null,
+        grade: o.grade || null,
+        gradeLabel: o.grade_label || '',
+        category: o.category || null,
+        categoryColor: o.category_color || null,
+        content: o.content,
+        staffName: o.staff_name || '',
+      }))
 
-      // Keyword filter
-      if (keyword) {
-        const lowerKeyword = keyword.toLowerCase()
-        if (!item.content.toLowerCase().includes(lowerKeyword)) return false
-      }
-
-      return true
-    })
+      setItems(prev => append ? [...prev, ...newItems] : newItems)
+      setTotal(json.data.total)
+      setHasMore(json.data.has_more)
+      setOffset(newOffset)
+    } catch (err) {
+      console.error('Failed to fetch observations:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [fromDate, toDate, selectedClass, selectedStaff, childName, selectedGrade, keyword])
 
-  const displayedItems = filteredHistory.slice(0, displayCount)
-  const hasMore = displayCount < filteredHistory.length
+  useEffect(() => {
+    fetchObservations(0, false)
+  }, [fetchObservations])
+
+  useEffect(() => {
+    const fetchMeta = async () => {
+      const classRes = await fetch('/api/classes')
+      const classJson = await classRes.json()
+      if (classJson.success) setClasses(classJson.data?.classes || [])
+
+      const staffRes = await fetch('/api/users?is_active=true')
+      if (staffRes.ok) {
+        const staffJson = await staffRes.json()
+        if (staffJson.success) setStaffList(staffJson.data?.users || [])
+      }
+    }
+    fetchMeta()
+  }, [])
 
   const handleLoadMore = () => {
-    setDisplayCount((prev) => prev + ITEMS_PER_PAGE)
+    fetchObservations(offset + 20, true)
   }
 
   return (
@@ -106,8 +169,8 @@ export default function PersonalHistoryClient() {
                   onChange={(e) => setSelectedClass(e.target.value)}
                 >
                   <option value="all">すべて</option>
-                  {mockClasses.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -123,7 +186,7 @@ export default function PersonalHistoryClient() {
                   onChange={(e) => setSelectedGrade(e.target.value)}
                 >
                   {GRADES.map((g) => (
-                    <option key={g} value={g}>{g}</option>
+                    <option key={g.value} value={g.value}>{g.label}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -139,15 +202,15 @@ export default function PersonalHistoryClient() {
                   onChange={(e) => setSelectedStaff(e.target.value)}
                 >
                   <option value="all">すべて</option>
-                  {mockStaff.map((s) => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
               </div>
             </div>
           </div>
-          
+
           <div className="flex flex-col md:flex-row gap-4">
             <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[200px]">
               <label className="text-xs font-bold text-slate-500">児童名</label>
@@ -182,10 +245,15 @@ export default function PersonalHistoryClient() {
         {/* List */}
         <div className="flex flex-col gap-4">
           <div className="text-sm text-slate-500 font-medium">
-            全 <span className="font-bold text-slate-800">{filteredHistory.length}</span> 件中 <span className="font-bold text-slate-800">{displayedItems.length}</span> 件を表示
+            全 <span className="font-bold text-slate-800">{total}</span> 件中{' '}
+            <span className="font-bold text-slate-800">{items.length}</span> 件を表示
           </div>
-          
-          {displayedItems.length === 0 ? (
+
+          {loading && items.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 border border-slate-200 rounded-xl bg-white">
+              読み込み中...
+            </div>
+          ) : items.length === 0 ? (
             <div className="py-12 text-center text-slate-500 border border-slate-200 rounded-xl bg-white">
               条件に一致する記録がありません。
             </div>
@@ -202,7 +270,7 @@ export default function PersonalHistoryClient() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
-                    {displayedItems.map((item) => (
+                    {items.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -211,18 +279,20 @@ export default function PersonalHistoryClient() {
                             {item.childName}
                           </div>
                           <div className="text-xs text-slate-500 mt-1 ml-[22px] flex items-center gap-1">
-                            <span>{item.className}</span>
-                            <span>/</span>
-                            <span>{item.grade}</span>
+                            {item.className && <span>{item.className}</span>}
+                            {item.className && item.gradeLabel && <span>/</span>}
+                            {item.gradeLabel && <span>{item.gradeLabel}</span>}
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-700 text-sm whitespace-pre-wrap">{item.content}</div>
-                          <div className="mt-2">
-                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-bold border border-amber-100">
-                              {item.category}
-                            </span>
-                          </div>
+                          {item.category && (
+                            <div className="mt-2">
+                              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-bold border border-amber-100">
+                                {item.category}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{item.staffName}</td>
                       </tr>
@@ -238,6 +308,7 @@ export default function PersonalHistoryClient() {
               variant="outline"
               className="mt-4 w-full border-slate-300 text-slate-600 py-6 font-bold hover:bg-slate-50 shadow-sm bg-white"
               onClick={handleLoadMore}
+              disabled={loading}
             >
               もっと見る
             </Button>
