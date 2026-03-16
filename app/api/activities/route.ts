@@ -74,7 +74,8 @@ export async function GET(request: NextRequest) {
     const class_id = searchParams.get('class_id');
     const from_date = searchParams.get('from_date');
     const to_date = searchParams.get('to_date');
-    const staff_id = searchParams.get('staff_id');
+    const staff_id_raw = searchParams.get('staff_id');
+    const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
     const keyword = searchParams.get('keyword');
 
     // Parse pagination parameters
@@ -155,9 +156,9 @@ export async function GET(request: NextRequest) {
       query = query.or(`created_by.eq.${staff_id},recorded_by.eq.${staff_id}`);
     }
 
-    // キーワードフィルター（content または title の部分一致）
+    // キーワードフィルター（content の部分一致）
     if (keyword) {
-      query = query.or(`content.ilike.%${keyword}%,title.ilike.%${keyword}%`);
+      query = query.ilike('content', `%${keyword}%`);
     }
 
     const { data: activities, error, count } = await query;
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { success: false, error: 'Database error' },
+        { success: false, error: `Database error: ${error.message}` },
         { status: 500 }
       );
     }

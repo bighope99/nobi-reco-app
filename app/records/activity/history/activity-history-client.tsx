@@ -42,7 +42,9 @@ export default function ActivityHistoryClient() {
       const staffRes = await fetch('/api/users?is_active=true')
       if (staffRes.ok) {
         const staffJson = await staffRes.json()
-        if (staffJson.success) setStaffList(staffJson.data?.users || [])
+        if (staffJson.success) setStaffList(
+          (staffJson.data?.users || []).map((u: { user_id: string; name: string }) => ({ id: u.user_id, name: u.name }))
+        )
       }
     }
     fetchMeta()

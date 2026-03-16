@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     const from_date = searchParams.get('from_date') ?? undefined;
     const to_date = searchParams.get('to_date') ?? undefined;
     const class_id = searchParams.get('class_id') ?? undefined;
-    const staff_id = searchParams.get('staff_id') ?? undefined;
+    const staff_id_raw = searchParams.get('staff_id') ?? undefined;
+    const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
     const child_name = searchParams.get('child_name') ?? undefined;
     const grade = searchParams.get('grade') ?? undefined;
     const keyword = searchParams.get('keyword') ?? undefined;
