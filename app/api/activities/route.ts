@@ -212,10 +212,9 @@ export async function GET(request: NextRequest) {
         console.error('Failed to fetch mentioned children names:', mentionedChildrenError);
       } else if (mentionedChildren) {
         mentionedChildren.forEach((child: { id: string; family_name: string | null; given_name: string | null; nickname: string | null }) => {
-          const displayName = child.nickname || formatName([
-            decryptOrFallback(child.family_name),
-            decryptOrFallback(child.given_name),
-          ]);
+          const familyName = decryptOrFallback(child.family_name) ?? '';
+          const givenName = decryptOrFallback(child.given_name) ?? '';
+          const displayName = child.nickname || formatName([familyName, givenName]) || '';
           mentionedChildrenNamesMap.set(child.id, displayName);
         });
       }

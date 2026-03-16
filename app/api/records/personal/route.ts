@@ -52,20 +52,42 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // child_name フィルター: 2ステップで child_id リストを取得
+    // child_name フィルター: 全児童を取得して復号後に部分一致検索
     let nameFilterChildIds: string[] | null = null;
     if (child_name) {
-      const escapedChildName = child_name
-        .replace(/\\/g, '\\\\')
-        .replace(/%/g, '\\%')
-        .replace(/_/g, '\\_');
-      const { data: matchingChildren } = await supabase
+      const { data: allChildrenForName } = await supabase
         .from('m_children')
-        .select('id')
+        .select('id, family_name, given_name, family_name_kana, given_name_kana, nickname')
         .eq('facility_id', facility_id)
-        .is('deleted_at', null)
-        .or(`family_name_kana.ilike.%${escapedChildName}%,given_name_kana.ilike.%${escapedChildName}%`);
-      nameFilterChildIds = matchingChildren?.map((c) => c.id) ?? [];
+        .is('deleted_at', null);
+
+      const searchLower = child_name.toLowerCase();
+      nameFilterChildIds = (allChildrenForName ?? [])
+        .filter((c) => {
+          const familyName = decryptOrFallback(c.family_name) ?? '';
+          const givenName = decryptOrFallback(c.given_name) ?? '';
+          const familyNameKana = decryptOrFallback(c.family_name_kana) ?? '';
+          const givenNameKana = decryptOrFallback(c.given_name_kana) ?? '';
+          const nickname = c.nickname ?? '';
+
+          const fullName = `${familyName}${givenName}`.toLowerCase();
+          const fullNameKana = `${familyNameKana}${givenNameKana}`.toLowerCase();
+          const fullNameWithSpace = `${familyName} ${givenName}`.toLowerCase();
+          const fullNameKanaWithSpace = `${familyNameKana} ${givenNameKana}`.toLowerCase();
+
+          return (
+            fullName.includes(searchLower) ||
+            fullNameWithSpace.includes(searchLower) ||
+            familyName.toLowerCase().includes(searchLower) ||
+            givenName.toLowerCase().includes(searchLower) ||
+            fullNameKana.includes(searchLower) ||
+            fullNameKanaWithSpace.includes(searchLower) ||
+            familyNameKana.toLowerCase().includes(searchLower) ||
+            givenNameKana.toLowerCase().includes(searchLower) ||
+            nickname.toLowerCase().includes(searchLower)
+          );
+        })
+        .map((c) => c.id);
 
       if (nameFilterChildIds.length === 0) {
         return NextResponse.json({ success: true, data: { observations: [], total: 0, has_more: false } });
@@ -190,10 +212,10 @@ export async function GET(request: NextRequest) {
       const recordedByUser = Array.isArray(obs.recorded_by_user) ? obs.recorded_by_user[0] : obs.recorded_by_user;
 
       const childDisplayName = child
-        ? (child.nickname || formatName([
+        ? (formatName([
             decryptOrFallback(child.family_name),
             decryptOrFallback(child.given_name),
-          ], ''))
+          ], '') ?? '')
         : '';
 
       const gradeNum = child ? calculateGrade(child.birth_date, child.grade_add) : null;
