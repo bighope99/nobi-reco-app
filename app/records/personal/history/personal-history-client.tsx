@@ -117,6 +117,7 @@ export default function PersonalHistoryClient() {
         category_color?: string
         content: string
         staff_name?: string
+        recorded_by_name?: string | null
       }) => ({
         id: o.id,
         date: o.observation_date,
@@ -127,7 +128,7 @@ export default function PersonalHistoryClient() {
         category: o.category || null,
         categoryColor: o.category_color || null,
         content: o.content,
-        staffName: o.staff_name || '',
+        staffName: o.recorded_by_name || o.staff_name || '',
       }))
 
       setItems(prev => append ? [...prev, ...newItems] : newItems)

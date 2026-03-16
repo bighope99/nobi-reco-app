@@ -65,6 +65,7 @@ interface Activity {
   class_id?: string
   recorded_by?: string
   created_by: string
+  recorded_by_name?: string | null
   created_at: string
   individual_record_count: number
   individual_records: IndividualRecord[]
@@ -1976,7 +1977,7 @@ export default function ActivityRecordClient() {
                           )}
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          作成: {activity.created_by}
+                          記入者: {activity.recorded_by_name || activity.created_by}
                         </span>
                       </div>
                     </div>

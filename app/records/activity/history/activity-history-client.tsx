@@ -113,6 +113,7 @@ export default function ActivityHistoryClient() {
         title: string
         content: string
         created_by?: string
+        recorded_by_name?: string | null
         individual_record_count?: number
       }) => ({
         id: a.activity_id,
@@ -120,7 +121,7 @@ export default function ActivityHistoryClient() {
         className: a.class_name || '',
         title: a.title,
         content: a.content,
-        staffName: a.created_by || '',
+        staffName: a.recorded_by_name || a.created_by || '',
         personalRecordCount: a.individual_record_count || 0,
       }))
 
@@ -256,7 +257,6 @@ export default function ActivityHistoryClient() {
                       {classes.length > 0 && <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[120px]">クラス</th>}
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[300px]">活動内容</th>
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[120px]">記入者</th>
-                      <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[100px]">個別記録</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
@@ -268,13 +268,6 @@ export default function ActivityHistoryClient() {
                           <div className="text-slate-700 line-clamp-3">{item.content}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{item.staffName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                          {item.personalRecordCount > 0 ? (
-                            <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-bold text-xs">{item.personalRecordCount} 件</span>
-                          ) : (
-                            <span className="text-slate-400 bg-slate-50 px-3 py-1 rounded-full text-xs font-medium">--</span>
-                          )}
-                        </td>
                       </tr>
                     ))}
                   </tbody>

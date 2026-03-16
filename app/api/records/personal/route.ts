@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
           )
         ),
         m_users!r_observation_created_by_fkey(id, name),
+        recorded_by_user:m_users!recorded_by(id, name),
         _record_tag(
           m_observation_tags(id, name, color)
         )
@@ -186,6 +187,7 @@ export async function GET(request: NextRequest) {
         : null;
 
       const staffUser = Array.isArray(obs.m_users) ? obs.m_users[0] : obs.m_users;
+      const recordedByUser = Array.isArray(obs.recorded_by_user) ? obs.recorded_by_user[0] : obs.recorded_by_user;
 
       const childDisplayName = child
         ? (child.nickname || formatName([
@@ -209,6 +211,7 @@ export async function GET(request: NextRequest) {
         category_color: tagData?.color ?? null,
         content: obs.content,
         staff_name: staffUser?.name ?? null,
+        recorded_by_name: recordedByUser?.name ?? null,
       };
     });
 

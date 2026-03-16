@@ -128,7 +128,8 @@ export async function GET(request: NextRequest) {
         m_users!r_activity_created_by_fkey (
           id,
           name
-        )
+        ),
+        recorded_by_user:m_users!recorded_by(id, name)
       `, { count: 'exact' })
       .eq('facility_id', facility_id)
       .is('deleted_at', null)
@@ -288,7 +289,8 @@ export async function GET(request: NextRequest) {
         handover: activity.handover,
         meal: activity.meal,
         recorded_by: activity.recorded_by || null,
-        created_by: activity.m_users?.name || '',
+        recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name || null,
+        created_by: (activity.m_users as { id: string; name: string } | null)?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
         individual_records: individualRecords,
