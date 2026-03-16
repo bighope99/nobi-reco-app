@@ -160,22 +160,24 @@ export default function PersonalHistoryClient() {
               </div>
             </div>
 
-            <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[160px]">
-              <label className="text-xs font-bold text-slate-500">クラス</label>
-              <div className="relative">
-                <select
-                  className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                >
-                  <option value="all">すべて</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+            {classes.length > 0 && (
+              <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[160px]">
+                <label className="text-xs font-bold text-slate-500">クラス</label>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={selectedClass}
+                    onChange={(e) => setSelectedClass(e.target.value)}
+                  >
+                    <option value="all">すべて</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[160px]">
               <label className="text-xs font-bold text-slate-500">学年</label>
