@@ -34,7 +34,7 @@ yarn-error.log*
 .claude/logs
 .claude/sessions
 .claude/memory
-setting.local.json
+settings.local.json
 
 # typescript
 *.tsbuildinfo
