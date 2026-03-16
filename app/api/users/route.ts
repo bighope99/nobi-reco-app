@@ -52,14 +52,6 @@ export async function GET(request: NextRequest) {
 
     const { role, company_id, current_facility_id } = metadata;
 
-    // 権限チェック（staffは閲覧不可）
-    if (role === 'staff') {
-      return NextResponse.json(
-        { success: false, error: 'Permission denied' },
-        { status: 403 }
-      );
-    }
-
     // リクエストパラメータ取得
     const searchParams = request.nextUrl.searchParams;
     const roleFilter = searchParams.get('role');
@@ -72,6 +64,86 @@ export async function GET(request: NextRequest) {
         { success: false, error: '検索文字列は100文字以内で入力してください' },
         { status: 400 }
       );
+    }
+
+    // staffは自施設のユーザー一覧のみ取得可。返却情報も最小限に絞る
+    if (role === 'staff') {
+      if (!current_facility_id) {
+        return NextResponse.json(
+          { success: false, error: 'Facility context is required' },
+          { status: 403 }
+        );
+      }
+
+      let staffQuery = supabase
+        .from('m_users')
+        .select(
+          `
+          id,
+          name,
+          role,
+          is_active,
+          _user_facility!inner (
+            facility_id,
+            is_current,
+            deleted_at
+          )
+        `
+        )
+        .is('deleted_at', null)
+        .eq('company_id', company_id)
+        .eq('_user_facility.facility_id', current_facility_id)
+        .eq('_user_facility.is_current', true)
+        .eq('_user_facility.deleted_at', null);
+
+      if (roleFilter) {
+        staffQuery = staffQuery.eq('role', roleFilter);
+      }
+
+      if (isActiveFilter !== null) {
+        staffQuery = staffQuery.eq('is_active', isActiveFilter === 'true');
+      }
+
+      if (search) {
+        const escapedSearch = search.replace(/[%_\\]/g, '\\$&');
+        staffQuery = staffQuery.ilike('name', `%${escapedSearch}%`);
+      }
+
+      const { data: staffUsers, error: staffUsersError } = await staffQuery.order('name');
+
+      if (staffUsersError) {
+        throw staffUsersError;
+      }
+
+      const totalUsers = staffUsers?.length || 0;
+      const activeUsers = (staffUsers || []).filter(
+        (user: { is_active: boolean }) => user.is_active
+      ).length;
+      const byRole = (staffUsers || []).reduce<Record<string, number>>(
+        (acc, user: { role: string }) => {
+          acc[user.role] = (acc[user.role] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          users: (staffUsers || []).map(
+            (user: { id: string; name: string }) => ({
+              user_id: user.id,
+              name: user.name,
+            })
+          ),
+          total: totalUsers,
+          summary: {
+            total_users: totalUsers,
+            active_users: activeUsers,
+            by_role: byRole,
+          },
+        },
+      });
     }
 
     // ユーザー一覧取得クエリ
