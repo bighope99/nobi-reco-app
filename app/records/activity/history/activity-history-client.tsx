@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
 import { Search, ChevronDown } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
 interface ActivityItem {
@@ -18,9 +18,13 @@ interface ActivityItem {
 }
 
 export default function ActivityHistoryClient() {
-  const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState("")
-  const [selectedClass, setSelectedClass] = useState("all")
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  const [fromDate, setFromDate] = useState(() => searchParams.get("from_date") ?? "")
+  const [toDate, setToDate] = useState(() => searchParams.get("to_date") ?? "")
+  const [selectedClass, setSelectedClass] = useState(() => searchParams.get("class_id") ?? "all")
   const [selectedStaff, setSelectedStaff] = useState("all")
   const [keyword, setKeyword] = useState("")
 
@@ -32,6 +36,44 @@ export default function ActivityHistoryClient() {
 
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
   const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    const nextFromDate = searchParams.get("from_date") ?? ""
+    const nextToDate = searchParams.get("to_date") ?? ""
+    const nextClassId = searchParams.get("class_id") ?? "all"
+
+    setFromDate((current) => (current === nextFromDate ? current : nextFromDate))
+    setToDate((current) => (current === nextToDate ? current : nextToDate))
+    setSelectedClass((current) => (current === nextClassId ? current : nextClassId))
+  }, [searchParams])
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (fromDate) {
+      params.set("from_date", fromDate)
+    } else {
+      params.delete("from_date")
+    }
+
+    if (toDate) {
+      params.set("to_date", toDate)
+    } else {
+      params.delete("to_date")
+    }
+
+    if (selectedClass !== "all") {
+      params.set("class_id", selectedClass)
+    } else {
+      params.delete("class_id")
+    }
+
+    const nextQuery = params.toString()
+    const currentQuery = searchParams.toString()
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
+    }
+  }, [fromDate, toDate, selectedClass, pathname, router, searchParams])
 
   useEffect(() => {
     const fetchMeta = async () => {

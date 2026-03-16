@@ -18,14 +18,14 @@ export function HistoryTabs() {
 
     // 共通の検索条件を引き継ぐ
     const params = new URLSearchParams(searchParams.toString())
-    const from = params.get("from")
-    const to = params.get("to")
-    const classId = params.get("classId") // class_id もしくは classId
+    const fromDate = params.get("from_date")
+    const toDate = params.get("to_date")
+    const classId = params.get("class_id")
 
     const newParams = new URLSearchParams()
-    if (from) newParams.set("from", from)
-    if (to) newParams.set("to", to)
-    if (classId) newParams.set("classId", classId)
+    if (fromDate) newParams.set("from_date", fromDate)
+    if (toDate) newParams.set("to_date", toDate)
+    if (classId) newParams.set("class_id", classId)
 
     const queryString = newParams.toString()
     return queryString ? `${baseHref}?${queryString}` : baseHref
