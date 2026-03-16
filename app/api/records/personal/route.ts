@@ -4,6 +4,7 @@ import { getUserSession } from '@/lib/auth/session';
 import { isValidUUID } from '@/lib/utils/validation';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 // Content validation constants
 const MAX_CONTENT_LENGTH = 5000;
@@ -54,13 +55,18 @@ export async function GET(request: NextRequest) {
     // child_name フィルター: 2ステップで child_id リストを取得
     let nameFilterChildIds: string[] | null = null;
     if (child_name) {
+      const escapedChildName = child_name
+        .replace(/\\/g, '\\\\')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
       const { data: matchingChildren } = await supabase
         .from('m_children')
         .select('id')
         .eq('facility_id', facility_id)
-        .or(`family_name.ilike.%${child_name}%,given_name.ilike.%${child_name}%`)
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .or(`family_name_kana.ilike.%${escapedChildName}%,given_name_kana.ilike.%${escapedChildName}%`);
       nameFilterChildIds = matchingChildren?.map((c) => c.id) ?? [];
+
       if (nameFilterChildIds.length === 0) {
         return NextResponse.json({ success: true, data: { observations: [], total: 0, has_more: false } });
       }
@@ -182,7 +188,10 @@ export async function GET(request: NextRequest) {
       const staffUser = Array.isArray(obs.m_users) ? obs.m_users[0] : obs.m_users;
 
       const childDisplayName = child
-        ? (child.nickname || [child.family_name, child.given_name].filter(Boolean).join(' '))
+        ? (child.nickname || formatName([
+            decryptOrFallback(child.family_name),
+            decryptOrFallback(child.given_name),
+          ], ''))
         : '';
 
       const gradeNum = child ? calculateGrade(child.birth_date, child.grade_add) : null;

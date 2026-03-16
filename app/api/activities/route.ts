@@ -19,6 +19,9 @@ const MAX_TITLE_LENGTH = 100;
 // Pagination constants
 const MAX_LIMIT = 100;
 
+const escapeIlikePattern = (value: string) =>
+  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+
 const signActivityPhotos = async (
   supabase: Awaited<ReturnType<typeof createClient>>,
   facilityId: string,
@@ -151,14 +154,22 @@ export async function GET(request: NextRequest) {
       query = query.lte('activity_date', to_date);
     }
 
-    // スタッフフィルター（created_by または recorded_by）
-    if (staff_id) {
-      query = query.or(`created_by.eq.${staff_id},recorded_by.eq.${staff_id}`);
-    }
+    // スタッフフィルターとキーワードフィルター
+    const escapedKeyword = keyword ? escapeIlikePattern(keyword) : null;
+    const keywordFilter = escapedKeyword
+      ? `or(content.ilike.%${escapedKeyword}%,title.ilike.%${escapedKeyword}%,handover.ilike.%${escapedKeyword}%,special_notes.ilike.%${escapedKeyword}%)`
+      : null;
 
-    // キーワードフィルター（content の部分一致）
-    if (keyword) {
-      query = query.ilike('content', `%${keyword}%`);
+    if (staff_id && keywordFilter) {
+      query = query.or(
+        `and(created_by.eq.${staff_id},${keywordFilter}),and(recorded_by.eq.${staff_id},${keywordFilter})`
+      );
+    } else if (staff_id) {
+      query = query.or(`created_by.eq.${staff_id},recorded_by.eq.${staff_id}`);
+    } else if (keywordFilter) {
+      query = query.or(
+        `content.ilike.%${escapedKeyword}%,title.ilike.%${escapedKeyword}%,handover.ilike.%${escapedKeyword}%,special_notes.ilike.%${escapedKeyword}%`
+      );
     }
 
     const { data: activities, error, count } = await query;
@@ -233,9 +244,10 @@ export async function GET(request: NextRequest) {
 
           // 子ども名の取得（nicknameを優先、なければ姓名）
           const child = Array.isArray(obs.m_children) ? obs.m_children[0] : obs.m_children;
-          const childName = child?.nickname ||
-                            [child?.family_name, child?.given_name].filter(Boolean).join(' ') ||
-                            '不明';
+          const childName = child?.nickname || formatName([
+            decryptOrFallback(child?.family_name),
+            decryptOrFallback(child?.given_name),
+          ], '不明');
 
           observationsByActivity[obs.activity_id].push({
             observation_id: obs.id,
