@@ -209,6 +209,7 @@ export default function ActivityHistoryClient() {
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[100px]">記録日</th>
+                      {classes.length > 0 && <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[120px]">クラス</th>}
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[300px]">活動内容</th>
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[120px]">記入者</th>
                       <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap w-[100px]">個別記録</th>
@@ -218,6 +219,7 @@ export default function ActivityHistoryClient() {
                     {items.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
+                        {classes.length > 0 && <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.className}</td>}
                         <td className="px-6 py-4 text-sm">
                           <div className="text-slate-700 line-clamp-3">{item.content}</div>
                         </td>
