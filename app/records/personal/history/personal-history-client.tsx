@@ -318,7 +318,7 @@ export default function PersonalHistoryClient() {
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
                     {items.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group">
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => router.push(`/records/personal/${item.id}/edit`)}>
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-indigo-600 transition-colors text-sm">

@@ -157,6 +157,7 @@ export default function ActivityRecordClient() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const autoEditHandledRef = useRef(false)
   const [originalContent, setOriginalContent] = useState<string>("")
 
   // 新規フィールドの状態
@@ -285,6 +286,19 @@ export default function ActivityRecordClient() {
   useEffect(() => {
     fetchActivities()
   }, [fetchActivities])
+
+  useEffect(() => {
+    if (autoEditHandledRef.current) return
+    const activityId = searchParams.get('activityId')
+    if (!activityId || !activitiesData) return
+    const target = activitiesData.activities.find((a) => a.activity_id === activityId)
+    if (!target) return
+    autoEditHandledRef.current = true
+    handleEdit(target)
+    // handleEdit は useCallback でラップされていないため依存リストから除外
+    // autoEditHandledRef によって一度だけ実行されることを保証している
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activitiesData, searchParams])
 
   useEffect(() => {
     const syncDrafts = () => {

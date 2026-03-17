@@ -261,7 +261,7 @@ export default function ActivityHistoryClient() {
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
                     {items.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group">
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => router.push(`/records/activity?activityId=${item.id}`)}>
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         {classes.length > 0 && <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.className}</td>}
                         <td className="px-6 py-4 text-sm">
