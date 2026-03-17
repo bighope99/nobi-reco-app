@@ -20,8 +20,7 @@ const MAX_TITLE_LENGTH = 100;
 const MAX_LIMIT = 100;
 
 const escapeIlikePattern = (value: string) =>
-  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
-    .replace(/,/g, '\\,').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
 const isValidDateParam = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -249,7 +248,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (activityIds.length > 0) {
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations } = await supabase
         .from('r_observation')
         .select(`
           id,
@@ -316,8 +315,8 @@ export async function GET(request: NextRequest) {
         handover: activity.handover,
         meal: activity.meal,
         recorded_by: activity.recorded_by || null,
-        recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name || null,
-        created_by: (activity.m_users as { id: string; name: string } | null)?.name || '',
+        recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name ?? null,
+        created_by: (activity.m_users as { id: string; name: string } | null)?.name ?? null,
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
         individual_records: individualRecords,

@@ -306,9 +306,11 @@ export default function ActivityRecordClient() {
       return
     }
 
+    const controller = new AbortController()
+
     const fetchActivity = async () => {
       try {
-        const response = await fetch(`/api/activities/${activityId}`)
+        const response = await fetch(`/api/activities/${activityId}`, { signal: controller.signal })
         const result = await response.json()
 
         if (!response.ok || !result.success || !result.data?.activity) {
@@ -318,11 +320,16 @@ export default function ActivityRecordClient() {
         autoOpenedActivityIdRef.current = activityId
         await handleEdit(result.data.activity as Activity)
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
         console.error('Failed to fetch target activity:', err)
       }
     }
 
     void fetchActivity()
+
+    return () => {
+      controller.abort()
+    }
     // handleEdit は useCallback でラップされていないため依存リストから除外
     // searchParams と activitiesData の変化に追従して activityId ごとに1回だけ処理する
     // eslint-disable-next-line react-hooks/exhaustive-deps

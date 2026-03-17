@@ -152,7 +152,9 @@ export default function PersonalHistoryClient() {
     } catch (err) {
       console.error('Failed to fetch observations:', err)
     } finally {
-      setLoading(false)
+      if (requestId === latestRequestRef.current) {
+        setLoading(false)
+      }
     }
   }, [fromDate, toDate, selectedClass, selectedStaff, childName, selectedGrade, debouncedKeyword])
 

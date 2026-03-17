@@ -174,6 +174,7 @@ export async function GET(request: NextRequest) {
     if (role !== 'site_admin' && current_facility_id) {
       query = query.eq('_user_facility.facility_id', current_facility_id);
       query = query.eq('_user_facility.is_current', true);
+      query = query.is('_user_facility.deleted_at', null);
     }
 
     // ロールフィルター
@@ -355,6 +356,14 @@ export async function POST(request: NextRequest) {
       ? (body.facility_id || current_facility_id)
       : current_facility_id;
 
+    // facility-scopedロールにはfacility_idが必須
+    if (['staff', 'facility_admin'].includes(body.role) && !targetFacilityId) {
+      return NextResponse.json(
+        { success: false, error: 'facility_id is required for staff and facility_admin roles' },
+        { status: 400 }
+      );
+    }
+
     // ---- メールなしスタッフ登録（auth.users に登録しない） ----
     if (isEmaillessStaff) {
       const staffId = crypto.randomUUID();
@@ -390,6 +399,8 @@ export async function POST(request: NextRequest) {
         });
         if (facilityError) {
           console.error('Failed to link user to facility:', facilityError);
+          await supabase.from('m_users').delete().eq('id', newStaff.id);
+          return NextResponse.json({ success: false, error: '施設との紐付けに失敗しました' }, { status: 500 });
         }
       }
 
@@ -526,6 +537,8 @@ export async function POST(request: NextRequest) {
       });
       if (facilityError) {
         console.error('Failed to link user to facility:', facilityError);
+        await supabaseAdmin.auth.admin.deleteUser(newUser.id);
+        return NextResponse.json({ success: false, error: '施設との紐付けに失敗しました' }, { status: 500 });
       }
     }
 

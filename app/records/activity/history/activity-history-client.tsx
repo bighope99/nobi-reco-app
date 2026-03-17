@@ -145,7 +145,9 @@ export default function ActivityHistoryClient() {
     } catch (err) {
       console.error('Failed to fetch activities:', err)
     } finally {
-      setLoading(false)
+      if (requestId === latestRequestRef.current) {
+        setLoading(false)
+      }
     }
   }, [fromDate, toDate, selectedClass, selectedStaff, debouncedKeyword])
 
@@ -274,7 +276,15 @@ export default function ActivityHistoryClient() {
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
                     {items.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => router.push(`/records/activity?activityId=${item.id}`)}>
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                        onClick={() => router.push(`/records/activity?activityId=${item.id}`)}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${item.date}の活動記録を開く`}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/records/activity?activityId=${item.id}`) } }}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         {classes.length > 0 && <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.className}</td>}
                         <td className="px-6 py-4 text-sm">

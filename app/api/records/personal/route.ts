@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
     const to_date = searchParams.get('to_date') ?? undefined;
     const class_id = searchParams.get('class_id') ?? undefined;
     const staff_id_raw = searchParams.get('staff_id') ?? undefined;
-    const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
+    if (staff_id_raw && !isValidUUID(staff_id_raw)) {
+      return NextResponse.json({ success: false, error: 'Invalid staff_id format' }, { status: 400 });
+    }
+    const staff_id = staff_id_raw;
     const child_name = searchParams.get('child_name') ?? undefined;
     const grade = searchParams.get('grade') ?? undefined;
     const keywordRaw = searchParams.get('keyword');
