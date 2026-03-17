@@ -332,7 +332,7 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       auth: {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
-            data: { user: { id: 'existing-user-id', last_sign_in_at: '2024-01-01T00:00:00Z' } },
+            data: { user: { id: 'existing-user-id', user_metadata: { password_set: true } } },
             error: null,
           }),
         },
@@ -424,7 +424,7 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       auth: {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
-            data: { user: { id: 'existing-user-id', last_sign_in_at: null } },
+            data: { user: { id: 'existing-user-id', user_metadata: { password_set: false } } },
             error: null,
           }),
           updateUserById: jest.fn().mockResolvedValue({ error: null }),

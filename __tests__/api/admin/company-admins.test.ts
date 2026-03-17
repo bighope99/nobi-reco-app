@@ -254,7 +254,7 @@ describe('POST /api/admin/company-admins', () => {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
             data: {
-              user: { id: 'existing-user-id', last_sign_in_at: '2024-01-01T00:00:00Z' },
+              user: { id: 'existing-user-id', user_metadata: { password_set: true } },
             },
             error: null,
           }),
@@ -340,7 +340,7 @@ describe('POST /api/admin/company-admins', () => {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
             data: {
-              user: { id: 'existing-user-id', last_sign_in_at: null },
+              user: { id: 'existing-user-id', user_metadata: { password_set: false } },
             },
             error: null,
           }),
@@ -411,13 +411,13 @@ describe('POST /api/admin/company-admins', () => {
       }),
     };
 
-    // last_sign_in_at が null でない → サインイン済みユーザー
+    // password_set: true → パスワード設定済みユーザー
     const mockAdminClient = {
       auth: {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
             data: {
-              user: { id: 'signed-in-user-id', last_sign_in_at: '2024-06-01T10:00:00Z' },
+              user: { id: 'signed-in-user-id', user_metadata: { password_set: true } },
             },
             error: null,
           }),
@@ -503,7 +503,7 @@ describe('POST /api/admin/company-admins', () => {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
             data: {
-              user: { id: 'existing-user-id', last_sign_in_at: null },
+              user: { id: 'existing-user-id', user_metadata: { password_set: false } },
             },
             error: null,
           }),

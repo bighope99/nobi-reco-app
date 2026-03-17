@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
 
 /**
  * GET /api/admin/companies
@@ -207,15 +208,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (authUserData.user.last_sign_in_at !== null) {
-        // 既にサインイン済み → 通常の重複エラー
+      if (hasCompletedPasswordSetup(authUserData.user)) {
+        // パスワード設定済み → 通常の重複エラー
         return NextResponse.json(
           { success: false, error: 'Email already exists' },
           { status: 400 }
         );
       }
 
-      // 未サインイン → 再招待フロー
+      // パスワード未設定 → 再招待フロー
       // Step 1: 新しい会社を先に作成
       const { data: newCompany, error: companyError } = await supabase
         .from('m_companies')

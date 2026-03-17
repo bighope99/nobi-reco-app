@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
 
 /**
  * POST /api/admin/companies/[companyId]/facilities
@@ -122,15 +123,15 @@ export async function POST(
         );
       }
 
-      if (authUserData.user.last_sign_in_at !== null) {
-        // 既にサインイン済み → 通常の重複エラー
+      if (hasCompletedPasswordSetup(authUserData.user)) {
+        // パスワード設定済み → 通常の重複エラー
         return NextResponse.json(
           { success: false, error: 'このメールアドレスは既に使用されています' },
           { status: 400 }
         );
       }
 
-      // 未サインイン → 再招待フロー
+      // パスワード未設定 → 再招待フロー
       // Re-invite Step 1: 新しい施設を作成
       const { data: newFacility, error: facilityError } = await supabase
         .from('m_facilities')

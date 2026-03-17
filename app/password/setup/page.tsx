@@ -183,7 +183,7 @@ function PasswordSetupContent() {
       }
 
       // Production path: update password via Supabase
-      const { error: updateError } = await supabase.auth.updateUser({ password });
+      const { error: updateError } = await supabase.auth.updateUser({ password, data: { password_set: true } });
       if (updateError) {
         throw updateError;
       }

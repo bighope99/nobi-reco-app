@@ -412,7 +412,7 @@ describe('POST /api/admin/companies', () => {
             data: {
               user: {
                 id: 'existing-user-id',
-                last_sign_in_at: '2024-01-01T00:00:00Z',
+                user_metadata: { password_set: true },
               },
             },
             error: null,
@@ -504,7 +504,7 @@ describe('POST /api/admin/companies', () => {
             data: {
               user: {
                 id: 'existing-user-id',
-                last_sign_in_at: null,
+                user_metadata: { password_set: false },
               },
             },
             error: null,
