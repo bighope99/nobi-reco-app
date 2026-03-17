@@ -31,6 +31,11 @@ interface PersonalItem {
   staffName: string
 }
 
+interface ClassOption {
+  class_id: string
+  name: string
+}
+
 export default function PersonalHistoryClient() {
   const router = useRouter()
   const pathname = usePathname()
@@ -51,7 +56,7 @@ export default function PersonalHistoryClient() {
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
+  const [classes, setClasses] = useState<ClassOption[]>([])
   const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
@@ -218,7 +223,7 @@ export default function PersonalHistoryClient() {
                   >
                     <option value="all">すべて</option>
                     {classes.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.class_id} value={c.class_id}>{c.name}</option>
                     ))}
                   </select>
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />

@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 
 /**
  * グローバルな認証セッション監視コンポーネント
@@ -9,15 +9,20 @@ import { useRouter } from 'next/navigation'
  */
 export function SessionGuard() {
   const router = useRouter()
+  const pathname = usePathname()
+  const isRedirectingRef = useRef(false)
+
+  useEffect(() => {
+    isRedirectingRef.current = false
+  }, [pathname])
 
   useEffect(() => {
     const originalFetch = window.fetch.bind(window)
-    let isRedirecting = false
 
     window.fetch = async function interceptedFetch(input, init) {
       const response = await originalFetch(input, init)
 
-      if (response.status === 401 && !isRedirecting) {
+      if (response.status === 401 && !isRedirectingRef.current) {
         const url =
           typeof input === 'string'
             ? input
@@ -27,7 +32,7 @@ export function SessionGuard() {
 
         // ログアウトAPI自体はインターセプトしない（無限ループ防止）
         if (!url.includes('/api/auth/logout')) {
-          isRedirecting = true
+          isRedirectingRef.current = true
           originalFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
           router.push('/login')
         }

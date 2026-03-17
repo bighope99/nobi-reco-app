@@ -157,7 +157,7 @@ export default function ActivityRecordClient() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
-  const autoEditHandledRef = useRef(false)
+  const autoOpenedActivityIdRef = useRef<string | null>(null)
   const [originalContent, setOriginalContent] = useState<string>("")
 
   // 新規フィールドの状態
@@ -288,15 +288,41 @@ export default function ActivityRecordClient() {
   }, [fetchActivities])
 
   useEffect(() => {
-    if (autoEditHandledRef.current) return
     const activityId = searchParams.get('activityId')
-    if (!activityId || !activitiesData) return
-    const target = activitiesData.activities.find((a) => a.activity_id === activityId)
-    if (!target) return
-    autoEditHandledRef.current = true
-    handleEdit(target)
+
+    if (!activityId) {
+      autoOpenedActivityIdRef.current = null
+      return
+    }
+
+    if (autoOpenedActivityIdRef.current === activityId) return
+
+    const target = activitiesData?.activities.find((activity) => activity.activity_id === activityId)
+    if (target) {
+      autoOpenedActivityIdRef.current = activityId
+      void handleEdit(target)
+      return
+    }
+
+    const fetchActivity = async () => {
+      try {
+        const response = await fetch(`/api/activities/${activityId}`)
+        const result = await response.json()
+
+        if (!response.ok || !result.success || !result.data?.activity) {
+          throw new Error(result.error || 'Failed to fetch activity')
+        }
+
+        autoOpenedActivityIdRef.current = activityId
+        await handleEdit(result.data.activity as Activity)
+      } catch (err) {
+        console.error('Failed to fetch target activity:', err)
+      }
+    }
+
+    void fetchActivity()
     // handleEdit は useCallback でラップされていないため依存リストから除外
-    // autoEditHandledRef によって一度だけ実行されることを保証している
+    // searchParams と activitiesData の変化に追従して activityId ごとに1回だけ処理する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activitiesData, searchParams])
 
