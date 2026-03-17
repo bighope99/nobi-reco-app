@@ -31,10 +31,10 @@ yarn-error.log*
 .mcp.json
 .work
 .claude/state
+.claude/logs
 .claude/sessions
 .claude/memory
-.claude/logs
-setting.local.json
+settings.local.json
 
 # typescript
 *.tsbuildinfo

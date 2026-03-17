@@ -88,11 +88,11 @@ const adminNavItems: NavItem[] = [
   },
   {
     label: "施設管理",
-    href: "/admin/facilities",
+    href: "/settings/facility",
     icon: <Home className="h-5 w-5" />,
     children: [
-      { label: "施設一覧", href: "/admin/facilities" },
-      { label: "施設登録", href: "/admin/facilities/new" },
+      { label: "施設一覧", href: "/settings/facility" },
+      { label: "施設登録", href: "/settings/facility/new" },
     ],
   },
   { label: "ユーザー管理", href: "/admin/users", icon: <Users className="h-5 w-5" /> },

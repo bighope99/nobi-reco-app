@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useDebounce } from "@/hooks/useDebounce"
 import { StaffLayout } from "@/components/layout/staff-layout"
@@ -59,6 +59,8 @@ export default function PersonalHistoryClient() {
   const [classes, setClasses] = useState<ClassOption[]>([])
   const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
 
+  const latestRequestRef = useRef(0)
+
   useEffect(() => {
     const nextFromDate = searchParams.get("from_date") ?? ""
     const nextToDate = searchParams.get("to_date") ?? ""
@@ -98,6 +100,7 @@ export default function PersonalHistoryClient() {
   }, [fromDate, toDate, selectedClass, pathname, router, searchParams])
 
   const fetchObservations = useCallback(async (newOffset: number, append: boolean) => {
+    const requestId = ++latestRequestRef.current
     setLoading(true)
     try {
       const params = new URLSearchParams({ limit: '20', offset: String(newOffset) })
@@ -133,7 +136,7 @@ export default function PersonalHistoryClient() {
         date: o.observation_date,
         childName: o.child_name,
         className: o.class_name || null,
-        grade: o.grade || null,
+        grade: o.grade ?? null,
         gradeLabel: o.grade_label || '',
         category: o.category || null,
         categoryColor: o.category_color || null,
@@ -141,6 +144,7 @@ export default function PersonalHistoryClient() {
         staffName: o.recorded_by_name || o.staff_name || '',
       }))
 
+      if (requestId !== latestRequestRef.current) return
       setItems(prev => append ? [...prev, ...newItems] : newItems)
       setTotal(json.data.total)
       setHasMore(json.data.has_more)
@@ -328,7 +332,15 @@ export default function PersonalHistoryClient() {
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-200">
                     {items.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => router.push(`/records/personal/${item.id}/edit`)}>
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                        onClick={() => router.push(`/records/personal/${item.id}/edit`)}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${item.childName}の記録を開く`}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/records/personal/${item.id}/edit`) } }}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-indigo-600 transition-colors text-sm">

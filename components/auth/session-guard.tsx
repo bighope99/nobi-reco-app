@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { SESSION_STORAGE_KEY } from '@/lib/auth/session'
 
 /**
  * グローバルな認証セッション監視コンポーネント
@@ -22,19 +23,27 @@ export function SessionGuard() {
     window.fetch = async function interceptedFetch(input, init) {
       const response = await originalFetch(input, init)
 
-      const requestHeaders = init instanceof Headers ? init : new Headers(init?.headers)
+      const baseHeaders = input instanceof Request ? input.headers : undefined
+      const requestHeaders = new Headers(baseHeaders)
+      if (init?.headers) {
+        new Headers(init.headers).forEach((value, key) => {
+          requestHeaders.set(key, value)
+        })
+      }
       if (response.status === 401 && !isRedirectingRef.current && !requestHeaders.get('X-Skip-SessionGuard')) {
-        const url =
+        const rawUrl =
           typeof input === 'string'
             ? input
             : input instanceof URL
               ? input.toString()
               : (input as Request).url
+        const url = new URL(rawUrl, window.location.origin)
 
         // ログアウトAPI自体はインターセプトしない（無限ループ防止）
-        if (!url.includes('/api/auth/logout')) {
+        const isLogoutApi = url.pathname === '/api/auth/logout'
+        if (!isLogoutApi) {
           isRedirectingRef.current = true
-          sessionStorage.removeItem('user_session')
+          sessionStorage.removeItem(SESSION_STORAGE_KEY)
           originalFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
           router.push('/login')
         }

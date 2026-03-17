@@ -1,5 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 
+export const SESSION_STORAGE_KEY = 'user_session';
+
 export interface UserSession {
     user_id: string;
     email: string;

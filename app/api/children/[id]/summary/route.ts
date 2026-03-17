@@ -42,8 +42,8 @@ export async function GET(
         given_name_kana,
         birth_date,
         photo_url,
-        _child_class!inner (
-          m_classes!inner (
+        _child_class (
+          m_classes (
             id,
             name
           )

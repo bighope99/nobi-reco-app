@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST, toDateStringJST } from '@/lib/utils/timezone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
     const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
     const class_id = searchParams.get('class_id') || null;
-    const search = searchParams.get('search') || null;
+    // チケット3: 児童名フィールドは暗号化されているため、サーバー側のilike検索は機能しない。
+    // 検索はクライアント側で復号化済みデータに対して行う。
     const warning_only = searchParams.get('warning_only') === 'true';
 
     // バリデーション
@@ -35,9 +36,11 @@ export async function GET(request: NextRequest) {
     const endDateStr = getLastDayOfMonthJST(year, month);
     const daysInMonth = new Date(year, month, 0).getDate();
 
-    // 年初
-    const yearStartStr = `${year}-01-01`;
+    // 今日から過去365日（1年間）の開始日（JSTベースで一貫して計算）
     const today = getCurrentDateJST();
+    const todayDate = new Date(`${today}T00:00:00+09:00`);
+    todayDate.setDate(todayDate.getDate() - 365);
+    const yearStartStr = toDateStringJST(todayDate);
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase
@@ -67,10 +70,6 @@ export async function GET(request: NextRequest) {
 
     if (class_id) {
       childrenQuery = childrenQuery.eq('_child_class.class_id', class_id);
-    }
-
-    if (search) {
-      childrenQuery = childrenQuery.or(`family_name.ilike.%${search}%,given_name.ilike.%${search}%,family_name_kana.ilike.%${search}%,given_name_kana.ilike.%${search}%`);
     }
 
     const { data: childrenData, error: childrenError } = await childrenQuery;
@@ -232,11 +231,17 @@ export async function GET(request: NextRequest) {
 
       const monthlyObservations = monthlyObservationsByChild.get(child.id) || [];
       const monthlyObservationDates = new Set(monthlyObservations.map((o: any) => o.observation_date));
-      const monthlyRecordCount = monthlyObservationDates.size;
+      // 出席日と記録日の交差のみカウント（非出席日の記録は記録率に含めない）
+      const monthlyRecordCount = [...monthlyObservationDates].filter((date) =>
+        monthlyAttendanceDates.has(date)
+      ).length;
 
-      const monthlyRecordRate = monthlyAttendanceCount > 0
-        ? Math.round((monthlyRecordCount / monthlyAttendanceCount) * 100 * 10) / 10
-        : 0;
+      // チケット6: 月間記録率の計算
+      // = 記録済み出席日数 / 総出席日数 × 100
+      // 0除算保護: 出席日数が0の場合（その月に一度も出席していない）は0%とする
+      const monthlyRecordRate = monthlyAttendanceCount === 0
+        ? 0
+        : Math.round((monthlyRecordCount / monthlyAttendanceCount) * 100 * 10) / 10;
 
       // 最終記録日（全期間 - 月をまたいでも継続表示）
       const lastRecordDate = allTimeLastRecordByChild.get(child.id) || null;
@@ -272,11 +277,17 @@ export async function GET(request: NextRequest) {
 
       const yearlyObservations = yearlyObservationsByChild.get(child.id) || [];
       const yearlyObservationDates = new Set(yearlyObservations.map((o: any) => o.observation_date));
-      const yearlyRecordCount = yearlyObservationDates.size;
+      // 出席日と記録日の交差のみカウント（非出席日の記録は記録率に含めない）
+      const yearlyRecordCount = [...yearlyObservationDates].filter((date) =>
+        yearlyAttendanceDates.has(date)
+      ).length;
 
-      const yearlyRecordRate = yearlyAttendanceCount > 0
-        ? Math.round((yearlyRecordCount / yearlyAttendanceCount) * 100 * 10) / 10
-        : 0;
+      // チケット6: 年間割合の計算
+      // = 年間の記録済み出席日数 / 年間の総出席日数 × 100
+      // 0除算保護: 年間出席日数が0の場合は0%とする
+      const yearlyRecordRate = yearlyAttendanceCount === 0
+        ? 0
+        : Math.round((yearlyRecordCount / yearlyAttendanceCount) * 100 * 10) / 10;
 
       // PIIフィールドを復号化
       const decryptedFamilyName = decryptOrFallback(child.family_name);

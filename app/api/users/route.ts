@@ -162,6 +162,7 @@ export async function GET(request: NextRequest) {
         is_active,
         created_at,
         updated_at,
+        last_login_at,
         _user_facility!inner (
           facility_id
         )
@@ -382,19 +383,25 @@ export async function POST(request: NextRequest) {
 
       // 施設との紐付け
       if (targetFacilityId) {
-        await supabase.from('_user_facility').insert({
+        const { error: facilityError } = await supabase.from('_user_facility').insert({
           user_id: newStaff.id,
           facility_id: targetFacilityId,
           start_date: newStaff.hire_date,
           is_current: true,
           is_primary: true,
         });
+        if (facilityError) {
+          console.error('Failed to link user to facility:', facilityError);
+        }
       }
 
       // クラス担当設定（任意）
       if (body.assigned_classes && body.assigned_classes.length > 0) {
         const classAssignments = buildClassAssignments(newStaff.id, body.assigned_classes, newStaff.hire_date);
-        await supabase.from('_user_class').insert(classAssignments);
+        const { error: classError } = await supabase.from('_user_class').insert(classAssignments);
+        if (classError) {
+          console.error('Failed to assign user to classes:', classError);
+        }
       }
 
       return NextResponse.json({
@@ -480,8 +487,8 @@ export async function POST(request: NextRequest) {
 
     // 独自のパスワード設定ページURLを構築
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!baseUrl) {
-      console.error('NEXT_PUBLIC_SITE_URL is not configured');
+    if (!request.nextUrl.host) {
+      console.error('Request host is not available');
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
@@ -512,19 +519,25 @@ export async function POST(request: NextRequest) {
 
     // 施設との紐付け
     if (targetFacilityId) {
-      await supabase.from('_user_facility').insert({
+      const { error: facilityError } = await supabase.from('_user_facility').insert({
         user_id: newUser.id,
         facility_id: targetFacilityId,
         start_date: newUser.hire_date,
         is_current: true,
         is_primary: true,
       });
+      if (facilityError) {
+        console.error('Failed to link user to facility:', facilityError);
+      }
     }
 
     // クラス担当設定（任意）
     if (body.assigned_classes && body.assigned_classes.length > 0) {
       const classAssignments = buildClassAssignments(newUser.id, body.assigned_classes, newUser.hire_date);
-      await supabase.from('_user_class').insert(classAssignments);
+      const { error: classError } = await supabase.from('_user_class').insert(classAssignments);
+      if (classError) {
+        console.error('Failed to assign user to classes:', classError);
+      }
     }
 
     // 会社名と施設名を取得してカスタムメールを送信

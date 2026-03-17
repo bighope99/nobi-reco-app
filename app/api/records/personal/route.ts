@@ -5,6 +5,13 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
+// Date parameter validation helper
+const isValidDateParam = (v: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(v);
+  return !Number.isNaN(d.getTime());
+};
+
 // Content validation constants
 const MAX_CONTENT_LENGTH = 5000;
 
@@ -32,6 +39,16 @@ export async function GET(request: NextRequest) {
     const grade = searchParams.get('grade') ?? undefined;
     const keywordRaw = searchParams.get('keyword');
     const keyword = keywordRaw && keywordRaw.length <= 100 ? keywordRaw : keywordRaw ? keywordRaw.slice(0, 100) : undefined;
+
+    if (from_date && !isValidDateParam(from_date)) {
+      return NextResponse.json({ success: false, error: 'Invalid from_date format' }, { status: 400 });
+    }
+    if (to_date && !isValidDateParam(to_date)) {
+      return NextResponse.json({ success: false, error: 'Invalid to_date format' }, { status: 400 });
+    }
+    if (from_date && to_date && from_date > to_date) {
+      return NextResponse.json({ success: false, error: 'from_date must be before or equal to to_date' }, { status: 400 });
+    }
 
     const rawLimit = parseInt(searchParams.get('limit') ?? '20', 10);
     const limit = Number.isNaN(rawLimit) ? 20 : Math.min(Math.max(rawLimit, 1), 100);
