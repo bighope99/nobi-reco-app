@@ -1,6 +1,8 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { AdminLayout } from "@/components/layout/admin-layout";
+import { useSession } from '@/hooks/useSession';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Building2,
@@ -59,6 +61,11 @@ const FieldGroup = ({ label, required, children }: any) => (
 );
 
 export default function FacilityDetailPage() {
+  const session = useSession();
+  const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
+  const canCreate = isAdmin;
+  const Layout = isAdmin ? AdminLayout : StaffLayout;
+
   const params = useParams();
   const router = useRouter();
   const facilityId = params.facility_id as string;
@@ -153,40 +160,40 @@ export default function FacilityDetailPage() {
 
   if (loading) {
     return (
-      <StaffLayout title="施設詳細">
+      <Layout title="施設詳細">
         <div className="flex justify-center items-center min-h-screen">
           <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
         </div>
-      </StaffLayout>
+      </Layout>
     );
   }
 
   if (error && !facility) {
     return (
-      <StaffLayout title="施設詳細">
+      <Layout title="施設詳細">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             <p className="text-sm">{error}</p>
           </div>
         </div>
-      </StaffLayout>
+      </Layout>
     );
   }
 
   if (!facility) {
     return (
-      <StaffLayout title="施設詳細">
+      <Layout title="施設詳細">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <p className="text-slate-500">施設情報を読み込んでいます...</p>
         </div>
-      </StaffLayout>
+      </Layout>
     );
   }
 
   const isNewFacility = facilityId === 'new';
 
   return (
-    <StaffLayout title={isNewFacility ? "施設新規作成" : "施設詳細"}>
+    <Layout title={isNewFacility ? "施設新規作成" : "施設詳細"}>
       <div className="min-h-screen bg-gray-50 text-slate-900 font-sans pb-24">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -340,6 +347,6 @@ export default function FacilityDetailPage() {
         </div>
 
       </div>
-    </StaffLayout>
+    </Layout>
   );
 }
