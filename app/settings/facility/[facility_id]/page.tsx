@@ -61,16 +61,13 @@ const FieldGroup = ({ label, required, children }: any) => (
 );
 
 export default function FacilityDetailPage() {
-  const session = useSession();
-  const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
-  const canCreate = isAdmin;
-  const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
-
   const params = useParams();
   const router = useRouter();
   const facilityId = params.facility_id as string;
   const session = useSession();
-  const canCreate = session?.role === 'company_admin' || session?.role === 'site_admin';
+  const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
+  const canCreate = isAdmin;
+  const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
 
   const [facility, setFacility] = useState<Facility | null>(null);
   const [loading, setLoading] = useState(false);
