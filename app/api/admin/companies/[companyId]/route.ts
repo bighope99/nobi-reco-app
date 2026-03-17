@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
+interface UserFacilityRelation {
+  facility_id: string;
+  is_primary: boolean;
+  m_facilities: { name: string } | null;
+}
+
 /**
  * GET /api/admin/companies/[companyId]
  * 会社詳細取得（site_adminのみ）
@@ -61,6 +67,59 @@ export async function GET(
       throw companyError;
     }
 
+    // 施設一覧とアカウント一覧を並列取得
+    const [facilitiesResult, accountsResult] = await Promise.all([
+      // 施設一覧
+      supabase
+        .from('m_facilities')
+        .select(
+          'id, name, name_kana, postal_code, address, phone, capacity, is_active'
+        )
+        .eq('company_id', companyId)
+        .is('deleted_at', null)
+        .order('name'),
+
+      // アカウント一覧（company_admin + facility_admin）
+      supabase
+        .from('m_users')
+        .select(
+          `
+          id, name, name_kana, email, role, is_active,
+          _user_facility!_user_facility_user_id_fkey (
+            facility_id, is_primary,
+            m_facilities ( id, name )
+          )
+        `
+        )
+        .eq('company_id', companyId)
+        .in('role', ['company_admin', 'facility_admin'])
+        .is('deleted_at', null)
+        .order('role'),
+    ]);
+
+    // エラーハンドリング
+    if (facilitiesResult.error) {
+      console.error('Error fetching facilities:', facilitiesResult.error);
+    }
+    if (accountsResult.error) {
+      console.error('Error fetching accounts:', accountsResult.error);
+    }
+
+    // アカウントデータを整形（_user_facilityをフラットに）
+    const accounts = (accountsResult.data || []).map((user) => ({
+      id: user.id,
+      name: user.name,
+      name_kana: user.name_kana,
+      email: user.email,
+      role: user.role,
+      is_active: user.is_active,
+      facilities: (user._user_facility || []).map((uf: UserFacilityRelation) => ({
+        facility_id: uf.facility_id,
+        facility_name: uf.m_facilities?.name || '',
+        is_primary: uf.is_primary,
+      })),
+    }));
+
     return NextResponse.json({
       success: true,
       data: {
@@ -76,6 +135,8 @@ export async function GET(
           created_at: company.created_at,
           updated_at: company.updated_at,
         },
+        facilities: facilitiesResult.data || [],
+        accounts,
       },
     });
   } catch (error) {

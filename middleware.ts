@@ -146,8 +146,8 @@ export async function middleware(request: NextRequest) {
     }
 
     // 未ログインで /login 以外にアクセス → /login へリダイレクト
-    const isPasswordSetup = request.nextUrl.pathname.startsWith('/password/setup');
-    if (!session && request.nextUrl.pathname !== '/login' && !isPasswordSetup && !isE2ETest) {
+    const isPasswordPage = request.nextUrl.pathname.startsWith('/password/');
+    if (!session && request.nextUrl.pathname !== '/login' && !isPasswordPage && !isE2ETest) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 

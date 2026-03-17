@@ -11,8 +11,10 @@ import {
 export default function NewCompanyPage() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (data: CompanyFormSubmitData) => {
+    setError(null)
     setIsSubmitting(true)
 
     try {
@@ -28,20 +30,7 @@ export default function NewCompanyPage() {
             postal_code: data.company.postal_code.trim() || undefined,
             address: data.company.address.trim() || undefined,
             phone: data.company.phone.trim() || undefined,
-            email: data.company.email.trim() || undefined,
           },
-          facility: data.facility
-            ? {
-                name: data.facility.name.trim(),
-                name_kana: data.facility.name_kana.trim() || undefined,
-                postal_code: data.facility.postal_code.trim() || undefined,
-                address: data.facility.address.trim() || undefined,
-                phone: data.facility.phone.trim() || undefined,
-                capacity: data.facility.capacity
-                  ? parseInt(data.facility.capacity, 10)
-                  : undefined,
-              }
-            : undefined,
           admin_user: data.adminUser
             ? {
                 name: data.adminUser.name.trim(),
@@ -52,12 +41,20 @@ export default function NewCompanyPage() {
         }),
       })
 
-      if (!response.ok) {
-        const result = await response.json()
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
         throw new Error(result.error || "会社の登録に失敗しました")
       }
 
-      router.push("/admin/companies")
+      // 完了画面にリダイレクト
+      const companyId = result.data?.company_id
+      if (!companyId) {
+        throw new Error("会社IDの取得に失敗しました")
+      }
+      router.push(`/admin/companies/${companyId}/complete`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました")
     } finally {
       setIsSubmitting(false)
     }
@@ -70,6 +67,11 @@ export default function NewCompanyPage() {
   return (
     <AdminLayout title="会社登録" subtitle="新しい会社を登録">
       <div className="mx-auto max-w-2xl">
+        {error && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            {error}
+          </div>
+        )}
         <CompanyForm
           mode="create"
           onSubmit={handleSubmit}

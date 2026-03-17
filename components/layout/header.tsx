@@ -12,6 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+/** 通知機能は将来的に復活する可能性があるため、コードは残しフラグで制御 */
+const SHOW_NOTIFICATIONS = false;
+
 type HeaderProps = {
   title: string
   subtitle?: string
@@ -54,9 +57,11 @@ export function Header({ title, subtitle, onMenuClick, userName, facilityName }:
             <span className="truncate max-w-[200px]">{facilityName}</span>
           </div>
         )}
-        <Button variant="ghost" size="icon" className="hidden sm:flex" aria-label="通知">
-          <Bell className="h-5 w-5" />
-        </Button>
+        {SHOW_NOTIFICATIONS && (
+          <Button variant="ghost" size="icon" className="hidden sm:flex" aria-label="通知">
+            <Bell className="h-5 w-5" />
+          </Button>
+        )}
         {/* ユーザーメニュー（デスクトップ） */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

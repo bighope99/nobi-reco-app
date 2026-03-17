@@ -37,6 +37,7 @@ import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/s
 import {
   MAX_EVENT_NAME_LENGTH,
   MAX_SPECIAL_NOTES_LENGTH,
+  MAX_HANDOVER_LENGTH,
   MAX_SNACK_LENGTH,
   MAX_SCHEDULE_CONTENT_LENGTH,
   MAX_ROLE_LENGTH,
@@ -45,6 +46,9 @@ import {
   MAX_MEAL_NOTES_LENGTH,
 } from "@/lib/validation/activityValidation"
 import { getSanitizedExtendedFields as getSanitizedExtendedFieldsUtil } from "@/lib/activity/sanitizeExtendedFields"
+import { PreviousHandoverBanner } from "./components/previous-handover-banner"
+
+const MENTION_ENABLED = false  // TODO: メンション機能復活時にtrueに変更
 
 interface IndividualRecord {
   observation_id: string
@@ -61,6 +65,7 @@ interface Activity {
   photos: Array<ActivityPhoto | string>
   class_name: string
   class_id?: string
+  recorded_by?: string
   created_by: string
   created_at: string
   individual_record_count: number
@@ -73,6 +78,7 @@ interface Activity {
   role_assignments?: RoleAssignment[]
   special_notes?: string | null
   meal?: Meal | null
+  handover?: string | null
 }
 
 interface MentionSuggestion {
@@ -139,7 +145,7 @@ export default function ActivityRecordClient() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
-  const [transcriptionTarget, setTranscriptionTarget] = useState<'activityContent' | 'specialNotes'>('activityContent')
+  const [transcriptionTarget, setTranscriptionTarget] = useState<'activityContent' | 'specialNotes' | 'handover'>('activityContent')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
 
@@ -174,8 +180,10 @@ export default function ActivityRecordClient() {
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
   const [specialNotes, setSpecialNotes] = useState("")
+  const [handover, setHandover] = useState("")
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
+  const [selectedRecorder, setSelectedRecorder] = useState<string>("")
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -227,10 +235,20 @@ export default function ActivityRecordClient() {
 
         if (response.ok && result.success) {
           const users = result.data?.users || []
-          setStaffList(users.map((u: { user_id: string; name: string }) => ({
+          const mapped = users.map((u: { user_id: string; name: string }) => ({
             user_id: u.user_id,
             name: u.name,
-          })))
+          }))
+          setStaffList(mapped)
+
+          // Cookie から前回選択した記録者を復元
+          const lastRecorder = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('nobi_last_recorder='))
+            ?.split('=')[1]
+          if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
+            setSelectedRecorder(lastRecorder)
+          }
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)
@@ -379,11 +397,11 @@ export default function ActivityRecordClient() {
     const value = event.target.value
     const cursorPos = event.target.selectionStart
     setActivityContent(value)
-    updateMentionedChildren(value)
+    if (MENTION_ENABLED) updateMentionedChildren(value)
 
     // @検出：カーソル位置の直前の文字を確認（テキスト中間でも検出可能）
     const justTypedChar = cursorPos > 0 ? value.charAt(cursorPos - 1) : ''
-    if (MENTION_TRIGGERS.includes(justTypedChar)) {
+    if (MENTION_ENABLED && MENTION_TRIGGERS.includes(justTypedChar)) {
       setMentionStartIndex(cursorPos - 1)
       mentionTriggerRef.current = 'textarea'
       setShowMentionPicker(true)
@@ -393,7 +411,7 @@ export default function ActivityRecordClient() {
     }
 
     // メンション中：@以降の文字を検索クエリに
-    if (showMentionPicker && mentionStartIndex !== null) {
+    if (MENTION_ENABLED && showMentionPicker && mentionStartIndex !== null) {
       const query = value.slice(mentionStartIndex + 1, cursorPos)
       setMentionSearchQuery(query)
       setSelectedIndex(0)
@@ -513,6 +531,7 @@ export default function ActivityRecordClient() {
       meal,
       specialNotes,
       eventName,
+      handover,
     })
   }
 
@@ -561,8 +580,9 @@ export default function ActivityRecordClient() {
             class_id: selectedClass,
             activity_date: activityDate,
             content: activityContent,
-            mentioned_children: selectedMentions.map((child) => child.child_id),
+            mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
             photos,
+            recorded_by: selectedRecorder || undefined,
             // 新規フィールド（サニタイズ済み）
             event_name: sanitizedFields.event_name,
             daily_schedule: sanitizedFields.daily_schedule,
@@ -570,6 +590,7 @@ export default function ActivityRecordClient() {
             snack: sanitizedFields.snack,
             meal: sanitizedFields.meal,
             special_notes: sanitizedFields.special_notes,
+            handover: sanitizedFields.handover,
           }),
         })
 
@@ -591,7 +612,7 @@ export default function ActivityRecordClient() {
             class_id: selectedClass,
             activity_date: activityDate,
             content: activityContent,
-            mentioned_children: selectedMentions.map((child) => child.child_id),
+            mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
             photos,
             // 新規フィールド（サニタイズ済み）
             event_name: sanitizedFields.event_name,
@@ -600,6 +621,7 @@ export default function ActivityRecordClient() {
             snack: sanitizedFields.snack,
             meal: sanitizedFields.meal,
             special_notes: sanitizedFields.special_notes,
+            handover: sanitizedFields.handover,
           }),
         })
 
@@ -627,7 +649,7 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           content: activityContent,
           activity_date: activityDate,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
           activity_id: savedActivityId, // 保存した活動記録IDを紐付け
         }),
       })
@@ -665,6 +687,12 @@ export default function ActivityRecordClient() {
 
       const sanitizedFields = getSanitizedExtendedFields()
 
+      // 記録者をCookieに保存（30日間）
+      if (selectedRecorder) {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`
+      }
+
       const response = await fetch('/api/activities', {
         method: 'POST',
         headers: {
@@ -674,8 +702,9 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           activity_date: activityDate,
           content: contentForDB,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
           photos,
+          recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
           event_name: sanitizedFields.event_name,
           daily_schedule: sanitizedFields.daily_schedule,
@@ -683,6 +712,7 @@ export default function ActivityRecordClient() {
           snack: sanitizedFields.snack,
           meal: sanitizedFields.meal,
           special_notes: sanitizedFields.special_notes,
+          handover: sanitizedFields.handover,
         }),
       })
 
@@ -701,7 +731,7 @@ export default function ActivityRecordClient() {
       fetchActivities()
 
       // AI分析自動実行（観察記録+メンションがある場合のみ）
-      if (contentForDB.trim() && selectedMentions.length > 0) {
+      if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -711,7 +741,7 @@ export default function ActivityRecordClient() {
               class_id: selectedClass || null,
               content: contentForDB,
               activity_date: activityDate,
-              mentioned_children: selectedMentions.map((child) => child.child_id),
+              mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
               activity_id: savedActivityId,
             }),
           })
@@ -758,8 +788,9 @@ export default function ActivityRecordClient() {
           class_id: selectedClass,
           activity_date: activityDate,
           content: contentForDB,
-          mentioned_children: selectedMentions.map((child) => child.child_id),
+          mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
           photos,
+          recorded_by: selectedRecorder || undefined,
           // 新規フィールド（サニタイズ済み）
           event_name: sanitizedFields.event_name,
           daily_schedule: sanitizedFields.daily_schedule,
@@ -767,6 +798,7 @@ export default function ActivityRecordClient() {
           snack: sanitizedFields.snack,
           meal: sanitizedFields.meal,
           special_notes: sanitizedFields.special_notes,
+          handover: sanitizedFields.handover,
         }),
       })
 
@@ -780,7 +812,7 @@ export default function ActivityRecordClient() {
       fetchActivities()
 
       // AI分析は内容が変更された場合のみ実行
-      if (contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
+      if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0 && contentForDB !== originalContent) {
         try {
           setIsAiLoading(true)
           const aiResponse = await fetch('/api/ai/observation', {
@@ -790,7 +822,7 @@ export default function ActivityRecordClient() {
               class_id: selectedClass || null,
               content: contentForDB,
               activity_date: activityDate,
-              mentioned_children: selectedMentions.map((child) => child.child_id),
+              mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
               activity_id: editingActivityId,
             }),
           })
@@ -824,6 +856,7 @@ export default function ActivityRecordClient() {
     setActivityContent(displayContent)
     setActivityDate(activity.activity_date)
     setSelectedClass(activity.class_id || '')
+    setSelectedRecorder(activity.recorded_by || "")
     setOriginalMentionedChildren(activity.mentioned_children || [])
     setOriginalContent(activity.content || "")
 
@@ -844,9 +877,10 @@ export default function ActivityRecordClient() {
     setSnack(activity.snack || "")
     setMeal(activity.meal || null)
     setSpecialNotes(activity.special_notes || "")
+    setHandover(activity.handover || "")
 
     // メンション復元: クラスの児童リストから名前情報を取得
-    if (activity.mentioned_children && activity.mentioned_children.length > 0) {
+    if (MENTION_ENABLED && activity.mentioned_children && activity.mentioned_children.length > 0) {
       // クラスが異なる場合は児童リストを再取得する必要があるため、APIから取得
       let children = classChildren
       if (activity.class_id && activity.class_id !== selectedClass) {
@@ -980,6 +1014,7 @@ export default function ActivityRecordClient() {
           ai_action: aiResult.data?.objective ?? '',
           ai_opinion: aiResult.data?.subjective ?? '',
           tag_flags: aiResult.data?.flags ?? {},
+          recorded_by: selectedRecorder || undefined,
         }),
       })
 
@@ -1030,6 +1065,7 @@ export default function ActivityRecordClient() {
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
+    setHandover("")
   }
 
   const handleRestart = () => {
@@ -1045,6 +1081,7 @@ export default function ActivityRecordClient() {
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
+    setHandover("")
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
@@ -1152,7 +1189,7 @@ export default function ActivityRecordClient() {
     })
   }
 
-  const startRecording = async (target: 'activityContent' | 'specialNotes' = 'activityContent') => {
+  const startRecording = async (target: 'activityContent' | 'specialNotes' | 'handover' = 'activityContent') => {
     try {
       setTranscriptionTarget(target)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1207,7 +1244,9 @@ export default function ActivityRecordClient() {
       }
 
       const transcribedText = result.text
-      if (transcriptionTarget === 'specialNotes') {
+      if (transcriptionTarget === 'handover') {
+        setHandover((prev) => prev + (prev ? '\n' : '') + transcribedText)
+      } else if (transcriptionTarget === 'specialNotes') {
         setSpecialNotes((prev) => prev + (prev ? '\n' : '') + transcribedText)
       } else {
         setActivityContent((prev) => prev + (prev ? '\n' : '') + transcribedText)
@@ -1268,6 +1307,7 @@ export default function ActivityRecordClient() {
   return (
     <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
+        <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
             <CardTitle>活動記録の入力</CardTitle>
@@ -1299,6 +1339,25 @@ export default function ActivityRecordClient() {
                   value={activityDate}
                   onChange={(event) => setActivityDate(event.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="recorder">記録者</Label>
+                <Select
+                  value={selectedRecorder}
+                  onValueChange={(value) => setSelectedRecorder(value)}
+                >
+                  <SelectTrigger id="recorder">
+                    <SelectValue placeholder="記録者を選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffList.map((staff) => (
+                      <SelectItem key={staff.user_id} value={staff.user_id}>
+                        {staff.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -1548,38 +1607,40 @@ export default function ActivityRecordClient() {
               <div className="flex items-center justify-between">
                 <Label htmlFor="activityContent" className="text-base font-semibold">観察記録</Label>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{selectedMentions.length}人</span>
-                  <span>・</span>
+                  {MENTION_ENABLED && <span>{selectedMentions.length}人</span>}
+                  {MENTION_ENABLED && <span>・</span>}
                   <span>{activityContent.length}/{ACTIVITY_CONTENT_MAX}文字</span>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // @を末尾に挿入
-                    const newContent = activityContent + '@'
-                    setActivityContent(newContent)
-                    // mentionStartIndexを設定
-                    setMentionStartIndex(newContent.length - 1)
-                    mentionTriggerRef.current = 'button'
-                    setShowMentionPicker(true)
-                    setMentionSearchQuery('')
-                    setSelectedIndex(0)
-                    // フォーカスしてカーソルを末尾に
-                    setTimeout(() => {
-                      textareaRef.current?.focus()
-                      textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
-                    }, 0)
-                  }}
-                  disabled={classOptions.length > 0 && !selectedClass || classChildren.length === 0}
-                >
-                  <span className="mr-1">@</span>
-                  児童をメンション
-                </Button>
+                {MENTION_ENABLED && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // @を末尾に挿入
+                      const newContent = activityContent + '@'
+                      setActivityContent(newContent)
+                      // mentionStartIndexを設定
+                      setMentionStartIndex(newContent.length - 1)
+                      mentionTriggerRef.current = 'button'
+                      setShowMentionPicker(true)
+                      setMentionSearchQuery('')
+                      setSelectedIndex(0)
+                      // フォーカスしてカーソルを末尾に
+                      setTimeout(() => {
+                        textareaRef.current?.focus()
+                        textareaRef.current?.setSelectionRange(newContent.length, newContent.length)
+                      }, 0)
+                    }}
+                    disabled={classOptions.length > 0 && !selectedClass || classChildren.length === 0}
+                  >
+                    <span className="mr-1">@</span>
+                    児童をメンション
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="sm"
@@ -1601,11 +1662,11 @@ export default function ActivityRecordClient() {
                 onChange={handleContentChange}
                 onKeyDown={handleTextareaKeyDown}
                 maxLength={ACTIVITY_CONTENT_MAX}
-                placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+                placeholder="園での活動内容を入力してください"
                 className="min-h-[300px]"
               />
 
-              {showMentionPicker && (
+              {MENTION_ENABLED && showMentionPicker && (
                 <div
                   ref={mentionPickerRef}
                   className="absolute top-full left-0 mt-2 z-50 w-64 max-h-[300px] p-2 bg-popover border rounded-md shadow-md"
@@ -1642,7 +1703,7 @@ export default function ActivityRecordClient() {
                 </div>
               )}
             </div>
-              {mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
+              {MENTION_ENABLED && mentionError && <p className="text-sm text-red-500">{mentionError}</p>}
             </div>
 
             <div className="space-y-3">
@@ -1703,7 +1764,7 @@ export default function ActivityRecordClient() {
               )}
             </div>
 
-            {selectedMentions.length > 0 && (
+            {MENTION_ENABLED && selectedMentions.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">メンション中の児童</Label>
                 <div className="flex flex-wrap gap-2">
@@ -1748,6 +1809,31 @@ export default function ActivityRecordClient() {
                 onChange={(e) => setSpecialNotes(e.target.value)}
                 placeholder="その他、気になったことや共有事項があれば記入してください"
                 maxLength={MAX_SPECIAL_NOTES_LENGTH}
+              />
+            </div>
+
+            {/* 翌日への引継ぎ */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="handover">翌日への引継ぎ</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isRecording && transcriptionTarget === 'handover' ? "destructive" : "outline"}
+                  onClick={isRecording && transcriptionTarget === 'handover' ? stopRecording : () => startRecording('handover')}
+                  disabled={isTranscribing || (isRecording && transcriptionTarget !== 'handover')}
+                >
+                  <Mic className={`mr-2 h-4 w-4 ${isRecording && transcriptionTarget === 'handover' ? 'animate-pulse' : ''}`} />
+                  {isRecording && transcriptionTarget === 'handover' ? '停止' : isTranscribing && transcriptionTarget === 'handover' ? '文字起こし中...' : '音声入力'}
+                </Button>
+              </div>
+              <Textarea
+                id="handover"
+                rows={4}
+                value={handover}
+                onChange={(e) => setHandover(e.target.value)}
+                placeholder="翌日のスタッフへの引継ぎ事項を入力してください"
+                maxLength={MAX_HANDOVER_LENGTH}
               />
             </div>
 
@@ -1844,6 +1930,12 @@ export default function ActivityRecordClient() {
                               })}
                             </div>
                           )}
+                          {activity.handover && (
+                            <div className="mt-3 p-3 rounded-md bg-amber-50 border border-amber-200">
+                              <p className="text-xs font-medium text-amber-800 mb-1">引継ぎ</p>
+                              <p className="text-sm text-amber-900 whitespace-pre-wrap">{activity.handover}</p>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <Button
@@ -1867,26 +1959,28 @@ export default function ActivityRecordClient() {
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t">
-                        <div className="flex flex-col gap-2 flex-1">
-                          <span className="text-xs text-muted-foreground">
-                            {activity.individual_record_count}件の児童記録
-                          </span>
-                          {activity.individual_records && activity.individual_records.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {activity.individual_records.map((record) => (
-                                <Button
-                                  key={record.observation_id}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-xs hover:bg-primary/10"
-                                  onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
-                                >
-                                  {record.child_name}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {MENTION_ENABLED && (
+                          <div className="flex flex-col gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground">
+                              {activity.individual_record_count}件の児童記録
+                            </span>
+                            {activity.individual_records && activity.individual_records.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {activity.individual_records.map((record) => (
+                                  <Button
+                                    key={record.observation_id}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs hover:bg-primary/10"
+                                    onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
+                                  >
+                                    {record.child_name}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           作成: {activity.created_by}
                         </span>

@@ -82,15 +82,16 @@ const adminNavItems: NavItem[] = [
     children: [
       { label: "会社一覧", href: "/admin/companies" },
       { label: "会社登録", href: "/admin/companies/new" },
+      { label: "管理者登録", href: "/admin/company-admins/new" },
     ],
   },
   {
     label: "施設管理",
-    href: "/admin/facilities",
+    href: "/settings/facility",
     icon: <Home className="h-5 w-5" />,
     children: [
-      { label: "施設一覧", href: "/admin/facilities" },
-      { label: "施設登録", href: "/admin/facilities/new" },
+      { label: "施設一覧", href: "/settings/facility" },
+      { label: "施設登録", href: "/settings/facility/new" },
     ],
   },
   { label: "ユーザー管理", href: "/admin/users", icon: <Users className="h-5 w-5" /> },
@@ -117,6 +118,22 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
   }
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
+
+  /**
+   * 子メニュー項目のアクティブ状態を判定する。
+   * 同一親メニュー内の兄弟アイテムでより具体的にマッチするものがある場合はそちらを優先する。
+   * @param href - メニュー項目のhref
+   * @param siblings - 同一親メニュー内の兄弟アイテムのhref配列
+   * @returns アクティブ状態かどうか
+   */
+  const isChildActive = (href: string, siblings: { href: string }[]) => {
+    if (pathname === href) return true
+    if (!pathname.startsWith(href + "/")) return false
+    // 自分よりも具体的にマッチする兄弟がいればfalse
+    return !siblings.some(
+      (sibling) => sibling.href !== href && (pathname === sibling.href || pathname.startsWith(sibling.href + "/"))
+    )
+  }
 
   return (
     <>
@@ -181,7 +198,7 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
                             className={cn(
                               "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                               "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
-                              isActive(child.href) && "bg-sidebar-accent font-medium",
+                              isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
                               child.hidden && "hidden",
                             )}
                           >

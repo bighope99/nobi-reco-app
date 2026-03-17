@@ -1,0 +1,114 @@
+import React from "react"
+import { render, screen } from "@testing-library/react"
+import { Sidebar } from "@/components/layout/sidebar"
+
+// Mock next/navigation
+const mockPathname = jest.fn()
+jest.mock("next/navigation", () => ({
+  usePathname: () => mockPathname(),
+}))
+
+describe("Sidebar", () => {
+  beforeEach(() => {
+    mockPathname.mockReturnValue("/dashboard")
+  })
+
+  describe("active state based on pathname", () => {
+    it("highlights dashboard when pathname is /dashboard", () => {
+      mockPathname.mockReturnValue("/dashboard")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const dashboardLink = screen.getByRole("link", { name: "ダッシュボード" })
+      expect(dashboardLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("does not highlight dashboard when pathname is /records", () => {
+      mockPathname.mockReturnValue("/records/status")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const dashboardLink = screen.getByRole("link", { name: "ダッシュボード" })
+      expect(dashboardLink).not.toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights child item when pathname exactly matches child href", () => {
+      mockPathname.mockReturnValue("/records/activity")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const activityLink = screen.getByRole("link", { name: "活動記録" })
+      expect(activityLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights the correct child when pathname is a sub-path", () => {
+      mockPathname.mockReturnValue("/records/personal/new")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const personalLink = screen.getByRole("link", { name: "児童記録" })
+      expect(personalLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights '子ども一覧' only when pathname is exactly /children", () => {
+      mockPathname.mockReturnValue("/children")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const childrenLink = screen.getByRole("link", { name: "子ども一覧" })
+      expect(childrenLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("does not highlight '子ども一覧' when pathname is /children/new", () => {
+      mockPathname.mockReturnValue("/children/new")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const childrenLink = screen.getByRole("link", { name: "子ども一覧" })
+      expect(childrenLink).not.toHaveClass("bg-sidebar-accent")
+
+      const newChildLink = screen.getByRole("link", { name: "新規登録" })
+      expect(newChildLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights '子ども一覧' when pathname is /children/[id] (child detail)", () => {
+      mockPathname.mockReturnValue("/children/some-uuid-123")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      // 子ども詳細は「子ども一覧」配下なのでアクティブにする
+      const childrenLink = screen.getByRole("link", { name: "子ども一覧" })
+      expect(childrenLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights parent menu button when any child is active", () => {
+      mockPathname.mockReturnValue("/records/activity")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const recordsButton = screen.getByRole("button", { name: /記録管理/ })
+      expect(recordsButton).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("does not highlight '会社一覧' when pathname is /admin/companies/new", () => {
+      mockPathname.mockReturnValue("/admin/companies/new")
+      render(<Sidebar type="admin" isOpen={true} />)
+
+      const companiesLink = screen.getByRole("link", { name: "会社一覧" })
+      expect(companiesLink).not.toHaveClass("bg-sidebar-accent")
+
+      const newCompanyLink = screen.getByRole("link", { name: "会社登録" })
+      expect(newCompanyLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights data export when pathname matches", () => {
+      mockPathname.mockReturnValue("/data/export")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      const dataLink = screen.getByRole("link", { name: "データ管理" })
+      expect(dataLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("auto-opens parent menu containing the active child", () => {
+      mockPathname.mockReturnValue("/settings/classes")
+      render(<Sidebar type="staff" isOpen={true} />)
+
+      // The child item should be visible (parent menu is open)
+      const classesLink = screen.getByRole("link", { name: "クラス管理" })
+      expect(classesLink).toBeInTheDocument()
+      expect(classesLink).toHaveClass("bg-sidebar-accent")
+    })
+  })
+})

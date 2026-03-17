@@ -1,20 +1,17 @@
 "use client"
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 
 import {
     Search,
     Filter,
     Plus,
-    MoreHorizontal,
     Phone,
     ChevronRight,
     ArrowUpDown,
-    Baby,
     Power,
     RotateCcw,
     Users,
-    QrCode,
     Download,
     Loader2
 } from 'lucide-react';
@@ -37,7 +34,7 @@ interface APIChild {
     class_id: string | null;
     class_name: string;
     enrollment_status: EnrollmentStatus;
-    contract_type: ContractType;
+    enrollment_type: ContractType;
     has_allergy: boolean;
     allergy_detail: string | null;
     photo_allowed: boolean;
@@ -53,21 +50,18 @@ interface ChildrenAPIResponse {
     success: boolean;
     data: {
         children: APIChild[];
-        pagination: {
-            total: number;
-            page: number;
-            limit: number;
-            total_pages: number;
-        };
         summary: {
             total_children: number;
-            enrolled: number;
-            withdrawn: number;
-            suspended: number;
+            enrolled_count: number;
+            withdrawn_count: number;
+            has_allergy_count: number;
+            has_sibling_count: number;
         };
         filters: {
-            classes: Array<{ class_id: string; class_name: string }>;
+            classes: Array<{ class_id: string; class_name: string; children_count: number }>;
         };
+        total: number;
+        has_more: boolean;
     };
     error?: string;
 }
@@ -126,7 +120,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         photoAllowed: apiChild.photo_allowed,
         reportAllowed: apiChild.report_allowed,
         status,
-        contractType: apiChild.contract_type,
+        contractType: apiChild.enrollment_type,
     };
 };
 
@@ -149,8 +143,25 @@ export default function StudentList() {
     const [sortKey, setSortKey] = useState<SortKey>('grade');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
+    // Debounced search term
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        debounceTimerRef.current = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, [searchTerm]);
+
     // Fetch children data from API
     useEffect(() => {
+        const abortController = new AbortController();
+
         const fetchChildren = async () => {
             try {
                 setLoading(true);
@@ -169,11 +180,13 @@ export default function StudentList() {
                     params.append('class_id', filterClass);
                 }
 
-                if (searchTerm) {
-                    params.append('search', searchTerm);
+                if (debouncedSearch) {
+                    params.append('search', debouncedSearch);
                 }
 
-                const response = await fetch(`/api/children?${params.toString()}`);
+                const response = await fetch(`/api/children?${params.toString()}`, {
+                    signal: abortController.signal,
+                });
                 const result: ChildrenAPIResponse = await response.json();
 
                 if (!response.ok) {
@@ -183,19 +196,28 @@ export default function StudentList() {
                 if (result.success) {
                     const convertedStudents = result.data.children.map(convertAPIChildToStudent);
                     setStudents(convertedStudents);
-                    setClassOptions(result.data.filters.classes);
-                    setTotalCount(result.data.summary.total_children);
+                    setClassOptions(result.data?.filters?.classes || []);
+                    setTotalCount(result.data?.summary?.total_children || 0);
                 }
             } catch (err) {
+                if (err instanceof DOMException && err.name === 'AbortError') {
+                    return; // リクエストがキャンセルされた場合は何もしない
+                }
                 console.error('Failed to fetch children:', err);
                 setError(err instanceof Error ? err.message : 'Failed to fetch children');
             } finally {
-                setLoading(false);
+                if (!abortController.signal.aborted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchChildren();
-    }, [activeTab, filterClass, searchTerm]);
+
+        return () => {
+            abortController.abort();
+        };
+    }, [activeTab, filterClass, debouncedSearch]);
 
     // Toggle Status Function (Now updates via API)
     const toggleStatus = async (id: string, currentStatus: StatusType) => {
@@ -205,11 +227,9 @@ export default function StudentList() {
         if (confirm(`${currentStatus === 'active' ? '退所済みに変更' : '所属中に復帰'}しますか？`)) {
             try {
                 const response = await fetch(`/api/children/${id}`, {
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        affiliation: { enrollment_status: newEnrollmentStatus }
-                    }),
+                    body: JSON.stringify({ enrollment_status: newEnrollmentStatus }),
                 });
 
                 if (!response.ok) {
@@ -239,23 +259,9 @@ export default function StudentList() {
 
     // Filter & Sort Logic
     const processedStudents = useMemo(() => {
-        // 1. Filter
-        let result = students.filter(student => {
-            // Status Tab Filter
-            if (student.status !== activeTab) return false;
-
-            // Search Text
-            const matchText =
-                student.name.includes(searchTerm) ||
-                student.kana.includes(searchTerm) ||
-                student.parentName.includes(searchTerm);
-            if (!matchText) return false;
-
-            // Class Filter
-            if (filterClass !== 'all' && student.className !== filterClass) return false;
-
-            return true;
-        });
+        // APIがstatus/search/class_idでフィルター済みのデータを返すため
+        // クライアント側では追加フィルターは不要
+        let result = [...students];
 
         // 2. Sort
         result.sort((a, b) => {
@@ -273,7 +279,7 @@ export default function StudentList() {
                     comparison = a.className.localeCompare(b.className);
                     break;
                 case 'contractType':
-                    comparison = a.contractType.localeCompare(b.contractType);
+                    comparison = (a.contractType || '').localeCompare(b.contractType || '');
                     break;
                 case 'allergy':
                     comparison = (a.hasAllergy === b.hasAllergy) ? 0 : a.hasAllergy ? -1 : 1;
@@ -287,7 +293,7 @@ export default function StudentList() {
         });
 
         return result;
-    }, [students, searchTerm, filterClass, activeTab, sortKey, sortOrder]);
+    }, [students, sortKey, sortOrder]);
 
     const parseFilename = (contentDisposition: string | null, fallback: string) => {
         if (!contentDisposition) return fallback;
@@ -389,7 +395,7 @@ export default function StudentList() {
     };
 
     return (
-        <StaffLayout title="園児管理">
+        <StaffLayout title="子ども一覧">
             <div className="min-h-screen text-slate-900 font-sans" >
                 <style>
                     {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -460,6 +466,7 @@ export default function StudentList() {
                                     onChange={(e) => setFilterClass(e.target.value)}
                                 >
                                     <option value="all" > 全クラス </option>
+                                    <option value="none" > クラスなし </option>
                                     {
                                         classOptions.map(cls => (
                                             <option key={cls.class_id} value={cls.class_id} > {cls.class_name} </option>
@@ -481,9 +488,6 @@ export default function StudentList() {
                             >
                                 {batchGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                                 QR一括出力
-                            </button>
-                            <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" >
-                                <MoreHorizontal size={20} />
                             </button>
                         </div>
                     </div>

@@ -4,7 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { normalizePhotos } from '@/lib/utils/photos';
-import { findInvalidUUIDs } from '@/lib/utils/validation';
+import { findInvalidUUIDs, isValidUUID } from '@/lib/utils/validation';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
@@ -108,7 +108,9 @@ export async function GET(request: NextRequest) {
         daily_schedule,
         role_assignments,
         special_notes,
+        handover,
         meal,
+        recorded_by,
         created_at,
         updated_at,
         m_classes (
@@ -248,7 +250,9 @@ export async function GET(request: NextRequest) {
         daily_schedule: activity.daily_schedule,
         role_assignments: activity.role_assignments,
         special_notes: activity.special_notes,
+        handover: activity.handover,
         meal: activity.meal,
+        recorded_by: activity.recorded_by || null,
         created_by: activity.m_users?.name || '',
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
@@ -291,7 +295,7 @@ export async function POST(request: NextRequest) {
     const user_id = metadata.user_id;
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, meal } = body;
+      event_name, daily_schedule, role_assignments, special_notes, handover, meal, recorded_by } = body;
 
     if (!activity_date) {
       return NextResponse.json(
@@ -342,6 +346,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // recorded_by のUUID形式検証 + 同一会社の有効スタッフか確認
+    if (recorded_by) {
+      if (!isValidUUID(recorded_by)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid recorded_by ID format' },
+          { status: 400 }
+        );
+      }
+      const { data: recorder, error: recorderError } = await supabase
+        .from('m_users')
+        .select('id')
+        .eq('id', recorded_by)
+        .eq('company_id', metadata.company_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (recorderError) {
+        console.error('recorded_by validation query failed:', recorderError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to validate recorded_by' },
+          { status: 500 }
+        );
+      }
+      if (!recorder) {
+        return NextResponse.json(
+          { success: false, error: 'recorded_by user not found or not in your company' },
+          { status: 400 }
+        );
+      }
+    }
+
     // class_id の施設所属確認
     if (class_id) {
       const { data: classData, error: classError } = await supabase
@@ -382,6 +417,7 @@ export async function POST(request: NextRequest) {
       daily_schedule,
       role_assignments,
       special_notes,
+      handover,
       snack,
       meal,
     });
@@ -408,11 +444,13 @@ export async function POST(request: NextRequest) {
         photos: normalizedPhotos,
         mentioned_children: mentioned_children || [],
         created_by: user_id,
+        recorded_by: recorded_by || null,
         // 新規フィールド（バリデーション済み）
         event_name: validatedFields.event_name,
         daily_schedule: validatedFields.daily_schedule,
         role_assignments: validatedFields.role_assignments,
         special_notes: validatedFields.special_notes,
+        handover: validatedFields.handover,
         meal: validatedFields.meal,
       })
       .select()
@@ -462,6 +500,7 @@ export async function POST(request: NextRequest) {
               observation_date: activity_date,
               content: observationContent,
               created_by: user_id,
+              recorded_by: recorded_by || null,
             })
             .select()
             .single();

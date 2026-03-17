@@ -1,22 +1,3 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
-
-These instructions are for AI assistants working in this project.
-
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
-
-Use `@/openspec/AGENTS.md` to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
-
 # Project Context
 **Name**: Nobi-Reco (のびレコ)
 **Target**: After-school care programs (学童保育) for elementary school children
@@ -44,26 +25,24 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | Session Interface | `/lib/auth/session.ts` |
 | Code Improvement | `.claude/skills/incremental-code-improvement` |
 
-# Coding Rules
-- **Supabase Import**: Use `@/utils/supabase/server` (NOT `@/lib/supabase/server`)
-- **Next.js 15 Params**: `params` are async - use `props: { params: Promise<T> }` and `await`
-- **Auth in API**: Use `getAuthenticatedUserMetadata()` from `@/lib/auth/jwt`
-  - `supabase.auth.getSession()` は**使用禁止** → セキュリティ警告が出る
-  - 新規APIルート作成時は必ず `getAuthenticatedUserMetadata()` を使用
-  - 既存の `getSession()` + `getUserSession()` パターンを見つけたら置き換える
-  - 詳細: `.claude/skills/supabase-jwt-auth`
-- **TypeScript**: Strict types, avoid `any`
-- **Components**: Server Components by default, `use client` only when needed
-- **Dependencies**: 新しいパッケージの追加は最小限に。既存の依存関係で実現できないか検討すること
-- **Mention Display**: 記録本文を表示する際、メンション（`child:childId`形式）を名前（`@児童名`）に変換すること
-  - `replaceChildIdsWithNames` を `@/lib/ai/childIdFormatter` からインポート
-  - 児童リストから `nameByIdMap: Map<string, string>` を構築
-  - 表示時に `replaceChildIdsWithNames(content, nameByIdMap)` を適用
-
 ## Incremental Code Improvement (編集時の段階的改善)
 
 ファイル編集時は周辺の `any` 型やエラーハンドリングも改善する。
 詳細: `.claude/skills/incremental-code-improvement`
+
+# Package Installation Rules
+- **必ず許可を求める**: `npm install` / `pnpm add` などでパッケージを追加する前に、必ずユーザーに許可を求める
+- **理由を説明する**: 許可を求める際は「なぜそのパッケージが必要か」「既存の方法では解決できない理由」を明示する
+- **代替案を検討する**: 既存パッケージ・標準APIで代替できる場合はそちらを優先し、新規パッケージは最終手段とする
+
+# Workflow Rules
+- **ALWAYS use a worktree**: Never work directly on the main branch. Create a NEW worktree at the start of each new task.
+- **Worktree cleanup**: Delete the worktree ONLY after the user explicitly says the PR is published/merged. Never assume it's done on your own.
+- **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
+- **Code change workflow**: 実装完了後は以下の順で実行する
+  1. （任意）`pr-review` スキル — セキュリティ・品質・パフォーマンスを網羅的に確認したい場合のみ実行。軽微な変更や CodeRabbit で十分な場合は不要。
+  2. `create-pr` スキル — PR作成 → CodeRabbitレビューループ（最大3回）
+  3. PR URLをユーザーに報告
 
 # Agent Guidelines
 

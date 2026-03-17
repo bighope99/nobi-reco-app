@@ -14,8 +14,20 @@ export const dynamic = 'force-dynamic';
 
 type AuthStatus = "verifying" | "ready" | "error";
 
-const isPasswordAlnumMixed = (value: string) => 
+const isPasswordAlnumMixed = (value: string) =>
   value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
+
+/** JWTペイロードからロールを抽出する */
+function getRoleFromAccessToken(accessToken: string): string | undefined {
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length !== 3) return undefined;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.app_metadata?.role as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function PasswordSetupContent() {
   const router = useRouter();
@@ -25,6 +37,7 @@ function PasswordSetupContent() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const linkError = searchParams.get("error_description") || searchParams.get("error");
   const code = searchParams.get("code");
@@ -60,9 +73,12 @@ function PasswordSetupContent() {
         const supabase = createClient();
         if (code) {
           console.log("[Password Setup] Using code for session exchange");
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
             throw exchangeError;
+          }
+          if (exchangeData.session?.access_token) {
+            setAccessToken(exchangeData.session.access_token);
           }
         } else if (token && linkType) {
           // Use relative URL to allow test mocking via API route
@@ -107,6 +123,10 @@ function PasswordSetupContent() {
           } else if (sessionError) {
             console.log("[Password Setup] Test mode: ignoring setSession error");
           }
+
+          if (sessionData.access_token) {
+            setAccessToken(sessionData.access_token);
+          }
         }
 
         console.log("[Password Setup] Verification successful, setting ready status");
@@ -146,21 +166,35 @@ function PasswordSetupContent() {
     setIsSubmitting(true);
 
     try {
+      const supabase = createClient();
+
       // Check if we're in test mode (using test token)
       if (token === "valid-token") {
         // In test mode, skip updateUser and redirect directly
-        console.log("[Password Setup] Test mode: skipping updateUser, redirecting to dashboard");
-        router.replace("/dashboard");
+        console.log("[Password Setup] Test mode: skipping updateUser, redirecting based on linkType");
+        const redirectPath = linkType === "recovery" ? "/login" : "/dashboard";
+        router.replace(redirectPath);
         return;
       }
 
       // Production path: update password via Supabase
-      const supabase = createClient();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         throw updateError;
       }
-      router.replace("/dashboard");
+
+      // パスワードリセット（recovery）の場合はログインページへ、
+      // 招待（invite）の場合はロールに基づいてリダイレクト
+      if (linkType === "recovery") {
+        // リセット後はログインページへ（セッション切り替えのため）
+        await supabase.auth.signOut();
+        router.replace("/login");
+      } else {
+        // 招待からの初回パスワード設定：verify時に保存したJWTからロールを取得
+        const role = accessToken ? getRoleFromAccessToken(accessToken) : undefined;
+        const redirectPath = (role === "site_admin" || role === "company_admin") ? "/admin" : "/dashboard";
+        router.replace(redirectPath);
+      }
     } catch (err) {
       console.error("Password update failed:", err);
       setError("パスワードの更新に失敗しました。もう一度お試しください。");
@@ -178,9 +212,13 @@ function PasswordSetupContent() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground">
             の
           </div>
-          <h1 className="leading-none font-semibold text-2xl">パスワード設定</h1>
+          <h1 className="leading-none font-semibold text-2xl">
+            {linkType === "recovery" ? "パスワード再設定" : "パスワード設定"}
+          </h1>
           <CardDescription>
-            パスワードを設定してログインを完了してください。
+            {linkType === "recovery"
+              ? "新しいパスワードを入力してください。"
+              : "パスワードを設定してログインを完了してください。"}
           </CardDescription>
         </CardHeader>
         <CardContent>

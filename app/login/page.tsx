@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -124,6 +125,14 @@ export default function LoginPage() {
                 "ログイン"
               )}
             </Button>
+            <div className="text-center">
+              <Link
+                href="/password/reset"
+                className="text-sm text-muted-foreground hover:underline"
+              >
+                パスワードを忘れた方はこちら
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

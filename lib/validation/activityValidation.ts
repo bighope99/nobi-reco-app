@@ -7,6 +7,7 @@ import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 // 定数
 export const MAX_EVENT_NAME_LENGTH = 200;
 export const MAX_SPECIAL_NOTES_LENGTH = 2000;
+export const MAX_HANDOVER_LENGTH = 2000;
 export const MAX_SNACK_LENGTH = 200;
 export const MAX_DAILY_SCHEDULE_ITEMS = 50;
 export const MAX_ROLE_ASSIGNMENTS = 20;
@@ -301,6 +302,32 @@ export const validateSnack = (
 };
 
 /**
+ * handover の検証
+ */
+export const validateHandover = (
+  handover: unknown
+): { valid: true; data: string | null } | { valid: false; error: string } => {
+  if (handover === null || handover === undefined) {
+    return { valid: true, data: null };
+  }
+
+  if (typeof handover !== 'string') {
+    return { valid: false, error: '引継ぎ事項は文字列で入力してください' };
+  }
+
+  const normalizedHandover = handover.trim();
+  if (normalizedHandover === '') {
+    return { valid: true, data: null };
+  }
+
+  if (normalizedHandover.length > MAX_HANDOVER_LENGTH) {
+    return { valid: false, error: `引継ぎ事項は${MAX_HANDOVER_LENGTH}文字以内で入力してください` };
+  }
+
+  return { valid: true, data: normalizedHandover };
+};
+
+/**
  * 全ての新規フィールドを一括検証
  */
 export const validateActivityExtendedFields = (body: {
@@ -310,6 +337,7 @@ export const validateActivityExtendedFields = (body: {
   special_notes?: unknown;
   snack?: unknown;
   meal?: unknown;
+  handover?: unknown;
 }): {
   valid: true;
   data: {
@@ -319,6 +347,7 @@ export const validateActivityExtendedFields = (body: {
     special_notes: string | null;
     snack: string | null;
     meal: Meal | null;
+    handover: string | null;
   };
 } | { valid: false; error: string } => {
   const eventNameResult = validateEventName(body.event_name);
@@ -339,6 +368,9 @@ export const validateActivityExtendedFields = (body: {
   const mealResult = validateMeal(body.meal);
   if (!mealResult.valid) return mealResult;
 
+  const handoverResult = validateHandover(body.handover);
+  if (!handoverResult.valid) return handoverResult;
+
   return {
     valid: true,
     data: {
@@ -348,6 +380,7 @@ export const validateActivityExtendedFields = (body: {
       special_notes: specialNotesResult.data,
       snack: snackResult.data,
       meal: mealResult.data,
+      handover: handoverResult.data,
     },
   };
 };

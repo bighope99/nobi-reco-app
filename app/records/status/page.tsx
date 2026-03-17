@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { FileText, ChevronLeft, Calendar, ChevronRight, ChevronDown, Search, Filter, History, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
@@ -84,7 +85,8 @@ const LastRecordBadge = ({ dateStr }: { dateStr: string | null }) => {
 }
 
 const ProgressBar = ({ value, max, mini = false }: { value: number, max: number, mini?: boolean }) => {
-    const percentage = Math.min(100, Math.max(0, (value / max) * 100)) || 0
+    // チケット6: 0除算保護 - max=0の場合はNaNやInfinityではなく0%を返す
+    const percentage = max === 0 ? 0 : Math.min(100, Math.max(0, (value / max) * 100))
     const colorClass = percentage >= 80 ? 'bg-green-500' : percentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
 
     return (
@@ -102,9 +104,13 @@ const ProgressBar = ({ value, max, mini = false }: { value: number, max: number,
 
 const MonthlyHeatmap = ({ history }: { history: string[] }) => {
     return (
-        <div className="flex gap-0.5">
+        <div className="flex flex-wrap gap-0.5">
             {history.map((status, i) => {
                 let color = 'bg-slate-100'
+                // チケット5: ヒートマップの色定義
+                // 'present' = 出席かつ記録済み（月間記録率の分子に含まれる）
+                // 'late'    = 出席だが記録なし（出席はカウントされるが記録率に貢献しない）
+                // 'absent'  = 欠席（出席カウント・記録率ともに対象外）
                 if (status === 'present') color = 'bg-indigo-600'
                 else if (status === 'absent') color = 'bg-slate-200'
                 else if (status === 'late') color = 'bg-amber-400'
@@ -126,12 +132,21 @@ export default function StatusPage() {
     const [error, setError] = useState<string | null>(null)
     const [recordsData, setRecordsData] = useState<RecordsData | null>(null)
 
-    const [year, setYear] = useState(new Date().getFullYear())
-    const [month, setMonth] = useState(new Date().getMonth() + 1)
+    const [year, setYear] = useState(0)
+    const [month, setMonth] = useState(0)
     const [selectedClass, setSelectedClass] = useState('all')
-    const [searchTerm, setSearchTerm] = useState('')
+    // チケット1: 検索入力値（入力のたびに検索しない）と確定値を分離
+    const [inputSearchTerm, setInputSearchTerm] = useState('')
+    const [committedSearchTerm, setCommittedSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
-    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'name', order: 'asc' })
+    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'asc' })
+
+    // 日付の初期化（クライアント側でのみ実行）
+    useEffect(() => {
+        const now = new Date()
+        setYear(now.getFullYear())
+        setMonth(now.getMonth() + 1)
+    }, [])
 
     // 履歴モーダル用の状態
     const [historyModalOpen, setHistoryModalOpen] = useState(false)
@@ -141,7 +156,10 @@ export default function StatusPage() {
     const [historyError, setHistoryError] = useState<string | null>(null)
 
     // データ取得
+    // チケット1・3: searchTermを依存配列から外し、クライアント側フィルタリングに変更
+    // （サーバー側の暗号化フィールドへのilike検索は機能しないため）
     useEffect(() => {
+        if (year === 0 || month === 0) return  // Wait for client-side date initialization
         const fetchRecordsData = async () => {
             try {
                 setLoading(true)
@@ -153,10 +171,6 @@ export default function StatusPage() {
 
                 if (selectedClass !== 'all') {
                     params.append('class_id', selectedClass)
-                }
-
-                if (searchTerm) {
-                    params.append('search', searchTerm)
                 }
 
                 const response = await fetch(`/api/records/status?${params}`)
@@ -180,7 +194,20 @@ export default function StatusPage() {
         }
 
         fetchRecordsData()
-    }, [year, month, selectedClass, searchTerm, warningOnly])
+    }, [year, month, selectedClass, warningOnly])
+
+    // チケット1: 検索ボタン押下時のみ検索を実行
+    const handleSearch = () => {
+        setCommittedSearchTerm(inputSearchTerm)
+    }
+
+    // チケット1: Enterキーでも検索を実行（IME変換中のEnterは無視）
+    const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.nativeEvent.isComposing) return
+        if (e.key === 'Enter') {
+            handleSearch()
+        }
+    }
 
     // 月の変更
     const changeMonth = (delta: number) => {
@@ -218,10 +245,20 @@ export default function StatusPage() {
         }
     };
 
-    const sortedData = useMemo(() => {
+    // チケット3: 復号化済み名前に対してクライアント側でフィルタリング
+    const clientFilteredData = useMemo(() => {
         if (!recordsData) return []
+        if (!committedSearchTerm) return recordsData.children
 
-        const sorted = [...recordsData.children]
+        const normalized = committedSearchTerm.trim().toLowerCase()
+        return recordsData.children.filter(child => {
+            return child.name.toLowerCase().includes(normalized) ||
+                child.kana.toLowerCase().includes(normalized)
+        })
+    }, [recordsData, committedSearchTerm])
+
+    const sortedData = useMemo(() => {
+        const sorted = [...clientFilteredData]
         sorted.sort((a, b) => {
             const aValue = getSortValue(a, sortConfig.key);
             const bValue = getSortValue(b, sortConfig.key);
@@ -231,7 +268,7 @@ export default function StatusPage() {
             return 0
         })
         return sorted
-    }, [recordsData, sortConfig])
+    }, [clientFilteredData, sortConfig])
 
     const handleSort = (key: string) => {
         setSortConfig(current => ({
@@ -287,7 +324,7 @@ export default function StatusPage() {
 
     if (loading) {
         return (
-            <StaffLayout title="全児童 月間記録管理">
+            <StaffLayout title="記録状況一覧">
                 <div className="min-h-screen flex items-center justify-center">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
@@ -300,7 +337,7 @@ export default function StatusPage() {
 
     if (error || !recordsData) {
         return (
-            <StaffLayout title="全児童 月間記録管理">
+            <StaffLayout title="記録状況一覧">
                 <div className="min-h-screen flex items-center justify-center">
                     <div className="text-center">
                         <AlertTriangle className="h-12 w-12 text-red-500 mx-auto" />
@@ -311,9 +348,18 @@ export default function StatusPage() {
         )
     }
 
+    // チケット4: 年月ドロップダウン用の選択肢を生成
+    // changeMonth()でyearが currentYear±2 の範囲外に移動した場合もドロップダウンに含める
+    const currentYear = new Date().getFullYear()
+    const yearStart = Math.min(currentYear - 2, year - 2)
+    const yearEnd = Math.max(currentYear + 2, year + 2)
+    const yearOptions = Array.from({ length: yearEnd - yearStart + 1 }, (_, i) => yearStart + i)
+    const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+
     return (
         <StaffLayout title="記録状況一覧">
-            <div className="max-w-[1600px] mx-auto">
+            {/* チケット7: max-w-fullでモバイル対応 */}
+            <div className="w-full max-w-[1600px] mx-auto px-2 sm:px-0">
                 {/* Title */}
                 <div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
@@ -328,28 +374,51 @@ export default function StatusPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-3 mt-4">
+                {/* チケット4: 前後ボタンに加え、年・月を直接選択できるドロップダウンを追加 */}
+                <div className="flex flex-wrap items-center gap-3 mt-4">
                     <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
                         <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
                             <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <div className="flex items-center text-sm font-bold text-slate-700 px-3">
-                            <Calendar className="w-4 h-4 mr-2 text-indigo-500" />
-                            {year}年 {month}月
+                        <div className="flex items-center gap-1 px-2">
+                            <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+                            <select
+                                className="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
+                                value={year}
+                                onChange={(e) => setYear(Number(e.target.value))}
+                                aria-label="年を選択"
+                            >
+                                {yearOptions.map(y => (
+                                    <option key={y} value={y}>{y}年</option>
+                                ))}
+                            </select>
+                            <select
+                                className="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
+                                value={month}
+                                onChange={(e) => setMonth(Number(e.target.value))}
+                                aria-label="月を選択"
+                            >
+                                {monthOptions.map(m => (
+                                    <option key={m} value={m}>{m}月</option>
+                                ))}
+                            </select>
                         </div>
                         <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
                             <ChevronRight className="w-4 h-4" />
                         </button>
                     </div>
 
-                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2">
-                        <FileText className="w-4 h-4" />
-                        <span className="hidden sm:inline">一括作成</span>
-                    </button>
+                    <Button asChild className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2">
+                        <Link href="/records/activity" aria-label="一括作成">
+                            <FileText className="w-4 h-4" />
+                            <span className="hidden sm:inline">一括作成</span>
+                        </Link>
+                    </Button>
                 </div>
 
                 {/* Filter Bar */}
-                <div className="py-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center gap-4 mt-4">
+                {/* チケット7: モバイルでの折り返し対応 */}
+                <div className="py-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
                     <div className="relative min-w-[140px]">
                         <select
                             className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -364,18 +433,28 @@ export default function StatusPage() {
                         <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
                     </div>
 
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="児童名・かな検索"
-                            className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    {/* チケット1: 検索ボタンを追加 */}
+                    <div className="flex gap-2 flex-1 max-w-md">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="児童名・かな検索"
+                                className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                value={inputSearchTerm}
+                                onChange={(e) => setInputSearchTerm(e.target.value)}
+                                onKeyDown={handleSearchKeyDown}
+                            />
+                        </div>
+                        <button
+                            onClick={handleSearch}
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors shrink-0"
+                        >
+                            検索
+                        </button>
                     </div>
 
-                    <div className="flex-1"></div>
+                    <div className="hidden sm:flex flex-1"></div>
 
                     <label className={`flex items-center gap-3 px-3 py-2 rounded-md border cursor-pointer transition-all select-none ${warningOnly ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                         <div className="relative">
@@ -395,29 +474,30 @@ export default function StatusPage() {
 
                 {/* --- Main Table Section --- */}
 
-
                 {/* Table Stats */}
-                <div className="mb-4 flex items-center justify-between text-sm text-slate-500">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
                     <div>
                         表示中: <span className="font-bold text-slate-900">{sortedData.length}</span> 名
                         {warningOnly && <span className="ml-2 text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-xs font-bold">要確認対象</span>}
                     </div>
-                    <div className="flex items-center gap-4 text-xs">
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-600 rounded-sm"></div> 記録済</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-400 rounded-sm"></div> 記録なし(在所)</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm"></div> 休み</div>
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                        {/* チケット5: ヒートマップの凡例を記録率の定義と一致させる */}
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-600 rounded-sm"></div> 出席+記録済</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-400 rounded-sm"></div> 出席+記録なし</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm"></div> 欠席</div>
                     </div>
                 </div>
 
                 {/* --- Scrollable Table Wrapper --- */}
+                {/* チケット7: モバイルでのスクロール対応 */}
                 <div className="w-full bg-white border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-slate-200">
+                        <table className="min-w-[700px] w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50 border-b border-slate-200">
                                 <tr>
                                     <th
                                         scope="col"
-                                        className="sticky left-0 z-20 bg-slate-50 px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-[180px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] cursor-pointer hover:bg-slate-100 transition-colors"
+                                        className="sticky left-0 z-20 bg-slate-50 px-4 sm:px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-[150px] sm:w-[180px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] cursor-pointer hover:bg-slate-100 transition-colors"
                                         onClick={() => handleSort('name')}
                                     >
                                         氏名 <SortIcon colKey="name" currentSort={sortConfig} />
@@ -447,7 +527,7 @@ export default function StatusPage() {
                                         月間記録率 <SortIcon colKey="record_rate" currentSort={sortConfig} />
                                     </th>
 
-                                    <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider lg:min-w-[350px]">
+                                    <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[200px]">
                                         月間ヒートマップ(1日〜{recordsData.period.days_in_month}日)
                                     </th>
 
@@ -469,7 +549,7 @@ export default function StatusPage() {
                                     sortedData.map((child) => (
                                         <tr key={child.child_id} className="hover:bg-slate-50 transition-colors group">
 
-                                            <td className="sticky left-0 z-20 bg-white px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
+                                            <td className="sticky left-0 z-20 bg-white px-4 sm:px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-bold text-slate-900">{child.name}</span>
                                                     <span className="text-xs text-slate-400">{child.kana}</span>
@@ -525,7 +605,7 @@ export default function StatusPage() {
                                                 <Filter className="w-8 h-8 text-slate-300" />
                                                 <span className="text-sm">条件に一致する児童はいません</span>
                                                 <button
-                                                    onClick={() => { setSearchTerm(''); setWarningOnly(false); setSelectedClass('all'); }}
+                                                    onClick={() => { setInputSearchTerm(''); setCommittedSearchTerm(''); setWarningOnly(false); setSelectedClass('all'); }}
                                                     className="text-indigo-600 text-sm hover:underline mt-1"
                                                 >
                                                     フィルターをリセット
@@ -568,7 +648,7 @@ export default function StatusPage() {
                                             <span className="text-sm font-medium text-slate-700">
                                                 {record.observation_date}
                                             </span>
-                                            <span className="text-xs text-slate-400">
+                                            <span className="text-xs text-slate-400" suppressHydrationWarning>
                                                 作成: {new Date(record.created_at).toLocaleString('ja-JP')}
                                             </span>
                                         </div>

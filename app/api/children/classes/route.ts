@@ -9,11 +9,47 @@ export async function GET(request: NextRequest) {
 
     // 認証チェック（JWT方式に統一）
     const metadata = await getAuthenticatedUserMetadata();
-    if (!metadata || !metadata.current_facility_id) {
+    if (!metadata) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const facility_id = metadata.current_facility_id;
+    const { role, current_facility_id, company_id } = metadata;
+
+    // リクエストパラメータ取得（facility_idパラメータがあればそれを使用）
+    const searchParams = request.nextUrl.searchParams;
+    const facilityIdParam = searchParams.get('facility_id');
+
+    // 施設IDの決定
+    // facility_admin/staffは自施設のみ（パラメータは無視）
+    // site_admin/company_adminはパラメータ優先、なければJWTから
+    let facility_id: string;
+    if (role === 'facility_admin' || role === 'staff') {
+      if (!current_facility_id) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      facility_id = current_facility_id;
+    } else {
+      // site_admin/company_adminのみが施設パラメータを使用可能
+      if (role !== 'site_admin' && role !== 'company_admin') {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+      facility_id = facilityIdParam || current_facility_id || '';
+      if (!facility_id) {
+        return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
+      }
+      if (role === 'company_admin') {
+        const { data: scopedFacility, error: scopeError } = await supabase
+          .from('m_facilities')
+          .select('id')
+          .eq('id', facility_id)
+          .eq('company_id', company_id)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (scopeError || !scopedFacility) {
+          return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+        }
+      }
+    }
 
     // クラス一覧取得（施設に紐づくクラス）
     const { data: classesData, error: classesError } = await supabase

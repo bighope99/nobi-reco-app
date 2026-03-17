@@ -31,12 +31,81 @@ export async function GET(request: NextRequest) {
     const has_allergy = searchParams.get('has_allergy');
     const has_sibling = searchParams.get('has_sibling');
     const enrollment_type = searchParams.get('enrollment_type') || null;
-    const sort_by = searchParams.get('sort_by') || 'name';
-    const sort_order = searchParams.get('sort_order') || 'asc';
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '200');
     const offset = parseInt(searchParams.get('offset') || '0');
 
+    // 施設全体のサマリーとフィルター情報を取得するヘルパー
+    const fetchSummaryAndFilters = async () => {
+      const { data: summaryData } = await supabase
+        .from('m_children')
+        .select('enrollment_status, allergies', { count: 'exact' })
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null);
+
+      const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
+      const withdrawnCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'withdrawn').length;
+      const hasAllergyCount = (summaryData || []).filter((c: any) => c.allergies !== null).length;
+
+      const { data: classesData } = await supabase
+        .from('m_classes')
+        .select('id, name')
+        .eq('facility_id', facility_id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('name');
+
+      const { data: classChildrenCount } = await supabase
+        .from('_child_class')
+        .select('class_id, child_id')
+        .eq('is_current', true)
+        .in('class_id', (classesData || []).map((c: any) => c.id));
+
+      const classCountMap: Record<string, number> = {};
+      (classChildrenCount || []).forEach((cc: any) => {
+        classCountMap[cc.class_id] = (classCountMap[cc.class_id] || 0) + 1;
+      });
+
+      return {
+        summary: {
+          total_children: enrolledCount + withdrawnCount,
+          enrolled_count: enrolledCount,
+          withdrawn_count: withdrawnCount,
+          has_allergy_count: hasAllergyCount,
+          has_sibling_count: 0, // 兄弟数は結果に依存するため呼び出し側で上書き
+        },
+        filters: {
+          classes: (classesData || []).map((cls: any) => ({
+            class_id: cls.id,
+            class_name: cls.name,
+            children_count: classCountMap[cls.id] || 0,
+          })),
+          enrollment_types: [] as Array<{ type: string; label: string; count: number }>,
+        },
+      };
+    };
+
     // 1. 子ども一覧取得
+    // class_idフィルター時は !inner JOINで該当クラスの子のみに絞る
+    const childClassJoin = class_id && class_id !== 'none'
+      ? `_child_class!inner (
+          class_id,
+          is_current,
+          m_classes (
+            id,
+            name,
+            age_group
+          )
+        )`
+      : `_child_class (
+          class_id,
+          is_current,
+          m_classes (
+            id,
+            name,
+            age_group
+          )
+        )`;
+
     let childrenQuery = supabase
       .from('m_children')
       .select(`
@@ -58,15 +127,7 @@ export async function GET(request: NextRequest) {
         allergies,
         photo_permission_public,
         report_name_permission,
-        _child_class (
-          class_id,
-          is_current,
-          m_classes (
-            id,
-            name,
-            age_group
-          )
-        ),
+        ${childClassJoin},
         _child_guardian (
           relationship,
           is_primary,
@@ -84,8 +145,10 @@ export async function GET(request: NextRequest) {
       .eq('enrollment_status', status)
       .is('deleted_at', null);
 
-    if (class_id) {
-      childrenQuery = childrenQuery.eq('_child_class.class_id', class_id);
+    if (class_id && class_id !== 'none') {
+      childrenQuery = childrenQuery
+        .eq('_child_class.class_id', class_id)
+        .eq('_child_class.is_current', true);
     }
 
     // 名前検索: 漢字名は検索用ハッシュテーブル経由、カナは直接DB検索（平文のため）
@@ -116,18 +179,16 @@ export async function GET(request: NextRequest) {
       searchChildIds = [...new Set([...nameIds, ...kanaIds])];
 
       if (searchChildIds.length === 0) {
-        // 検索結果がない場合は空の結果を返す
+        // 検索結果がない場合でも施設全体のサマリーとクラス一覧は返す
+        const { summary, filters } = await fetchSummaryAndFilters();
         return NextResponse.json({
           success: true,
           data: {
             children: [],
             total: 0,
-            summary: {
-              total: 0,
-              enrolled: 0,
-              withdrawn: 0,
-              has_allergy: 0,
-            },
+            summary,
+            filters,
+            has_more: false,
           },
         });
       }
@@ -147,9 +208,8 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
-    // ソート
-    const sortColumn = sort_by === 'name' ? 'family_name_kana' : sort_by;
-    childrenQuery = childrenQuery.order(sortColumn, { ascending: sort_order === 'asc' });
+    // ソートはクライアント側で処理するため、デフォルトのカナ順で返す
+    childrenQuery = childrenQuery.order('family_name_kana', { ascending: true });
 
     // ページネーション
     childrenQuery = childrenQuery.range(offset, offset + limit - 1);
@@ -162,21 +222,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (!childrenData || childrenData.length === 0) {
+      // 結果0件でも施設全体のサマリーとクラス一覧は返す
+      const { summary, filters } = await fetchSummaryAndFilters();
       return NextResponse.json({
         success: true,
         data: {
-          summary: {
-            total_children: 0,
-            enrolled_count: 0,
-            withdrawn_count: 0,
-            has_allergy_count: 0,
-            has_sibling_count: 0,
-          },
+          summary,
           children: [],
-          filters: {
-            classes: [],
-            enrollment_types: [],
-          },
+          filters,
           total: 0,
           has_more: false,
         },
@@ -196,7 +249,7 @@ export async function GET(request: NextRequest) {
           id,
           family_name,
           given_name,
-          _child_class!inner (
+          _child_class (
             m_classes (
               name,
               age_group
@@ -303,67 +356,31 @@ export async function GET(request: NextRequest) {
     });
 
     // has_siblingフィルター適用（兄弟データ取得後）
-    const filteredChildren = has_sibling !== null
+    let filteredChildren = has_sibling !== null
       ? children.filter(c => c.has_sibling === (has_sibling === 'true'))
       : children;
 
-    // サマリー取得
-    const { data: summaryData } = await supabase
-      .from('m_children')
-      .select('enrollment_status, allergies', { count: 'exact' })
-      .eq('facility_id', facility_id)
-      .is('deleted_at', null);
+    // 「クラスなし」フィルター: is_current=trueのクラス所属がない子のみ
+    if (class_id === 'none') {
+      filteredChildren = filteredChildren.filter(c => c.class_id === null);
+    }
 
-    const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
-    const withdrawnCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'withdrawn').length;
-    const hasAllergyCount = (summaryData || []).filter((c: any) => c.allergies !== null).length;
+    // サマリーとフィルター取得
+    const { summary, filters } = await fetchSummaryAndFilters();
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
+    summary.has_sibling_count = hasSiblingCount;
 
-    // クラス一覧（フィルター用）
-    const { data: classesData } = await supabase
-      .from('m_classes')
-      .select('id, name')
-      .eq('facility_id', facility_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .order('name');
-
-    // 児童数取得
-    const { data: classChildrenCount } = await supabase
-      .from('_child_class')
-      .select('class_id, child_id')
-      .eq('is_current', true)
-      .in('class_id', (classesData || []).map((c: any) => c.id));
-
-    const classCountMap: Record<string, number> = {};
-    (classChildrenCount || []).forEach((cc: any) => {
-      classCountMap[cc.class_id] = (classCountMap[cc.class_id] || 0) + 1;
-    });
-
-    const filters = {
-      classes: (classesData || []).map((cls: any) => ({
-        class_id: cls.id,
-        class_name: cls.name,
-        children_count: classCountMap[cls.id] || 0,
-      })),
-      enrollment_types: [
-        { type: 'regular', label: '通年', count: children.filter(c => c.enrollment_type === 'regular').length },
-        { type: 'temporary', label: '一時', count: children.filter(c => c.enrollment_type === 'temporary').length },
-        { type: 'spot', label: 'スポット', count: children.filter(c => c.enrollment_type === 'spot').length },
-      ],
-    };
+    filters.enrollment_types = [
+      { type: 'regular', label: '通年', count: children.filter(c => c.enrollment_type === 'regular').length },
+      { type: 'temporary', label: '一時', count: children.filter(c => c.enrollment_type === 'temporary').length },
+      { type: 'spot', label: 'スポット', count: children.filter(c => c.enrollment_type === 'spot').length },
+    ];
 
     // レスポンス構築
     const response = {
       success: true,
       data: {
-        summary: {
-          total_children: enrolledCount + withdrawnCount,
-          enrolled_count: enrolledCount,
-          withdrawn_count: withdrawnCount,
-          has_allergy_count: hasAllergyCount,
-          has_sibling_count: hasSiblingCount,
-        },
+        summary,
         children: filteredChildren,
         filters,
         total: count || filteredChildren.length,
