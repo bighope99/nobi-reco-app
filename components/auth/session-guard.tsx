@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { SESSION_STORAGE_KEY } from '@/lib/auth/session'
+import { SESSION_STORAGE_KEY } from '@/lib/auth/storage-keys'
 
 /**
  * グローバルな認証セッション監視コンポーネント
