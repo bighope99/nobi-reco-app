@@ -32,7 +32,7 @@ export default function FacilityListPage() {
   const session = useSession();
   const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
   const isCompanyAdmin = isAdmin;
-  const Layout = isAdmin ? AdminLayout : StaffLayout;
+  const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
 
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [searchTerm, setSearchTerm] = useState('');

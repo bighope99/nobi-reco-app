@@ -64,7 +64,7 @@ export default function FacilityDetailPage() {
   const session = useSession();
   const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
   const canCreate = isAdmin;
-  const Layout = isAdmin ? AdminLayout : StaffLayout;
+  const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
 
   const params = useParams();
   const router = useRouter();
