@@ -110,10 +110,175 @@ export async function POST(
       .single();
 
     if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'このメールアドレスは既に使用されています' },
-        { status: 400 }
-      );
+      // 既存ユーザーが存在する場合: last_sign_in_at を確認して再招待 or エラー
+      const supabaseAdmin = await createAdminClient();
+      const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(existingUser.id);
+
+      if (authUserError || !authUserData.user) {
+        console.error('Failed to get auth user by id:', authUserError);
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      if (authUserData.user.last_sign_in_at !== null) {
+        // 既にサインイン済み → 通常の重複エラー
+        return NextResponse.json(
+          { success: false, error: 'このメールアドレスは既に使用されています' },
+          { status: 400 }
+        );
+      }
+
+      // 未サインイン → 再招待フロー
+      // Re-invite Step 1: 新しい施設を作成
+      const { data: newFacility, error: facilityError } = await supabase
+        .from('m_facilities')
+        .insert({
+          company_id: companyId,
+          name: facilityName,
+          name_kana: body.facility.name_kana?.trim() || null,
+          postal_code: body.facility.postal_code || null,
+          address: body.facility.address || null,
+          phone: body.facility.phone || null,
+          capacity: body.facility.capacity ? Number(body.facility.capacity) : null,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (facilityError || !newFacility) {
+        throw facilityError || new Error('Failed to create facility for reinvite');
+      }
+
+      // Re-invite Step 2: app_metadata を更新
+      const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+        app_metadata: {
+          role: 'facility_admin',
+          company_id: companyId,
+          current_facility_id: newFacility.id,
+        },
+      });
+
+      if (updateMetaError) {
+        console.error('Failed to update user app_metadata for reinvite:', updateMetaError);
+        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      // Re-invite Step 3: 新しい招待リンクを生成
+      const { data: reinviteLinkData, error: reinviteLinkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email: adminEmail,
+      });
+
+      if (reinviteLinkError || !reinviteLinkData) {
+        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        throw reinviteLinkError || new Error('Failed to generate reinvite link');
+      }
+
+      const reinviteUrl = reinviteLinkData.properties.action_link;
+      const reinviteUrlObj = new URL(reinviteUrl);
+      const reinviteTokenHash = reinviteUrlObj.searchParams.get('token_hash') || reinviteUrlObj.searchParams.get('token');
+      const reinviteType = reinviteUrlObj.searchParams.get('type') || 'invite';
+
+      if (!reinviteTokenHash) {
+        console.error('Failed to extract token from reinvite link for facility admin');
+        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        return NextResponse.json(
+          { success: false, error: 'Failed to generate valid invite link' },
+          { status: 500 }
+        );
+      }
+
+      const reinviteBaseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+      const inviteUrlForReinvite = `${reinviteBaseUrl}/password/setup?token_hash=${reinviteTokenHash}&type=${reinviteType}`;
+
+      // Re-invite Step 4: m_users を更新
+      const hireDateValue = body.facility_admin.hire_date || getCurrentDateJST();
+
+      const { data: updatedUser, error: updateUserError } = await supabase
+        .from('m_users')
+        .update({
+          company_id: companyId,
+          name: adminName,
+          name_kana: body.facility_admin.name_kana?.trim() || null,
+          role: 'facility_admin',
+          hire_date: hireDateValue,
+        })
+        .eq('id', existingUser.id)
+        .select()
+        .single();
+
+      if (updateUserError || !updatedUser) {
+        console.error('Failed to update m_users for reinvite:', updateUserError);
+        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      // Re-invite Step 5: _user_facility に新施設を紐付け
+      const { error: userFacilityError } = await supabase
+        .from('_user_facility')
+        .insert({
+          user_id: existingUser.id,
+          facility_id: newFacility.id,
+          start_date: hireDateValue,
+          is_current: true,
+          is_primary: true,
+        });
+
+      if (userFacilityError) {
+        console.error('Failed to insert _user_facility for reinvite:', userFacilityError);
+        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      // Re-invite Step 6: company_admin の current_facility_id が null の場合、この施設で更新
+      if (metadata.role === 'company_admin' && !metadata.current_facility_id) {
+        const { error: updateAdminError } = await supabaseAdmin.auth.admin.updateUserById(metadata.user_id, {
+          app_metadata: {
+            role: metadata.role,
+            company_id: metadata.company_id,
+            current_facility_id: newFacility.id,
+          },
+        });
+        if (updateAdminError) {
+          console.error('Failed to update company_admin current_facility_id:', updateAdminError);
+        }
+      }
+
+      // Re-invite Step 7: 招待メール再送信（fire-and-forget）
+      const reinviteEmailHtml = buildUserInvitationEmailHtml({
+        userName: updatedUser.name,
+        userEmail: updatedUser.email,
+        role: updatedUser.role,
+        companyName: company.name,
+        facilityName: newFacility.name,
+        inviteUrl: inviteUrlForReinvite,
+      });
+
+      sendWithGas({
+        to: updatedUser.email,
+        subject: '【のびレコ】アカウント登録のご案内',
+        htmlBody: reinviteEmailHtml,
+        senderName: 'のびレコ',
+      }).catch((emailError) => {
+        console.error('Failed to send reinvitation email:', emailError);
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: '招待メールを再送しました',
+      });
     }
 
     // Step 1: 施設作成
