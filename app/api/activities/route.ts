@@ -104,9 +104,21 @@ export async function GET(request: NextRequest) {
     }
 
     const staff_id_raw = searchParams.get('staff_id');
-    const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
+    if (staff_id_raw && !isValidUUID(staff_id_raw)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid staff_id format' },
+        { status: 400 }
+      );
+    }
+    const staff_id = staff_id_raw ?? undefined;
     const keywordRaw = searchParams.get('keyword');
-    const keyword = keywordRaw && keywordRaw.length <= 100 ? keywordRaw : keywordRaw ? keywordRaw.slice(0, 100) : null;
+    if (keywordRaw && keywordRaw.length > 100) {
+      return NextResponse.json(
+        { success: false, error: 'keyword must be 100 characters or less' },
+        { status: 400 }
+      );
+    }
+    const keyword = keywordRaw ?? null;
 
     // Parse pagination parameters
     const parsedLimit = parseInt(searchParams.get('limit') || '20');
@@ -205,7 +217,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { success: false, error: `Database error: ${error.message}` },
+        { success: false, error: 'データの取得に失敗しました' },
         { status: 500 }
       );
     }

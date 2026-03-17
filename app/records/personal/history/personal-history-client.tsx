@@ -165,8 +165,13 @@ export default function PersonalHistoryClient() {
   useEffect(() => {
     const fetchMeta = async () => {
       const classRes = await fetch('/api/classes')
-      const classJson = await classRes.json()
-      if (classJson.success) setClasses(classJson.data?.classes || [])
+      if (classRes.ok) {
+        const classJson = await classRes.json()
+        if (classJson.success) setClasses(classJson.data?.classes || [])
+        else console.error('Class fetch error:', classJson)
+      } else {
+        console.error('Class fetch failed:', classRes.status, await classRes.text())
+      }
 
       const staffRes = await fetch('/api/users?is_active=true')
       if (staffRes.ok) {
@@ -299,6 +304,7 @@ export default function PersonalHistoryClient() {
                 <input
                   type="text"
                   placeholder="記録から検索"
+                  maxLength={100}
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}

@@ -537,6 +537,7 @@ export async function POST(request: NextRequest) {
       });
       if (facilityError) {
         console.error('Failed to link user to facility:', facilityError);
+        await supabase.from('m_users').delete().eq('id', newUser.id);
         await supabaseAdmin.auth.admin.deleteUser(newUser.id);
         return NextResponse.json({ success: false, error: '施設との紐付けに失敗しました' }, { status: 500 });
       }
