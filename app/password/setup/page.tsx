@@ -55,13 +55,18 @@ function PasswordSetupContent() {
 
     if (linkError) {
       setStatus("error");
-      setError("リンクが無効です。再度メールからアクセスしてください。");
+      const isExpired = linkError.toLowerCase().includes("expired");
+      setError(
+        isExpired
+          ? "招待リンクの有効期限が切れています。管理者に再招待を依頼してください。"
+          : "リンクが無効です。再度メールからアクセスしてください。"
+      );
       return;
     }
 
     if (!canVerify) {
       setStatus("error");
-      setError("リンクが無効です。再度メールからアクセスしてください。");
+      setError("招待リンクの有効期限が切れています。管理者に再招待を依頼してください。");
       return;
     }
 
