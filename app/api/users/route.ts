@@ -162,7 +162,6 @@ export async function GET(request: NextRequest) {
         is_active,
         created_at,
         updated_at,
-        last_login_at,
         _user_facility!inner (
           facility_id
         )
@@ -235,7 +234,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 同期的にデータを結合
-    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => ({
+    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; created_at: string; updated_at: string }) => ({
       user_id: u.id,
       email: u.email,
       name: u.name,
@@ -245,7 +244,6 @@ export async function GET(request: NextRequest) {
       hire_date: u.hire_date,
       is_active: u.is_active,
       assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: u.last_login_at,
       created_at: u.created_at,
       updated_at: u.updated_at,
     }));
@@ -271,12 +269,12 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error fetching users:', error, JSON.stringify(error));
     return NextResponse.json(
       {
         success: false,
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: error instanceof Error ? error.message : (error as { message?: string })?.message ?? JSON.stringify(error),
       },
       { status: 500 }
     );

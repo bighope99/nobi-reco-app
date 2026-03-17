@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useDebounce } from "@/hooks/useDebounce"
 import { StaffLayout } from "@/components/layout/staff-layout"
@@ -40,6 +40,7 @@ export default function ActivityHistoryClient() {
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
+  const latestRequestRef = useRef(0)
 
   const [classes, setClasses] = useState<ClassOption[]>([])
   const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
@@ -94,12 +95,16 @@ export default function ActivityHistoryClient() {
         if (staffJson.success) setStaffList(
           (staffJson.data?.users || []).map((u: { user_id: string; name: string }) => ({ id: u.user_id, name: u.name }))
         )
+        else console.error('Staff fetch error:', staffJson)
+      } else {
+        console.error('Staff fetch failed:', staffRes.status, await staffRes.text())
       }
     }
     fetchMeta()
   }, [])
 
   const fetchActivities = useCallback(async (newOffset: number, append: boolean) => {
+    const requestId = ++latestRequestRef.current
     setLoading(true)
     try {
       const params = new URLSearchParams({ limit: '20', offset: String(newOffset) })
@@ -132,6 +137,7 @@ export default function ActivityHistoryClient() {
         personalRecordCount: a.individual_record_count || 0,
       }))
 
+      if (requestId !== latestRequestRef.current) return
       setItems(prev => append ? [...prev, ...newItems] : newItems)
       setTotal(json.data.total)
       setHasMore(json.data.has_more)

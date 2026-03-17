@@ -20,7 +20,14 @@ const MAX_TITLE_LENGTH = 100;
 const MAX_LIMIT = 100;
 
 const escapeIlikePattern = (value: string) =>
-  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+    .replace(/,/g, '\\,').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+
+const isValidDateParam = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(value);
+  return !isNaN(d.getTime());
+};
 
 const signActivityPhotos = async (
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -77,6 +84,26 @@ export async function GET(request: NextRequest) {
     const class_id = searchParams.get('class_id');
     const from_date = searchParams.get('from_date');
     const to_date = searchParams.get('to_date');
+    // 日付バリデーション
+    if (from_date && !isValidDateParam(from_date)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid from_date format. Use YYYY-MM-DD.' },
+        { status: 400 }
+      );
+    }
+    if (to_date && !isValidDateParam(to_date)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid to_date format. Use YYYY-MM-DD.' },
+        { status: 400 }
+      );
+    }
+    if (from_date && to_date && from_date > to_date) {
+      return NextResponse.json(
+        { success: false, error: 'from_date must not be after to_date.' },
+        { status: 400 }
+      );
+    }
+
     const staff_id_raw = searchParams.get('staff_id');
     const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
     const keywordRaw = searchParams.get('keyword');

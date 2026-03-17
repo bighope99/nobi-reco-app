@@ -172,6 +172,9 @@ export default function PersonalHistoryClient() {
         if (staffJson.success) setStaffList(
           (staffJson.data?.users || []).map((u: { user_id: string; name: string }) => ({ id: u.user_id, name: u.name }))
         )
+        else console.error('Staff fetch error:', staffJson)
+      } else {
+        console.error('Staff fetch failed:', staffRes.status, await staffRes.text())
       }
     }
     fetchMeta()
