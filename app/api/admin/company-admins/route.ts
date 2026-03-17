@@ -126,6 +126,8 @@ export async function POST(request: NextRequest) {
       }
 
       // パスワード未設定 → 再招待フロー
+      const originalAppMetadata = authUserData.user.app_metadata;
+
       // app_metadata を更新
       const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
         app_metadata: {
@@ -187,6 +189,14 @@ export async function POST(request: NextRequest) {
 
       if (updateUserError || !updatedUser) {
         console.error('Failed to update m_users for reinvite:', updateUserError);
+        // app_metadata を元に戻す
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }

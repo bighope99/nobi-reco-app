@@ -132,6 +132,8 @@ export async function POST(
       }
 
       // パスワード未設定 → 再招待フロー
+      const originalAppMetadata = authUserData.user.app_metadata;
+
       // Re-invite Step 1: 新しい施設を作成
       const { data: newFacility, error: facilityError } = await supabase
         .from('m_facilities')
@@ -217,6 +219,14 @@ export async function POST(
       if (updateUserError || !updatedUser) {
         console.error('Failed to update m_users for reinvite:', updateUserError);
         try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        // app_metadata を元に戻す
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
@@ -237,6 +247,14 @@ export async function POST(
       if (userFacilityError) {
         console.error('Failed to insert _user_facility for reinvite:', userFacilityError);
         try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        // app_metadata を元に戻す
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
@@ -278,6 +296,11 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
+        data: {
+          facility_id: newFacility.id,
+          facility_name: newFacility.name,
+          facility_admin_id: updatedUser.id,
+        },
         message: '招待メールを再送しました',
       });
     }
