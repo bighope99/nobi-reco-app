@@ -126,13 +126,21 @@ export async function POST(request: NextRequest) {
 
       // 未サインイン → 再招待フロー
       // app_metadata を更新
-      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+      const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
         app_metadata: {
           role: 'company_admin',
           company_id: body.company_id,
           current_facility_id: null,
         },
       });
+
+      if (updateMetaError) {
+        console.error('Failed to update user app_metadata:', updateMetaError);
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
 
       // 新しい招待リンクを生成
       const { data: reinviteLinkData, error: reinviteLinkError } = await supabaseAdmin.auth.admin.generateLink({
