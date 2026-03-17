@@ -163,10 +163,10 @@ export async function GET(request: NextRequest) {
 
     if (staff_id && keywordFilter) {
       query = query.or(
-        `and(created_by.eq.${staff_id},${keywordFilter}),and(recorded_by.eq.${staff_id},${keywordFilter})`
+        `and(recorded_by.eq.${staff_id},${keywordFilter})`
       );
     } else if (staff_id) {
-      query = query.or(`created_by.eq.${staff_id},recorded_by.eq.${staff_id}`);
+      query = query.or(`recorded_by.eq.${staff_id}`);
     } else if (keywordFilter) {
       query = query.or(
         `content.ilike.%${escapedKeyword}%,title.ilike.%${escapedKeyword}%,handover.ilike.%${escapedKeyword}%,special_notes.ilike.%${escapedKeyword}%`

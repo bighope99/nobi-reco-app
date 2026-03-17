@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
       query = query.lte('observation_date', to_date);
     }
     if (staff_id) {
-      query = query.or(`created_by.eq.${staff_id},recorded_by.eq.${staff_id}`);
+      query = query.eq('recorded_by', staff_id);
     }
     if (keyword) {
       query = query.ilike('content', `%${keyword}%`);
