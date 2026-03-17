@@ -7,6 +7,7 @@ import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
 import { Search, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 interface ActivityItem {
   id: string
@@ -280,15 +281,18 @@ export default function ActivityHistoryClient() {
                         key={item.id}
                         className="hover:bg-slate-50 transition-colors cursor-pointer group"
                         onClick={() => router.push(`/records/activity?activityId=${item.id}`)}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`${item.date}の活動記録を開く`}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/records/activity?activityId=${item.id}`) } }}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         {classes.length > 0 && <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.className}</td>}
                         <td className="px-6 py-4 text-sm">
-                          <div className="text-slate-700 line-clamp-3">{item.content}</div>
+                          <Link
+                            href={`/records/activity?activityId=${item.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="block text-slate-700 line-clamp-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 rounded"
+                            aria-label={`${item.date}の活動記録を開く`}
+                          >
+                            {item.content}
+                          </Link>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{item.staffName}</td>
                       </tr>

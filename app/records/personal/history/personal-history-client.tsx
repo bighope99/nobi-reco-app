@@ -7,6 +7,7 @@ import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
 import { Search, ChevronDown, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 const GRADES = [
   { value: "", label: "すべて" },
@@ -347,22 +348,25 @@ export default function PersonalHistoryClient() {
                         key={item.id}
                         className="hover:bg-slate-50 transition-colors cursor-pointer group"
                         onClick={() => router.push(`/records/personal/${item.id}/edit`)}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`${item.childName}の記録を開く`}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/records/personal/${item.id}/edit`) } }}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">{item.date}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-indigo-600 transition-colors text-sm">
-                            <User className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />
-                            {item.childName}
-                          </div>
-                          <div className="text-xs text-slate-500 mt-1 ml-[22px] flex items-center gap-1">
-                            {item.className && <span>{item.className}</span>}
-                            {item.className && item.gradeLabel && <span>/</span>}
-                            {item.gradeLabel && <span>{item.gradeLabel}</span>}
-                          </div>
+                          <Link
+                            href={`/records/personal/${item.id}/edit`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="block focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 rounded"
+                            aria-label={`${item.childName}の記録を開く`}
+                          >
+                            <div className="font-bold text-slate-800 flex items-center gap-1.5 group-hover:text-indigo-600 transition-colors text-sm">
+                              <User className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />
+                              {item.childName}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1 ml-[22px] flex items-center gap-1">
+                              {item.className && <span>{item.className}</span>}
+                              {item.className && item.gradeLabel && <span>/</span>}
+                              {item.gradeLabel && <span>{item.gradeLabel}</span>}
+                            </div>
+                          </Link>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-700 text-sm whitespace-pre-wrap">{item.content}</div>
