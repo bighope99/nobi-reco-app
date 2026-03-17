@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { AdminLayout } from "@/components/layout/admin-layout";
 import { useSession } from '@/hooks/useSession';
 import {
   Building2,
@@ -29,7 +30,9 @@ interface Facility {
 
 export default function FacilityListPage() {
   const session = useSession();
-  const isCompanyAdmin = session?.role === 'company_admin' || session?.role === 'site_admin';
+  const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
+  const isCompanyAdmin = isAdmin;
+  const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
 
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,7 +76,7 @@ export default function FacilityListPage() {
   };
 
   return (
-    <StaffLayout title="施設情報">
+    <Layout title="施設情報">
       <div className="min-h-screen text-slate-900 font-sans">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -237,6 +240,6 @@ export default function FacilityListPage() {
           )}
         </div>
       </div>
-    </StaffLayout>
+    </Layout>
   );
 }
