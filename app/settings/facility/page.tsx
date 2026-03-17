@@ -96,13 +96,15 @@ export default function FacilityListPage() {
               </p>
             </div>
 
-            <button
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm"
-              onClick={() => window.location.href = '/settings/facility/new'}
-            >
-              <Plus size={18} />
-              施設を追加
-            </button>
+            {isCompanyAdmin && (
+              <button
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm"
+                onClick={() => window.location.href = '/settings/facility/new'}
+              >
+                <Plus size={18} />
+                施設を追加
+              </button>
+            )}
           </div>
 
           {/* Search Bar */}

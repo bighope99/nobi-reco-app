@@ -69,6 +69,8 @@ export default function FacilityDetailPage() {
   const params = useParams();
   const router = useRouter();
   const facilityId = params.facility_id as string;
+  const session = useSession();
+  const canCreate = session?.role === 'company_admin' || session?.role === 'site_admin';
 
   const [facility, setFacility] = useState<Facility | null>(null);
   const [loading, setLoading] = useState(false);
@@ -80,7 +82,16 @@ export default function FacilityDetailPage() {
     if (facilityId && facilityId !== 'new') {
       fetchFacility();
     } else if (facilityId === 'new') {
+      // セッション読み込み完了を待つ
+      if (!session) {
+        return;
+      }
+      if (!canCreate) {
+        setError('施設の作成権限がありません');
+        return;
+      }
       // 新規作成モード
+      setError(null);
       setFacility({
         facility_id: 'new',
         name: '',
@@ -89,7 +100,7 @@ export default function FacilityDetailPage() {
         email: '',
       });
     }
-  }, [facilityId]);
+  }, [facilityId, session]);
 
   const fetchFacility = async () => {
     try {
