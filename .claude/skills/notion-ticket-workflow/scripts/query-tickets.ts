@@ -4,11 +4,12 @@
  * Notion データベースからチケットをクエリするスクリプト
  *
  * Usage:
- *   npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts [--status <value>] [--limit <number>]
+ *   npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts [--status <value>] [--limit <number>] [--assignee-id <id>]
  *
  * Options:
- *   --status  ステータスフィルター (default: "承認OK")
- *   --limit   最大取得件数 (default: 30)
+ *   --status       ステータスフィルター (default: "承認OK")
+ *   --limit        最大取得件数 (default: 30)
+ *   --assignee-id  担当者IDフィルター (default: null)
  */
 
 import {
@@ -61,6 +62,11 @@ interface NotionDateProperty {
   date: { start: string } | null;
 }
 
+interface NotionPeopleProperty {
+  type: "people";
+  people: { id: string; name?: string }[];
+}
+
 type NotionProperty =
   | NotionTitleProperty
   | NotionStatusProperty
@@ -69,6 +75,7 @@ type NotionProperty =
   | NotionRelationProperty
   | NotionNumberProperty
   | NotionDateProperty
+  | NotionPeopleProperty
   | { type: string; [key: string]: unknown };
 
 interface NotionPage {
@@ -127,6 +134,7 @@ interface OutputTicket {
     優先度: string;
     パス: string;
     プロジェクト: string[];
+    担当者: string[];
     [key: string]: unknown;
   };
   content: string;
@@ -158,12 +166,14 @@ const BATCH_DELAY_MS = 100;
 interface Args {
   status: string;
   limit: number;
+  assigneeId: string | null;
 }
 
 function parseArgs(): Args {
   const argv = process.argv.slice(2);
   let status = "承認OK";
   let limit = 30;
+  let assigneeId: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--status" && argv[i + 1]) {
@@ -173,10 +183,13 @@ function parseArgs(): Args {
       const n = parseInt(argv[i + 1], 10);
       if (!isNaN(n) && n > 0) limit = n;
       i++;
+    } else if (argv[i] === "--assignee-id" && argv[i + 1]) {
+      assigneeId = argv[i + 1];
+      i++;
     }
   }
 
-  return { status, limit };
+  return { status, limit, assigneeId };
 }
 
 // ---------------------------------------------------------------------------
@@ -186,18 +199,36 @@ function parseArgs(): Args {
 async function queryDatabase(
   token: string,
   statusFilter: string,
-  limit: number
+  limit: number,
+  assigneeId: string | null
 ): Promise<NotionPage[]> {
   const pages: NotionPage[] = [];
   let cursor: string | null = null;
   const pageSize = Math.min(limit, 100);
 
   while (pages.length < limit) {
+    const statusCondition = {
+      property: "ステータス",
+      status: { equals: statusFilter },
+    };
+
+    const filter =
+      assigneeId !== null
+        ? {
+            and: [
+              statusCondition,
+              {
+                or: [
+                  { property: "担当者", people: { contains: assigneeId } },
+                  { property: "担当者", people: { is_empty: true } },
+                ],
+              },
+            ],
+          }
+        : statusCondition;
+
     const body: Record<string, unknown> = {
-      filter: {
-        property: "ステータス",
-        status: { equals: statusFilter },
-      },
+      filter,
       page_size: Math.min(pageSize, limit - pages.length),
     };
 
@@ -356,6 +387,10 @@ function extractPropertyValue(prop: NotionProperty): unknown {
       const p = prop as NotionDateProperty;
       return p.date?.start ?? null;
     }
+    case "people": {
+      const p = prop as NotionPeopleProperty;
+      return p.people.map((u) => u.id);
+    }
     default:
       return null;
   }
@@ -383,6 +418,11 @@ function extractPageProperties(
     優先度: getName("優先度"),
     パス: getName("パス"),
     プロジェクト: getRelation("プロジェクト"),
+    担当者: (() => {
+      const prop = properties["担当者"];
+      if (!prop || prop.type !== "people") return [];
+      return (prop as NotionPeopleProperty).people.map((u) => u.id);
+    })(),
   };
 
   // Include remaining properties
@@ -453,8 +493,11 @@ async function main(): Promise<void> {
   const args = parseArgs();
 
   process.stderr.write(`Fetching tickets with status="${args.status}" (limit=${args.limit})...\n`);
+  if (args.assigneeId !== null) {
+    process.stderr.write(`assignee filter: ${args.assigneeId}\n`);
+  }
 
-  const pages = await queryDatabase(token, args.status, args.limit);
+  const pages = await queryDatabase(token, args.status, args.limit, args.assigneeId);
 
   process.stderr.write(`Fetching content for ${pages.length} tickets...\n`);
 
