@@ -76,11 +76,16 @@ export default function FacilityDetailPage() {
     if (facilityId && facilityId !== 'new') {
       fetchFacility();
     } else if (facilityId === 'new') {
+      // セッション読み込み完了を待つ
+      if (!session) {
+        return;
+      }
       if (!canCreate) {
         setError('施設の作成権限がありません');
         return;
       }
       // 新規作成モード
+      setError(null);
       setFacility({
         facility_id: 'new',
         name: '',
@@ -89,7 +94,7 @@ export default function FacilityDetailPage() {
         email: '',
       });
     }
-  }, [facilityId, canCreate]);
+  }, [facilityId, session]);
 
   const fetchFacility = async () => {
     try {
