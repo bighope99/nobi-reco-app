@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
 import { isValidUUID } from '@/lib/utils/validation';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
@@ -31,7 +30,8 @@ export async function GET(request: NextRequest) {
     const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
     const child_name = searchParams.get('child_name') ?? undefined;
     const grade = searchParams.get('grade') ?? undefined;
-    const keyword = searchParams.get('keyword') ?? undefined;
+    const keywordRaw = searchParams.get('keyword');
+    const keyword = keywordRaw && keywordRaw.length <= 100 ? keywordRaw : keywordRaw ? keywordRaw.slice(0, 100) : undefined;
 
     const rawLimit = parseInt(searchParams.get('limit') ?? '20', 10);
     const limit = Number.isNaN(rawLimit) ? 20 : Math.min(Math.max(rawLimit, 1), 100);
@@ -257,21 +257,12 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { child_id, observation_date, content, ai_action, ai_opinion, tag_flags, activity_id, recorded_by } = body;
     const objective = typeof ai_action === 'string' ? ai_action.trim() : '';
@@ -292,7 +283,7 @@ export async function POST(request: NextRequest) {
         .is('deleted_at', null)
         .single();
 
-      if (activityError || !activityData || activityData.facility_id !== session.current_facility_id) {
+      if (activityError || !activityData || activityData.facility_id !== metadata.current_facility_id) {
         return NextResponse.json(
           { success: false, error: 'Invalid activity_id or activity does not belong to this facility' },
           { status: 400 }
@@ -328,7 +319,7 @@ export async function POST(request: NextRequest) {
         .from('m_users')
         .select('id')
         .eq('id', recorded_by)
-        .eq('company_id', session.company_id)
+        .eq('company_id', metadata.company_id)
         .eq('is_active', true)
         .is('deleted_at', null)
         .single();
@@ -352,7 +343,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '子どもが見つかりません' }, { status: 404 });
     }
 
-    if (childData.facility_id !== session.current_facility_id) {
+    if (childData.facility_id !== metadata.current_facility_id) {
       return NextResponse.json({ success: false, error: 'この子どもの記録を作成する権限がありません' }, { status: 403 });
     }
 
@@ -368,8 +359,8 @@ export async function POST(request: NextRequest) {
         subjective: subjective || null,
         is_ai_analyzed: hasAiResult,
         ai_analyzed_at: hasAiResult ? new Date().toISOString() : null,
-        created_by: user.id,
-        updated_by: user.id,
+        created_by: metadata.user_id,
+        updated_by: metadata.user_id,
         recorded_by: recorded_by || null,
       })
       .select('id')

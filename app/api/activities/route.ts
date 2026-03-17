@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
     const to_date = searchParams.get('to_date');
     const staff_id_raw = searchParams.get('staff_id');
     const staff_id = staff_id_raw && isValidUUID(staff_id_raw) ? staff_id_raw : undefined;
-    const keyword = searchParams.get('keyword');
+    const keywordRaw = searchParams.get('keyword');
+    const keyword = keywordRaw && keywordRaw.length <= 100 ? keywordRaw : keywordRaw ? keywordRaw.slice(0, 100) : null;
 
     // Parse pagination parameters
     const parsedLimit = parseInt(searchParams.get('limit') || '20');
