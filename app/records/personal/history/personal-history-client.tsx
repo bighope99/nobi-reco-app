@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useDebounce } from "@/hooks/useDebounce"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
 import { Search, ChevronDown, User } from "lucide-react"
@@ -42,6 +43,7 @@ export default function PersonalHistoryClient() {
   const [childName, setChildName] = useState("")
   const [selectedGrade, setSelectedGrade] = useState("")
   const [keyword, setKeyword] = useState("")
+  const debouncedKeyword = useDebounce(keyword, 500)
 
   const [items, setItems] = useState<PersonalItem[]>([])
   const [total, setTotal] = useState(0)
@@ -100,7 +102,7 @@ export default function PersonalHistoryClient() {
       if (selectedStaff !== 'all') params.set('staff_id', selectedStaff)
       if (childName.trim()) params.set('child_name', childName.trim())
       if (selectedGrade) params.set('grade', selectedGrade)
-      if (keyword.trim()) params.set('keyword', keyword.trim())
+      if (debouncedKeyword.trim()) params.set('keyword', debouncedKeyword.trim())
 
       const res = await fetch(`/api/records/personal?${params}`)
       const json = await res.json()
@@ -140,7 +142,7 @@ export default function PersonalHistoryClient() {
     } finally {
       setLoading(false)
     }
-  }, [fromDate, toDate, selectedClass, selectedStaff, childName, selectedGrade, keyword])
+  }, [fromDate, toDate, selectedClass, selectedStaff, childName, selectedGrade, debouncedKeyword])
 
   useEffect(() => {
     fetchObservations(0, false)

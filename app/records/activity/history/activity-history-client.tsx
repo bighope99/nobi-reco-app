@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useDebounce } from "@/hooks/useDebounce"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
 import { Search, ChevronDown } from "lucide-react"
@@ -27,6 +28,7 @@ export default function ActivityHistoryClient() {
   const [selectedClass, setSelectedClass] = useState(() => searchParams.get("class_id") ?? "all")
   const [selectedStaff, setSelectedStaff] = useState("all")
   const [keyword, setKeyword] = useState("")
+  const debouncedKeyword = useDebounce(keyword, 500)
 
   const [items, setItems] = useState<ActivityItem[]>([])
   const [total, setTotal] = useState(0)
@@ -100,7 +102,7 @@ export default function ActivityHistoryClient() {
       if (toDate) params.set('to_date', toDate)
       if (selectedClass !== 'all') params.set('class_id', selectedClass)
       if (selectedStaff !== 'all') params.set('staff_id', selectedStaff)
-      if (keyword.trim()) params.set('keyword', keyword.trim())
+      if (debouncedKeyword.trim()) params.set('keyword', debouncedKeyword.trim())
 
       const res = await fetch(`/api/activities?${params}`)
       const json = await res.json()
@@ -134,7 +136,7 @@ export default function ActivityHistoryClient() {
     } finally {
       setLoading(false)
     }
-  }, [fromDate, toDate, selectedClass, selectedStaff, keyword])
+  }, [fromDate, toDate, selectedClass, selectedStaff, debouncedKeyword])
 
   useEffect(() => {
     fetchActivities(0, false)
