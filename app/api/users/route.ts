@@ -85,16 +85,15 @@ export async function GET(request: NextRequest) {
           is_active,
           _user_facility!inner (
             facility_id,
-            is_current,
-            deleted_at
+            is_current
           )
         `
         )
         .is('deleted_at', null)
         .eq('company_id', company_id)
         .eq('_user_facility.facility_id', current_facility_id)
-        .eq('_user_facility.is_current', true)
-        .is('_user_facility.deleted_at', null);
+        .eq('_user_facility.is_current', true);
+        // _user_facility に deleted_at カラムは存在しないため削除（docs/03_database.md 参照）
 
       if (roleFilter) {
         staffQuery = staffQuery.eq('role', roleFilter);
@@ -174,7 +173,8 @@ export async function GET(request: NextRequest) {
     if (role !== 'site_admin' && current_facility_id) {
       query = query.eq('_user_facility.facility_id', current_facility_id);
       query = query.eq('_user_facility.is_current', true);
-      query = query.is('_user_facility.deleted_at', null);
+      // _user_facility に deleted_at カラムは存在しないため削除（docs/03_database.md 参照）
+      // 退職・異動はis_currentフラグで管理するため、is_current=true で十分
     }
 
     // ロールフィルター
