@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         .eq('company_id', company_id)
         .eq('_user_facility.facility_id', current_facility_id)
         .eq('_user_facility.is_current', true)
-        .eq('_user_facility.deleted_at', null);
+        .is('_user_facility.deleted_at', null);
 
       if (roleFilter) {
         staffQuery = staffQuery.eq('role', roleFilter);
@@ -131,9 +131,10 @@ export async function GET(request: NextRequest) {
         success: true,
         data: {
           users: (staffUsers || []).map(
-            (user: { id: string; name: string }) => ({
+            (user: { id: string; name: string; role: string }) => ({
               user_id: user.id,
               name: user.name,
+              role: user.role,
             })
           ),
           total: totalUsers,

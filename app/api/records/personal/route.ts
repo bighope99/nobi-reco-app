@@ -180,7 +180,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('recorded_by', staff_id);
     }
     if (keyword) {
-      query = query.ilike('content', `%${keyword}%`);
+      const escapedKeyword = keyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+      query = query.ilike('content', `%${escapedKeyword}%`);
     }
 
     const { data, error, count } = await query;

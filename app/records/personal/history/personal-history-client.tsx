@@ -110,6 +110,9 @@ export default function PersonalHistoryClient() {
       if (debouncedKeyword.trim()) params.set('keyword', debouncedKeyword.trim())
 
       const res = await fetch(`/api/records/personal?${params}`)
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       const json = await res.json()
       if (!json.success) throw new Error(json.error)
 

@@ -32,7 +32,10 @@ export function useSession(): UserSession | null {
 
                 const response = await fetch('/api/auth/session', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Skip-SessionGuard': '1',
+                    },
                     body: JSON.stringify({ user_id: user.id }),
                 });
 

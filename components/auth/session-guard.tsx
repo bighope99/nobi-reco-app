@@ -22,7 +22,8 @@ export function SessionGuard() {
     window.fetch = async function interceptedFetch(input, init) {
       const response = await originalFetch(input, init)
 
-      if (response.status === 401 && !isRedirectingRef.current) {
+      const requestHeaders = init instanceof Headers ? init : new Headers(init?.headers)
+      if (response.status === 401 && !isRedirectingRef.current && !requestHeaders.get('X-Skip-SessionGuard')) {
         const url =
           typeof input === 'string'
             ? input
@@ -33,6 +34,7 @@ export function SessionGuard() {
         // ログアウトAPI自体はインターセプトしない（無限ループ防止）
         if (!url.includes('/api/auth/logout')) {
           isRedirectingRef.current = true
+          sessionStorage.removeItem('user_session')
           originalFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
           router.push('/login')
         }
