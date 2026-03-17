@@ -236,7 +236,8 @@ export async function POST(request: NextRequest) {
         throw companyError || new Error('Failed to create company');
       }
 
-      // app_metadata を更新
+      // app_metadata を更新（失敗時のロールバック用に元の値を保存）
+      const originalAppMetadata = authUserData.user.app_metadata;
       const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
         app_metadata: {
           role: 'company_admin',
@@ -262,6 +263,13 @@ export async function POST(request: NextRequest) {
 
       if (reinviteLinkError || !reinviteLinkData) {
         await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         throw reinviteLinkError || new Error('Failed to generate reinvite link');
       }
 
@@ -273,6 +281,13 @@ export async function POST(request: NextRequest) {
       if (!reinviteTokenHash) {
         console.error('Failed to extract token from reinvite link');
         await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         return NextResponse.json(
           { success: false, error: 'Failed to generate valid invite link' },
           { status: 500 }
@@ -301,6 +316,13 @@ export async function POST(request: NextRequest) {
       if (updateUserError || !updatedUser) {
         console.error('Failed to update m_users for reinvite:', updateUserError);
         await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
