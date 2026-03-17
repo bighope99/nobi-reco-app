@@ -4,12 +4,12 @@
  * Notion データベースからチケットをクエリするスクリプト
  *
  * Usage:
- *   npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts [--status <value>] [--limit <number>] [--assignee-id <id>]
+ *   npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts [--status <value>] [--limit <number>] [--assignee-name <name>]
  *
  * Options:
- *   --status       ステータスフィルター (default: "承認OK")
- *   --limit        最大取得件数 (default: 30)
- *   --assignee-id  担当者IDフィルター (default: null)
+ *   --status         ステータスフィルター (default: "承認OK")
+ *   --limit          最大取得件数 (default: 30)
+ *   --assignee-name  担当者名フィルター (default: null)
  */
 
 import {
@@ -62,9 +62,9 @@ interface NotionDateProperty {
   date: { start: string } | null;
 }
 
-interface NotionPeopleProperty {
-  type: "people";
-  people: { id: string; name?: string }[];
+interface NotionMultiSelectProperty {
+  type: "multi_select";
+  multi_select: { id: string; name: string; color: string }[];
 }
 
 type NotionProperty =
@@ -75,7 +75,7 @@ type NotionProperty =
   | NotionRelationProperty
   | NotionNumberProperty
   | NotionDateProperty
-  | NotionPeopleProperty
+  | NotionMultiSelectProperty
   | { type: string; [key: string]: unknown };
 
 interface NotionPage {
@@ -166,14 +166,15 @@ const BATCH_DELAY_MS = 100;
 interface Args {
   status: string;
   limit: number;
-  assigneeId: string | null;
+  /** 担当者名フィルター（multi_select の選択肢名、例: "中村"） */
+  assigneeName: string | null;
 }
 
 function parseArgs(): Args {
   const argv = process.argv.slice(2);
   let status = "承認OK";
   let limit = 30;
-  let assigneeId: string | null = null;
+  let assigneeName: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--status" && argv[i + 1]) {
@@ -183,13 +184,13 @@ function parseArgs(): Args {
       const n = parseInt(argv[i + 1], 10);
       if (!isNaN(n) && n > 0) limit = n;
       i++;
-    } else if (argv[i] === "--assignee-id" && argv[i + 1]) {
-      assigneeId = argv[i + 1];
+    } else if (argv[i] === "--assignee-name" && argv[i + 1]) {
+      assigneeName = argv[i + 1];
       i++;
     }
   }
 
-  return { status, limit, assigneeId };
+  return { status, limit, assigneeName };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +201,7 @@ async function queryDatabase(
   token: string,
   statusFilter: string,
   limit: number,
-  assigneeId: string | null
+  assigneeName: string | null
 ): Promise<NotionPage[]> {
   const pages: NotionPage[] = [];
   let cursor: string | null = null;
@@ -213,14 +214,14 @@ async function queryDatabase(
     };
 
     const filter =
-      assigneeId !== null
+      assigneeName !== null
         ? {
             and: [
               statusCondition,
               {
                 or: [
-                  { property: "担当者", people: { contains: assigneeId } },
-                  { property: "担当者", people: { is_empty: true } },
+                  { property: "担当者", multi_select: { contains: assigneeName } },
+                  { property: "担当者", multi_select: { is_empty: true } },
                 ],
               },
             ],
@@ -387,9 +388,9 @@ function extractPropertyValue(prop: NotionProperty): unknown {
       const p = prop as NotionDateProperty;
       return p.date?.start ?? null;
     }
-    case "people": {
-      const p = prop as NotionPeopleProperty;
-      return p.people.map((u) => u.id);
+    case "multi_select": {
+      const p = prop as NotionMultiSelectProperty;
+      return p.multi_select.map((o) => o.name);
     }
     default:
       return null;
@@ -420,8 +421,8 @@ function extractPageProperties(
     プロジェクト: getRelation("プロジェクト"),
     担当者: (() => {
       const prop = properties["担当者"];
-      if (!prop || prop.type !== "people") return [];
-      return (prop as NotionPeopleProperty).people.map((u) => u.id);
+      if (!prop || prop.type !== "multi_select") return [];
+      return (prop as NotionMultiSelectProperty).multi_select.map((o) => o.name);
     })(),
   };
 
@@ -493,11 +494,11 @@ async function main(): Promise<void> {
   const args = parseArgs();
 
   process.stderr.write(`Fetching tickets with status="${args.status}" (limit=${args.limit})...\n`);
-  if (args.assigneeId !== null) {
-    process.stderr.write(`assignee filter: ${args.assigneeId}\n`);
+  if (args.assigneeName !== null) {
+    process.stderr.write(`assignee filter: ${args.assigneeName}\n`);
   }
 
-  const pages = await queryDatabase(token, args.status, args.limit, args.assigneeId);
+  const pages = await queryDatabase(token, args.status, args.limit, args.assigneeName);
 
   process.stderr.write(`Fetching content for ${pages.length} tickets...\n`);
 

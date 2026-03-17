@@ -29,7 +29,7 @@ description: |
 
 ```
 Phase 0: ユーザー特定
-  AskUserQuestion でユーザー名確認 → notion-get-users でID解決
+  AskUserQuestion で担当者名を番号選択 → ASSIGNEE_NAME を確定
 
 Phase 1: 計画・承認
   チケット取得（自分 or 担当者なしでフィルタ）→ グルーピング案作成
@@ -52,21 +52,21 @@ Phase 3: 完了報告
 
 ## Phase 0: ユーザー特定
 
-### Step 1: ユーザー確認
+### Step 1: 担当者を番号選択で確認
 
-`AskUserQuestion` ツールを使い、以下を聞く:
+`AskUserQuestion` ツールを使い、以下の形式で聞く:
 
-> 「あなたのNotionユーザー名を教えてください（担当者フィールドに表示される名前）」
+> 「あなたの担当者名を番号で選択してください:
+> 1. 中村
+> 2. 尼崎
+> 3. かつはら
+> 4. 小川
+> 5. その他（直接入力）
+> （担当者なしのチケットも含めて取得します）」
 
-### Step 2: Notion ユーザーID解決
+選択された番号から `ASSIGNEE_NAME` を確定する。「5. その他」の場合はそのまま入力された名前を使用する。
 
-MCPツール `notion-get-users` でユーザー一覧を取得し、名前からIDを特定する。
-
-```
-mcp tool: notion-get-users
-→ 返ってきたリストから USER_NAME に一致するユーザーのIDを取得
-→ USER_NOTION_ID として以降のステップで使用
-```
+以降の全フェーズで `ASSIGNEE_NAME` を参照する。
 
 ## Phase 1: 計画・承認
 
@@ -76,7 +76,7 @@ mcp tool: notion-get-users
 # 承認OKかつ（自分が担当 or 担当者なし）のチケットを取得
 npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
   --status "承認OK" \
-  --assignee-id <USER_NOTION_ID>
+  --assignee-name <ASSIGNEE_NAME>
 ```
 
 ### Step 2: グルーピング案作成
@@ -128,12 +128,12 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
 npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
   --page-id <チケットID> \
   --status "進行中" \
-  --assignee-id <USER_NOTION_ID>
+  --assignee-name <ASSIGNEE_NAME>
 ```
 
 これにより:
 - ステータス → 「進行中」
-- 担当者 → 自分（USER_NOTION_ID）
+- 担当者 → 自分（ASSIGNEE_NAME）
 
 #### Step 1: worktree 作成
 

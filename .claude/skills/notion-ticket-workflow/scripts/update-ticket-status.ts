@@ -8,13 +8,13 @@
  *     --page-id <notion-page-uuid> \
  *     --status "レビュー依頼" \
  *     [--pr-url "https://github.com/bighope99/nobi-reco-app/pull/205"] \
- *     [--assignee-id <notion-user-uuid>]
+ *     [--assignee-name "中村"]
  *
  * Options:
- *   --page-id     (required) Notion ページの UUID
- *   --status      (required) 新しいステータス値 (例: "レビュー依頼", "進行中")
- *   --pr-url      (optional) PR URL。指定した場合はコメントとして追加される
- *   --assignee-id (optional) 担当者として設定する Notion ユーザーの UUID
+ *   --page-id       (required) Notion ページの UUID
+ *   --status        (required) 新しいステータス値 (例: "レビュー依頼", "進行中")
+ *   --pr-url        (optional) PR URL。指定した場合はコメントとして追加される
+ *   --assignee-name (optional) 担当者として設定する名前 (例: "中村", "尼崎")
  */
 
 import {
@@ -36,7 +36,7 @@ interface OutputResult {
   page_id: string;
   status: string;
   pr_url: string | null;
-  assignee_id: string | null;
+  assignee_name: string | null;
   success: true;
 }
 
@@ -48,7 +48,7 @@ interface Args {
   pageId: string;
   status: string;
   prUrl: string | null;
-  assigneeId: string | null;
+  assigneeName: string | null;
 }
 
 function parseArgs(): Args {
@@ -56,7 +56,7 @@ function parseArgs(): Args {
   let pageId: string | null = null;
   let status: string | null = null;
   let prUrl: string | null = null;
-  let assigneeId: string | null = null;
+  let assigneeName: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--page-id" && argv[i + 1]) {
@@ -68,8 +68,8 @@ function parseArgs(): Args {
     } else if (argv[i] === "--pr-url" && argv[i + 1]) {
       prUrl = argv[i + 1];
       i++;
-    } else if (argv[i] === "--assignee-id" && argv[i + 1]) {
-      assigneeId = argv[i + 1];
+    } else if (argv[i] === "--assignee-name" && argv[i + 1]) {
+      assigneeName = argv[i + 1];
       i++;
     }
   }
@@ -84,7 +84,7 @@ function parseArgs(): Args {
     process.exit(1);
   }
 
-  return { pageId, status, prUrl, assigneeId };
+  return { pageId, status, prUrl, assigneeName };
 }
 
 // ---------------------------------------------------------------------------
@@ -142,9 +142,9 @@ async function updatePrUrl(
 async function updateAssignee(
   token: string,
   pageId: string,
-  assigneeId: string
+  assigneeName: string
 ): Promise<void> {
-  process.stderr.write(`Setting assignee to ${assigneeId} for page ${pageId}...\n`);
+  process.stderr.write(`Setting assignee to "${assigneeName}" for page ${pageId}...\n`);
 
   await notionFetch<UpdatePageResponse>(
     `${NOTION_API_BASE}/pages/${pageId}`,
@@ -154,7 +154,7 @@ async function updateAssignee(
       body: JSON.stringify({
         properties: {
           担当者: {
-            people: [{ id: assigneeId }],
+            multi_select: [{ name: assigneeName }],
           },
         },
       }),
@@ -190,15 +190,15 @@ async function main(): Promise<void> {
   }
 
   // Step 3: Update assignee if provided
-  if (args.assigneeId !== null) {
-    await updateAssignee(token, args.pageId, args.assigneeId);
+  if (args.assigneeName !== null) {
+    await updateAssignee(token, args.pageId, args.assigneeName);
   }
 
   const output: OutputResult = {
     page_id: args.pageId,
     status: args.status,
     pr_url: args.prUrl,
-    assignee_id: args.assigneeId,
+    assignee_name: args.assigneeName,
     success: true,
   };
 
