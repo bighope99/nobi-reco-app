@@ -129,10 +129,10 @@ describe('getStatusPresentation', () => {
       expect(result?.label).toBe('出席予定')
     })
 
-    it('absent + is_expected=false の過去日付 → label: 欠席予定', () => {
+    it('absent + is_expected=false の過去日付 → label: 欠席', () => {
       const child = makeChild({ status: 'absent', is_expected: false })
       const result = getStatusPresentation(child, PAST_DATE)
-      expect(result?.label).toBe('欠席予定')
+      expect(result?.label).toBe('欠席')
     })
   })
 })

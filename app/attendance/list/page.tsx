@@ -48,9 +48,8 @@ const StatusActionButton = ({
   if (isPastDate(currentDate)) {
     // 過去日付: ステータスに応じて disabled 状態で両ボタンを表示
     // 楽観的更新は status='absent', is_expected=true/false で状態を表現するため両方考慮
-    const isPresent = child.status === 'present' || child.status === 'late' ||
-      (child.status === 'absent' && child.is_expected)
-    const isAbsent = child.status === 'absent' && !child.is_expected
+    const isPresent = child.status === 'present' || child.status === 'late'
+    const isAbsent = child.status === 'absent'
 
     return (
       <div className="flex gap-2">

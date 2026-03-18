@@ -85,6 +85,14 @@ export const getStatusPresentation = (child: ChildAttendance, currentDate: strin
   if (child.status === 'absent') {
     const isPast = isPastDate(currentDate)
 
+    if (isPast) {
+      // 過去日付: is_expected に関係なく「欠席」
+      return {
+        label: '欠席',
+        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200',
+      }
+    }
+
     if (!child.is_expected) {
       return {
         label: '欠席予定',
@@ -93,10 +101,8 @@ export const getStatusPresentation = (child: ChildAttendance, currentDate: strin
     }
 
     return {
-      label: isPast ? '欠席' : '出席予定',
-      className: isPast
-        ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
-        : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
+      label: '出席予定',
+      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
     }
   }
 
