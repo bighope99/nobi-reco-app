@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { useState } from "react"
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
 import { useSession } from "@/hooks/useSession"
@@ -17,6 +18,7 @@ export function getSidebarType(role?: string | null): "staff" | "admin" {
 
 export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
   const session = useSession()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const userName = session?.name
   const currentFacility = session?.facilities.find(
@@ -30,6 +32,8 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
       <Sidebar
         type={sidebarType}
         userName={userName}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header
@@ -37,6 +41,7 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
           subtitle={subtitle}
           userName={userName}
           facilityName={facilityName}
+          onMenuClick={() => setIsMobileMenuOpen(true)}
         />
         <main className="flex-1 overflow-y-auto bg-background p-4 sm:p-6">{children}</main>
       </div>

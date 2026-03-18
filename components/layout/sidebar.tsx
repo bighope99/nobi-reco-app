@@ -14,7 +14,9 @@ import {
   Database,
   Building2,
   Home,
+  X,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/LogoutButton"
 
 type NavItem = {
@@ -100,9 +102,11 @@ const adminNavItems: NavItem[] = [
 type SidebarProps = {
   type: "staff" | "admin"
   userName?: string
+  isOpen?: boolean
+  onClose?: () => void
 }
 
-export function Sidebar({ type, userName }: SidebarProps) {
+export function Sidebar({ type, userName, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
 
@@ -124,16 +128,48 @@ export function Sidebar({ type, userName }: SidebarProps) {
     )
   }
 
+  const handleNavClick = () => {
+    onClose?.()
+  }
+
   return (
     <>
+      {/* モバイル用オーバーレイ */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+
       {/* サイドバー本体 */}
-      <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
+          "transition-transform duration-300 ease-in-out",
+          "lg:static lg:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
       <div className="border-b border-sidebar-border px-6 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-            の
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+              の
+            </div>
+            <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
           </div>
-          <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
+          {/* モバイル用閉じるボタン */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="lg:hidden h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+            aria-label="メニューを閉じる"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
         {userName && (
           <p className="mt-1 text-xs text-muted-foreground truncate" title={userName}>
@@ -162,6 +198,7 @@ export function Sidebar({ type, userName }: SidebarProps) {
                       <li key={child.href}>
                         <Link
                           href={child.href}
+                          onClick={handleNavClick}
                           className={cn(
                             "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                             "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
@@ -178,6 +215,7 @@ export function Sidebar({ type, userName }: SidebarProps) {
               ) : (
                 <Link
                   href={item.href}
+                  onClick={handleNavClick}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                     "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
