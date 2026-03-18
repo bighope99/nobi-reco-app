@@ -1,7 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
-import { AdminLayout } from "@/components/layout/admin-layout";
 import { useSession } from '@/hooks/useSession';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -16,8 +15,16 @@ import {
   Users,
   ChevronLeft,
   UserCheck,
-  ChevronRight
+  ChevronRight,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  FacilityRegistrationForm,
+  type FacilityRegistrationData,
+} from '@/components/admin/facility-registration-form';
 
 interface Facility {
   facility_id: string;
@@ -60,44 +67,130 @@ const FieldGroup = ({ label, required, children }: any) => (
   </div>
 );
 
+function NewFacilityPage() {
+  const router = useRouter();
+  const session = useSession();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [createdFacilityName, setCreatedFacilityName] = useState('');
+
+  const handleSubmit = async (data: FacilityRegistrationData) => {
+    if (!session) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/api/admin/companies/${session.company_id}/facilities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          facility: {
+            name: data.facility.name.trim(),
+            name_kana: data.facility.name_kana.trim() || undefined,
+            postal_code: data.facility.postal_code.trim() || undefined,
+            address: data.facility.address.trim() || undefined,
+            phone: data.facility.phone.trim() || undefined,
+            capacity: data.facility.capacity.trim() || undefined,
+          },
+          facility_admin: {
+            name: data.facilityAdmin.name.trim(),
+            name_kana: data.facilityAdmin.name_kana.trim() || undefined,
+            email: data.facilityAdmin.email.trim(),
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '施設の登録に失敗しました');
+      }
+      setCreatedFacilityName(result.data.facility_name);
+      setCompleted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!session) {
+    return (
+      <StaffLayout title="施設登録">
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          <p className="text-slate-500">セッション情報を読み込んでいます...</p>
+        </div>
+      </StaffLayout>
+    );
+  }
+
+  if (completed) {
+    return (
+      <StaffLayout title="施設登録完了">
+        <div className="mx-auto max-w-lg">
+          <Card>
+            <CardHeader className="text-center pb-2">
+              <div className="flex justify-center mb-4">
+                <div className="p-3 bg-green-50 rounded-full">
+                  <CheckCircle2 className="h-12 w-12 text-green-500" />
+                </div>
+              </div>
+              <CardTitle className="text-xl">施設登録が完了しました</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {createdFacilityName && (
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-800">{createdFacilityName}</p>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+                <p>施設管理者に招待メールを送信しました。</p>
+              </div>
+
+              <div className="border-t pt-6 space-y-3">
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    setCompleted(false);
+                    setCreatedFacilityName('');
+                  }}
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  別の施設を登録する
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => router.push('/settings/facility')}
+                >
+                  施設一覧に戻る
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </StaffLayout>
+    );
+  }
+
+  return (
+    <StaffLayout title="施設登録" subtitle="新しい施設と施設管理者を登録">
+      <div className="mx-auto max-w-2xl">
+        <FacilityRegistrationForm
+          onSubmit={handleSubmit}
+          onCancel={() => router.push('/settings/facility')}
+          isSubmitting={isSubmitting}
+        />
+      </div>
+    </StaffLayout>
+  );
+}
+
 export default function FacilityDetailPage() {
   const params = useParams();
   const router = useRouter();
   const facilityId = params.facility_id as string;
-  const session = useSession();
-  const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
-  const canCreate = isAdmin;
-  const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
 
   const [facility, setFacility] = useState<Facility | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Load facility data
-  useEffect(() => {
-    if (facilityId && facilityId !== 'new') {
-      fetchFacility();
-    } else if (facilityId === 'new') {
-      // セッション読み込み完了を待つ
-      if (!session) {
-        return;
-      }
-      if (!canCreate) {
-        setError('施設の作成権限がありません');
-        return;
-      }
-      // 新規作成モード
-      setError(null);
-      setFacility({
-        facility_id: 'new',
-        name: '',
-        address: '',
-        phone: '',
-        email: '',
-      });
-    }
-  }, [facilityId, session]);
 
   const fetchFacility = async () => {
     try {
@@ -166,42 +259,53 @@ export default function FacilityDetailPage() {
     }
   };
 
+  // Load facility data
+  useEffect(() => {
+    if (facilityId && facilityId !== 'new') {
+      fetchFacility();
+    }
+  }, [facilityId]);
+
+  if (facilityId === 'new') {
+    return <NewFacilityPage />;
+  }
+
   if (loading) {
     return (
-      <Layout title="施設詳細">
+      <StaffLayout title="施設詳細">
         <div className="flex justify-center items-center min-h-screen">
           <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
         </div>
-      </Layout>
+      </StaffLayout>
     );
   }
 
   if (error && !facility) {
     return (
-      <Layout title="施設詳細">
+      <StaffLayout title="施設詳細">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             <p className="text-sm">{error}</p>
           </div>
         </div>
-      </Layout>
+      </StaffLayout>
     );
   }
 
   if (!facility) {
     return (
-      <Layout title="施設詳細">
+      <StaffLayout title="施設詳細">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <p className="text-slate-500">施設情報を読み込んでいます...</p>
         </div>
-      </Layout>
+      </StaffLayout>
     );
   }
 
   const isNewFacility = facilityId === 'new';
 
   return (
-    <Layout title={isNewFacility ? "施設新規作成" : "施設詳細"}>
+    <StaffLayout title={isNewFacility ? "施設新規作成" : "施設詳細"}>
       <div className="min-h-screen bg-gray-50 text-slate-900 font-sans pb-24">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -355,6 +459,6 @@ export default function FacilityDetailPage() {
         </div>
 
       </div>
-    </Layout>
+    </StaffLayout>
   );
 }
