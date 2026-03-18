@@ -157,43 +157,24 @@ export async function POST(request: NextRequest) {
     const upsertResult = await upsertDailyAttendance('scheduled')
     if (upsertResult) return upsertResult
 
-    // 過去日付の場合: h_attendance に手動チェックイン記録を追加
+    // 過去日付の場合: h_attendance に手動チェックイン記録をupsert
+    // checked_in_date (JST) のユニーク制約により重複を防止
     if (isPastDate(date)) {
       const checkedInAt = `${date}T09:00:00+09:00`
-      const dayStart = `${date}T00:00:00+09:00`
-      const nextDateObj = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
-      const nextY = nextDateObj.getUTCFullYear()
-      const nextM = String(nextDateObj.getUTCMonth() + 1).padStart(2, '0')
-      const nextD = String(nextDateObj.getUTCDate()).padStart(2, '0')
-      const dayEnd = `${nextY}-${nextM}-${nextD}T00:00:00+09:00`
 
-      // 既存のレコードを削除してから挿入（重複防止）
-      const { error: hDeleteError } = await supabase
+      const { error: hUpsertError } = await supabase
         .from('h_attendance')
-        .delete()
-        .eq('child_id', child_id)
-        .eq('facility_id', facility_id)
-        .gte('checked_in_at', dayStart)
-        .lt('checked_in_at', dayEnd)
-
-      if (hDeleteError) {
-        console.error('h_attendance delete error:', hDeleteError)
-        return NextResponse.json({ success: false, error: 'Failed to delete existing attendance record' }, { status: 500 })
-      }
-
-      const { error: hInsertError } = await supabase
-        .from('h_attendance')
-        .insert({
+        .upsert({
           child_id,
           facility_id,
           checked_in_at: checkedInAt,
           check_in_method: 'manual',
           checked_in_by: user_id,
           created_at: timestamp,
-        })
+        }, { onConflict: 'child_id,facility_id,checked_in_date' })
 
-      if (hInsertError) {
-        console.error('h_attendance insert error:', hInsertError)
+      if (hUpsertError) {
+        console.error('h_attendance upsert error:', hUpsertError)
         return NextResponse.json({ success: false, error: 'Failed to create attendance record' }, { status: 500 })
       }
     }
