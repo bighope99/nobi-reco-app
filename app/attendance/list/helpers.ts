@@ -153,7 +153,8 @@ export const getStatusAction = (child: ChildAttendance, currentDate: string): 'a
 export const applyOptimisticStatusUpdate = (
   data: AttendanceData,
   childId: string,
-  nextStatus: 'absent' | 'present'
+  nextStatus: 'absent' | 'present',
+  currentDate: string
 ): AttendanceData => {
   const updatedChildren = data.children.map(child => {
     if (child.child_id !== childId) return child
@@ -167,6 +168,16 @@ export const applyOptimisticStatusUpdate = (
     }
 
     // nextStatus === 'present'
+    // 過去日付: 実際のチェックイン記録を作成するので 'present' を表示
+    // 今日/未来: 出席予定にするだけなので '出席予定' バッジ（absent + is_expected=true）
+    if (isPastDate(currentDate)) {
+      return {
+        ...child,
+        status: 'present' as const,
+        is_expected: true,
+      }
+    }
+
     return {
       ...child,
       status: 'absent' as const,

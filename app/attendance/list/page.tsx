@@ -217,7 +217,7 @@ export default function AttendanceListPage() {
 
     // 楽観的更新: APIコール前にUIを即座に更新
     const previousData = attendanceData
-    setAttendanceData(applyOptimisticStatusUpdate(attendanceData, childId, nextStatus))
+    setAttendanceData(applyOptimisticStatusUpdate(attendanceData, childId, nextStatus, currentDate))
 
     try {
       const response = await fetch('/api/attendance/status', {

@@ -196,6 +196,9 @@ describe('getStatusAction', () => {
 })
 
 describe('applyOptimisticStatusUpdate', () => {
+  const TODAY = '2026-03-18'
+  const PAST = '2020-01-01'
+
   it('出席予定の児童を欠席にすると summary.absent_count が増える', () => {
     const children = [
       makeChild({ child_id: 'child-1', status: 'absent', is_expected: true }),
@@ -203,7 +206,7 @@ describe('applyOptimisticStatusUpdate', () => {
     ]
     const data = makeAttendanceData(children)
 
-    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent')
+    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent', TODAY)
 
     expect(result.children[0].status).toBe('absent')
     expect(result.children[0].is_expected).toBe(false)
@@ -211,18 +214,33 @@ describe('applyOptimisticStatusUpdate', () => {
     expect(result.summary.present_count).toBe(1)
   })
 
-  it('欠席予定の児童を出席にすると is_expected が true になる', () => {
+  it('今日: 欠席予定の児童を出席にすると is_expected が true になり status は absent のまま（出席予定表示）', () => {
     const children = [
       makeChild({ child_id: 'child-1', status: 'absent', is_expected: false }),
       makeChild({ child_id: 'child-2', status: 'present' }),
     ]
     const data = makeAttendanceData(children)
 
-    const result = applyOptimisticStatusUpdate(data, 'child-1', 'present')
+    const result = applyOptimisticStatusUpdate(data, 'child-1', 'present', TODAY)
 
     expect(result.children[0].is_expected).toBe(true)
-    // 楽観的更新: is_expected=true に変更、status は absent のまま（出席予定表示）
+    // 今日: is_expected=true に変更、status は absent のまま（出席予定バッジ）
     expect(result.children[0].status).toBe('absent')
+    expect(result.summary.absent_count).toBe(1)
+  })
+
+  it('過去日付: 出席にすると status が present になる（出席バッジ）', () => {
+    const children = [
+      makeChild({ child_id: 'child-1', status: 'absent', is_expected: true }),
+      makeChild({ child_id: 'child-2', status: 'absent', is_expected: false }),
+    ]
+    const data = makeAttendanceData(children)
+
+    const result = applyOptimisticStatusUpdate(data, 'child-1', 'present', PAST)
+
+    expect(result.children[0].status).toBe('present')
+    expect(result.children[0].is_expected).toBe(true)
+    expect(result.summary.present_count).toBe(1)
     expect(result.summary.absent_count).toBe(1)
   })
 
@@ -233,7 +251,7 @@ describe('applyOptimisticStatusUpdate', () => {
     ]
     const data = makeAttendanceData(children)
 
-    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent')
+    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent', TODAY)
 
     expect(result.children[1].status).toBe('present')
     expect(result.children[1].child_id).toBe('child-2')
@@ -249,7 +267,7 @@ describe('applyOptimisticStatusUpdate', () => {
     expect(data.summary.present_count).toBe(2)
     expect(data.summary.absent_count).toBe(1)
 
-    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent')
+    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent', TODAY)
 
     expect(result.summary.present_count).toBe(1)
     expect(result.summary.absent_count).toBe(2)
