@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
 import { useSession } from "@/hooks/useSession"
@@ -17,7 +16,6 @@ export function getSidebarType(role?: string | null): "staff" | "admin" {
 }
 
 export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const session = useSession()
 
   const userName = session?.name
@@ -31,15 +29,12 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         type={sidebarType}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
         userName={userName}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header
           title={title}
           subtitle={subtitle}
-          onMenuClick={() => setIsSidebarOpen(true)}
           userName={userName}
           facilityName={facilityName}
         />

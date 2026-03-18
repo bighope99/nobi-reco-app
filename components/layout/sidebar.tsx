@@ -101,12 +101,10 @@ const adminNavItems: NavItem[] = [
 
 type SidebarProps = {
   type: "staff" | "admin"
-  isOpen?: boolean
-  onClose?: () => void
   userName?: string
 }
 
-export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProps) {
+export function Sidebar({ type, userName }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
 
@@ -138,22 +136,8 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
 
   return (
     <>
-      {/* モバイル用バックドロップ */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
-
       {/* サイドバー本体 */}
-      <aside className={cn(
-        "flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar",
-        // モバイル: オーバーレイとして表示
-        "fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
+      <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       <div className="border-b border-sidebar-border px-6 py-3">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
