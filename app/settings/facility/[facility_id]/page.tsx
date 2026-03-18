@@ -73,10 +73,12 @@ function NewFacilityPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [createdFacilityName, setCreatedFacilityName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (data: FacilityRegistrationData) => {
-    if (!session) return;
+    if (!session || !session.company_id) return;
     setIsSubmitting(true);
+    setError(null);
     try {
       const response = await fetch(`/api/admin/companies/${session.company_id}/facilities`, {
         method: 'POST',
@@ -103,6 +105,8 @@ function NewFacilityPage() {
       }
       setCreatedFacilityName(result.data.facility_name);
       setCompleted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '施設の登録に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
@@ -172,6 +176,11 @@ function NewFacilityPage() {
   return (
     <StaffLayout title="施設登録" subtitle="新しい施設と施設管理者を登録">
       <div className="mx-auto max-w-2xl">
+        {error && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            {error}
+          </div>
+        )}
         <FacilityRegistrationForm
           onSubmit={handleSubmit}
           onCancel={() => router.push('/settings/facility')}
