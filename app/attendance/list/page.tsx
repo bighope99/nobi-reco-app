@@ -205,13 +205,11 @@ export default function AttendanceListPage() {
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        // APIエラー時はロールバック
-        setAttendanceData(previousData)
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
     } catch (err) {
       console.error('Failed to update attendance status:', err)
-      // ネットワークエラー時もロールバック
+      // エラー時はロールバック
       setAttendanceData(previousData)
       setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
     } finally {
