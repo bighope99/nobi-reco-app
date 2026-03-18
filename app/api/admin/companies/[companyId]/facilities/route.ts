@@ -179,6 +179,13 @@ export async function POST(
       });
 
       if (reinviteLinkError || !reinviteLinkData) {
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         throw reinviteLinkError || new Error('Failed to generate reinvite link');
       }
@@ -190,6 +197,13 @@ export async function POST(
 
       if (!reinviteTokenHash) {
         console.error('Failed to extract token from reinvite link for facility admin');
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         return NextResponse.json(
           { success: false, error: 'Failed to generate valid invite link' },
@@ -201,6 +215,13 @@ export async function POST(
       const inviteUrlForReinvite = `${reinviteBaseUrl}/password/setup?token_hash=${reinviteTokenHash}&type=${reinviteType}`;
 
       // Re-invite Step 4: m_users を更新
+      // ロールバック用に元の状態を保存
+      const { data: originalMUser } = await supabase
+        .from('m_users')
+        .select('company_id, name, name_kana, role, hire_date')
+        .eq('id', existingUser.id)
+        .single();
+
       const hireDateValue = body.facility_admin.hire_date || getCurrentDateJST();
 
       const { data: updatedUser, error: updateUserError } = await supabase
@@ -246,6 +267,14 @@ export async function POST(
 
       if (userFacilityError) {
         console.error('Failed to insert _user_facility for reinvite:', userFacilityError);
+        // m_users を元に戻す
+        if (originalMUser) {
+          try {
+            await supabase.from('m_users').update(originalMUser).eq('id', existingUser.id);
+          } catch (rollbackErr) {
+            console.error('Failed to rollback m_users:', rollbackErr);
+          }
+        }
         try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         // app_metadata を元に戻す
         try {

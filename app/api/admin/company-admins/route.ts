@@ -152,6 +152,13 @@ export async function POST(request: NextRequest) {
       });
 
       if (reinviteLinkError || !reinviteLinkData) {
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         throw reinviteLinkError || new Error('Failed to generate reinvite link');
       }
 
@@ -162,6 +169,13 @@ export async function POST(request: NextRequest) {
 
       if (!reinviteTokenHash) {
         console.error('Failed to extract token from reinvite link');
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
         return NextResponse.json(
           { success: false, error: 'Failed to generate valid invite link' },
           { status: 500 }
