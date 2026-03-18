@@ -173,8 +173,10 @@ export async function POST(
       }
 
       // Re-invite Step 3: 新しい招待リンクを生成
+      // メールが確認済みの場合は 'invite' が失敗するため 'magiclink' を使用する
+      const reinviteLinkType = authUserData.user.email_confirmed_at ? 'magiclink' : 'invite';
       const { data: reinviteLinkData, error: reinviteLinkError } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'invite',
+        type: reinviteLinkType,
         email: adminEmail,
       });
 
