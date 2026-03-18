@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import { useSession } from '@/hooks/useSession';
+import { useRole } from '@/hooks/useRole';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Building2,
@@ -212,6 +213,15 @@ export default function FacilityDetailPage() {
   const params = useParams();
   const router = useRouter();
   const facilityId = params.facility_id as string;
+
+  // useRole() が返すフラグの意味:
+  //   isAdmin        : site_admin または company_admin
+  //   isFacilityAdmin: facility_admin（施設ごとの管理者）
+  //   isStaff        : staff（一般職員）
+  //   hasRole(...)   : 指定したロールのいずれかに一致するか判定
+  const { hasRole } = useRole();
+  // 施設管理者の追加は company_admin のみ可能
+  const canAddFacilityAdmin = hasRole('company_admin');
 
   const [facility, setFacility] = useState<Facility | null>(null);
   const [loading, setLoading] = useState(false);
@@ -509,12 +519,14 @@ export default function FacilityDetailPage() {
                 <Users size={18} className="text-indigo-500" />
                 <h2 className="text-lg font-bold text-slate-800">施設管理者</h2>
                 <Badge variant="outline" className="ml-1">{accounts.length}名</Badge>
-                <div className="ml-auto">
-                  <Button size="sm" onClick={() => setShowAddDialog(true)}>
-                    <Plus size={16} className="mr-1" />
-                    管理者を追加
-                  </Button>
-                </div>
+                {canAddFacilityAdmin && (
+                  <div className="ml-auto">
+                    <Button size="sm" onClick={() => setShowAddDialog(true)}>
+                      <Plus size={16} className="mr-1" />
+                      管理者を追加
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="p-0">
                 {accounts.length === 0 ? (
@@ -555,8 +567,8 @@ export default function FacilityDetailPage() {
             </section>
           )}
 
-          {/* Add Admin Dialog */}
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          {/* Add Admin Dialog - company_admin のみ表示 */}
+          {canAddFacilityAdmin && <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>施設管理者を追加</DialogTitle>
@@ -614,7 +626,7 @@ export default function FacilityDetailPage() {
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
 
         </div>
 
