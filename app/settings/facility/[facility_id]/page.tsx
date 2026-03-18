@@ -389,10 +389,8 @@ export default function FacilityDetailPage() {
     );
   }
 
-  const isNewFacility = facilityId === 'new';
-
   return (
-    <StaffLayout title={isNewFacility ? "施設新規作成" : "施設詳細"}>
+    <StaffLayout title="施設詳細">
       <div className="min-h-screen bg-gray-50 text-slate-900 font-sans pb-24">
         <style>
           {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
@@ -414,10 +412,10 @@ export default function FacilityDetailPage() {
             <div>
               <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <Building2 className="text-indigo-500" />
-                {isNewFacility ? '施設新規作成' : '施設情報編集'}
+                施設情報編集
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                {isNewFacility ? '新しい施設を登録します' : '施設の基本情報を編集'}
+                施設の基本情報を編集
               </p>
             </div>
           </div>
@@ -488,7 +486,7 @@ export default function FacilityDetailPage() {
           </section>
 
           {/* Statistics (only for existing facilities) */}
-          {!isNewFacility && facility.current_children_count !== undefined && (
+          {facility.current_children_count !== undefined && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
               <div className="px-6 py-5 border-b border-slate-100">
                 <h2 className="text-lg font-bold text-slate-800">統計情報</h2>
@@ -513,59 +511,57 @@ export default function FacilityDetailPage() {
           )}
 
           {/* Facility Admins Section */}
-          {!isNewFacility && (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
-                <Users size={18} className="text-indigo-500" />
-                <h2 className="text-lg font-bold text-slate-800">施設管理者</h2>
-                <Badge variant="outline" className="ml-1">{accounts.length}名</Badge>
-                {canAddFacilityAdmin && (
-                  <div className="ml-auto">
-                    <Button size="sm" onClick={() => setShowAddDialog(true)}>
-                      <Plus size={16} className="mr-1" />
-                      管理者を追加
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="p-0">
-                {accounts.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-500">
-                    登録された施設管理者はありません
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                          <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">氏名</th>
-                          <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">メールアドレス</th>
-                          <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">ステータス</th>
+          <section className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+              <Users size={18} className="text-indigo-500" />
+              <h2 className="text-lg font-bold text-slate-800">施設管理者</h2>
+              <Badge variant="outline" className="ml-1">{accounts.length}名</Badge>
+              {canAddFacilityAdmin && (
+                <div className="ml-auto">
+                  <Button size="sm" onClick={() => setShowAddDialog(true)}>
+                    <Plus size={16} className="mr-1" />
+                    管理者を追加
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="p-0">
+              {accounts.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">
+                  登録された施設管理者はありません
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">氏名</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">メールアドレス</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">ステータス</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {accounts.map((account) => (
+                        <tr key={account.user_id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <span className="font-medium text-slate-900">{account.name}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm text-slate-600">{account.email || '-'}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge variant={account.is_active ? 'default' : 'destructive'}>
+                              {account.is_active ? '有効' : '無効'}
+                            </Badge>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {accounts.map((account) => (
-                          <tr key={account.user_id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="px-6 py-4">
-                              <span className="font-medium text-slate-900">{account.name}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-sm text-slate-600">{account.email || '-'}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <Badge variant={account.is_active ? 'default' : 'destructive'}>
-                                {account.is_active ? '有効' : '無効'}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
 
           {/* Add Admin Dialog - company_admin のみ表示 */}
           {canAddFacilityAdmin && <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -654,7 +650,7 @@ export default function FacilityDetailPage() {
               ) : (
                 <>
                   <Save size={18} />
-                  {isNewFacility ? '施設を作成' : '変更を保存'}
+                  変更を保存
                 </>
               )}
             </button>

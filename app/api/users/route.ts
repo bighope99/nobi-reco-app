@@ -304,6 +304,24 @@ export async function POST(request: NextRequest) {
       ? (body.facility_id || current_facility_id)
       : current_facility_id;
 
+    // 施設の所有権確認（クロステナントリンク防止）
+    if (targetFacilityId && body.facility_id) {
+      const { data: facilityCheck, error: facilityCheckError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', targetFacilityId)
+        .eq('company_id', company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (facilityCheckError || !facilityCheck) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid facility_id for current company' },
+          { status: 403 }
+        );
+      }
+    }
+
     // ---- メールなしスタッフ登録（auth.users に登録しない） ----
     if (isEmaillessStaff) {
       const staffId = crypto.randomUUID();
@@ -365,8 +383,9 @@ export async function POST(request: NextRequest) {
       .from('m_users')
       .select('id, name, role')
       .eq('email', body.email)
+      .eq('company_id', company_id)
       .is('deleted_at', null)
-      .single();
+      .maybeSingle();
 
     // Admin クライアントを作成（サービスロールキー使用）
     // ※ 再招待フローでも使い回すため、重複チェック後に宣言する
