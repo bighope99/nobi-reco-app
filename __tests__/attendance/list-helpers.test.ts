@@ -10,13 +10,13 @@ import {
 // テスト用のヘルパー: 基本的なChildAttendanceを生成
 const makeChild = (overrides: Partial<ChildAttendance> = {}): ChildAttendance => ({
   child_id: 'child-1',
-  name: 'テスト 太郎',
-  kana: 'テスト タロウ',
+  name: 'テスト太郎',
+  kana: 'てすとたろう',
   class_id: 'class-1',
   class_name: 'ひまわり組',
-  age_group: '小学1年',
+  age_group: 'elementary',
   grade: 1,
-  grade_label: '小1',
+  grade_label: '1年生',
   photo_url: null,
   status: 'absent',
   is_expected: true,
@@ -42,62 +42,94 @@ const makeAttendanceData = (children: ChildAttendance[]): AttendanceData => ({
   filters: { classes: [] },
 })
 
-// 未来日付（テスト実行時から十分先の日付）
-const FUTURE_DATE = '2099-12-31'
 // 過去日付
 const PAST_DATE = '2020-01-01'
+// 今日の日付（fake timer で固定する値と一致させる）
+const TODAY = '2026-03-18'
+// 未来日付
+const FUTURE_DATE = '2099-12-31'
 
 describe('isPastDate', () => {
-  it('過去日付に対してtrueを返す', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    // JST 2026-03-18 = UTC 2026-03-17T15:00:00Z 以降
+    // テストで「今日 = 2026-03-18 JST」を保証するため UTC+9 相当の時刻を使用
+    jest.setSystemTime(new Date('2026-03-18T10:00:00Z'))
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('過去の日付は true を返す', () => {
     expect(isPastDate(PAST_DATE)).toBe(true)
   })
 
-  it('未来日付に対してfalseを返す', () => {
+  it('今日の日付は false を返す', () => {
+    expect(isPastDate(TODAY)).toBe(false)
+  })
+
+  it('未来の日付は false を返す', () => {
     expect(isPastDate(FUTURE_DATE)).toBe(false)
   })
 })
 
 describe('getStatusPresentation', () => {
-  describe('未来日付', () => {
-    it('出席予定の児童（absent + is_expected）は「出席予定」を返す', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-03-18T10:00:00Z'))
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  describe('今日の日付', () => {
+    it('absent + is_expected=true → label: 出席予定', () => {
       const child = makeChild({ status: 'absent', is_expected: true })
-      const result = getStatusPresentation(child, FUTURE_DATE)
+      const result = getStatusPresentation(child, TODAY)
       expect(result?.label).toBe('出席予定')
     })
 
-    it('欠席予定の児童（absent + !is_expected）は「欠席予定」を返す', () => {
+    it('absent + is_expected=false → label: 欠席予定', () => {
       const child = makeChild({ status: 'absent', is_expected: false })
-      const result = getStatusPresentation(child, FUTURE_DATE)
+      const result = getStatusPresentation(child, TODAY)
       expect(result?.label).toBe('欠席予定')
     })
 
-    it('出席済みの児童は「出席」を返す', () => {
+    it('present → label: 出席', () => {
       const child = makeChild({ status: 'present' })
-      const result = getStatusPresentation(child, FUTURE_DATE)
+      const result = getStatusPresentation(child, TODAY)
       expect(result?.label).toBe('出席')
     })
 
-    it('遅刻の児童は「遅刻」を返す', () => {
+    it('late → label: 遅刻', () => {
       const child = makeChild({ status: 'late' })
-      const result = getStatusPresentation(child, FUTURE_DATE)
+      const result = getStatusPresentation(child, TODAY)
       expect(result?.label).toBe('遅刻')
     })
 
-    it('予定外登園の児童は「予定外登園」を返す', () => {
+    it('is_unexpected=true → label: 予定外登園', () => {
       const child = makeChild({ status: 'present', is_unexpected: true })
-      const result = getStatusPresentation(child, FUTURE_DATE)
+      const result = getStatusPresentation(child, TODAY)
       expect(result?.label).toBe('予定外登園')
     })
   })
 
   describe('過去日付', () => {
-    it('出席予定だったが未チェックイン（absent + is_expected）は「欠席」を返す', () => {
+    it('absent + is_expected=true の過去日付 → label: 欠席', () => {
       const child = makeChild({ status: 'absent', is_expected: true })
       const result = getStatusPresentation(child, PAST_DATE)
       expect(result?.label).toBe('欠席')
     })
 
-    it('欠席予定の児童（absent + !is_expected）は「欠席予定」を返す', () => {
+    it('absent + is_expected=true の今日 → label: 出席予定', () => {
+      const child = makeChild({ status: 'absent', is_expected: true })
+      const result = getStatusPresentation(child, TODAY)
+      expect(result?.label).toBe('出席予定')
+    })
+
+    it('absent + is_expected=false の過去日付 → label: 欠席予定', () => {
       const child = makeChild({ status: 'absent', is_expected: false })
       const result = getStatusPresentation(child, PAST_DATE)
       expect(result?.label).toBe('欠席予定')
@@ -106,45 +138,57 @@ describe('getStatusPresentation', () => {
 })
 
 describe('getStatusAction', () => {
-  describe('未来日付', () => {
-    it('出席予定 → 「欠席にする」ボタン', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-03-18T10:00:00Z'))
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  describe('今日の動作', () => {
+    it('status=absent, is_expected=true → absent（欠席にするボタン）', () => {
+      // 今日: 出席予定 → 欠席にするアクション
       const child = makeChild({ status: 'absent', is_expected: true })
-      expect(getStatusAction(child, FUTURE_DATE)).toBe('absent')
+      expect(getStatusAction(child, TODAY)).toBe('absent')
     })
 
-    it('欠席予定 → 「出席にする」ボタン', () => {
+    it('status=absent, is_expected=false → present（出席にするボタン）', () => {
+      // 今日: 欠席予定 → 出席にするアクション
       const child = makeChild({ status: 'absent', is_expected: false })
-      expect(getStatusAction(child, FUTURE_DATE)).toBe('present')
+      expect(getStatusAction(child, TODAY)).toBe('present')
     })
 
-    it('出席済み → ボタンなし', () => {
-      const child = makeChild({ status: 'present' })
-      expect(getStatusAction(child, FUTURE_DATE)).toBeNull()
+    it('status=present, is_expected=true → null（ボタンなし）', () => {
+      const child = makeChild({ status: 'present', is_expected: true })
+      expect(getStatusAction(child, TODAY)).toBeNull()
     })
 
-    it('遅刻 → ボタンなし', () => {
-      const child = makeChild({ status: 'late' })
-      expect(getStatusAction(child, FUTURE_DATE)).toBeNull()
+    it('status=late, is_expected=true → null（ボタンなし）', () => {
+      const child = makeChild({ status: 'late', is_expected: true })
+      expect(getStatusAction(child, TODAY)).toBeNull()
     })
   })
 
-  describe('過去日付', () => {
-    it('欠席（is_expected=true）→ 「出席にする」ボタンが表示される', () => {
+  describe('過去日付の動作', () => {
+    it('status=absent, is_expected=true → present（欠席 → 出席にする）', () => {
       const child = makeChild({ status: 'absent', is_expected: true })
       expect(getStatusAction(child, PAST_DATE)).toBe('present')
     })
 
-    it('出席済み → 「欠席にする」ボタンが表示される', () => {
-      const child = makeChild({ status: 'present' })
+    it('status=present, is_expected=true → absent（出席 → 欠席にする）', () => {
+      const child = makeChild({ status: 'present', is_expected: true })
       expect(getStatusAction(child, PAST_DATE)).toBe('absent')
     })
 
-    it('遅刻 → 「欠席にする」ボタンが表示される', () => {
-      const child = makeChild({ status: 'late' })
+    it('status=late, is_expected=true → absent（遅刻 → 欠席にする）', () => {
+      const child = makeChild({ status: 'late', is_expected: true })
       expect(getStatusAction(child, PAST_DATE)).toBe('absent')
     })
 
-    it('欠席予定（is_expected=false）→ 「出席にする」ボタンが表示される', () => {
+    it('status=absent, is_expected=false → present（欠席予定 → 出席にする）', () => {
+      // 欠席予定ラベルは isPast に関係なく present を返す
       const child = makeChild({ status: 'absent', is_expected: false })
       expect(getStatusAction(child, PAST_DATE)).toBe('present')
     })
@@ -152,7 +196,7 @@ describe('getStatusAction', () => {
 })
 
 describe('applyOptimisticStatusUpdate', () => {
-  it('出席予定の児童を欠席にすると、summary.absent_countが増える', () => {
+  it('出席予定の児童を欠席にすると summary.absent_count が増える', () => {
     const children = [
       makeChild({ child_id: 'child-1', status: 'absent', is_expected: true }),
       makeChild({ child_id: 'child-2', status: 'present' }),
@@ -167,7 +211,7 @@ describe('applyOptimisticStatusUpdate', () => {
     expect(result.summary.present_count).toBe(1)
   })
 
-  it('欠席予定の児童を出席にすると、is_expectedがtrueになる', () => {
+  it('欠席予定の児童を出席にすると is_expected が true になる', () => {
     const children = [
       makeChild({ child_id: 'child-1', status: 'absent', is_expected: false }),
       makeChild({ child_id: 'child-2', status: 'present' }),
@@ -177,8 +221,7 @@ describe('applyOptimisticStatusUpdate', () => {
     const result = applyOptimisticStatusUpdate(data, 'child-1', 'present')
 
     expect(result.children[0].is_expected).toBe(true)
-    // 実際のステータスはAPIのレスポンス後に確定するが、
-    // 楽観的更新ではis_expectedをtrueにしてstatusは'absent'のまま（出席予定表示）
+    // 楽観的更新: is_expected=true に変更、status は absent のまま（出席予定表示）
     expect(result.children[0].status).toBe('absent')
     expect(result.summary.absent_count).toBe(1)
   })
@@ -196,7 +239,7 @@ describe('applyOptimisticStatusUpdate', () => {
     expect(result.children[1].child_id).toBe('child-2')
   })
 
-  it('summaryが正しく再計算される', () => {
+  it('summary が正しく再計算される', () => {
     const children = [
       makeChild({ child_id: 'child-1', status: 'present' }),
       makeChild({ child_id: 'child-2', status: 'present' }),

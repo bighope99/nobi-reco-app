@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 
+/** 今日の日付をJSTで YYYY-MM-DD 形式で返す */
+const getTodayJST = (): string => {
+  const now = new Date()
+  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+  const y = jstDate.getUTCFullYear()
+  const m = String(jstDate.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(jstDate.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/** 日付文字列が今日より過去かどうか判定 */
+const isPastDate = (date: string): boolean => date < getTodayJST()
+
 const VALID_STATUSES = ['absent', 'present', 'cancel'] as const
 
 export async function POST(request: NextRequest) {
@@ -115,11 +128,64 @@ export async function POST(request: NextRequest) {
       const upsertResult = await upsertDailyAttendance('absent')
       if (upsertResult) return upsertResult
 
+      // 過去日付の場合: h_attendance のチェックイン記録を削除
+      if (isPastDate(date)) {
+        const dayStart = `${date}T00:00:00+09:00`
+        const nextDate = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
+        const dayEnd = nextDate.toISOString()
+
+        const { error: hDeleteError } = await supabase
+          .from('h_attendance')
+          .delete()
+          .eq('child_id', child_id)
+          .eq('facility_id', facility_id)
+          .gte('checked_in_at', dayStart)
+          .lt('checked_in_at', dayEnd)
+
+        if (hDeleteError) {
+          console.error('h_attendance delete error:', hDeleteError)
+          return NextResponse.json({ success: false, error: 'Failed to delete attendance record' }, { status: 500 })
+        }
+      }
+
       return NextResponse.json({ success: true, data: { status: 'absent', attendance_date: date } })
     }
 
     const upsertResult = await upsertDailyAttendance('scheduled')
     if (upsertResult) return upsertResult
+
+    // 過去日付の場合: h_attendance に手動チェックイン記録を追加
+    if (isPastDate(date)) {
+      const checkedInAt = `${date}T09:00:00+09:00`
+      const dayStart = `${date}T00:00:00+09:00`
+      const nextDate = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
+      const dayEnd = nextDate.toISOString()
+
+      // 既存のレコードを削除してから挿入（重複防止）
+      await supabase
+        .from('h_attendance')
+        .delete()
+        .eq('child_id', child_id)
+        .eq('facility_id', facility_id)
+        .gte('checked_in_at', dayStart)
+        .lt('checked_in_at', dayEnd)
+
+      const { error: hInsertError } = await supabase
+        .from('h_attendance')
+        .insert({
+          child_id,
+          facility_id,
+          checked_in_at: checkedInAt,
+          check_in_method: 'manual',
+          checked_in_by: user_id,
+          created_at: timestamp,
+        })
+
+      if (hInsertError) {
+        console.error('h_attendance insert error:', hInsertError)
+        return NextResponse.json({ success: false, error: 'Failed to create attendance record' }, { status: 500 })
+      }
+    }
 
     return NextResponse.json({ success: true, data: { status: 'present', attendance_date: date } })
   } catch (error) {

@@ -21,6 +21,7 @@ import {
   getStatusPresentation,
   getStatusAction,
   applyOptimisticStatusUpdate,
+  isPastDate,
 } from "./helpers"
 
 // Status badge component
@@ -44,6 +45,33 @@ const StatusActionButton = ({
   onMarkStatus: (childId: string, status: 'absent' | 'present') => void
   isLoading: boolean
 }) => {
+  if (isPastDate(currentDate)) {
+    // 過去日付: ステータスに応じて disabled 状態で両ボタンを表示
+    const isPresent = child.status === 'present' || child.status === 'late'
+    const isAbsent = child.status === 'absent'
+
+    return (
+      <div className="flex gap-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => onMarkStatus(child.child_id, 'absent')}
+          disabled={isLoading || isAbsent}
+        >
+          {isLoading ? '処理中...' : '欠席にする'}
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => onMarkStatus(child.child_id, 'present')}
+          disabled={isLoading || isPresent}
+        >
+          {isLoading ? '処理中...' : '出席にする'}
+        </Button>
+      </div>
+    )
+  }
+
+  // 今日/未来: 現行ロジック
   const action = getStatusAction(child, currentDate)
 
   if (!action) return null
