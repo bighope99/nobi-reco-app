@@ -307,6 +307,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const audioChunksRef = useRef<Blob[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [selectedRecorder, setSelectedRecorder] = useState<string>('');
+  const [staffLoadError, setStaffLoadError] = useState(false);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
@@ -342,9 +343,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               setSelectedRecorder(lastRecorder);
             }
           }
+        } else {
+          setStaffLoadError(true);
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err);
+        setStaffLoadError(true);
       }
     };
     fetchStaff();
@@ -985,7 +989,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setError('本文を入力してください');
       return;
     }
-    if (!selectedRecorder) {
+    if (!selectedRecorder && !staffLoadError) {
       setError('記録者を選択してください');
       return;
     }
@@ -1008,7 +1012,20 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      setObservation((prev) => (prev ? { ...prev, body_text: displayText } : prev));
+      const nextObservationDate = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const nextRecorderName =
+        staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
+      setObservation((prev) =>
+        prev
+          ? {
+              ...prev,
+              body_text: displayText,
+              observed_at: nextObservationDate,
+              recorded_by_name: nextRecorderName || prev.recorded_by_name,
+              updated_at: new Date().toISOString(),
+            }
+          : prev,
+      );
       // 過去記録リスト内の該当レコードも更新
       setRecentObservations((prev) =>
         prev.map((item) =>
@@ -1055,7 +1072,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setError('本文を入力してください');
       return;
     }
-    if (!selectedRecorder) {
+    if (!selectedRecorder && !staffLoadError) {
       setError('記録者を選択してください');
       return;
     }
@@ -1519,6 +1536,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </div>
                     ) : null}
                   </div>
+                  {(isNew || isEditing) && staffLoadError && (
+                    <div className="text-sm text-destructive">記録者情報の取得に失敗しました</div>
+                  )}
                   {(isNew || isEditing) && staffList.length > 0 && (
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
