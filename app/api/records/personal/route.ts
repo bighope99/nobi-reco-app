@@ -320,6 +320,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // recorded_by は必須
+    if (!recorded_by || (typeof recorded_by === 'string' && !recorded_by.trim())) {
+      return NextResponse.json(
+        { success: false, error: 'recorded_by は必須です' },
+        { status: 400 },
+      );
+    }
+
     // Content length validation
     if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
