@@ -23,12 +23,27 @@
 | JWT Authentication | `.claude/skills/supabase-jwt-auth` |
 | Query Patterns | `.claude/skills/supabase-query-patterns` |
 | Session Interface | `/lib/auth/session.ts` |
+| Role-based UI | `hooks/useRole.ts` — `useRole()` でロール判定。直接 `session.role` を比較しない |
 | Code Improvement | `.claude/skills/incremental-code-improvement` |
 
 ## Incremental Code Improvement (編集時の段階的改善)
 
 ファイル編集時は周辺の `any` 型やエラーハンドリングも改善する。
 詳細: `.claude/skills/incremental-code-improvement`
+
+## Role-based UI (ロールベースUI)
+
+ロールによる表示切替は `useRole()` フックを使う。`session.role` を直接比較しない。
+
+```tsx
+const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
+// isAdmin: site_admin または company_admin
+// isFacilityAdmin: facility_admin
+// isStaff: staff
+// hasRole('facility_admin', 'site_admin'): 複数ロール指定
+```
+
+ロール→サイドバー変換は `getSidebarType(role)` (`components/layout/app-layout.tsx`) を参照。
 
 # Package Installation Rules
 - **必ず許可を求める**: `npm install` / `pnpm add` などでパッケージを追加する前に、必ずユーザーに許可を求める
