@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       if (hasCompletedPasswordSetup(authUserData.user)) {
         // パスワード設定済み → 通常の重複エラー
         return NextResponse.json(
-          { success: false, error: 'Email already exists' },
+          { success: false, error: 'このメールアドレスは既に使用されています' },
           { status: 400 }
         );
       }
@@ -182,7 +182,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const reinviteBaseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+      const reinviteBaseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '');
+      if (!reinviteBaseUrl) {
+        console.error('NEXT_PUBLIC_SITE_URL is not configured');
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
       const inviteUrlForReinvite = `${reinviteBaseUrl}/password/setup?token_hash=${reinviteTokenHash}&type=${reinviteType}`;
 
       // m_users の情報を更新

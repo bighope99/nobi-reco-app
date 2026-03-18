@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
       if (hasCompletedPasswordSetup(authUserData.user)) {
         // パスワード設定済み → 通常の重複エラー
         return NextResponse.json(
-          { success: false, error: 'Email already exists' },
+          { success: false, error: 'このメールアドレスは既に使用されています' },
           { status: 400 }
         );
       }

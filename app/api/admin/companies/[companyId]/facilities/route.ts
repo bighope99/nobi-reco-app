@@ -255,6 +255,13 @@ export async function POST(
       }
 
       // Re-invite Step 5: _user_facility に新施設を紐付け
+      // 既存の is_primary を false に更新してから新レコードを挿入
+      await supabase
+        .from('_user_facility')
+        .update({ is_primary: false })
+        .eq('user_id', existingUser.id)
+        .eq('is_primary', true);
+
       const { error: userFacilityError } = await supabase
         .from('_user_facility')
         .insert({
