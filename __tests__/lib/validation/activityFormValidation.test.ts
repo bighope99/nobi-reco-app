@@ -222,5 +222,20 @@ describe('validateActivityFormSubmission', () => {
       });
       expect(result.valid).toBe(true);
     });
+
+    it('photos配列に空URLの要素のみがある場合は無効であること', () => {
+      const result = validateActivityFormSubmission({
+        selectedRecorder: 'user-id-123',
+        activityContent: '',
+        eventName: '',
+        dailySchedule: [],
+        specialNotes: '',
+        snack: '',
+        meal: null,
+        handover: '',
+        photos: [{ url: '' }],
+      });
+      expect(result.valid).toBe(false);
+    });
   });
 });

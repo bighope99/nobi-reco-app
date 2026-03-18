@@ -359,7 +359,7 @@ export const validateActivityFormSubmission = (params: {
   const hasSnack = params.snack.trim() !== '';
   const hasMeal = params.meal !== null && params.meal.menu.trim() !== '';
   const hasHandover = params.handover.trim() !== '';
-  const hasPhotos = params.photos.length > 0;
+  const hasPhotos = params.photos.some((photo) => photo.url?.trim() !== '');
 
   const hasAnyField =
     hasContent ||
