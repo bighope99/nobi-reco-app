@@ -21,6 +21,16 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input as ShadcnInput } from '@/components/ui/input';
 import {
   FacilityRegistrationForm,
   type FacilityRegistrationData,
@@ -37,6 +47,13 @@ interface Facility {
   current_children_count?: number;
   current_staff_count?: number;
   current_classes_count?: number;
+}
+
+interface Account {
+  user_id: string;
+  name: string;
+  email: string | null;
+  is_active: boolean;
 }
 
 const Input = ({ icon: Icon, className = "", ...props }: any) => (
@@ -200,6 +217,11 @@ export default function FacilityDetailPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', name_kana: '', email: '' });
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addLoading, setAddLoading] = useState(false);
 
   const fetchFacility = async () => {
     try {
@@ -219,6 +241,51 @@ export default function FacilityDetailPage() {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      const response = await fetch(
+        `/api/users?role=facility_admin&facility_id=${facilityId}`
+      );
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setAccounts(data.data.users || []);
+      }
+    } catch (err) {
+      console.error('Error fetching accounts:', err);
+    }
+  };
+
+  const handleAddAccount = async () => {
+    if (!addForm.name.trim() || !addForm.email.trim()) return;
+    setAddLoading(true);
+    setAddError(null);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: addForm.name,
+          name_kana: addForm.name_kana || undefined,
+          email: addForm.email,
+          role: 'facility_admin',
+          facility_id: facilityId,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '管理者の追加に失敗しました');
+      }
+      setShowAddDialog(false);
+      setAddForm({ name: '', name_kana: '', email: '' });
+      alert('招待メールを送信しました');
+      fetchAccounts();
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : '管理者の追加に失敗しました');
+    } finally {
+      setAddLoading(false);
     }
   };
 
@@ -272,6 +339,7 @@ export default function FacilityDetailPage() {
   useEffect(() => {
     if (facilityId && facilityId !== 'new') {
       fetchFacility();
+      fetchAccounts();
     }
   }, [facilityId]);
 
@@ -433,6 +501,120 @@ export default function FacilityDetailPage() {
               </div>
             </section>
           )}
+
+          {/* Facility Admins Section */}
+          {!isNewFacility && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+                <Users size={18} className="text-indigo-500" />
+                <h2 className="text-lg font-bold text-slate-800">施設管理者</h2>
+                <Badge variant="outline" className="ml-1">{accounts.length}名</Badge>
+                <div className="ml-auto">
+                  <Button size="sm" onClick={() => setShowAddDialog(true)}>
+                    <Plus size={16} className="mr-1" />
+                    管理者を追加
+                  </Button>
+                </div>
+              </div>
+              <div className="p-0">
+                {accounts.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-500">
+                    登録された施設管理者はありません
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">氏名</th>
+                          <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">メールアドレス</th>
+                          <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">ステータス</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {accounts.map((account) => (
+                          <tr key={account.user_id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <span className="font-medium text-slate-900">{account.name}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-slate-600">{account.email || '-'}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <Badge variant={account.is_active ? 'default' : 'destructive'}>
+                                {account.is_active ? '有効' : '無効'}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Add Admin Dialog */}
+          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>施設管理者を追加</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                {addError && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                    {addError}
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="add-name">
+                    氏名
+                    <span className="ml-2 text-[10px] bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded font-bold">必須</span>
+                  </Label>
+                  <ShadcnInput
+                    id="add-name"
+                    value={addForm.name}
+                    onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                    placeholder="例: 山田 太郎"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="add-name-kana">氏名（カナ）</Label>
+                  <ShadcnInput
+                    id="add-name-kana"
+                    value={addForm.name_kana}
+                    onChange={(e) => setAddForm({ ...addForm, name_kana: e.target.value })}
+                    placeholder="例: ヤマダ タロウ"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="add-email">
+                    メールアドレス
+                    <span className="ml-2 text-[10px] bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded font-bold">必須</span>
+                  </Label>
+                  <ShadcnInput
+                    id="add-email"
+                    type="email"
+                    value={addForm.email}
+                    onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                    placeholder="例: admin@example.com"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                  キャンセル
+                </Button>
+                <Button
+                  onClick={handleAddAccount}
+                  disabled={addLoading || !addForm.name.trim() || !addForm.email.trim()}
+                >
+                  {addLoading ? '送信中...' : '招待メールを送信'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
         </div>
 

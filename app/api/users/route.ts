@@ -97,10 +97,30 @@ export async function GET(request: NextRequest) {
       .is('deleted_at', null)
       .eq('company_id', company_id); // 会社でフィルター
 
-    // 施設フィルター（site_admin以外の場合のみ適用）
-    if (role !== 'site_admin' && current_facility_id) {
-      query = query.eq('_user_facility.facility_id', current_facility_id);
-      query = query.eq('_user_facility.is_current', true);
+    // facility_idパラメータ（company_admin以上のみ使用可能）
+    const facilityIdParam = searchParams.get('facility_id');
+
+    // 施設フィルター
+    if (role === 'site_admin') {
+      // site_adminはフィルターなし（company_id でのみ絞り込み）
+      // ただしfacility_idパラメータがあれば適用
+      if (facilityIdParam) {
+        query = query.eq('_user_facility.facility_id', facilityIdParam);
+        query = query.eq('_user_facility.is_current', true);
+      }
+    } else if (role === 'company_admin') {
+      // company_adminはfacility_idパラメータを使用可能（自社施設のみ - company_idフィルターで担保）
+      const targetFacility = facilityIdParam || current_facility_id;
+      if (targetFacility) {
+        query = query.eq('_user_facility.facility_id', targetFacility);
+        query = query.eq('_user_facility.is_current', true);
+      }
+    } else {
+      // facility_admin: current_facility_idのみ使用（facility_idパラメータは無視）
+      if (current_facility_id) {
+        query = query.eq('_user_facility.facility_id', current_facility_id);
+        query = query.eq('_user_facility.is_current', true);
+      }
     }
 
     // ロールフィルター
@@ -278,8 +298,8 @@ export async function POST(request: NextRequest) {
     }
     body.name = userName;
 
-    // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
-    const targetFacilityId = role === 'site_admin'
+    // 施設IDの決定（site_adminとcompany_adminの場合はbody.facility_idを使用可能）
+    const targetFacilityId = (role === 'site_admin' || role === 'company_admin')
       ? (body.facility_id || current_facility_id)
       : current_facility_id;
 
