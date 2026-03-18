@@ -120,10 +120,6 @@ export async function POST(
 
     // 招待URLの構築
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!baseUrl) {
-      console.error('NEXT_PUBLIC_SITE_URL is not configured');
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // 招待メール送信

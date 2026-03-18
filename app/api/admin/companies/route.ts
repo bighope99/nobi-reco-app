@@ -427,12 +427,6 @@ export async function POST(request: NextRequest) {
     }
 
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!baseUrl) {
-      console.error('NEXT_PUBLIC_SITE_URL is not configured');
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_companies').delete().eq('id', newCompany.id);
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // Step 4: m_users テーブルにユーザー情報を登録

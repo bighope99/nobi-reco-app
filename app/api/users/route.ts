@@ -52,6 +52,14 @@ export async function GET(request: NextRequest) {
 
     const { role, company_id, current_facility_id } = metadata;
 
+    // 権限チェック（staffは閲覧不可）
+    if (role === 'staff') {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
     // リクエストパラメータ取得
     const searchParams = request.nextUrl.searchParams;
     const roleFilter = searchParams.get('role');
@@ -64,86 +72,6 @@ export async function GET(request: NextRequest) {
         { success: false, error: '検索文字列は100文字以内で入力してください' },
         { status: 400 }
       );
-    }
-
-    // staffは自施設のユーザー一覧のみ取得可。返却情報も最小限に絞る
-    if (role === 'staff') {
-      if (!current_facility_id) {
-        return NextResponse.json(
-          { success: false, error: 'Facility context is required' },
-          { status: 403 }
-        );
-      }
-
-      let staffQuery = supabase
-        .from('m_users')
-        .select(
-          `
-          id,
-          name,
-          role,
-          is_active,
-          _user_facility!inner (
-            facility_id,
-            is_current
-          )
-        `
-        )
-        .is('deleted_at', null)
-        .eq('company_id', company_id)
-        .eq('_user_facility.facility_id', current_facility_id)
-        .eq('_user_facility.is_current', true);
-        // _user_facility に deleted_at カラムは存在しないため削除（docs/03_database.md 参照）
-
-      if (roleFilter) {
-        staffQuery = staffQuery.eq('role', roleFilter);
-      }
-
-      if (isActiveFilter !== null) {
-        staffQuery = staffQuery.eq('is_active', isActiveFilter === 'true');
-      }
-
-      if (search) {
-        const escapedSearch = search.replace(/[%_\\]/g, '\\$&');
-        staffQuery = staffQuery.ilike('name', `%${escapedSearch}%`);
-      }
-
-      const { data: staffUsers, error: staffUsersError } = await staffQuery.order('name');
-
-      if (staffUsersError) {
-        throw staffUsersError;
-      }
-
-      const totalUsers = staffUsers?.length || 0;
-      const activeUsers = (staffUsers || []).filter(
-        (user: { is_active: boolean }) => user.is_active
-      ).length;
-      const byRole = (staffUsers || []).reduce<Record<string, number>>(
-        (acc, user: { role: string }) => {
-          acc[user.role] = (acc[user.role] || 0) + 1;
-          return acc;
-        },
-        {}
-      );
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          users: (staffUsers || []).map(
-            (user: { id: string; name: string; role: string }) => ({
-              user_id: user.id,
-              name: user.name,
-              role: user.role,
-            })
-          ),
-          total: totalUsers,
-          summary: {
-            total_users: totalUsers,
-            active_users: activeUsers,
-            by_role: byRole,
-          },
-        },
-      });
     }
 
     // ユーザー一覧取得クエリ
@@ -173,8 +101,6 @@ export async function GET(request: NextRequest) {
     if (role !== 'site_admin' && current_facility_id) {
       query = query.eq('_user_facility.facility_id', current_facility_id);
       query = query.eq('_user_facility.is_current', true);
-      // _user_facility に deleted_at カラムは存在しないため削除（docs/03_database.md 参照）
-      // 退職・異動はis_currentフラグで管理するため、is_current=true で十分
     }
 
     // ロールフィルター
@@ -235,7 +161,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 同期的にデータを結合
-    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; created_at: string; updated_at: string }) => ({
+    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => ({
       user_id: u.id,
       email: u.email,
       name: u.name,
@@ -245,6 +171,7 @@ export async function GET(request: NextRequest) {
       hire_date: u.hire_date,
       is_active: u.is_active,
       assigned_classes: classAssignmentMap.get(u.id) || [],
+      last_login_at: u.last_login_at,
       created_at: u.created_at,
       updated_at: u.updated_at,
     }));
@@ -270,12 +197,12 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error fetching users:', error, JSON.stringify(error));
+    console.error('Error fetching users:', error);
     return NextResponse.json(
       {
         success: false,
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : (error as { message?: string })?.message ?? JSON.stringify(error),
+        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
@@ -356,14 +283,6 @@ export async function POST(request: NextRequest) {
       ? (body.facility_id || current_facility_id)
       : current_facility_id;
 
-    // facility-scopedロールにはfacility_idが必須
-    if (['staff', 'facility_admin'].includes(body.role) && !targetFacilityId) {
-      return NextResponse.json(
-        { success: false, error: 'facility_id is required for staff and facility_admin roles' },
-        { status: 400 }
-      );
-    }
-
     // ---- メールなしスタッフ登録（auth.users に登録しない） ----
     if (isEmaillessStaff) {
       const staffId = crypto.randomUUID();
@@ -390,27 +309,19 @@ export async function POST(request: NextRequest) {
 
       // 施設との紐付け
       if (targetFacilityId) {
-        const { error: facilityError } = await supabase.from('_user_facility').insert({
+        await supabase.from('_user_facility').insert({
           user_id: newStaff.id,
           facility_id: targetFacilityId,
           start_date: newStaff.hire_date,
           is_current: true,
           is_primary: true,
         });
-        if (facilityError) {
-          console.error('Failed to link user to facility:', facilityError);
-          await supabase.from('m_users').delete().eq('id', newStaff.id);
-          return NextResponse.json({ success: false, error: '施設との紐付けに失敗しました' }, { status: 500 });
-        }
       }
 
       // クラス担当設定（任意）
       if (body.assigned_classes && body.assigned_classes.length > 0) {
         const classAssignments = buildClassAssignments(newStaff.id, body.assigned_classes, newStaff.hire_date);
-        const { error: classError } = await supabase.from('_user_class').insert(classAssignments);
-        if (classError) {
-          console.error('Failed to assign user to classes:', classError);
-        }
+        await supabase.from('_user_class').insert(classAssignments);
       }
 
       return NextResponse.json({
@@ -496,11 +407,6 @@ export async function POST(request: NextRequest) {
 
     // 独自のパスワード設定ページURLを構築
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!request.nextUrl.host) {
-      console.error('Request host is not available');
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
@@ -528,28 +434,19 @@ export async function POST(request: NextRequest) {
 
     // 施設との紐付け
     if (targetFacilityId) {
-      const { error: facilityError } = await supabase.from('_user_facility').insert({
+      await supabase.from('_user_facility').insert({
         user_id: newUser.id,
         facility_id: targetFacilityId,
         start_date: newUser.hire_date,
         is_current: true,
         is_primary: true,
       });
-      if (facilityError) {
-        console.error('Failed to link user to facility:', facilityError);
-        await supabase.from('m_users').delete().eq('id', newUser.id);
-        await supabaseAdmin.auth.admin.deleteUser(newUser.id);
-        return NextResponse.json({ success: false, error: '施設との紐付けに失敗しました' }, { status: 500 });
-      }
     }
 
     // クラス担当設定（任意）
     if (body.assigned_classes && body.assigned_classes.length > 0) {
       const classAssignments = buildClassAssignments(newUser.id, body.assigned_classes, newUser.hire_date);
-      const { error: classError } = await supabase.from('_user_class').insert(classAssignments);
-      if (classError) {
-        console.error('Failed to assign user to classes:', classError);
-      }
+      await supabase.from('_user_class').insert(classAssignments);
     }
 
     // 会社名と施設名を取得してカスタムメールを送信

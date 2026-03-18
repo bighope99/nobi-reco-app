@@ -411,12 +411,6 @@ export async function POST(
     }
 
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!baseUrl) {
-      console.error('NEXT_PUBLIC_SITE_URL is not configured');
-      try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
-      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // Step 4: m_users + _user_facility 作成
