@@ -44,6 +44,7 @@ import {
   MAX_MEAL_MENU_LENGTH,
   MAX_MEAL_ITEMS_LENGTH,
   MAX_MEAL_NOTES_LENGTH,
+  validateActivityFormSubmission,
 } from "@/lib/validation/activityValidation"
 import { getSanitizedExtendedFields as getSanitizedExtendedFieldsUtil } from "@/lib/activity/sanitizeExtendedFields"
 import { PreviousHandoverBanner } from "./components/previous-handover-banner"
@@ -724,9 +725,27 @@ export default function ActivityRecordClient() {
   }
 
   const handleSave = async () => {
-    setIsSaving(true)
     setSaveError(null)
     setSaveMessage(null)
+
+    // フォームバリデーション
+    const formValidation = validateActivityFormSubmission({
+      selectedRecorder,
+      activityContent,
+      eventName,
+      dailySchedule,
+      specialNotes,
+      snack,
+      meal,
+      handover,
+      photos,
+    })
+    if (!formValidation.valid) {
+      setSaveError(formValidation.error)
+      return
+    }
+
+    setIsSaving(true)
 
     try {
       // 保存用にメンションをプレースホルダー形式に変換
@@ -816,9 +835,27 @@ export default function ActivityRecordClient() {
   const handleUpdate = async () => {
     if (!editingActivityId) return
 
-    setIsSaving(true)
     setSaveError(null)
     setSaveMessage(null)
+
+    // フォームバリデーション
+    const formValidation = validateActivityFormSubmission({
+      selectedRecorder,
+      activityContent,
+      eventName,
+      dailySchedule,
+      specialNotes,
+      snack,
+      meal,
+      handover,
+      photos,
+    })
+    if (!formValidation.valid) {
+      setSaveError(formValidation.error)
+      return
+    }
+
+    setIsSaving(true)
 
     try {
       // 更新用にメンションをプレースホルダー形式に変換
@@ -1362,22 +1399,24 @@ export default function ActivityRecordClient() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="class">クラス</Label>
-                <Select value={selectedClass} onValueChange={handleClassChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="クラスを選択" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classOptions.map((classOption) => (
-                      <SelectItem key={classOption.class_id} value={classOption.class_id}>
-                        {classOption.class_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {classError && <p className="text-sm text-red-500">{classError}</p>}
-              </div>
+              {!isLoadingClasses && classOptions.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="class">クラス</Label>
+                  <Select value={selectedClass} onValueChange={handleClassChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="クラスを選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classOptions.map((classOption) => (
+                        <SelectItem key={classOption.class_id} value={classOption.class_id}>
+                          {classOption.class_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {classError && <p className="text-sm text-red-500">{classError}</p>}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="activityDate">日付</Label>
@@ -1385,12 +1424,13 @@ export default function ActivityRecordClient() {
                   id="activityDate"
                   type="date"
                   value={activityDate}
+                  max={getCurrentDateJST()}
                   onChange={(event) => setActivityDate(event.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="recorder">記録者</Label>
+                <Label htmlFor="recorder">記録者 <span className="text-red-500">*</span></Label>
                 <Select
                   value={selectedRecorder}
                   onValueChange={(value) => setSelectedRecorder(value)}
