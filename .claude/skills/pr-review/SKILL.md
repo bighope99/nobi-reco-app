@@ -76,6 +76,7 @@ Criticalがある場合はマージをブロックすること。
 - Next.js 15 params: `params` は非同期。`props: { params: Promise<T> }` + `await` が必須
 - Auth: `supabase.auth.getSession()` は使用禁止 → `getAuthenticatedUserMetadata()` from `@/lib/auth/jwt` を使うこと（セキュリティ警告が出る）
 - メンション表示: 記録本文のメンション（`child:childId`形式）は `replaceChildIdsWithNames` で名前に変換すること
+- 再招待 generateLink: `type: 'invite'` はメール確認済みユーザー（`email_confirmed_at` あり）に対してエラーになる → `email_confirmed_at ? 'magiclink' : 'invite'` で動的切り替えすること
 
 ## 使用例
 
