@@ -74,12 +74,12 @@ describe("Sidebar", () => {
       expect(childrenLink).toHaveClass("bg-sidebar-accent")
     })
 
-    it("highlights parent menu button when any child is active", () => {
+    it("highlights parent menu label when any child is active", () => {
       mockPathname.mockReturnValue("/records/activity")
       render(<Sidebar type="staff" />)
 
-      const recordsButton = screen.getByRole("button", { name: /記録管理/ })
-      expect(recordsButton).toHaveClass("bg-sidebar-accent")
+      const recordsLabel = screen.getByText("記録管理").closest("div")
+      expect(recordsLabel).toHaveClass("bg-sidebar-accent")
     })
 
     it("does not highlight '会社一覧' when pathname is /admin/companies/new", () => {

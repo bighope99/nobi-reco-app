@@ -14,9 +14,7 @@ import {
   Database,
   Building2,
   Home,
-  ChevronDown,
 } from "lucide-react"
-import { useState } from "react"
 import { LogoutButton } from "@/components/LogoutButton"
 
 type NavItem = {
@@ -108,14 +106,6 @@ export function Sidebar({ type, userName }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
 
-  // デフォルトで全てのプルダウンメニューを開いた状態にする
-  const defaultOpenMenus = navItems.filter(item => item.children).map(item => item.label)
-  const [openMenus, setOpenMenus] = useState<string[]>(defaultOpenMenus)
-
-  const toggleMenu = (label: string) => {
-    setOpenMenus((prev) => (prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]))
-  }
-
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
 
   /**
@@ -158,41 +148,32 @@ export function Sidebar({ type, userName }: SidebarProps) {
             <li key={item.label}>
               {item.children ? (
                 <div>
-                  <button
-                    onClick={() => toggleMenu(item.label)}
+                  <div
                     className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                      "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                       isActive(item.href) && "bg-sidebar-accent",
                     )}
                   >
-                    <span className="flex items-center gap-3">
-                      {item.icon}
-                      {item.label}
-                    </span>
-                    <ChevronDown
-                      className={cn("h-4 w-4 transition-transform", openMenus.includes(item.label) && "rotate-180")}
-                    />
-                  </button>
-                  {openMenus.includes(item.label) && (
-                    <ul className="ml-8 mt-1 space-y-1">
-                      {item.children.map((child) => (
-                        <li key={child.href}>
-                          <Link
-                            href={child.href}
-                            className={cn(
-                              "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                              "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
-                              isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
-                              child.hidden && "hidden",
-                            )}
-                          >
-                            {child.label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                    {item.icon}
+                    {item.label}
+                  </div>
+                  <ul className="ml-8 mt-1 space-y-1">
+                    {item.children.map((child) => (
+                      <li key={child.href}>
+                        <Link
+                          href={child.href}
+                          className={cn(
+                            "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
+                            "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
+                            isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
+                            child.hidden && "hidden",
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : (
                 <Link
