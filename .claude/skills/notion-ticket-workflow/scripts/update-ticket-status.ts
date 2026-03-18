@@ -153,6 +153,7 @@ async function updateAssignee(
       method: "PATCH",
       body: JSON.stringify({
         properties: {
+          // NOTE: 既存の担当者を全て上書きする（追記ではなく置換）
           担当者: {
             multi_select: [{ name: assigneeName }],
           },

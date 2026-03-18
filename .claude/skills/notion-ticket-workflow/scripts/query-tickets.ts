@@ -207,27 +207,27 @@ async function queryDatabase(
   let cursor: string | null = null;
   const pageSize = Math.min(limit, 100);
 
+  const statusCondition = {
+    property: "ステータス",
+    status: { equals: statusFilter },
+  };
+
+  const filter =
+    assigneeName !== null
+      ? {
+          and: [
+            statusCondition,
+            {
+              or: [
+                { property: "担当者", multi_select: { contains: assigneeName } },
+                { property: "担当者", multi_select: { is_empty: true } },
+              ],
+            },
+          ],
+        }
+      : statusCondition;
+
   while (pages.length < limit) {
-    const statusCondition = {
-      property: "ステータス",
-      status: { equals: statusFilter },
-    };
-
-    const filter =
-      assigneeName !== null
-        ? {
-            and: [
-              statusCondition,
-              {
-                or: [
-                  { property: "担当者", multi_select: { contains: assigneeName } },
-                  { property: "担当者", multi_select: { is_empty: true } },
-                ],
-              },
-            ],
-          }
-        : statusCondition;
-
     const body: Record<string, unknown> = {
       filter,
       page_size: Math.min(pageSize, limit - pages.length),

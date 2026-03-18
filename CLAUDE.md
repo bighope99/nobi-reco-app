@@ -52,7 +52,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 
 # Workflow Rules
 - **ALWAYS use a worktree**: Never work directly on the main branch. Create a NEW worktree at the start of each new task.
-- **Worktree cleanup**: Delete the worktree ONLY after the user explicitly says the PR is published/merged. Never assume it's done on your own.
+- **Worktree cleanup**: Delete the worktree when the user says the session/task is done (e.g., "終了"). Discard uncommitted `package-lock.json` and `settings.json` without committing them.
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
 - **Code change workflow**: 実装完了後は以下の順で実行する
   1. （任意）`pr-review` スキル — セキュリティ・品質・パフォーマンスを網羅的に確認したい場合のみ実行。軽微な変更や CodeRabbit で十分な場合は不要。

@@ -42,7 +42,9 @@ Phase 0: ユーザー特定（Leader担当）
 
 Phase 1: 計画（Planner担当）
   Planner → Notionチケット取得（自分 or 担当者なしでフィルタ）→ グルーピング案作成 → Leaderに報告
-  Leader → 承認 / 調整 → Plannerに指示
+  Leader → AskUserQuestion でユーザーに確認（必須）
+  ユーザーが指示を出した場合 → Leaderがチケット本文に指示を追記
+  ユーザー承認後 → Plannerに指示
   Planner → チケットのステータスを「進行中」に更新 + 担当者を自分に設定
   Planner → worktree作成 → Coderへタスク指示
 
@@ -118,12 +120,39 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
 | #216 | パスワード設定の遷移先 | バグ | 通常 |
 ```
 
-### Step 3: Leader承認
+### Step 3: ユーザー承認
 
-Plannerがグルーピング案をLeaderに報告。Leaderが：
+Plannerがグルーピング案をLeaderに報告後、Leaderが**必ずユーザーに確認**する。
+
+Leaderは `AskUserQuestion` でユーザーに以下を提示する:
+- グルーピング一覧（グループ名・チケット一覧・大規模変更フラグ）
+- 「このグルーピングで進めますか？」
+
+ユーザーの回答:
 - **承認** → Phase 2へ進む
-- **調整** → Plannerがグルーピングを修正して再提出
-- **却下** → ユーザーに確認
+- **調整指示あり** → Plannerがグルーピングを修正して再提出
+- **特定チケットへの実装指示あり** → Leaderがチケット本文に指示を追記（後述）してから Phase 2へ
+
+> ⚠️ **ユーザーの明示的な承認なしに Phase 2 へ進んではいけない。**
+
+### Step 3b: ユーザー指示をチケット本文に記載
+
+ユーザーが特定チケットの進め方を指示した場合（例:「このチケットはAパターンで実装して」「〇〇は使わないで」）、
+Leaderは対象チケットのNotionページ本文にその旨を追記する。
+
+```bash
+# notion-update-page MCP を使ってチケット本文を更新する
+# または notion-create-comment でコメントとして追加する
+```
+
+追記フォーマット:
+```
+---
+[実装指示 by ユーザー]
+<ユーザーの指示をそのまま記載>
+```
+
+追記後、Plannerへの指示にも同内容を含めること。
 
 ## Phase 2: 準備 & 実装（Planner → Coder）
 
@@ -237,81 +266,114 @@ PR作成 → CodeRabbitループ完了のタイミングで「レビュー依頼
 ## 起動方法（エージェントチーム）
 
 チームメンバーは永続的で、セッション中ずっと生き続ける。
-Leaderがチームを作成し、メンバーに指示を送りながらワークフローを進行する。
+LeaderがTeamCreateでチームを作成し、AgentツールでメンバーをSpawn、SendMessageで指示を送りながらワークフローを進行する。
 
-### 1. チーム作成
+### 1. チーム作成（TeamCreate）
+
+まず `TeamCreate` ツールでチームを作成する:
+
+```
+TeamCreate:
+  team_name: "ticket-team"
+  description: "Notionチケット一括処理チーム"
+```
+
+### 2. メンバーSpawn（Agent tool with team_name）
+
+次に `Agent` ツールで各メンバーを起動する。`team_name` を指定することで永続エージェントになる:
 
 ```
 Agent tool:
   name: "Planner"
   team_name: "ticket-team"
   model: sonnet
-  prompt: "あなたはPlannerです。チームのPlanner役として、
-           Notionチケットの取得・グルーピング・worktree作成・Coderへの指示出しを担当します。
-           まずはNotionから承認OKチケットを取得し、パス別にグルーピングして報告してください。
-           notion-ticket-workflow スキルの手順に従ってください。"
+  prompt: "あなたはPlannerです。ticket-teamのPlanner役として動作します。
+           担当者: <ASSIGNEE_NAME>
+
+           役割:
+           - Notionチケット取得・グルーピング案作成
+           - worktree作成（git gtr new <ブランチ名> --yes）
+           - Coderへの指示出し（SendMessageを使用）
+           - Notionステータス一括更新
+
+           Leaderからの指示を待ってください。
+           指示を受けたら実行し、結果をLeaderに SendMessage で報告してください。
+           Coderへの指示もSendMessageで行います。"
 
 Agent tool:
   name: "Coder-1"
   team_name: "ticket-team"
   model: sonnet
-  prompt: "あなたはCoder-1です。Plannerから指示されたチケットを実装します。
-           Plannerから指示を受けたら、まずEnterPlanModeツールを呼んでプランモードに入ってください。
-           プランモード中はファイル編集できません。プランには必ず以下を含めてください
-           （ユーザーがチケットを見に行かなくて済むよう）:
-           1. 対象チケット一覧（ID・タイトル・本文・コメントの要約）
-           2. Plannerから受け取った修正指示の内容
-           3. 対象ファイル・パス
-           4. 実装方針（何をどう変えるか、変更理由）
-           5. テスト方針
-           6. 懸念事項・不明点（あれば）
-           ユーザーがUIでプランを承認したらExitPlanModeで通常モードに戻り実装を開始してください。承認前に実装してはいけません。
-           実装完了後は自分で /pr-review の指摘修正、PR作成、CodeRabbitループまで行い、
-           PR作成後はPR URLをPlannerに報告してください。
+  prompt: "あなたはCoder-1です。ticket-teamのCoder役として動作します。
+
+           Plannerから指示を受けたら:
+           1. まず EnterPlanMode ツールを呼んでプランモードに入る
+              プランに必ず含めること:
+              - 対象チケット一覧（ID・タイトル・本文・コメントの要約）
+              - Plannerから受け取った修正指示
+              - 対象ファイル・パス
+              - 実装方針（何をどう変えるか、変更理由）
+              - テスト方針
+              - 懸念事項・不明点
+           2. ユーザーがUIでプランを承認したら ExitPlanMode で実装開始（承認前に実装してはいけない）
+           3. 実装 → テスト → コミット
+           4. /pr-review スキルで指摘修正
+           5. /create-pr スキルでPR作成・CodeRabbitループ
+           6. PR URLを SendMessage でPlannerに報告
+
            Plannerからの指示を待ってください。"
 
 Agent tool:
   name: "Coder-2"
   team_name: "ticket-team"
   model: sonnet
-  prompt: "（Coder-1と同様）"
+  prompt: "（Coder-1と同様のプロンプト。name部分をCoder-2に変える）"
 
 Agent tool:
   name: "Coder-3"
   team_name: "ticket-team"
   model: sonnet
-  prompt: "（Coder-1と同様）"
+  prompt: "（Coder-1と同様のプロンプト。name部分をCoder-3に変える）"
 ```
 
-### 2. ワークフロー進行
+### 3. ワークフロー進行（SendMessage）
 
-チームメンバーへの指示はメッセージで行う:
+**全てのメンバー間通信は `SendMessage` ツールで行う**。
 
 ```
 Phase 1:
-  → Plannerにメッセージ: "チケットを取得してグルーピングしてください"
-  → Plannerが結果を報告
-  → Leaderが承認
-  → Plannerにメッセージ: "承認OK。worktreeを作成してCoderに指示を出してください"
+  Leader → SendMessage(to: "Planner"):
+    "承認OKチケットを取得し、パス別にグルーピングしてください。
+     担当者: <ASSIGNEE_NAME>
+     コマンド:
+     npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
+       --status '承認OK' --assignee-name <ASSIGNEE_NAME>"
+  → Plannerがグルーピング案を SendMessage(to: "Leader") で報告
+  → Leader がユーザーに確認 → 承認
+  → Leader → SendMessage(to: "Planner"):
+    "承認OK。以下グルーピングで進めてください。
+     チケットを「進行中」に更新後、worktreeを作成してCoderに指示を出してください。"
 
 Phase 2:
-  → Planner → 各Coderにメッセージで具体的なタスク指示
-  → 各Coderが並列で実装
-  → 完了報告はPlannerに返す
+  Planner → SendMessage(to: "Coder-1"): グループ1の詳細指示
+  Planner → SendMessage(to: "Coder-2"): グループ2の詳細指示  ← 並列
+  Planner → SendMessage(to: "Coder-3"): グループ3の詳細指示  ← 並列
+  各Coderが実装後 → SendMessage(to: "Planner") で完了報告
 
 Phase 3:
-  → 各Coderが自分のブランチで /pr-review を実行し、指摘を修正
-  → Coder → PR作成 → CodeRabbitループ → PR URLをPlannerに報告
-  → 複数ブランチは並列で処理
-  → 全Coderの完了後、Plannerが全チケットのNotionステータスをスクリプトで一括更新
+  各Coderが /pr-review → /create-pr → PR URL を SendMessage(to: "Planner") で報告
+  Planner → 全チケットのNotionステータスを一括更新
+  Planner → SendMessage(to: "Leader") で全完了を報告
+  Leader → 各メンバーに SendMessage({type: "shutdown_request"}) でチームを解散
 ```
 
-### チーム操作
+### 4. チーム操作
 
 - **Shift+Down** — チームメンバーを切り替え
 - **Escape** — メンバーの現在の作業を中断
 - **Ctrl+T** — タスクリスト表示
 - メンバーに直接メッセージを送るには、そのメンバーに切り替えてから入力
+- チームメンバー一覧は `~/.claude/teams/ticket-team/config.json` で確認できる
 
 ## 制約事項
 
