@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
 
 interface ClassAssignmentInput {
   class_id: string;
@@ -362,20 +363,90 @@ export async function POST(request: NextRequest) {
     // メールアドレス重複チェック
     const { data: existingUser } = await supabase
       .from('m_users')
-      .select('id')
+      .select('id, name, role')
       .eq('email', body.email)
       .is('deleted_at', null)
       .single();
 
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'Email already exists' },
-        { status: 400 }
-      );
-    }
-
     // Admin クライアントを作成（サービスロールキー使用）
+    // ※ 再招待フローでも使い回すため、重複チェック後に宣言する
     const supabaseAdmin = await createAdminClient();
+
+    if (existingUser) {
+      // 既存ユーザーがいる場合、パスワード設定済みかどうかで処理を分岐する
+      const { data: authUserData } = await supabaseAdmin.auth.admin.getUserById(existingUser.id);
+
+      if (!authUserData?.user) {
+        // Auth ユーザーが見つからない場合は通常の重複エラーとして扱う
+        return NextResponse.json(
+          { success: false, error: 'Email already exists' },
+          { status: 400 }
+        );
+      }
+
+      if (hasCompletedPasswordSetup(authUserData.user)) {
+        // パスワード設定済み → 通常の重複エラー
+        return NextResponse.json(
+          { success: false, error: 'Email already exists' },
+          { status: 400 }
+        );
+      }
+
+      // パスワード未設定 → 再招待フロー
+      // メールが確認済みの場合は 'invite' が失敗するため 'magiclink' を使用する
+      const reinviteLinkType = authUserData.user.email_confirmed_at ? 'magiclink' : 'invite';
+
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: reinviteLinkType,
+        email: body.email,
+      });
+
+      if (linkError || !linkData) {
+        throw linkError || new Error('Failed to generate invite link');
+      }
+
+      // Supabaseが生成したURLからトークンハッシュを抽出
+      const supabaseUrl = linkData.properties.action_link;
+      const urlObj = new URL(supabaseUrl);
+      const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
+      const type = urlObj.searchParams.get('type') || 'invite';
+
+      if (!tokenHash) {
+        console.error('Failed to extract token from invite link for re-invite, user:', existingUser.id);
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Failed to generate valid invite link',
+            message: 'Token hash is missing from the generated link',
+          },
+          { status: 500 }
+        );
+      }
+
+      // 独自のパスワード設定ページURLを構築
+      const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+      const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
+
+      // 再招待メールを送信
+      sendWithGas({
+        to: body.email,
+        subject: '【のびレコ】アカウント登録のご案内',
+        htmlBody: buildUserInvitationEmailHtml({
+          userName: existingUser.name,
+          userEmail: body.email,
+          role: existingUser.role,
+          inviteUrl,
+        }),
+        senderName: 'のびレコ',
+      }).catch((emailError) => {
+        console.error('Failed to send re-invite email:', emailError);
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: '招待メールを再送信しました',
+      });
+    }
 
     // Supabase Auth にユーザーを作成（メール送信なし）
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
