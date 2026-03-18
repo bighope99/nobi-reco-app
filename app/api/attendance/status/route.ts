@@ -131,8 +131,11 @@ export async function POST(request: NextRequest) {
       // 過去日付の場合: h_attendance のチェックイン記録を削除
       if (isPastDate(date)) {
         const dayStart = `${date}T00:00:00+09:00`
-        const nextDate = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
-        const dayEnd = nextDate.toISOString()
+        const nextDateObj = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
+        const nextY = nextDateObj.getUTCFullYear()
+        const nextM = String(nextDateObj.getUTCMonth() + 1).padStart(2, '0')
+        const nextD = String(nextDateObj.getUTCDate()).padStart(2, '0')
+        const dayEnd = `${nextY}-${nextM}-${nextD}T00:00:00+09:00`
 
         const { error: hDeleteError } = await supabase
           .from('h_attendance')
@@ -158,17 +161,25 @@ export async function POST(request: NextRequest) {
     if (isPastDate(date)) {
       const checkedInAt = `${date}T09:00:00+09:00`
       const dayStart = `${date}T00:00:00+09:00`
-      const nextDate = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
-      const dayEnd = nextDate.toISOString()
+      const nextDateObj = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
+      const nextY = nextDateObj.getUTCFullYear()
+      const nextM = String(nextDateObj.getUTCMonth() + 1).padStart(2, '0')
+      const nextD = String(nextDateObj.getUTCDate()).padStart(2, '0')
+      const dayEnd = `${nextY}-${nextM}-${nextD}T00:00:00+09:00`
 
       // 既存のレコードを削除してから挿入（重複防止）
-      await supabase
+      const { error: hDeleteError } = await supabase
         .from('h_attendance')
         .delete()
         .eq('child_id', child_id)
         .eq('facility_id', facility_id)
         .gte('checked_in_at', dayStart)
         .lt('checked_in_at', dayEnd)
+
+      if (hDeleteError) {
+        console.error('h_attendance delete error:', hDeleteError)
+        return NextResponse.json({ success: false, error: 'Failed to delete existing attendance record' }, { status: 500 })
+      }
 
       const { error: hInsertError } = await supabase
         .from('h_attendance')
