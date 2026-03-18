@@ -2,7 +2,7 @@
  * 活動記録フィールドのバリデーションユーティリティ
  */
 
-import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
+import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 
 // 定数
 export const MAX_EVENT_NAME_LENGTH = 200;
@@ -325,6 +325,60 @@ export const validateHandover = (
   }
 
   return { valid: true, data: normalizedHandover };
+};
+
+/**
+ * 活動記録フォーム送信時のバリデーション
+ *
+ * - 記録者は必須
+ * - 記録者以外に少なくとも1つのフィールドに値が必要
+ */
+export const validateActivityFormSubmission = (params: {
+  selectedRecorder: string;
+  activityContent: string;
+  eventName: string;
+  dailySchedule: DailyScheduleItem[];
+  specialNotes: string;
+  snack: string;
+  meal: Meal | { menu: string } | null;
+  handover: string;
+  photos: ActivityPhoto[];
+}): { valid: true } | { valid: false; error: string } => {
+  // 記録者は必須
+  if (!params.selectedRecorder) {
+    return { valid: false, error: '記録者を選択してください' };
+  }
+
+  // 少なくとも1つのフィールドに値が必要
+  const hasContent = params.activityContent.trim() !== '';
+  const hasEventName = params.eventName.trim() !== '';
+  const hasScheduleContent = params.dailySchedule.some(
+    (item) => item.content.trim() !== ''
+  );
+  const hasSpecialNotes = params.specialNotes.trim() !== '';
+  const hasSnack = params.snack.trim() !== '';
+  const hasMeal = params.meal !== null && params.meal.menu.trim() !== '';
+  const hasHandover = params.handover.trim() !== '';
+  const hasPhotos = params.photos.length > 0;
+
+  const hasAnyField =
+    hasContent ||
+    hasEventName ||
+    hasScheduleContent ||
+    hasSpecialNotes ||
+    hasSnack ||
+    hasMeal ||
+    hasHandover ||
+    hasPhotos;
+
+  if (!hasAnyField) {
+    return {
+      valid: false,
+      error: '記録者以外に1つ以上のフィールドに値を入力してください',
+    };
+  }
+
+  return { valid: true };
 };
 
 /**
