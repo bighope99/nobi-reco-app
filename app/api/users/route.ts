@@ -61,7 +61,9 @@ export async function GET(request: NextRequest) {
           { status: 403 }
         );
       }
-      const { data: staffUsers, error: staffError } = await supabase
+      const isActiveFilter = request.nextUrl.searchParams.get('is_active');
+
+      let staffQuery = supabase
         .from('m_users')
         .select(
           `
@@ -75,9 +77,15 @@ export async function GET(request: NextRequest) {
         )
         .is('deleted_at', null)
         .eq('company_id', company_id)
+        .eq('role', 'staff')
         .eq('_user_facility.facility_id', current_facility_id)
-        .eq('_user_facility.is_current', true)
-        .order('name');
+        .eq('_user_facility.is_current', true);
+
+      if (isActiveFilter !== null) {
+        staffQuery = staffQuery.eq('is_active', isActiveFilter === 'true');
+      }
+
+      const { data: staffUsers, error: staffError } = await staffQuery.order('name');
 
       if (staffError) {
         throw staffError;
