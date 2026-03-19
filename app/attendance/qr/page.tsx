@@ -6,8 +6,6 @@ import { BrowserQRCodeReader } from "@zxing/browser"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 
 interface AttendanceQrPayload {
   type: string
@@ -233,150 +231,144 @@ export default function QRAttendanceScannerPage() {
 
   return (
     <StaffLayout title="QR出席" subtitle="QRコードをかざして出席をとろう">
-      <div className="mx-auto max-w-4xl">
-        <Card>
-          <CardContent className="p-6">
-            <div className="space-y-6">
-              {/* QRコード読み取りエリア */}
-              <div className="relative overflow-hidden rounded-2xl border-4 border-primary/20 bg-black">
-                {!isScanning && !isCheckingIn && !checkInResult && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/80 text-center text-white">
-                    <Camera className="h-16 w-16" />
-                    <p className="text-2xl font-bold">カメラを起動してください</p>
-                  </div>
-                )}
-                {isCheckingIn && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/80 text-center text-white">
-                    <Loader2 className="h-16 w-16 animate-spin" />
-                    <p className="text-2xl font-bold">出席を記録中...</p>
-                  </div>
-                )}
-                <video
-                  ref={videoRef}
-                  className="aspect-square sm:aspect-video h-full w-full bg-black object-cover"
-                  playsInline
-                  muted
-                />
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="h-56 w-56 sm:h-48 sm:w-48 border-4 border-white/80 shadow-lg" />
-                </div>
-                {isScanning && (
-                  <button
-                    type="button"
-                    onClick={handleToggleCamera}
-                    disabled={isCheckingIn}
-                    aria-label="カメラを切り替え"
-                    className="absolute right-3 top-3 z-20 rounded-full bg-black/50 p-3 text-white backdrop-blur-sm transition hover:bg-black/70 active:scale-95 disabled:opacity-50"
-                  >
-                    <SwitchCamera className="h-6 w-6" />
-                  </button>
-                )}
-              </div>
-
-              {/* コントロールボタン */}
-              {!checkInResult && (
-                <div className="flex flex-wrap justify-center gap-4">
-                  <Button
-                    onClick={() => startScanner()}
-                    disabled={isScanning || isCheckingIn}
-                    size="lg"
-                    className="text-lg"
-                  >
-                    {scanStatus === "starting" ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> 起動中...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="mr-2 h-5 w-5" /> カメラを起動
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={stopScanner}
-                    disabled={scanStatus === "idle" || scanStatus === "stopped" || isCheckingIn}
-                    size="lg"
-                    className="text-lg"
-                  >
-                    <VideoOff className="mr-2 h-5 w-5" /> 停止
-                  </Button>
-                </div>
-              )}
-
-              {/* エラーメッセージ */}
-              {errorMessage && (
-                <div className="flex items-start gap-3 rounded-lg border-2 border-destructive/30 bg-destructive/10 p-4 text-destructive">
-                  <TriangleAlert className="mt-1 h-6 w-6" />
-                  <p className="text-lg font-medium">{errorMessage}</p>
-                </div>
-              )}
-
-              {/* 出席記録結果 */}
-              {checkInResult && (
-                <div className="space-y-4">
-                  {checkInResult.success ? (
-                    <div className="rounded-2xl border-4 border-green-500 bg-green-50 p-8 text-center dark:bg-green-950">
-                      <div className="mb-6 flex justify-center">
-                        <div className="rounded-full bg-green-500 p-6">
-                          <Check className="h-16 w-16 text-white" />
-                        </div>
-                      </div>
-                      <p className="mb-2 text-2xl font-bold text-green-800 dark:text-green-200">
-                        しゅっせき かんりょう！
-                      </p>
-                      {checkInResult.data && (
-                        <div className="mt-6 space-y-3">
-                          <p className="text-4xl font-bold text-green-900 dark:text-green-100">
-                            {checkInResult.data.child_name}
-                          </p>
-                          <p className="text-2xl font-semibold text-green-800 dark:text-green-200">
-                            {checkInResult.data.class_name}
-                          </p>
-                          <p className="text-xl text-green-700 dark:text-green-300">
-                            {new Date(checkInResult.data.checked_in_at).toLocaleTimeString('ja-JP', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </p>
-                        </div>
-                      )}
-                      <Button
-                        onClick={() => setCheckInResult(null)}
-                        size="lg"
-                        className="mt-6 text-lg"
-                      >
-                        つぎのおともだち
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border-4 border-red-500 bg-red-50 p-8 text-center dark:bg-red-950">
-                      <div className="mb-6 flex justify-center">
-                        <div className="rounded-full bg-red-500 p-6">
-                          <TriangleAlert className="h-16 w-16 text-white" />
-                        </div>
-                      </div>
-                      <p className="mb-4 text-2xl font-bold text-red-800 dark:text-red-200">
-                        エラーが はっせい しました
-                      </p>
-                      <p className="text-lg text-red-700 dark:text-red-300">
-                        {checkInResult.error}
-                      </p>
-                      <Button
-                        onClick={() => setCheckInResult(null)}
-                        variant="outline"
-                        size="lg"
-                        className="mt-6 text-lg"
-                      >
-                        もういちど やってみる
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
+      <div className="space-y-6">
+        {/* QRコード読み取りエリア */}
+        <div className="relative overflow-hidden rounded-2xl border-4 border-primary/20 bg-black">
+          {!isScanning && !isCheckingIn && !checkInResult && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/80 text-center text-white">
+              <Camera className="h-16 w-16" />
+              <p className="text-2xl font-bold">カメラを起動してください</p>
             </div>
-          </CardContent>
-        </Card>
+          )}
+          {isCheckingIn && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/80 text-center text-white">
+              <Loader2 className="h-16 w-16 animate-spin" />
+              <p className="text-2xl font-bold">出席を記録中...</p>
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            className="aspect-square sm:aspect-video h-full w-full bg-black object-cover"
+            playsInline
+            muted
+          />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="h-56 w-56 sm:h-48 sm:w-48 border-4 border-white/80 shadow-lg" />
+          </div>
+          {isScanning && (
+            <button
+              type="button"
+              onClick={handleToggleCamera}
+              disabled={isCheckingIn}
+              aria-label="カメラを切り替え"
+              className="absolute right-3 top-3 z-20 rounded-full bg-black/50 p-3 text-white backdrop-blur-sm transition hover:bg-black/70 active:scale-95 disabled:opacity-50"
+            >
+              <SwitchCamera className="h-6 w-6" />
+            </button>
+          )}
+        </div>
+
+        {/* コントロールボタン */}
+        {!checkInResult && (
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button
+              onClick={() => startScanner()}
+              disabled={isScanning || isCheckingIn}
+              size="lg"
+              className="text-lg"
+            >
+              {scanStatus === "starting" ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" /> 起動中...
+                </>
+              ) : (
+                <>
+                  <Camera className="mr-2 h-5 w-5" /> カメラを起動
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={stopScanner}
+              disabled={scanStatus === "idle" || scanStatus === "stopped" || isCheckingIn}
+              size="lg"
+              className="text-lg"
+            >
+              <VideoOff className="mr-2 h-5 w-5" /> 停止
+            </Button>
+          </div>
+        )}
+
+        {/* エラーメッセージ */}
+        {errorMessage && (
+          <div className="flex items-start gap-3 rounded-lg border-2 border-destructive/30 bg-destructive/10 p-4 text-destructive">
+            <TriangleAlert className="mt-1 h-6 w-6" />
+            <p className="text-lg font-medium">{errorMessage}</p>
+          </div>
+        )}
+
+        {/* 出席記録結果 */}
+        {checkInResult && (
+          <div className="space-y-4">
+            {checkInResult.success ? (
+              <div className="rounded-2xl border-4 border-green-500 bg-green-50 p-8 text-center dark:bg-green-950">
+                <div className="mb-6 flex justify-center">
+                  <div className="rounded-full bg-green-500 p-6">
+                    <Check className="h-16 w-16 text-white" />
+                  </div>
+                </div>
+                <p className="mb-2 text-2xl font-bold text-green-800 dark:text-green-200">
+                  しゅっせき かんりょう！
+                </p>
+                {checkInResult.data && (
+                  <div className="mt-6 space-y-3">
+                    <p className="text-4xl font-bold text-green-900 dark:text-green-100">
+                      {checkInResult.data.child_name}
+                    </p>
+                    <p className="text-2xl font-semibold text-green-800 dark:text-green-200">
+                      {checkInResult.data.class_name}
+                    </p>
+                    <p className="text-xl text-green-700 dark:text-green-300">
+                      {new Date(checkInResult.data.checked_in_at).toLocaleTimeString('ja-JP', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                )}
+                <Button
+                  onClick={() => setCheckInResult(null)}
+                  size="lg"
+                  className="mt-6 text-lg"
+                >
+                  つぎのおともだち
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-2xl border-4 border-red-500 bg-red-50 p-8 text-center dark:bg-red-950">
+                <div className="mb-6 flex justify-center">
+                  <div className="rounded-full bg-red-500 p-6">
+                    <TriangleAlert className="h-16 w-16 text-white" />
+                  </div>
+                </div>
+                <p className="mb-4 text-2xl font-bold text-red-800 dark:text-red-200">
+                  エラーが はっせい しました
+                </p>
+                <p className="text-lg text-red-700 dark:text-red-300">
+                  {checkInResult.error}
+                </p>
+                <Button
+                  onClick={() => setCheckInResult(null)}
+                  variant="outline"
+                  size="lg"
+                  className="mt-6 text-lg"
+                >
+                  もういちど やってみる
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </StaffLayout>
   )
