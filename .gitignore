@@ -36,6 +36,7 @@ yarn-error.log*
 .claude/memory
 settings.local.json
 
+
 # typescript
 *.tsbuildinfo
 # Test coverage
