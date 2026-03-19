@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
-      .uploadToSignedUrl(signedUpload.path, signedUpload.signedUrl, buffer, {
+      .uploadToSignedUrl(signedUpload.path, signedUpload.token, buffer, {
         contentType: file.type,
         upsert: false,
       })
