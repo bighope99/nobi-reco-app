@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Analytics } from "@vercel/analytics/next"
+import { SessionGuard } from "@/components/auth/session-guard"
 import "./globals.css"
 
 // <CHANGE> のびレコ用メタデータ
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="ja" className="h-full">
       <body className="h-full font-sans antialiased">
+        <SessionGuard />
         {children}
         <Analytics />
       </body>

@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { normalizeSearch } from "@/lib/utils/kana"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -250,10 +251,11 @@ export default function StatusPage() {
         if (!recordsData) return []
         if (!committedSearchTerm) return recordsData.children
 
-        const normalized = committedSearchTerm.trim().toLowerCase()
+        const normalize = (s: string) => normalizeSearch(s)
+        const normalizedTerm = normalize(committedSearchTerm).trim()
         return recordsData.children.filter(child => {
-            return child.name.toLowerCase().includes(normalized) ||
-                child.kana.toLowerCase().includes(normalized)
+            return normalize(child.name).includes(normalizedTerm) ||
+                normalize(child.kana).includes(normalizedTerm)
         })
     }, [recordsData, committedSearchTerm])
 

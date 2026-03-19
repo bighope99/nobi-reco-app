@@ -1020,7 +1020,12 @@ CREATE TABLE IF NOT EXISTS h_attendance (
   checked_in_by UUID REFERENCES m_users(id),
   checked_out_by UUID REFERENCES m_users(id),
   
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  -- JST日付（チェックイン日、自動生成）
+  checked_in_date DATE GENERATED ALWAYS AS (
+    (checked_in_at AT TIME ZONE 'Asia/Tokyo')::date
+  ) STORED
 );
 
 -- インデックス
@@ -1028,6 +1033,11 @@ CREATE INDEX idx_h_attendance_child_id ON h_attendance(child_id);
 CREATE INDEX idx_h_attendance_facility_id ON h_attendance(facility_id);
 CREATE INDEX idx_h_attendance_checked_in_at ON h_attendance(checked_in_at);
 CREATE INDEX idx_h_attendance_facility_date ON h_attendance(facility_id, DATE(checked_in_at));
+
+-- ユニーク制約（同一児童・施設・日付でチェックインは1件のみ）
+ALTER TABLE h_attendance
+ADD CONSTRAINT h_attendance_unique_child_facility_date
+UNIQUE (child_id, facility_id, checked_in_date);
 ```
 
 ---
