@@ -103,6 +103,13 @@ const ProgressBar = ({ value, max, mini = false }: { value: number, max: number,
     )
 }
 
+const DAILY_STATUS_LABEL: Record<string, string> = {
+    present: '記録済（来所）',
+    recorded_absent: '記録済（来所なし）',
+    late: '記録なし（来所）',
+    absent: '休み',
+}
+
 const MonthlyHeatmap = ({ history }: { history: string[] }) => {
     return (
         <div className="flex flex-wrap gap-0.5">
@@ -113,11 +120,12 @@ const MonthlyHeatmap = ({ history }: { history: string[] }) => {
                 // 'late'    = 出席だが記録なし（出席はカウントされるが記録率に貢献しない）
                 // 'absent'  = 欠席（出席カウント・記録率ともに対象外）
                 if (status === 'present') color = 'bg-indigo-600'
+                else if (status === 'recorded_absent') color = 'bg-teal-400'
                 else if (status === 'absent') color = 'bg-slate-200'
                 else if (status === 'late') color = 'bg-amber-400'
 
                 return (
-                    <div key={i} className={`w-2 h-4 rounded-sm ${color}`} title={`Day ${i + 1}: ${status}`} />
+                    <div key={i} className={`w-2 h-4 rounded-sm ${color}`} title={`Day ${i + 1}: ${DAILY_STATUS_LABEL[status] ?? status}`} />
                 )
             })}
         </div>
@@ -482,11 +490,11 @@ export default function StatusPage() {
                         表示中: <span className="font-bold text-slate-900">{sortedData.length}</span> 名
                         {warningOnly && <span className="ml-2 text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-xs font-bold">要確認対象</span>}
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                        {/* チケット5: ヒートマップの凡例を記録率の定義と一致させる */}
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-600 rounded-sm"></div> 出席+記録済</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-400 rounded-sm"></div> 出席+記録なし</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm"></div> 欠席</div>
+                    <div className="flex items-center gap-4 text-xs">
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-600 rounded-sm"></div> 記録済（来所）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-teal-400 rounded-sm"></div> 記録済（来所なし）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-400 rounded-sm"></div> 記録なし（来所）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm"></div> 休み</div>
                     </div>
                 </div>
 
@@ -570,7 +578,11 @@ export default function StatusPage() {
                                             </td>
 
                                             <td className="px-4 py-4 whitespace-nowrap align-middle">
-                                                <ProgressBar value={child.monthly.record_count} max={child.monthly.attendance_count} />
+                                                {child.monthly.attendance_count > 0 ? (
+                                                    <ProgressBar value={child.monthly.record_count} max={child.monthly.attendance_count} />
+                                                ) : (
+                                                    <span className="text-xs text-slate-400">出欠データなし</span>
+                                                )}
                                             </td>
 
                                             <td className="px-4 py-4 whitespace-nowrap">
