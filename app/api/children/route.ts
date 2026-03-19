@@ -6,6 +6,7 @@ import { handleChildSave } from './save/route';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { isoToDateJST } from '@/lib/utils/timezone';
 import { searchByName } from '@/utils/pii/searchIndex';
+import { normalizeSearch } from '@/lib/utils/kana';
 
 // GET /api/children - 子ども一覧取得
 export async function GET(request: NextRequest) {
@@ -158,8 +159,10 @@ export async function GET(request: NextRequest) {
       const nameIds = await searchByName(supabase, 'child', 'name', search);
 
       // カナは平文なので直接DB検索
+      // ひらがな→カタカナに正規化してから検索（表記ゆれ対応）
       // 特殊文字をエスケープしてSQL injection/filter breakを防止
-      const escapedSearch = search
+      const normalizedSearch = normalizeSearch(search)
+      const escapedSearch = normalizedSearch
         .replace(/\\/g, '\\\\')
         .replace(/%/g, '\\%')
         .replace(/_/g, '\\_');
