@@ -153,10 +153,10 @@ export function Sidebar({ type, userName, isOpen = false, onClose }: SidebarProp
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-      <div className="border-b border-sidebar-border px-6 py-3">
+      <div className="border-b border-sidebar-border px-6 pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image src="/nobireco-logo.png" alt="のびレコ" width={120} height={48} />
+            <Image src="/nobireco-logo.png" alt="のびレコ" width={70} height={48} />
           </div>
           {/* モバイル用閉じるボタン */}
           <Button
