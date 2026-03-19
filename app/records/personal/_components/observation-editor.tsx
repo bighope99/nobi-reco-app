@@ -150,6 +150,7 @@ type AiAnalysisResult = {
 type ChildOption = {
   id: string;
   name: string;
+  kana: string;
   className: string;
   grade?: number | null;
 };
@@ -292,6 +293,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [showContinueButton, setShowContinueButton] = useState(false);
   const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -305,6 +308,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const audioChunksRef = useRef<Blob[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [selectedRecorder, setSelectedRecorder] = useState<string>('');
+  const [staffLoadError, setStaffLoadError] = useState(false);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
@@ -340,9 +344,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               setSelectedRecorder(lastRecorder);
             }
           }
+        } else {
+          setStaffLoadError(true);
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err);
+        setStaffLoadError(true);
       }
     };
     fetchStaff();
@@ -522,17 +529,18 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         const children = (result.data?.children || []).map((child) => ({
           id: child.child_id,
           name: child.name,
+          kana: child.kana || '',
           className: child.class_name || '未設定',
           grade: child.grade ?? null,
         }));
-        // 学年昇順、同学年内は名前順にソート
+        // 学年降順（6年→1年）、同学年内はあいうえお順にソート
         children.sort((a, b) => {
-          const gradeA = a.grade ?? 999;
-          const gradeB = b.grade ?? 999;
+          const gradeA = a.grade ?? 0;
+          const gradeB = b.grade ?? 0;
           if (gradeA !== gradeB) {
-            return gradeA - gradeB;
+            return gradeB - gradeA;
           }
-          return a.name.localeCompare(b.name, 'ja');
+          return a.kana.localeCompare(b.kana, 'ja');
         });
         if (isMounted) {
           setChildOptions(children);
@@ -689,6 +697,27 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      weekday: 'short',
+    });
+  };
+
+  const formatDate = (dateString: string) => {
+    // yyyy-MM-dd 形式の日付文字列をそのまま表示（タイムゾーンずれを防ぐ）
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [, year, month, day] = match;
+      const date = new Date(Number(year), Number(month) - 1, Number(day));
+      return date.toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        weekday: 'short',
+      });
+    }
+    return new Date(dateString).toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
       weekday: 'short',
     });
   };
@@ -962,6 +991,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setError('本文を入力してください');
       return;
     }
+    if (!selectedRecorder && !staffLoadError) {
+      setError('記録者を選択してください');
+      return;
+    }
     setSavingEdit(true);
     setError('');
     try {
@@ -981,7 +1014,26 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      setObservation((prev) => (prev ? { ...prev, body_text: displayText } : prev));
+      const nextObservationDate = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const nextRecorderName =
+        staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
+      setObservation((prev) =>
+        prev
+          ? {
+              ...prev,
+              body_text: displayText,
+              observed_at: nextObservationDate,
+              recorded_by_name: nextRecorderName || prev.recorded_by_name,
+              updated_at: new Date().toISOString(),
+            }
+          : prev,
+      );
+      // 過去記録リスト内の該当レコードも更新
+      setRecentObservations((prev) =>
+        prev.map((item) =>
+          item.id === observation.id ? { ...item, content: text } : item,
+        ),
+      );
       setIsEditing(false);
       setAiProcessing(true);
       const aiResult = await runAiAnalysis(text);
@@ -1020,6 +1072,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
     if (!text) {
       setError('本文を入力してください');
+      return;
+    }
+    if (!selectedRecorder && !staffLoadError) {
+      setError('記録者を選択してください');
       return;
     }
     setSavingEdit(true);
@@ -1173,7 +1229,24 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   );
 
   const handleReanalyze = async () => {
-    const sourceText = observation?.body_text || editText;
+    const sourceText = isEditing ? editText : (observation?.body_text || editText);
+    if (!sourceText.trim()) return;
+
+    // 抽出された事実・解釈・所感・フラグに既存入力がある場合は確認ダイアログを表示
+    const hasExistingAiContent =
+      aiEditForm.ai_action.trim().length > 0 ||
+      aiEditForm.ai_opinion.trim().length > 0 ||
+      Object.values(aiEditForm.flags).some(Boolean);
+    if (hasExistingAiContent) {
+      setShowReanalyzeConfirmDialog(true);
+      return;
+    }
+
+    await runReanalyze();
+  };
+
+  const runReanalyze = async () => {
+    const sourceText = isEditing ? editText : (observation?.body_text || editText);
     if (!sourceText.trim()) return;
     setAiProcessing(true);
     try {
@@ -1372,7 +1445,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => router.back()}>
+                <Button
+                  variant="outline"
+                  disabled={savingEdit || aiEditSaving || aiProcessing}
+                  onClick={() => {
+                    if (savingEdit || aiEditSaving || aiProcessing) return;
+                    const hasUnsaved = isNew && !observation && editText.trim().length > 0;
+                    if (hasUnsaved) {
+                      setShowUnsavedDialog(true);
+                    } else {
+                      router.back();
+                    }
+                  }}
+                >
                   戻る
                 </Button>
               </div>
@@ -1439,9 +1524,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           />
                         </div>
                       )
-                    ) : (
-                      <span>{childDisplayName}</span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-1">
                     {isNew || isEditing ? (
@@ -1453,13 +1536,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           disabled={savingEdit}
                         />
                       </div>
-                    ) : (
-                      <>
-                        <Calendar className="h-4 w-4" />
-                        {observation ? formatDateTime(observation.observed_at) : '未保存'}
-                      </>
-                    )}
+                    ) : null}
                   </div>
+                  {(isNew || isEditing) && staffLoadError && (
+                    <div className="text-sm text-destructive">記録者情報の取得に失敗しました</div>
+                  )}
                   {(isNew || isEditing) && staffList.length > 0 && (
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
@@ -1477,10 +1558,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </Select>
                     </div>
                   )}
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    記録: {observation ? formatDateTime(observation.created_at) : '未保存'}
-                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1691,15 +1768,15 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <p className="text-sm text-gray-500">読み込み中...</p>
                   ) : recentError ? (
                     <p className="text-sm text-red-600">{recentError}</p>
-                  ) : recentObservations.length === 0 ? (
+                  ) : recentObservations.filter((item) => item.id !== observation?.id).length === 0 ? (
                     <p className="text-sm text-gray-500">過去の記録はありません。</p>
                   ) : (
-                    recentObservations.map((item) => {
+                    recentObservations.filter((item) => item.id !== observation?.id).map((item) => {
                       const tagBadges = getTagBadges(item.tag_ids);
                       return (
                         <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
                           <div className="flex items-start justify-between gap-2 text-xs text-gray-500">
-                            <span>{item.observation_date ? formatDateTime(item.observation_date) : '日付不明'}</span>
+                            <span>{item.observation_date ? formatDate(item.observation_date) : '日付不明'}</span>
                             <div className="flex gap-1">
                               <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
                                 編集
@@ -1775,11 +1852,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <span className="text-gray-600">対象児童:</span>
                   <span className="font-medium">{childDisplayName}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="h-4 w-4 text-green-600" />
-                  <span className="text-gray-600">観察日時</span>
-                  <span>{observation ? formatDateTime(observation.observed_at) : '未保存'}</span>
-                </div>
+                {!isNew && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4 text-green-600" />
+                    <span className="text-gray-600">観察日</span>
+                    <span>{observation ? formatDate(observation.observed_at) : '未保存'}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-purple-600" />
                   <span className="text-gray-600">記録日時</span>
@@ -1813,16 +1892,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 <Button variant="outline" className="w-full border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
                   <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
                 </Button>
-
-                {!isNew && (
-                  <Button
-                    variant="outline"
-                    className="w-full border-blue-200 text-blue-600 hover:bg-blue-50"
-                    onClick={() => observation && load(observation.id)}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" /> データを元に戻す
-                  </Button>
-                )}
               </CardContent>
             </Card>
           </div>
@@ -1904,6 +1973,46 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </Button>
               <Button onClick={handleCreateNewConfirm}>
                 作成する
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 未保存で戻る確認ダイアログ */}
+        <Dialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>保存されていません</DialogTitle>
+              <DialogDescription>
+                入力した内容はまだ保存されていません。保存せずに戻りますか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowUnsavedDialog(false)}>
+                キャンセル
+              </Button>
+              <Button variant="destructive" onClick={() => { setShowUnsavedDialog(false); router.back(); }}>
+                保存せずに戻る
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* AI再解析の上書き確認ダイアログ */}
+        <Dialog open={showReanalyzeConfirmDialog} onOpenChange={setShowReanalyzeConfirmDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>AI再解析の確認</DialogTitle>
+              <DialogDescription>
+                現在の「抽出された事実」「解釈・所感」「非認知能力フラグ」の入力内容を上書きしますか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowReanalyzeConfirmDialog(false)}>
+                キャンセル
+              </Button>
+              <Button onClick={async () => { setShowReanalyzeConfirmDialog(false); await runReanalyze(); }}>
+                上書きする
               </Button>
             </DialogFooter>
           </DialogContent>

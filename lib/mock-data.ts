@@ -49,3 +49,24 @@ export const mockActivities = [
   { id: "1", date: "2024-01-15", title: "外遊び", content: "園庭で鬼ごっこや砂場遊びを行いました。" },
   { id: "2", date: "2024-01-15", title: "製作活動", content: "折り紙でお花を作りました。" },
 ]
+
+export const mockActivityHistory = Array.from({ length: 45 }).map((_, i) => ({
+  id: `act-hist-${i + 1}`,
+  date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  className: i % 3 === 0 ? "うさぎ組" : i % 3 === 1 ? "くま組" : "ぞう組",
+  title: i % 2 === 0 ? "園庭での外遊び" : "室内での製作活動",
+  content: "今日は天気が良かったので、園庭で鬼ごっこや砂場遊びをしました。みんな元気いっぱいに走り回っていました。",
+  staffName: i % 2 === 0 ? "中村 先生" : "小林 先生",
+  personalRecordCount: Math.floor(Math.random() * 5),
+}))
+
+export const mockPersonalHistory = Array.from({ length: 45 }).map((_, i) => ({
+  id: `pers-hist-${i + 1}`,
+  date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  childName: mockChildren[i % mockChildren.length].name,
+  className: mockChildren[i % mockChildren.length].className,
+  grade: `${mockChildren[i % mockChildren.length].age}歳児`,
+  category: i % 3 === 0 ? "健康" : i % 3 === 1 ? "人間関係" : "表現",
+  content: "お友達とおもちゃの貸し借りが上手にできました。「どうぞ」「ありがとう」のやり取りが見られました。",
+  staffName: i % 2 === 0 ? "中村 先生" : "小林 先生",
+}))

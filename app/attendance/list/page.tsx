@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { Button } from "@/components/ui/button"
@@ -15,98 +15,14 @@ import {
   AlertCircle,
   CheckCircle2
 } from "lucide-react"
-
-interface ChildAttendance {
-  child_id: string
-  name: string
-  kana: string
-  class_id: string | null
-  class_name: string
-  age_group: string
-  grade: number | null
-  grade_label: string
-  photo_url: string | null
-  status: 'present' | 'absent' | 'late' | 'not_arrived'
-  is_expected: boolean
-  checked_in_at: string | null
-  checked_out_at: string | null
-  check_in_method: string | null
-  is_unexpected: boolean
-}
-
-interface StatusPresentation {
-  label: string
-  className: string
-}
-
-// Helper function to check if a date is in the past
-const isPastDate = (dateString: string): boolean => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const target = new Date(dateString)
-  target.setHours(0, 0, 0, 0)
-
-  return target < today
-}
-
-// Get status presentation based on child attendance data
-const getStatusPresentation = (child: ChildAttendance, currentDate: string): StatusPresentation | null => {
-  if (child.is_unexpected) {
-    return {
-      label: '予定外登園',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200',
-    }
-  }
-
-  if (child.status === 'present') {
-    return {
-      label: '出席',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200',
-    }
-  }
-
-  if (child.status === 'late') {
-    return {
-      label: '遅刻',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200',
-    }
-  }
-
-  if (child.status === 'absent') {
-    const isPast = isPastDate(currentDate)
-
-    if (!child.is_expected) {
-      return {
-        label: '欠席予定',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
-      }
-    }
-
-    return {
-      label: isPast ? '欠席' : '出席予定',
-      className: isPast
-        ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
-        : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
-    }
-  }
-
-  if (child.status === 'not_arrived') {
-    if (child.is_expected) {
-      return {
-        label: '未到着',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
-      }
-    }
-
-    return {
-      label: '欠席予定',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
-    }
-  }
-
-  return null
-}
+import {
+  type ChildAttendance,
+  type AttendanceData,
+  getStatusPresentation,
+  getStatusAction,
+  applyOptimisticStatusUpdate,
+  isPastDate,
+} from "./helpers"
 
 // Status badge component
 const StatusBadge = ({ child, currentDate }: { child: ChildAttendance; currentDate: string }) => {
@@ -129,11 +45,39 @@ const StatusActionButton = ({
   onMarkStatus: (childId: string, status: 'absent' | 'present') => void
   isLoading: boolean
 }) => {
-  const presentation = getStatusPresentation(child, currentDate)
+  if (isPastDate(currentDate)) {
+    // 過去日付: ステータスに応じて disabled 状態で両ボタンを表示
+    // 楽観的更新は status='absent', is_expected=true/false で状態を表現するため両方考慮
+    const isPresent = child.status === 'present' || child.status === 'late'
+    const isAbsent = child.status === 'absent'
 
-  if (!presentation) return null
+    return (
+      <div className="flex gap-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => onMarkStatus(child.child_id, 'absent')}
+          disabled={isLoading || isAbsent}
+        >
+          {isLoading ? '処理中...' : '欠席にする'}
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => onMarkStatus(child.child_id, 'present')}
+          disabled={isLoading || isPresent}
+        >
+          {isLoading ? '処理中...' : '出席にする'}
+        </Button>
+      </div>
+    )
+  }
 
-  if (presentation.label === '出席予定') {
+  // 今日/未来: 現行ロジック
+  const action = getStatusAction(child, currentDate)
+
+  if (!action) return null
+
+  if (action === 'absent') {
     return (
       <Button
         variant="destructive"
@@ -146,41 +90,15 @@ const StatusActionButton = ({
     )
   }
 
-  if (presentation.label === '欠席予定') {
-    return (
-      <Button
-        size="sm"
-        onClick={() => onMarkStatus(child.child_id, 'present')}
-        disabled={isLoading}
-      >
-        {isLoading ? '処理中...' : '出席にする'}
-      </Button>
-    )
-  }
-
-  return null
-}
-
-interface AttendanceData {
-  date: string
-  weekday: string
-  weekday_jp: string
-  summary: {
-    total_children: number
-    present_count: number
-    absent_count: number
-    late_count: number
-    not_checked_in_count: number
-  }
-  children: ChildAttendance[]
-  filters: {
-    classes: Array<{
-      class_id: string
-      class_name: string
-      present_count: number
-      total_count: number
-    }>
-  }
+  return (
+    <Button
+      size="sm"
+      onClick={() => onMarkStatus(child.child_id, 'present')}
+      disabled={isLoading}
+    >
+      {isLoading ? '処理中...' : '出席にする'}
+    </Button>
+  )
 }
 
 export default function AttendanceListPage() {
@@ -193,20 +111,35 @@ export default function AttendanceListPage() {
   const [filterClass, setFilterClass] = useState<string>('all')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
+  const [canEditTime, setCanEditTime] = useState(false)
+  const [editingTime, setEditingTime] = useState<{ childId: string; field: 'in' | 'out'; value: string } | null>(null)
+  const [timeLoading, setTimeLoading] = useState<{ childId: string; field: 'in' | 'out' } | null>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
-  // クライアント側でのみ初期日付を設定
+  // クライアント側でのみ初期日付・ロールを設定
   useEffect(() => {
     if (!selectedDate) {
       setSelectedDate(getTomorrowDateJST())
     }
+    // sessionStorageからロールを取得して時刻編集権限を判定
+    try {
+      const raw = sessionStorage.getItem('user_session')
+      if (raw) {
+        const session = JSON.parse(raw)
+        const role = session.role as string
+        setCanEditTime(['site_admin', 'company_admin', 'facility_admin'].includes(role))
+      }
+    } catch {
+      // sessionStorageが使えない場合は権限なし
+    }
   }, [selectedDate])
 
-  const fetchAttendance = useCallback(async () => {
+  const fetchAttendance = useCallback(async (silent = false) => {
     // 日付が設定されるまで待つ
     if (!selectedDate) return
 
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setError(null)
 
       const response = await fetch(`/api/attendance/list?date=${selectedDate}`)
@@ -223,7 +156,7 @@ export default function AttendanceListPage() {
       console.error('Failed to fetch attendance:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch attendance')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [selectedDate])
 
@@ -276,8 +209,14 @@ export default function AttendanceListPage() {
   const currentDate = attendanceData?.date || selectedDate
 
   const handleStatusChange = async (childId: string, nextStatus: 'absent' | 'present') => {
+    if (!attendanceData) return
+
     setActionError(null)
     setActionLoading(prev => ({ ...prev, [childId]: true }))
+
+    // 楽観的更新: APIコール前にUIを即座に更新
+    const previousData = attendanceData
+    setAttendanceData(applyOptimisticStatusUpdate(attendanceData, childId, nextStatus, currentDate))
 
     try {
       const response = await fetch('/api/attendance/status', {
@@ -297,13 +236,49 @@ export default function AttendanceListPage() {
       if (!response.ok || !result.success) {
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
-
-      await fetchAttendance()
     } catch (err) {
       console.error('Failed to update attendance status:', err)
+      // エラー時はロールバック
+      setAttendanceData(previousData)
       setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
     } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))
+    }
+  }
+
+  const handleTimeEdit = async (childId: string, field: 'in' | 'out', timeValue: string) => {
+    setActionError(null)
+    setActionLoading(prev => ({ ...prev, [childId]: true }))
+    setEditingTime(null)
+    setTimeLoading({ childId, field })
+
+    try {
+      const dbField = field === 'in' ? 'checked_in_at' : 'checked_out_at'
+
+      const response = await fetch('/api/attendance/time', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          field: dbField,
+          time: timeValue,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '時刻の更新に失敗しました')
+      }
+
+      await fetchAttendance(true)
+    } catch (err) {
+      console.error('Failed to update time:', err)
+      setActionError(err instanceof Error ? err.message : '時刻の更新に失敗しました')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [childId]: false }))
+      setTimeLoading(null)
     }
   }
 
@@ -362,12 +337,25 @@ export default function AttendanceListPage() {
                   <ChevronLeft size={18} className="text-slate-600" />
                 </button>
 
-                <div className="flex items-center gap-3 px-3 min-w-[200px] justify-center">
+                <button
+                  onClick={() => dateInputRef.current?.showPicker()}
+                  className="flex items-center gap-3 px-3 min-w-[200px] justify-center cursor-pointer hover:bg-gray-50 rounded transition-colors py-1 relative"
+                  aria-label="日付を選択"
+                >
                   <Calendar size={16} className="text-indigo-600" />
                   <span className="text-base font-bold text-slate-800">
                     {formatDisplayDate(selectedDate)}
                   </span>
-                </div>
+                  <input
+                    ref={dateInputRef}
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="absolute inset-0 opacity-0 w-0 h-0 pointer-events-none"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
+                </button>
 
                 <button
                   onClick={() => changeDate(1)}
@@ -392,13 +380,6 @@ export default function AttendanceListPage() {
                   明日
                 </button>
               </div>
-
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
             </div>
           </header>
 
@@ -508,15 +489,77 @@ export default function AttendanceListPage() {
                         />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {child.checked_in_at ? (
-                          <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
+                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
+                          <span className="inline-flex items-center gap-1 text-indigo-500">
+                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                            <span className="text-xs">更新中</span>
+                          </span>
+                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
+                          <input
+                            type="time"
+                            defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
+                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            onBlur={(e) => {
+                              if (editingTime?.childId === child.child_id && editingTime?.field === 'in') {
+                                if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
+                                else setEditingTime(null)
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                              if (e.key === 'Escape') {
+                                setEditingTime(null)
+                                e.currentTarget.blur()
+                              }
+                            }}
+                            autoFocus
+                          />
+                        ) : child.checked_in_at ? (
+                          <span
+                            className={`text-emerald-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
+                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
+                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
+                          >
+                            {formatTime(child.checked_in_at)}
+                          </span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {child.checked_out_at ? (
-                          <span className="text-slate-600 font-medium">{formatTime(child.checked_out_at)}</span>
+                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
+                          <span className="inline-flex items-center gap-1 text-indigo-500">
+                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                            <span className="text-xs">更新中</span>
+                          </span>
+                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
+                          <input
+                            type="time"
+                            defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
+                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            onBlur={(e) => {
+                              if (editingTime?.childId === child.child_id && editingTime?.field === 'out') {
+                                if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
+                                else setEditingTime(null)
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                              if (e.key === 'Escape') {
+                                setEditingTime(null)
+                                e.currentTarget.blur()
+                              }
+                            }}
+                            autoFocus
+                          />
+                        ) : child.checked_out_at ? (
+                          <span
+                            className={`text-slate-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
+                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
+                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
+                          >
+                            {formatTime(child.checked_out_at)}
+                          </span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
@@ -563,7 +606,12 @@ export default function AttendanceListPage() {
                         <div>
                           <div className="text-slate-400 mb-1">チェックイン</div>
                           <div className="text-slate-600">
-                            {child.checked_in_at ? (
+                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
+                              <span className="inline-flex items-center gap-1 text-indigo-500">
+                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                                <span>更新中</span>
+                              </span>
+                            ) : child.checked_in_at ? (
                               <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
                             ) : (
                               <span className="text-slate-400">-</span>
@@ -573,7 +621,12 @@ export default function AttendanceListPage() {
                         <div>
                           <div className="text-slate-400 mb-1">チェックアウト</div>
                           <div className="text-slate-600">
-                            {child.checked_out_at ? (
+                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
+                              <span className="inline-flex items-center gap-1 text-indigo-500">
+                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                                <span>更新中</span>
+                              </span>
+                            ) : child.checked_out_at ? (
                               <span className="font-medium">{formatTime(child.checked_out_at)}</span>
                             ) : (
                               <span className="text-slate-400">-</span>

@@ -1,22 +1,21 @@
 "use client"
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { Badge } from "@/components/ui/badge";
 
 import {
     Search,
     Filter,
     Plus,
-    MoreHorizontal,
     Phone,
     ChevronRight,
     ArrowUpDown,
-    Baby,
     Power,
     RotateCcw,
     Users,
-    QrCode,
     Download,
-    Loader2
+    Loader2,
+    CameraOff
 } from 'lucide-react';
 
 // --- Types ---
@@ -37,7 +36,7 @@ interface APIChild {
     class_id: string | null;
     class_name: string;
     enrollment_status: EnrollmentStatus;
-    contract_type: ContractType;
+    enrollment_type: ContractType;
     has_allergy: boolean;
     allergy_detail: string | null;
     photo_allowed: boolean;
@@ -53,21 +52,18 @@ interface ChildrenAPIResponse {
     success: boolean;
     data: {
         children: APIChild[];
-        pagination: {
-            total: number;
-            page: number;
-            limit: number;
-            total_pages: number;
-        };
         summary: {
             total_children: number;
-            enrolled: number;
-            withdrawn: number;
-            suspended: number;
+            enrolled_count: number;
+            withdrawn_count: number;
+            has_allergy_count: number;
+            has_sibling_count: number;
         };
         filters: {
-            classes: Array<{ class_id: string; class_name: string }>;
+            classes: Array<{ class_id: string; class_name: string; children_count: number }>;
         };
+        total: number;
+        has_more: boolean;
     };
     error?: string;
 }
@@ -93,7 +89,7 @@ interface Student {
     contractType: ContractType;
 }
 
-type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings';
+type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings' | 'photoAllowed';
 type SortOrder = 'asc' | 'desc';
 
 // --- Helper Functions ---
@@ -126,7 +122,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         photoAllowed: apiChild.photo_allowed,
         reportAllowed: apiChild.report_allowed,
         status,
-        contractType: apiChild.contract_type,
+        contractType: apiChild.enrollment_type,
     };
 };
 
@@ -149,8 +145,25 @@ export default function StudentList() {
     const [sortKey, setSortKey] = useState<SortKey>('grade');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
+    // Debounced search term
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        debounceTimerRef.current = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, [searchTerm]);
+
     // Fetch children data from API
     useEffect(() => {
+        const abortController = new AbortController();
+
         const fetchChildren = async () => {
             try {
                 setLoading(true);
@@ -169,15 +182,13 @@ export default function StudentList() {
                     params.append('class_id', filterClass);
                 }
 
-                if (searchTerm) {
-                    params.append('search', searchTerm);
+                if (debouncedSearch) {
+                    params.append('search', debouncedSearch);
                 }
 
-                // Add sort params
-                params.append('sort_by', sortKey);
-                params.append('sort_order', sortOrder);
-
-                const response = await fetch(`/api/children?${params.toString()}`);
+                const response = await fetch(`/api/children?${params.toString()}`, {
+                    signal: abortController.signal,
+                });
                 const result: ChildrenAPIResponse = await response.json();
 
                 if (!response.ok) {
@@ -187,19 +198,28 @@ export default function StudentList() {
                 if (result.success) {
                     const convertedStudents = result.data.children.map(convertAPIChildToStudent);
                     setStudents(convertedStudents);
-                    setClassOptions(result.data.filters.classes);
-                    setTotalCount(result.data.summary.total_children);
+                    setClassOptions(result.data?.filters?.classes || []);
+                    setTotalCount(result.data?.summary?.total_children || 0);
                 }
             } catch (err) {
+                if (err instanceof DOMException && err.name === 'AbortError') {
+                    return; // リクエストがキャンセルされた場合は何もしない
+                }
                 console.error('Failed to fetch children:', err);
                 setError(err instanceof Error ? err.message : 'Failed to fetch children');
             } finally {
-                setLoading(false);
+                if (!abortController.signal.aborted) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchChildren();
-    }, [activeTab, filterClass, searchTerm]);
+
+        return () => {
+            abortController.abort();
+        };
+    }, [activeTab, filterClass, debouncedSearch]);
 
     // Toggle Status Function (Now updates via API)
     const toggleStatus = async (id: string, currentStatus: StatusType) => {
@@ -209,11 +229,9 @@ export default function StudentList() {
         if (confirm(`${currentStatus === 'active' ? '退所済みに変更' : '所属中に復帰'}しますか？`)) {
             try {
                 const response = await fetch(`/api/children/${id}`, {
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        affiliation: { enrollment_status: newEnrollmentStatus }
-                    }),
+                    body: JSON.stringify({ enrollment_status: newEnrollmentStatus }),
                 });
 
                 if (!response.ok) {
@@ -243,23 +261,9 @@ export default function StudentList() {
 
     // Filter & Sort Logic
     const processedStudents = useMemo(() => {
-        // 1. Filter
-        let result = students.filter(student => {
-            // Status Tab Filter
-            if (student.status !== activeTab) return false;
-
-            // Search Text
-            const matchText =
-                student.name.includes(searchTerm) ||
-                student.kana.includes(searchTerm) ||
-                student.parentName.includes(searchTerm);
-            if (!matchText) return false;
-
-            // Class Filter
-            if (filterClass !== 'all' && student.className !== filterClass) return false;
-
-            return true;
-        });
+        // APIがstatus/search/class_idでフィルター済みのデータを返すため
+        // クライアント側では追加フィルターは不要
+        let result = [...students];
 
         // 2. Sort
         result.sort((a, b) => {
@@ -277,7 +281,7 @@ export default function StudentList() {
                     comparison = a.className.localeCompare(b.className);
                     break;
                 case 'contractType':
-                    comparison = a.contractType.localeCompare(b.contractType);
+                    comparison = (a.contractType || '').localeCompare(b.contractType || '');
                     break;
                 case 'allergy':
                     comparison = (a.hasAllergy === b.hasAllergy) ? 0 : a.hasAllergy ? -1 : 1;
@@ -286,12 +290,15 @@ export default function StudentList() {
                     // 兄弟の数でソート
                     comparison = a.siblings.length - b.siblings.length;
                     break;
+                case 'photoAllowed':
+                    comparison = (a.photoAllowed === b.photoAllowed) ? 0 : a.photoAllowed ? 1 : -1;
+                    break;
             }
             return sortOrder === 'asc' ? comparison : -comparison;
         });
 
         return result;
-    }, [students, searchTerm, filterClass, activeTab, sortKey, sortOrder]);
+    }, [students, sortKey, sortOrder]);
 
     const parseFilename = (contentDisposition: string | null, fallback: string) => {
         if (!contentDisposition) return fallback;
@@ -464,6 +471,7 @@ export default function StudentList() {
                                     onChange={(e) => setFilterClass(e.target.value)}
                                 >
                                     <option value="all" > 全クラス </option>
+                                    <option value="none" > クラスなし </option>
                                     {
                                         classOptions.map(cls => (
                                             <option key={cls.class_id} value={cls.class_id} > {cls.class_name} </option>
@@ -485,9 +493,6 @@ export default function StudentList() {
                             >
                                 {batchGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                                 QR一括出力
-                            </button>
-                            <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" >
-                                <MoreHorizontal size={20} />
                             </button>
                         </div>
                     </div>
@@ -559,6 +564,15 @@ export default function StudentList() {
                                                 </div>
                                             </th>
                                             <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('photoAllowed')}
+                                            >
+                                                <div className="flex items-center gap-1">
+                                                    写真
+                                                    <SortIcon columnKey="photoAllowed" />
+                                                </div>
+                                            </th>
+                                            <th
                                                 className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
                                                 onClick={() => handleSort('allergy')}
                                             >
@@ -602,7 +616,7 @@ export default function StudentList() {
                                                     {/* Name */}
                                                     <td className="px-3 py-4" >
                                                         <div>
-                                                            <div className="flex items-center gap-2" >
+                                                            <div className="flex items-center gap-2 flex-wrap" >
                                                                 <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
                                                                     {student.name}
                                                                 </span>
@@ -646,6 +660,18 @@ export default function StudentList() {
                                                             ) : (
                                                                 <span className="text-slate-300 text-sm" > -</span>
                                                             )}
+                                                    </td>
+
+                                                    {/* Photo Restriction */}
+                                                    <td className="px-2 py-4">
+                                                        {!student.photoAllowed ? (
+                                                            <Badge variant="destructive" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold">
+                                                                <CameraOff size={10} />
+                                                                撮影NG
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-slate-300 text-sm">-</span>
+                                                        )}
                                                     </td>
 
                                                     {/* Allergy (Max 2 lines) */}

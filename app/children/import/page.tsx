@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Upload, Download } from "lucide-react"
+import { useSession } from "@/hooks/useSession"
 
 type FacilityOption = { facility_id: string; name: string }
 type SchoolOption = { school_id: string; name: string }
@@ -40,6 +41,7 @@ type SiblingCandidate = {
 }
 
 export default function ChildImportPage() {
+  const session = useSession()
   const [facilities, setFacilities] = useState<FacilityOption[]>([])
   const [schools, setSchools] = useState<SchoolOption[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
@@ -62,42 +64,66 @@ export default function ChildImportPage() {
   } | null>(null)
   const [approvedSiblingPhones, setApprovedSiblingPhones] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  // 初期ロード: 施設一覧のみ取得
   useEffect(() => {
-    const fetchOptions = async () => {
+    const fetchFacilities = async () => {
       try {
         setLoading(true)
         setError(null)
+        const response = await fetch("/api/facilities")
+        const json = await response.json()
+        if (!response.ok || !json.success) {
+          throw new Error(json.error || "施設の取得に失敗しました")
+        }
+        setFacilities(json.data?.facilities ?? [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "取得に失敗しました")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchFacilities()
+  }, [])
 
-        const [facilitiesResponse, schoolsResponse, classesResponse] =
-          await Promise.all([
-            fetch("/api/facilities"),
-            fetch("/api/schools"),
-            fetch("/api/children/classes"),
-          ])
+  // sessionロード時: facility_admin/staffは自施設を自動選択
+  useEffect(() => {
+    if (!session) return
+    if (session.role === 'facility_admin' || session.role === 'staff') {
+      if (session.current_facility_id) {
+        setSelectedFacilityId(session.current_facility_id)
+      }
+    }
+  }, [session])
 
-        const [facilitiesJson, schoolsJson, classesJson] = await Promise.all([
-          facilitiesResponse.json(),
+  // 施設変更時: 学校・クラスを再取得
+  useEffect(() => {
+    if (!selectedFacilityId) {
+      setSchools([])
+      setClasses([])
+      return
+    }
+    const fetchSchoolsAndClasses = async () => {
+      try {
+        const [schoolsResponse, classesResponse] = await Promise.all([
+          fetch(`/api/schools?facility_id=${selectedFacilityId}`),
+          fetch(`/api/children/classes?facility_id=${selectedFacilityId}`),
+        ])
+        const [schoolsJson, classesJson] = await Promise.all([
           schoolsResponse.json(),
           classesResponse.json(),
         ])
-
-        if (!facilitiesResponse.ok || !facilitiesJson.success) {
-          throw new Error(facilitiesJson.error || "施設の取得に失敗しました")
-        }
-
         if (!schoolsResponse.ok || !schoolsJson.success) {
           throw new Error(schoolsJson.error || "学校の取得に失敗しました")
         }
-
         if (!classesResponse.ok || !classesJson.success) {
           throw new Error(classesJson.error || "クラスの取得に失敗しました")
         }
-
-        setFacilities(facilitiesJson.data?.facilities ?? [])
         setSchools(
           (schoolsJson.data?.schools ?? []).map((school: any) => ({
             school_id: school.school_id,
@@ -107,15 +133,15 @@ export default function ChildImportPage() {
         setClasses(classesJson.data?.classes ?? [])
       } catch (err) {
         setError(err instanceof Error ? err.message : "取得に失敗しました")
-      } finally {
-        setLoading(false)
       }
     }
+    // 施設変更時は学校・クラス選択をリセット
+    setSelectedSchoolId("")
+    setSelectedClassId("")
+    fetchSchoolsAndClasses()
+  }, [selectedFacilityId])
 
-    fetchOptions()
-  }, [])
-
-  const requestPreview = async (file: File) => {
+  const requestPreview = useCallback(async (file: File) => {
     try {
       setPreviewLoading(true)
       setError(null)
@@ -145,21 +171,36 @@ export default function ChildImportPage() {
     } finally {
       setPreviewLoading(false)
     }
-  }
+  }, [selectedFacilityId, selectedSchoolId, selectedClassId])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null
     setSelectedFile(file)
-    if (file) {
-      requestPreview(file)
-    }
   }
 
   useEffect(() => {
     if (selectedFile) {
       requestPreview(selectedFile)
     }
-  }, [selectedFacilityId, selectedSchoolId, selectedClassId])
+  }, [selectedFile, selectedFacilityId, selectedSchoolId, selectedClassId, requestPreview])
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file && file.name.endsWith('.csv')) {
+      setSelectedFile(file)
+    }
+  }
 
   const handleImport = async () => {
     if (!selectedFile) {
@@ -168,7 +209,7 @@ export default function ChildImportPage() {
     }
 
     try {
-      setLoading(true)
+      setImporting(true)
       setError(null)
       setImportResult(null)
 
@@ -190,7 +231,9 @@ export default function ChildImportPage() {
       }
 
       setImportResult(json.data)
-      setSelectedFacilityId("")
+      if (session?.role !== 'facility_admin' && session?.role !== 'staff') {
+        setSelectedFacilityId("")
+      }
       setSelectedSchoolId("")
       setSelectedClassId("")
       setSelectedFile(null)
@@ -203,7 +246,7 @@ export default function ChildImportPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "インポートに失敗しました")
     } finally {
-      setLoading(false)
+      setImporting(false)
     }
   }
 
@@ -232,6 +275,31 @@ export default function ChildImportPage() {
       title="CSV一括登録"
       subtitle="CSVファイルから子どもを一括登録"
     >
+      {/* モバイル警告（PC限定ページ） */}
+      <div className="md:hidden flex min-h-[60vh] items-center justify-center px-6">
+        <Card className="w-full max-w-sm border-2 border-amber-200 bg-amber-50 text-center">
+          <CardHeader className="pb-3">
+            <div aria-hidden="true" className="text-4xl">💻</div>
+            <CardTitle className="text-amber-900">PC環境でご利用ください</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed text-amber-700">
+              CSV一括登録はPC環境専用のページです。スマートフォンからの操作は正しく動作しない場合があります。
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* PC向けコンテンツ */}
+      <div className="hidden md:block">
+      {/* 保存中オーバーレイ */}
+      {importing && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="h-12 w-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <p className="mt-4 text-sm font-medium text-foreground">取り込み中...</p>
+          <p className="mt-1 text-xs text-muted-foreground">完了するまでページを移動しないでください</p>
+        </div>
+      )}
       <div className="mx-auto max-w-5xl space-y-6">
         {/* CSVアップロードとテンプレート（プレビュー非表示時のみ） */}
         {!selectedFile && !previewLoading && !previewResult && (
@@ -241,7 +309,12 @@ export default function ChildImportPage() {
                 <CardTitle className="text-lg font-semibold">CSVファイル</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex h-44 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-gradient-to-br from-muted/30 to-muted/60 transition-all hover:border-primary/50 hover:bg-muted/80">
+                <div
+                  className={`flex h-44 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-gradient-to-br from-muted/30 to-muted/60 transition-all hover:border-primary/50 hover:bg-muted/80 ${isDragging ? 'border-primary bg-primary/5' : ''}`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                   <Upload className="mb-3 h-10 w-10 text-muted-foreground/70" />
                   <p className="text-sm font-medium text-foreground/80">
                     CSVファイルをドラッグ＆ドロップ
@@ -311,19 +384,19 @@ export default function ChildImportPage() {
                   className="font-semibold shadow-sm transition-all hover:shadow-md min-w-[120px]"
                   onClick={handleImport}
                   disabled={
-                    loading ||
+                    importing ||
                     previewLoading ||
                     !previewResult ||
                     previewResult.failure_count > 0
                   }
                 >
-                  {loading ? "取り込み中..." : "保存する"}
+                  {importing ? "取り込み中..." : "保存する"}
                 </Button>
                 <Button
                   variant="outline"
                   className="font-semibold min-w-[120px]"
                   onClick={handleCancel}
-                  disabled={loading || previewLoading}
+                  disabled={importing || previewLoading}
                 >
                   キャンセル
                 </Button>
@@ -373,7 +446,7 @@ export default function ChildImportPage() {
                     <Select
                       value={selectedFacilityId}
                       onValueChange={setSelectedFacilityId}
-                      disabled={loading || previewLoading}
+                      disabled={loading || previewLoading || session?.role === 'facility_admin' || session?.role === 'staff'}
                     >
                       <SelectTrigger className="bg-background/80 backdrop-blur">
                         <SelectValue placeholder="施設を選択" />
@@ -602,6 +675,7 @@ export default function ChildImportPage() {
             </CardContent>
           </Card>
         )}
+      </div>
       </div>
     </StaffLayout>
   )

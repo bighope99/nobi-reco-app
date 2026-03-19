@@ -17,6 +17,7 @@
 - [必要要件](#-必要要件)
 - [セットアップ手順](#-セットアップ手順)
 - [開発コマンド](#-開発コマンド)
+- [開発ワークフロー（Claude Code）](#-開発ワークフローclaude-code)
 - [プロジェクト構造](#-プロジェクト構造)
 - [ドキュメント](#-ドキュメント)
 - [テスト](#-テスト)
@@ -298,8 +299,42 @@ nobi-reco-app/
 | [07_auth_api.md](./docs/07_auth_api.md) | 認証API仕様 |
 | [jwt-custom-claims-setup.md](./docs/jwt-custom-claims-setup.md) | JWT認証セットアップガイド |
 | [migrations_summary.md](./docs/migrations_summary.md) | マイグレーション履歴 |
+| [12_development_workflow.md](./docs/12_development_workflow.md) | 開発ワークフロー（Claude Code） |
 
 ⭐ **重要**: `03_database.md` はデータベーススキーマの**唯一の信頼できる情報源**です。API実装やクエリ作成時は必ず参照してください。
+
+---
+
+## 🔄 開発ワークフロー（Claude Code）
+
+本プロジェクトは [Claude Code](https://claude.com/claude-code) を活用したエージェント駆動の開発フローを採用しています。
+
+### クイックスタート
+
+承認済みの Notion チケットを一括処理するには：
+
+```
+/ticket-team-workflow
+```
+
+これにより、以下が自動実行されます：
+1. Notion からチケット取得・グルーピング
+2. Worktree 作成・並列実装（最大3 Coder）
+3. TDD によるテスト・実装
+4. PR 作成 & CodeRabbit レビューループ
+5. Notion ステータス更新
+
+### 主要スキル
+
+| コマンド | 説明 |
+|---------|------|
+| `/ticket-team-workflow` | チケット一括処理（チーム自動編成） |
+| `/notion-ticket-workflow` | Notion チケット確認・管理 |
+| `/create-worktree` | 作業用 worktree 作成 |
+| `/create-pr` | PR 作成 & CodeRabbit ループ |
+| `/pr-review` | 並列コードレビュー |
+
+> 📖 詳細は [開発ワークフロー](./docs/12_development_workflow.md) を参照してください。
 
 ---
 

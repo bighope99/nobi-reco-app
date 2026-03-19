@@ -5,7 +5,7 @@ import { saveChild } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { searchByPhone } from '@/utils/pii/searchIndex';
+import { deleteSearchIndex, searchByPhone } from '@/utils/pii/searchIndex';
 
 async function fetchExistingSiblingRows(
   supabase: any,
@@ -101,18 +101,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'CSVファイルが必要です' }, { status: 400 });
     }
 
-    const { role, current_facility_id } = metadata;
-    const targetFacilityId = facilityId || current_facility_id;
+    const { role, current_facility_id, company_id } = metadata;
+
+    // facility_admin/staffは自施設のみ（フロントからのfacility_idパラメータを無視）
+    let targetFacilityId: string;
+    if (role === 'facility_admin' || role === 'staff') {
+      if (!current_facility_id) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      targetFacilityId = current_facility_id;
+    } else {
+      // site_admin/company_adminのみが施設パラメータを使用可能
+      if (role !== 'site_admin' && role !== 'company_admin') {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+      targetFacilityId = facilityId || current_facility_id || '';
+    }
 
     if (!targetFacilityId) {
       return NextResponse.json({ success: false, error: '施設が未選択です' }, { status: 400 });
     }
 
-    if (
-      (role === 'facility_admin' || role === 'staff') &&
-      targetFacilityId !== current_facility_id
-    ) {
-      return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
+    if (role === 'company_admin') {
+      const { data: scopedFacility, error: scopeError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', targetFacilityId)
+        .eq('company_id', company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (scopeError || !scopedFacility) {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     const [schoolCheck, classCheck] = await Promise.all([
@@ -162,6 +182,79 @@ export async function POST(request: NextRequest) {
     let successCount = 0;
     let failureCount = 0;
 
+    // commitモード: ロールバック用に登録済みchild_idを記録
+    const insertedChildIds: string[] = [];
+
+    const rollbackInsertedChildren = async (): Promise<void> => {
+      if (insertedChildIds.length === 0) return;
+
+      // 1. child_id に紐づく guardian_id を取得（_child_guardian 経由）
+      const { data: guardianLinks } = await supabase
+        .from('_child_guardian')
+        .select('guardian_id')
+        .in('child_id', insertedChildIds);
+      const guardianIds: string[] = (guardianLinks ?? []).map((l: { guardian_id: string }) => l.guardian_id);
+
+      // 2. _child_guardian リンクを削除（子テーブル側から先に削除）
+      const { error: linkError } = await supabase
+        .from('_child_guardian')
+        .delete()
+        .in('child_id', insertedChildIds);
+      if (linkError) {
+        console.error('Failed to rollback _child_guardian:', linkError);
+        throw linkError;
+      }
+
+      // 3. _child_class リンクを削除
+      const { error: classLinkError } = await supabase
+        .from('_child_class')
+        .delete()
+        .in('child_id', insertedChildIds);
+      if (classLinkError) {
+        console.error('Failed to rollback _child_class:', classLinkError);
+        throw classLinkError;
+      }
+
+      // 4. child の検索インデックスを削除
+      await Promise.all(
+        insertedChildIds.map((id) => deleteSearchIndex(supabase, 'child', id))
+      );
+
+      // 5. 孤立した保護者（他の child に紐づいていないもの）を論理削除し、検索インデックスも削除
+      if (guardianIds.length > 0) {
+        const { data: remainingLinks } = await supabase
+          .from('_child_guardian')
+          .select('guardian_id')
+          .in('guardian_id', guardianIds);
+        const stillLinkedIds = new Set((remainingLinks ?? []).map((l: { guardian_id: string }) => l.guardian_id));
+        const orphanGuardianIds = guardianIds.filter((id) => !stillLinkedIds.has(id));
+
+        if (orphanGuardianIds.length > 0) {
+          await Promise.all(
+            orphanGuardianIds.map((id) => deleteSearchIndex(supabase, 'guardian', id))
+          );
+          const { error: guardianError } = await supabase
+            .from('m_guardians')
+            .update({ deleted_at: new Date().toISOString() })
+            .in('id', orphanGuardianIds);
+          if (guardianError) {
+            console.error('Failed to rollback m_guardians:', guardianError);
+            throw guardianError;
+          }
+        }
+      }
+
+      // 6. m_children を論理削除
+      const { error: childError } = await supabase
+        .from('m_children')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', insertedChildIds);
+      if (childError) {
+        console.error('Failed to rollback m_children:', childError);
+        throw childError;
+      }
+    };
+
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
@@ -191,13 +284,38 @@ export async function POST(request: NextRequest) {
           success: false,
           message: errors.join(', '),
         });
-        continue;
+
+        try {
+          await rollbackInsertedChildren();
+        } catch (rollbackErr) {
+          console.error('Rollback failed after validation error:', rollbackErr);
+          return NextResponse.json(
+            { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: false,
+          error: `${rowNumber}行目にエラーがあるためインポートを中止しました: ${errors.join(', ')}`,
+        }, { status: 400 });
       }
 
-      const response = await saveChild(payload, targetFacilityId, supabase, undefined, {
-        skipParentLegacy: true,
-      });
-      const json = await response.json();
+      let response: Response;
+      let json: { data?: { child_id?: string }; error?: string };
+      try {
+        response = await saveChild(payload, targetFacilityId, supabase, undefined, {
+          skipParentLegacy: true,
+        });
+        json = await response.json();
+      } catch (saveErr) {
+        try {
+          await rollbackInsertedChildren();
+        } catch (rollbackErr) {
+          console.error('Rollback failed after saveChild threw:', rollbackErr);
+        }
+        throw saveErr;
+      }
 
       if (!response.ok) {
         failureCount += 1;
@@ -206,7 +324,26 @@ export async function POST(request: NextRequest) {
           success: false,
           message: json.error || '登録に失敗しました',
         });
-        continue;
+
+        try {
+          await rollbackInsertedChildren();
+        } catch (rollbackErr) {
+          console.error('Rollback failed after DB error:', rollbackErr);
+          return NextResponse.json(
+            { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: false,
+          error: `${rowNumber}行目の登録に失敗したためインポートを中止しました: ${json.error || '登録に失敗しました'}`,
+        }, { status: 400 });
+      }
+
+      // 登録成功時はchild_idを記録
+      if (json.data?.child_id) {
+        insertedChildIds.push(json.data.child_id);
       }
 
       successCount += 1;

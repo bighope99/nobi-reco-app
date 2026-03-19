@@ -12,6 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+/** 通知機能は将来的に復活する可能性があるため、コードは残しフラグで制御 */
+const SHOW_NOTIFICATIONS = false;
+
 type HeaderProps = {
   title: string
   subtitle?: string
@@ -26,17 +29,15 @@ export function Header({ title, subtitle, onMenuClick, userName, facilityName }:
     <header className="flex h-16 items-center justify-between border-b border-border bg-card px-4 sm:px-6">
       <div className="flex items-center gap-4">
         {/* モバイル用ハンバーガーメニュー */}
-        {onMenuClick && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onMenuClick}
-            className="lg:hidden"
-            aria-label="メニューを開く"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onMenuClick}
+          className="lg:hidden"
+          aria-label="メニューを開く"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-card-foreground">{title}</h1>
           {subtitle && <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">{subtitle}</p>}
@@ -54,9 +55,11 @@ export function Header({ title, subtitle, onMenuClick, userName, facilityName }:
             <span className="truncate max-w-[200px]">{facilityName}</span>
           </div>
         )}
-        <Button variant="ghost" size="icon" className="hidden sm:flex" aria-label="通知">
-          <Bell className="h-5 w-5" />
-        </Button>
+        {SHOW_NOTIFICATIONS && (
+          <Button variant="ghost" size="icon" className="hidden sm:flex" aria-label="通知">
+            <Bell className="h-5 w-5" />
+          </Button>
+        )}
         {/* ユーザーメニュー（デスクトップ） */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
