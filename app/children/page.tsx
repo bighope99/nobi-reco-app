@@ -89,7 +89,7 @@ interface Student {
     contractType: ContractType;
 }
 
-type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings';
+type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings' | 'photoAllowed';
 type SortOrder = 'asc' | 'desc';
 
 // --- Helper Functions ---
@@ -289,6 +289,9 @@ export default function StudentList() {
                 case 'siblings':
                     // 兄弟の数でソート
                     comparison = a.siblings.length - b.siblings.length;
+                    break;
+                case 'photoAllowed':
+                    comparison = (a.photoAllowed === b.photoAllowed) ? 0 : a.photoAllowed ? 1 : -1;
                     break;
             }
             return sortOrder === 'asc' ? comparison : -comparison;
@@ -561,6 +564,15 @@ export default function StudentList() {
                                                 </div>
                                             </th>
                                             <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('photoAllowed')}
+                                            >
+                                                <div className="flex items-center gap-1">
+                                                    写真
+                                                    <SortIcon columnKey="photoAllowed" />
+                                                </div>
+                                            </th>
+                                            <th
                                                 className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
                                                 onClick={() => handleSort('allergy')}
                                             >
@@ -613,14 +625,6 @@ export default function StudentList() {
                                                                         <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
                                                                     )
                                                                 }
-                                                                {
-                                                                    !student.photoAllowed && (
-                                                                        <Badge variant="destructive" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold">
-                                                                            <CameraOff size={10} />
-                                                                            撮影NG
-                                                                        </Badge>
-                                                                    )
-                                                                }
                                                             </div>
                                                             <div className="text-xs text-slate-400 mt-0.5 font-mono" >
                                                                 {student.kana}
@@ -656,6 +660,18 @@ export default function StudentList() {
                                                             ) : (
                                                                 <span className="text-slate-300 text-sm" > -</span>
                                                             )}
+                                                    </td>
+
+                                                    {/* Photo Restriction */}
+                                                    <td className="px-2 py-4">
+                                                        {!student.photoAllowed ? (
+                                                            <Badge variant="destructive" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold">
+                                                                <CameraOff size={10} />
+                                                                撮影NG
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-slate-300 text-sm">-</span>
+                                                        )}
                                                     </td>
 
                                                     {/* Allergy (Max 2 lines) */}

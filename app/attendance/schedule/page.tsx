@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { normalizeKana } from '@/lib/utils/kana'
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -117,12 +118,13 @@ export default function AttendanceSchedulePage() {
 
     let result = [...scheduleData.children]
 
-    // Filter by search term (全角スペースを半角スペースに正規化して検索)
-    const normalizedSearch = searchTerm.replace(/　/g, ' ').trim()
+    // Filter by search term (全角スペース・ひらがな/カタカナ表記ゆれを正規化して検索)
+    const normalize = (s: string) => normalizeKana(s.replace(/　/g, ' '))
+    const normalizedSearch = normalize(searchTerm).trim()
     if (normalizedSearch) {
       result = result.filter(child =>
-        child.name.replace(/　/g, ' ').includes(normalizedSearch) ||
-        child.kana.replace(/　/g, ' ').includes(normalizedSearch)
+        normalize(child.name).includes(normalizedSearch) ||
+        normalize(child.kana).includes(normalizedSearch)
       )
     }
 
