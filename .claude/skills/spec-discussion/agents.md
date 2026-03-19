@@ -17,6 +17,10 @@ PMからの指示を待ってください。
 【チケット取得コマンド】
 npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status "仕様確認"
 
+【複数チケット取得時の扱い】
+先頭1件（または関連チケットを1グループ）のみを処理対象とする。
+残件数は PM に「他にXX件あり」と報告する。
+
 【各チケットの出力項目】
 - チケットID・タイトル・本文・コメント要約
 - 論点（何が決まっていないか・何が問題か）
@@ -204,11 +208,25 @@ Planner → Notionステータス更新:
     --page-id <チケットID> \
     --status "進行中"
 
+Planner → Engineer をSpawn:
+  Agent tool:
+    name: "Engineer"
+    team_name: "spec-discussion-team"
+    model: sonnet
+    prompt: agents.md の Engineer プロンプトを使用（【Plannerの指示書】等を埋めて渡す）
+
 Planner → SendMessage(to: "Engineer"):
   実装指示書（チケット内容・対象ファイル・実装方針・制約）を送付
 
 Engineer → 実装 → テスト → コミット
 Engineer → SendMessage(to: "Planner"): "実装完了。レビュー依頼します"
+
+Planner → Reviewer をSpawn:
+  Agent tool:
+    name: "Reviewer"
+    team_name: "spec-discussion-team"
+    model: sonnet
+    prompt: agents.md の Reviewer プロンプトを使用（【チケット】・【対象パス】等を埋めて渡す）
 
 Planner → SendMessage(to: "Reviewer"): Engineerの実装内容を転送
 Reviewer → /pr-review 実行 → 指摘リストを SendMessage(to: "Engineer") で返す
