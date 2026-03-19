@@ -307,6 +307,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const audioChunksRef = useRef<Blob[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [selectedRecorder, setSelectedRecorder] = useState<string>('');
+  const [staffLoadError, setStaffLoadError] = useState(false);
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
@@ -342,9 +343,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               setSelectedRecorder(lastRecorder);
             }
           }
+        } else {
+          setStaffLoadError(true);
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err);
+        setStaffLoadError(true);
       }
     };
     fetchStaff();
@@ -985,6 +989,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setError('本文を入力してください');
       return;
     }
+    if (!selectedRecorder && !staffLoadError) {
+      setError('記録者を選択してください');
+      return;
+    }
     setSavingEdit(true);
     setError('');
     try {
@@ -1004,7 +1012,26 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      setObservation((prev) => (prev ? { ...prev, body_text: displayText } : prev));
+      const nextObservationDate = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const nextRecorderName =
+        staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
+      setObservation((prev) =>
+        prev
+          ? {
+              ...prev,
+              body_text: displayText,
+              observed_at: nextObservationDate,
+              recorded_by_name: nextRecorderName || prev.recorded_by_name,
+              updated_at: new Date().toISOString(),
+            }
+          : prev,
+      );
+      // 過去記録リスト内の該当レコードも更新
+      setRecentObservations((prev) =>
+        prev.map((item) =>
+          item.id === observation.id ? { ...item, content: text } : item,
+        ),
+      );
       setIsEditing(false);
       setAiProcessing(true);
       const aiResult = await runAiAnalysis(text);
@@ -1043,6 +1070,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
     if (!text) {
       setError('本文を入力してください');
+      return;
+    }
+    if (!selectedRecorder && !staffLoadError) {
+      setError('記録者を選択してください');
       return;
     }
     setSavingEdit(true);
@@ -1505,6 +1536,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </div>
                     ) : null}
                   </div>
+                  {(isNew || isEditing) && staffLoadError && (
+                    <div className="text-sm text-destructive">記録者情報の取得に失敗しました</div>
+                  )}
                   {(isNew || isEditing) && staffList.length > 0 && (
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
@@ -1732,10 +1766,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <p className="text-sm text-gray-500">読み込み中...</p>
                   ) : recentError ? (
                     <p className="text-sm text-red-600">{recentError}</p>
-                  ) : recentObservations.length === 0 ? (
+                  ) : recentObservations.filter((item) => item.id !== observation?.id).length === 0 ? (
                     <p className="text-sm text-gray-500">過去の記録はありません。</p>
                   ) : (
-                    recentObservations.map((item) => {
+                    recentObservations.filter((item) => item.id !== observation?.id).map((item) => {
                       const tagBadges = getTagBadges(item.tag_ids);
                       return (
                         <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
@@ -1856,16 +1890,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 <Button variant="outline" className="w-full border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
                   <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
                 </Button>
-
-                {!isNew && (
-                  <Button
-                    variant="outline"
-                    className="w-full border-blue-200 text-blue-600 hover:bg-blue-50"
-                    onClick={() => observation && load(observation.id)}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" /> データを元に戻す
-                  </Button>
-                )}
               </CardContent>
             </Card>
           </div>

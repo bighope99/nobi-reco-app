@@ -14,9 +14,9 @@ import {
   Database,
   Building2,
   Home,
-  ChevronDown,
+  X,
 } from "lucide-react"
-import { useState } from "react"
+import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/LogoutButton"
 
 type NavItem = {
@@ -35,6 +35,7 @@ const staffNavItems: NavItem[] = [
     children: [
       { label: "記録状況一覧", href: "/records/status" },
       { label: "活動記録", href: "/records/activity" },
+      { label: "記録履歴", href: "/records/activity/history" },
       { label: "児童記録", href: "/records/personal/new" },
     ],
   },
@@ -87,11 +88,11 @@ const adminNavItems: NavItem[] = [
   },
   {
     label: "施設管理",
-    href: "/admin/facilities",
+    href: "/settings/facility",
     icon: <Home className="h-5 w-5" />,
     children: [
-      { label: "施設一覧", href: "/admin/facilities" },
-      { label: "施設登録", href: "/admin/facilities/new" },
+      { label: "施設一覧", href: "/settings/facility" },
+      { label: "施設登録", href: "/settings/facility/new" },
     ],
   },
   { label: "ユーザー管理", href: "/admin/users", icon: <Users className="h-5 w-5" /> },
@@ -100,22 +101,14 @@ const adminNavItems: NavItem[] = [
 
 type SidebarProps = {
   type: "staff" | "admin"
+  userName?: string
   isOpen?: boolean
   onClose?: () => void
-  userName?: string
 }
 
-export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProps) {
+export function Sidebar({ type, userName, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const navItems = type === "admin" ? adminNavItems : staffNavItems
-
-  // デフォルトで全てのプルダウンメニューを開いた状態にする
-  const defaultOpenMenus = navItems.filter(item => item.children).map(item => item.label)
-  const [openMenus, setOpenMenus] = useState<string[]>(defaultOpenMenus)
-
-  const toggleMenu = (label: string) => {
-    setOpenMenus((prev) => (prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]))
-  }
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
 
@@ -135,9 +128,13 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
     )
   }
 
+  const handleNavClick = () => {
+    onClose?.()
+  }
+
   return (
     <>
-      {/* モバイル用バックドロップ */}
+      {/* モバイル用オーバーレイ */}
       {isOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -147,18 +144,32 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
       )}
 
       {/* サイドバー本体 */}
-      <aside className={cn(
-        "flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar",
-        // モバイル: オーバーレイとして表示
-        "fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
+          "transition-transform duration-300 ease-in-out",
+          "lg:static lg:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
       <div className="border-b border-sidebar-border px-6 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-            の
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+              の
+            </div>
+            <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
           </div>
-          <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
+          {/* モバイル用閉じるボタン */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="lg:hidden h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+            aria-label="メニューを閉じる"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
         {userName && (
           <p className="mt-1 text-xs text-muted-foreground truncate" title={userName}>
@@ -173,45 +184,38 @@ export function Sidebar({ type, isOpen = false, onClose, userName }: SidebarProp
             <li key={item.label}>
               {item.children ? (
                 <div>
-                  <button
-                    onClick={() => toggleMenu(item.label)}
+                  <div
                     className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                      "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                       isActive(item.href) && "bg-sidebar-accent",
                     )}
                   >
-                    <span className="flex items-center gap-3">
-                      {item.icon}
-                      {item.label}
-                    </span>
-                    <ChevronDown
-                      className={cn("h-4 w-4 transition-transform", openMenus.includes(item.label) && "rotate-180")}
-                    />
-                  </button>
-                  {openMenus.includes(item.label) && (
-                    <ul className="ml-8 mt-1 space-y-1">
-                      {item.children.map((child) => (
-                        <li key={child.href}>
-                          <Link
-                            href={child.href}
-                            className={cn(
-                              "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
-                              "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
-                              isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
-                              child.hidden && "hidden",
-                            )}
-                          >
-                            {child.label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                    {item.icon}
+                    {item.label}
+                  </div>
+                  <ul className="ml-8 mt-1 space-y-1">
+                    {item.children.map((child) => (
+                      <li key={child.href}>
+                        <Link
+                          href={child.href}
+                          onClick={handleNavClick}
+                          className={cn(
+                            "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
+                            "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
+                            isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
+                            child.hidden && "hidden",
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : (
                 <Link
                   href={item.href}
+                  onClick={handleNavClick}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                     "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",

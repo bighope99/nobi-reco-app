@@ -108,6 +108,10 @@ export const buildUserInvitationEmailHtml = (params: {
                 ボタンがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：<br>
                 <a href="${params.inviteUrl}" style="color: #667eea; word-break: break-all;">${params.inviteUrl}</a>
               </p>
+
+              <p style="font-size: 14px; color: #e74c3c; margin-top: 8px;">
+                ※このリンクは24時間有効です。
+              </p>
               ` : `
               <p style="margin: 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
                 招待メールが別途送信されますので、そちらからパスワードを設定してください。

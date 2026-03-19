@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
 
 /**
  * GET /api/admin/companies
@@ -194,10 +195,169 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'Email already exists' },
-        { status: 400 }
-      );
+      // 既存ユーザーが存在する場合: last_sign_in_at を確認して再招待 or エラー
+      const supabaseAdmin = await createAdminClient();
+
+      const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(existingUser.id);
+
+      if (authUserError || !authUserData.user) {
+        console.error('Failed to get auth user by id:', authUserError);
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      if (hasCompletedPasswordSetup(authUserData.user)) {
+        // パスワード設定済み → 通常の重複エラー
+        return NextResponse.json(
+          { success: false, error: 'このメールアドレスは既に使用されています' },
+          { status: 400 }
+        );
+      }
+
+      // パスワード未設定 → 再招待フロー
+      // Step 1: 新しい会社を先に作成
+      const { data: newCompany, error: companyError } = await supabase
+        .from('m_companies')
+        .insert({
+          name: companyName,
+          name_kana: body.company.name_kana,
+          postal_code: body.company.postal_code,
+          address: body.company.address,
+          phone: body.company.phone,
+          email: body.company.email,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (companyError || !newCompany) {
+        throw companyError || new Error('Failed to create company');
+      }
+
+      // app_metadata を更新（失敗時のロールバック用に元の値を保存）
+      const originalAppMetadata = authUserData.user.app_metadata;
+      const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+        app_metadata: {
+          role: 'company_admin',
+          company_id: newCompany.id,
+          current_facility_id: null,
+        },
+      });
+
+      if (updateMetaError) {
+        console.error('Failed to update user app_metadata:', updateMetaError);
+        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      // 新しい招待リンクを生成
+      // メールが確認済みの場合は 'invite' が失敗するため 'magiclink' を使用する
+      const reinviteLinkType = authUserData.user.email_confirmed_at ? 'magiclink' : 'invite';
+      const { data: reinviteLinkData, error: reinviteLinkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: reinviteLinkType,
+        email: adminEmail,
+      });
+
+      if (reinviteLinkError || !reinviteLinkData) {
+        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
+        throw reinviteLinkError || new Error('Failed to generate reinvite link');
+      }
+
+      const reinviteUrl = reinviteLinkData.properties.action_link;
+      const reinviteUrlObj = new URL(reinviteUrl);
+      const reinviteTokenHash = reinviteUrlObj.searchParams.get('token_hash') || reinviteUrlObj.searchParams.get('token');
+      const reinviteType = reinviteUrlObj.searchParams.get('type') || 'invite';
+
+      if (!reinviteTokenHash) {
+        console.error('Failed to extract token from reinvite link');
+        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
+        return NextResponse.json(
+          { success: false, error: 'Failed to generate valid invite link' },
+          { status: 500 }
+        );
+      }
+
+      const reinviteBaseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+      const inviteUrlForReinvite = `${reinviteBaseUrl}/password/setup?token_hash=${reinviteTokenHash}&type=${reinviteType}`;
+
+      // m_users の情報を更新
+      const hireDateValueReinvite = body.admin_user.hire_date || getCurrentDateJST();
+
+      const { data: updatedUser, error: updateUserError } = await supabase
+        .from('m_users')
+        .update({
+          company_id: newCompany.id,
+          name: adminName,
+          name_kana: body.admin_user.name_kana || null,
+          role: 'company_admin',
+          hire_date: hireDateValueReinvite,
+        })
+        .eq('id', existingUser.id)
+        .select()
+        .single();
+
+      if (updateUserError || !updatedUser) {
+        console.error('Failed to update m_users for reinvite:', updateUserError);
+        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+            app_metadata: originalAppMetadata,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback app_metadata:', rollbackErr);
+        }
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      // 招待メール再送信（fire-and-forget）
+      const reinviteEmailHtml = buildUserInvitationEmailHtml({
+        userName: updatedUser.name,
+        userEmail: updatedUser.email,
+        role: updatedUser.role,
+        companyName: newCompany.name,
+        inviteUrl: inviteUrlForReinvite,
+      });
+
+      sendWithGas({
+        to: updatedUser.email,
+        subject: '【のびレコ】アカウント登録のご案内',
+        htmlBody: reinviteEmailHtml,
+        senderName: 'のびレコ',
+      }).catch((emailError) => {
+        console.error('Failed to send reinvitation email:', emailError);
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          company_id: newCompany.id,
+          company_name: newCompany.name,
+          admin_user_id: updatedUser.id,
+        },
+        message: '招待メールを再送しました',
+      });
     }
 
     // Step 1: 会社作成
@@ -267,12 +427,6 @@ export async function POST(request: NextRequest) {
     }
 
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!baseUrl) {
-      console.error('NEXT_PUBLIC_SITE_URL is not configured');
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_companies').delete().eq('id', newCompany.id);
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // Step 4: m_users テーブルにユーザー情報を登録
