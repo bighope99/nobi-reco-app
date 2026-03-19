@@ -185,6 +185,18 @@ export async function POST(request: NextRequest) {
     // commitモード: ロールバック用に登録済みchild_idを記録
     const insertedChildIds: string[] = [];
 
+    const rollbackInsertedChildren = async (): Promise<void> => {
+      if (insertedChildIds.length === 0) return;
+      const { error } = await supabase
+        .from('m_children')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', insertedChildIds);
+      if (error) {
+        console.error('Failed to rollback imported children:', error);
+        throw error;
+      }
+    };
+
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
@@ -215,12 +227,14 @@ export async function POST(request: NextRequest) {
           message: errors.join(', '),
         });
 
-        // バリデーションエラーが発生した場合、登録済み行をロールバック
-        if (insertedChildIds.length > 0) {
-          await supabase
-            .from('m_children')
-            .update({ deleted_at: new Date().toISOString() })
-            .in('id', insertedChildIds);
+        try {
+          await rollbackInsertedChildren();
+        } catch (rollbackErr) {
+          console.error('Rollback failed after validation error:', rollbackErr);
+          return NextResponse.json(
+            { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
+            { status: 500 }
+          );
         }
 
         return NextResponse.json({
@@ -229,10 +243,21 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      const response = await saveChild(payload, targetFacilityId, supabase, undefined, {
-        skipParentLegacy: true,
-      });
-      const json = await response.json();
+      let response: Response;
+      let json: { data?: { child_id?: string }; error?: string };
+      try {
+        response = await saveChild(payload, targetFacilityId, supabase, undefined, {
+          skipParentLegacy: true,
+        });
+        json = await response.json();
+      } catch (saveErr) {
+        try {
+          await rollbackInsertedChildren();
+        } catch (rollbackErr) {
+          console.error('Rollback failed after saveChild threw:', rollbackErr);
+        }
+        throw saveErr;
+      }
 
       if (!response.ok) {
         failureCount += 1;
@@ -242,12 +267,14 @@ export async function POST(request: NextRequest) {
           message: json.error || '登録に失敗しました',
         });
 
-        // DB登録エラーが発生した場合、登録済み行をロールバック
-        if (insertedChildIds.length > 0) {
-          await supabase
-            .from('m_children')
-            .update({ deleted_at: new Date().toISOString() })
-            .in('id', insertedChildIds);
+        try {
+          await rollbackInsertedChildren();
+        } catch (rollbackErr) {
+          console.error('Rollback failed after DB error:', rollbackErr);
+          return NextResponse.json(
+            { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
+            { status: 500 }
+          );
         }
 
         return NextResponse.json({
