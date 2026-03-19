@@ -182,6 +182,9 @@ export async function POST(request: NextRequest) {
     let successCount = 0;
     let failureCount = 0;
 
+    // commitモード: ロールバック用に登録済みchild_idを記録
+    const insertedChildIds: string[] = [];
+
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
@@ -211,7 +214,19 @@ export async function POST(request: NextRequest) {
           success: false,
           message: errors.join(', '),
         });
-        continue;
+
+        // バリデーションエラーが発生した場合、登録済み行をロールバック
+        if (insertedChildIds.length > 0) {
+          await supabase
+            .from('m_children')
+            .update({ deleted_at: new Date().toISOString() })
+            .in('id', insertedChildIds);
+        }
+
+        return NextResponse.json({
+          success: false,
+          error: `${rowNumber}行目にエラーがあるためインポートを中止しました: ${errors.join(', ')}`,
+        }, { status: 400 });
       }
 
       const response = await saveChild(payload, targetFacilityId, supabase, undefined, {
@@ -226,7 +241,24 @@ export async function POST(request: NextRequest) {
           success: false,
           message: json.error || '登録に失敗しました',
         });
-        continue;
+
+        // DB登録エラーが発生した場合、登録済み行をロールバック
+        if (insertedChildIds.length > 0) {
+          await supabase
+            .from('m_children')
+            .update({ deleted_at: new Date().toISOString() })
+            .in('id', insertedChildIds);
+        }
+
+        return NextResponse.json({
+          success: false,
+          error: `${rowNumber}行目の登録に失敗したためインポートを中止しました: ${json.error || '登録に失敗しました'}`,
+        }, { status: 400 });
+      }
+
+      // 登録成功時はchild_idを記録
+      if (json.data?.child_id) {
+        insertedChildIds.push(json.data.child_id);
       }
 
       successCount += 1;

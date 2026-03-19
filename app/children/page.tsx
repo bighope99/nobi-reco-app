@@ -13,7 +13,8 @@ import {
     RotateCcw,
     Users,
     Download,
-    Loader2
+    Loader2,
+    CameraOff
 } from 'lucide-react';
 
 // --- Types ---
@@ -602,13 +603,21 @@ export default function StudentList() {
                                                     {/* Name */}
                                                     <td className="px-3 py-4" >
                                                         <div>
-                                                            <div className="flex items-center gap-2" >
+                                                            <div className="flex items-center gap-2 flex-wrap" >
                                                                 <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
                                                                     {student.name}
                                                                 </span>
                                                                 {
                                                                     student.status === 'inactive' && (
                                                                         <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
+                                                                    )
+                                                                }
+                                                                {
+                                                                    !student.photoAllowed && (
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] rounded font-bold">
+                                                                            <CameraOff size={10} />
+                                                                            撮影NG
+                                                                        </span>
                                                                     )
                                                                 }
                                                             </div>
