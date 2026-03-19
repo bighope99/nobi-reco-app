@@ -12,3 +12,12 @@ export function toKatakana(text: string): string {
 export function normalizeKana(text: string): string {
   return toKatakana(text.toLowerCase().replace(/\s/g, ''))
 }
+
+/**
+ * 検索用正規化: ひらがな→カタカナ, 全角・半角スペース除去, 小文字化
+ * スペースの有無に関わらずマッチさせるため、全空白を除去する
+ * 例: "山田花子" と "山田 花子" が相互にマッチする
+ */
+export function normalizeSearch(text: string): string {
+  return toKatakana(text.replace(/[\s　]/g, '').toLowerCase())
+}

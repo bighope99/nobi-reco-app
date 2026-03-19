@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { normalizeSearch } from '@/lib/utils/kana';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Users,
@@ -129,11 +130,17 @@ export default function UsersSettingsPage() {
     fetchUsers();
   };
 
-  const filteredUsers = users.filter(user =>
-    user.name.includes(searchTerm) ||
-    (user.email && user.email.includes(searchTerm)) ||
-    (user.phone && user.phone.includes(searchTerm))
-  );
+  const filteredUsers = (() => {
+    const normalize = (s: string) => normalizeSearch(s)
+    const normalizedTerm = normalize(searchTerm).trim()
+    if (!normalizedTerm) return users
+    return users.filter(user =>
+      normalize(user.name).includes(normalizedTerm) ||
+      (user.name_kana && normalize(user.name_kana).includes(normalizedTerm)) ||
+      (user.email && user.email.toLowerCase().includes(normalizedTerm)) ||
+      (user.phone && user.phone.includes(normalizedTerm))
+    )
+  })();
 
   const isEmailRequired = newUser.role !== 'staff';
 
