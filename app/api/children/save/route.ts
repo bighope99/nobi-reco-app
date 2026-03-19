@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { normalizePhone } from '@/lib/children/import-csv';
+import { toKatakana } from '@/lib/utils/kana';
 import { encryptPII } from '@/utils/crypto/piiEncryption';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import {
@@ -123,8 +124,9 @@ export async function saveChild(
     family_name: encryptPII(basic_info.family_name),
     given_name: encryptPII(basic_info.given_name),
     // 読み仮名: 新規入力値を優先、なければ既存データ（復号済み）を使用
-    family_name_kana: basic_info.family_name_kana || existingKana?.family_name_kana || null,
-    given_name_kana: basic_info.given_name_kana || existingKana?.given_name_kana || null,
+    // カタカナに統一して保存（検索時の normalizeSearch との表記ゆれを防ぐ）
+    family_name_kana: toKatakana(basic_info.family_name_kana || existingKana?.family_name_kana || '') || null,
+    given_name_kana: toKatakana(basic_info.given_name_kana || existingKana?.given_name_kana || '') || null,
     nickname: basic_info.nickname || null,
     gender: basic_info.gender || 'other',
     birth_date: basic_info.birth_date,

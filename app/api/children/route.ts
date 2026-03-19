@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
       // カナは平文なので直接DB検索
       // ひらがな→カタカナに正規化してから検索（表記ゆれ対応）
       // 特殊文字をエスケープしてSQL injection/filter breakを防止
-      const normalizedSearch = normalizeSearch(search)
+      const normalizedSearch = normalizeSearch(search);
       const escapedSearch = normalizedSearch
         .replace(/\\/g, '\\\\')
         .replace(/%/g, '\\%')
