@@ -1530,6 +1530,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
                       {toDisplayText(observation?.body_text || '')}
                     </div>
+                    <div className="mt-3 flex items-center gap-1 text-sm text-muted-foreground">
+                      <User className="h-3.5 w-3.5" />
+                      <span>{childDisplayName}</span>
+                    </div>
                     <div className="mt-4 flex justify-end gap-2">
                       {isNew && !draftId && showContinueButton && (
                         <Button
