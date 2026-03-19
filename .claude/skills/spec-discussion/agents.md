@@ -207,7 +207,19 @@ Phase 5 でユーザーが「実装を進める」を選択した場合に実行
     model: sonnet
     prompt: [agents.md の Engineer プロンプトに 【Plannerの指示書】等を埋めて渡す]
 
-Engineer → 実装 → テスト → コミット → PR作成 → CodeRabbitループ → PR URL を返す
+Engineer → 実装 → テスト → コミット → /create-pr でPR作成 → PR URL を返す
+
+※ PR作成直後（CodeRabbitループ前）に Notion を更新する:
+親Claude → Notionステータス更新:
+  npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
+    --page-id <チケットID> \
+    --status "レビュー依頼" \
+    --pr-url <PR URL>
+
+親Claude → ユーザーに中間報告:
+  「PR作成しました: [URL]
+   チケット #XXX を「レビュー依頼」に更新しました。
+   引き続きCodeRabbitレビューループを実行します。」
 
 Engineer → CodeRabbitループ（最大3回転）:
   1. push後5〜10分待機
@@ -217,7 +229,7 @@ Engineer → CodeRabbitループ（最大3回転）:
   5. 未対応コメントが0件 → ループ終了
 
 親Claude → Reviewer をSpawn（agents.md の Reviewer プロンプトを使用）:
-  ※ Engineer完了後に実行
+  ※ CodeRabbitループ完了後に実行
   Agent tool:
     name: "Reviewer"
     team_name: "spec-discussion-team"
@@ -228,15 +240,8 @@ Reviewer → 指摘リストを返す
 
 Engineerに指摘修正を依頼（SendMessage または 再Spawn）
 
-親Claude → Planner をSpawn（Notionステータス更新）:
-  npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
-    --page-id <チケットID> \
-    --status "レビュー依頼" \
-    --pr-url <PR URL>
-
 親Claude → ユーザーに最終報告:
-  「実装完了。PR: [URL]
-   チケット #XXX を「レビュー依頼」に更新しました。」
+  「レビュー完了。PR: [URL]」
 ```
 
 ### worktreeクリーンアップ
