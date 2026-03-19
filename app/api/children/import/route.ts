@@ -5,7 +5,7 @@ import { saveChild } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { searchByPhone } from '@/utils/pii/searchIndex';
+import { deleteSearchIndex, searchByPhone } from '@/utils/pii/searchIndex';
 
 async function fetchExistingSiblingRows(
   supabase: any,
@@ -187,13 +187,71 @@ export async function POST(request: NextRequest) {
 
     const rollbackInsertedChildren = async (): Promise<void> => {
       if (insertedChildIds.length === 0) return;
-      const { error } = await supabase
+
+      // 1. child_id に紐づく guardian_id を取得（_child_guardian 経由）
+      const { data: guardianLinks } = await supabase
+        .from('_child_guardian')
+        .select('guardian_id')
+        .in('child_id', insertedChildIds);
+      const guardianIds: string[] = (guardianLinks ?? []).map((l: { guardian_id: string }) => l.guardian_id);
+
+      // 2. _child_guardian リンクを削除（子テーブル側から先に削除）
+      const { error: linkError } = await supabase
+        .from('_child_guardian')
+        .delete()
+        .in('child_id', insertedChildIds);
+      if (linkError) {
+        console.error('Failed to rollback _child_guardian:', linkError);
+        throw linkError;
+      }
+
+      // 3. _child_class リンクを削除
+      const { error: classLinkError } = await supabase
+        .from('_child_class')
+        .delete()
+        .in('child_id', insertedChildIds);
+      if (classLinkError) {
+        console.error('Failed to rollback _child_class:', classLinkError);
+        throw classLinkError;
+      }
+
+      // 4. child の検索インデックスを削除
+      await Promise.all(
+        insertedChildIds.map((id) => deleteSearchIndex(supabase, 'child', id))
+      );
+
+      // 5. 孤立した保護者（他の child に紐づいていないもの）を論理削除し、検索インデックスも削除
+      if (guardianIds.length > 0) {
+        const { data: remainingLinks } = await supabase
+          .from('_child_guardian')
+          .select('guardian_id')
+          .in('guardian_id', guardianIds);
+        const stillLinkedIds = new Set((remainingLinks ?? []).map((l: { guardian_id: string }) => l.guardian_id));
+        const orphanGuardianIds = guardianIds.filter((id) => !stillLinkedIds.has(id));
+
+        if (orphanGuardianIds.length > 0) {
+          await Promise.all(
+            orphanGuardianIds.map((id) => deleteSearchIndex(supabase, 'guardian', id))
+          );
+          const { error: guardianError } = await supabase
+            .from('m_guardians')
+            .update({ deleted_at: new Date().toISOString() })
+            .in('id', orphanGuardianIds);
+          if (guardianError) {
+            console.error('Failed to rollback m_guardians:', guardianError);
+            throw guardianError;
+          }
+        }
+      }
+
+      // 6. m_children を論理削除
+      const { error: childError } = await supabase
         .from('m_children')
         .update({ deleted_at: new Date().toISOString() })
         .in('id', insertedChildIds);
-      if (error) {
-        console.error('Failed to rollback imported children:', error);
-        throw error;
+      if (childError) {
+        console.error('Failed to rollback m_children:', childError);
+        throw childError;
       }
     };
 
