@@ -70,12 +70,21 @@ Phase 3: 完了報告
 
 ### Step 1: チケット取得
 
+デフォルトは `承認OK` チケットを対象とする。ユーザーが「仕様確認のチケットで」と指定した場合は `--status "仕様確認"` に切り替える。
+
 ```bash
-# 承認OKかつ（自分が担当 or 担当者なし）のチケットを取得
+# 承認OKかつ（自分が担当 or 担当者なし）のチケットを取得（デフォルト）
 npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
   --status "承認OK" \
   --assignee-name <ASSIGNEE_NAME>
+
+# 仕様確認チケットを対象にする場合
+npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
+  --status "仕様確認" \
+  --assignee-name <ASSIGNEE_NAME>
 ```
+
+> **注意**: `仕様確認` チケットは実装ではなく仕様議論が目的。実装フェーズ（Step 3）ではなく、`/spec-discussion` スキルを使った議論フローへ誘導することも検討する。
 
 ### Step 2: グルーピング案作成
 
