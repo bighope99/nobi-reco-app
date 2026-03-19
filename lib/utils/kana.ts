@@ -14,9 +14,10 @@ export function normalizeKana(text: string): string {
 }
 
 /**
- * 検索用正規化: ひらがな→カタカナ, 全角スペース→半角スペース, 小文字化
- * スペースは除去せず保持するため、単語区切りを維持した検索に適している
+ * 検索用正規化: ひらがな→カタカナ, 全角・半角スペース除去, 小文字化
+ * スペースの有無に関わらずマッチさせるため、全空白を除去する
+ * 例: "山田花子" と "山田 花子" が相互にマッチする
  */
 export function normalizeSearch(text: string): string {
-  return toKatakana(text.replace(/　/g, ' ').toLowerCase())
+  return toKatakana(text.replace(/[\s　]/g, '').toLowerCase())
 }
