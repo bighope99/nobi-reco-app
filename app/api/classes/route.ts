@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { normalizeKana } from '@/lib/utils/kana';
 
 /**
  * GET /api/classes
@@ -160,13 +161,14 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // 検索フィルタ（クライアント側）
+    // 検索フィルタ（ひらがな/カタカナ表記ゆれ対応）
     let filteredClasses = classesWithDetails;
     if (search) {
+      const normalizedSearch = normalizeKana(search);
       filteredClasses = classesWithDetails.filter(
         (cls) =>
-          cls.name.includes(search) ||
-          cls.teachers.some((teacher) => teacher.includes(search))
+          normalizeKana(cls.name).includes(normalizedSearch) ||
+          cls.teachers.some((teacher) => normalizeKana(teacher).includes(normalizedSearch))
       );
     }
 
