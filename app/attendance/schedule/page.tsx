@@ -118,8 +118,8 @@ export default function AttendanceSchedulePage() {
     let result = [...scheduleData.children]
 
     // Filter by search term (全角スペースを半角スペースに正規化して検索)
-    if (searchTerm) {
-      const normalizedSearch = searchTerm.replace(/　/g, ' ')
+    const normalizedSearch = searchTerm.replace(/　/g, ' ').trim()
+    if (normalizedSearch) {
       result = result.filter(child =>
         child.name.replace(/　/g, ' ').includes(normalizedSearch) ||
         child.kana.replace(/　/g, ' ').includes(normalizedSearch)
