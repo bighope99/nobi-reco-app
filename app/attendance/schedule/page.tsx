@@ -93,6 +93,12 @@ export default function AttendanceSchedulePage() {
     fetchSchedules()
   }, [])
 
+  // O(1) child lookup map
+  const childrenMap = useMemo(() => {
+    if (!scheduleData) return new Map<string, ChildSchedule>()
+    return new Map(scheduleData.children.map(c => [c.child_id, c]))
+  }, [scheduleData])
+
   // Get unique class options
   const classOptions = useMemo(() => {
     if (!scheduleData) return []
@@ -172,7 +178,7 @@ export default function AttendanceSchedulePage() {
   const handleCheckboxChange = (childId: string, dayKey: keyof ChildSchedule['schedule'], currentValue: boolean) => {
     if (!editMode) return
 
-    const child = scheduleData?.children.find(c => c.child_id === childId)
+    const child = childrenMap.get(childId)
     if (!child) return
 
     const currentModified = modifiedSchedules.get(childId) || { ...child.schedule }
@@ -185,7 +191,7 @@ export default function AttendanceSchedulePage() {
     const modified = modifiedSchedules.get(childId)
     if (modified) return modified
 
-    const child = scheduleData?.children.find(c => c.child_id === childId)
+    const child = childrenMap.get(childId)
     return child?.schedule || {
       monday: false,
       tuesday: false,

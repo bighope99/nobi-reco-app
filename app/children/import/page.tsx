@@ -276,14 +276,18 @@ export default function ChildImportPage() {
       subtitle="CSVファイルから子どもを一括登録"
     >
       {/* モバイル警告（PC限定ページ） */}
-      <div className="md:hidden flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-        <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-8 max-w-sm w-full">
-          <div className="text-4xl mb-4">💻</div>
-          <h2 className="text-lg font-bold text-amber-900 mb-2">PC環境でご利用ください</h2>
-          <p className="text-sm text-amber-700 leading-relaxed">
-            CSV一括登録はPC環境専用のページです。スマートフォンからの操作は正しく動作しない場合があります。
-          </p>
-        </div>
+      <div className="md:hidden flex min-h-[60vh] items-center justify-center px-6">
+        <Card className="w-full max-w-sm border-2 border-amber-200 bg-amber-50 text-center">
+          <CardHeader className="pb-3">
+            <div aria-hidden="true" className="text-4xl">💻</div>
+            <CardTitle className="text-amber-900">PC環境でご利用ください</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed text-amber-700">
+              CSV一括登録はPC環境専用のページです。スマートフォンからの操作は正しく動作しない場合があります。
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* PC向けコンテンツ */}

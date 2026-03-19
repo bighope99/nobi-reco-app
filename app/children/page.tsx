@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import { Badge } from "@/components/ui/badge";
 
 import {
     Search,
@@ -614,10 +615,10 @@ export default function StudentList() {
                                                                 }
                                                                 {
                                                                     !student.photoAllowed && (
-                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] rounded font-bold">
+                                                                        <Badge variant="destructive" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold">
                                                                             <CameraOff size={10} />
                                                                             撮影NG
-                                                                        </span>
+                                                                        </Badge>
                                                                     )
                                                                 }
                                                             </div>
