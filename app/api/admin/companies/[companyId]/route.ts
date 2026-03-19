@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 interface UserFacilityRelation {
@@ -105,21 +105,6 @@ export async function GET(
       console.error('Error fetching accounts:', accountsResult.error);
     }
 
-    // Auth ユーザーのメール確認状態を一括取得
-    const supabaseAdmin = await createAdminClient();
-    const userIds = (accountsResult.data || []).map((u) => u.id);
-    const emailConfirmedMap = new Map<string, boolean>();
-    if (userIds.length > 0) {
-      const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({
-        perPage: 1000,
-      });
-      (authUsers?.users || []).forEach((authUser) => {
-        if (userIds.includes(authUser.id)) {
-          emailConfirmedMap.set(authUser.id, !!authUser.email_confirmed_at);
-        }
-      });
-    }
-
     // アカウントデータを整形（_user_facilityをフラットに）
     const accounts = (accountsResult.data || []).map((user) => ({
       id: user.id,
@@ -128,7 +113,6 @@ export async function GET(
       email: user.email,
       role: user.role,
       is_active: user.is_active,
-      email_confirmed: emailConfirmedMap.get(user.id) ?? true,
       facilities: (user._user_facility || []).map((uf: UserFacilityRelation) => ({
         facility_id: uf.facility_id,
         facility_name: uf.m_facilities?.name || '',

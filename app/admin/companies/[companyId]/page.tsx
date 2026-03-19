@@ -7,9 +7,7 @@ import { AdminLayout } from "@/components/layout/admin-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus, Mail, UserPlus } from "lucide-react"
+import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus } from "lucide-react"
 
 interface Facility {
   id: string
@@ -32,7 +30,6 @@ interface Account {
   email: string | null
   role: string
   is_active: boolean
-  email_confirmed: boolean
   facilities: AccountFacility[]
 }
 
@@ -67,40 +64,32 @@ export default function CompanyDetailPage(props: {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [resendingId, setResendingId] = useState<string | null>(null)
-  const [resendMessage, setResendMessage] = useState<string | null>(null)
-
-  // 管理者追加モーダル
-  const [showAddAdminModal, setShowAddAdminModal] = useState(false)
-  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "" })
-  const [isAddingAdmin, setIsAddingAdmin] = useState(false)
-  const [addAdminError, setAddAdminError] = useState<string | null>(null)
-
-  const fetchCompanyDetail = async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      const response = await fetch(`/api/admin/companies/${companyId}`)
-      const data: CompanyDetailResponse = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "会社情報の取得に失敗しました")
-      }
-
-      if (data.data) {
-        setCompany(data.data.company)
-        setFacilities(data.data.facilities)
-        setAccounts(data.data.accounts)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "会社情報の取得に失敗しました")
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   useEffect(() => {
+    const fetchCompanyDetail = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const response = await fetch(`/api/admin/companies/${companyId}`)
+        const data: CompanyDetailResponse = await response.json()
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "会社情報の取得に失敗しました")
+        }
+
+        if (data.data) {
+          setCompany(data.data.company)
+          setFacilities(data.data.facilities)
+          setAccounts(data.data.accounts)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "会社情報の取得に失敗しました")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
     fetchCompanyDetail()
   }, [companyId])
 
@@ -121,58 +110,6 @@ export default function CompanyDetailPage(props: {
 
   const getRoleBadgeVariant = (role: string): "default" | "secondary" => {
     return role === "company_admin" ? "default" : "secondary"
-  }
-
-  const handleResendInvite = async (accountId: string) => {
-    setResendingId(accountId)
-    setResendMessage(null)
-    try {
-      const response = await fetch(`/api/admin/companies/${companyId}/resend-invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: accountId }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "再送信に失敗しました")
-      }
-      setResendMessage("招待メールを再送信しました")
-    } catch (err) {
-      setResendMessage(err instanceof Error ? err.message : "再送信に失敗しました")
-    } finally {
-      setResendingId(null)
-    }
-  }
-
-  const handleAddAdmin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsAddingAdmin(true)
-    setAddAdminError(null)
-    try {
-      const response = await fetch("/api/admin/company-admins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_id: companyId,
-          admin_user: {
-            name: addAdminForm.name,
-            name_kana: addAdminForm.name_kana || undefined,
-            email: addAdminForm.email,
-          },
-        }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "管理者の追加に失敗しました")
-      }
-      setShowAddAdminModal(false)
-      setAddAdminForm({ name: "", name_kana: "", email: "" })
-      await fetchCompanyDetail()
-    } catch (err) {
-      setAddAdminError(err instanceof Error ? err.message : "管理者の追加に失敗しました")
-    } finally {
-      setIsAddingAdmin(false)
-    }
   }
 
   // Loading state
@@ -284,26 +221,12 @@ export default function CompanyDetailPage(props: {
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">アカウント一覧</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                className="ml-auto gap-2"
-                onClick={() => setShowAddAdminModal(true)}
-              >
-                <UserPlus className="h-4 w-4" />
-                管理者を追加
-              </Button>
-              <Badge variant="outline">
+              <Badge variant="outline" className="ml-auto">
                 {accounts.length}件
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {resendMessage && (
-              <div className="px-6 py-3 text-sm bg-blue-50 border-b border-blue-100 text-blue-700">
-                {resendMessage}
-              </div>
-            )}
             {accounts.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 登録されたアカウントはありません
@@ -327,9 +250,6 @@ export default function CompanyDetailPage(props: {
                       </th>
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         ステータス
-                      </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        操作
                       </th>
                     </tr>
                   </thead>
@@ -355,33 +275,9 @@ export default function CompanyDetailPage(props: {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          {account.email_confirmed ? (
-                            <Badge variant={account.is_active ? "default" : "destructive"}>
-                              {account.is_active ? "有効" : "無効"}
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-amber-700 bg-amber-50 border border-amber-200">
-                              招待中
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          {!account.email_confirmed && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1 text-xs"
-                              disabled={resendingId === account.id}
-                              onClick={() => handleResendInvite(account.id)}
-                            >
-                              {resendingId === account.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Mail className="h-3 w-3" />
-                              )}
-                              招待再送
-                            </Button>
-                          )}
+                          <Badge variant={account.is_active ? "default" : "destructive"}>
+                            {account.is_active ? "有効" : "無効"}
+                          </Badge>
                         </td>
                       </tr>
                     ))}
@@ -467,77 +363,6 @@ export default function CompanyDetailPage(props: {
           </CardContent>
         </Card>
       </div>
-
-      {/* 管理者追加モーダル */}
-      {showAddAdminModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">管理者を追加</h2>
-            <form onSubmit={handleAddAdmin} className="space-y-4">
-              {addAdminError && (
-                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {addAdminError}
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="admin-name">氏名 <span className="text-destructive">*</span></Label>
-                <Input
-                  id="admin-name"
-                  value={addAdminForm.name}
-                  onChange={(e) => setAddAdminForm((f) => ({ ...f, name: e.target.value }))}
-                  required
-                  disabled={isAddingAdmin}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admin-name-kana">氏名（カナ）</Label>
-                <Input
-                  id="admin-name-kana"
-                  value={addAdminForm.name_kana}
-                  onChange={(e) => setAddAdminForm((f) => ({ ...f, name_kana: e.target.value }))}
-                  disabled={isAddingAdmin}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admin-email">メールアドレス <span className="text-destructive">*</span></Label>
-                <Input
-                  id="admin-email"
-                  type="email"
-                  value={addAdminForm.email}
-                  onChange={(e) => setAddAdminForm((f) => ({ ...f, email: e.target.value }))}
-                  required
-                  disabled={isAddingAdmin}
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  disabled={isAddingAdmin}
-                  onClick={() => {
-                    setShowAddAdminModal(false)
-                    setAddAdminError(null)
-                    setAddAdminForm({ name: "", name_kana: "", email: "" })
-                  }}
-                >
-                  キャンセル
-                </Button>
-                <Button type="submit" className="flex-1" disabled={isAddingAdmin}>
-                  {isAddingAdmin ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      登録中...
-                    </>
-                  ) : (
-                    "追加"
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </AdminLayout>
   )
 }
