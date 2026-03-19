@@ -34,7 +34,11 @@ export default function LoginPage() {
       })
 
       if (authError) {
-        throw new Error(authError.message)
+        const message =
+          authError.message === "Invalid login credentials"
+            ? "IDもしくはパスワードが間違っています"
+            : "ログインに失敗しました"
+        throw new Error(message)
       }
 
       if (!authData.user) {

@@ -15,98 +15,14 @@ import {
   AlertCircle,
   CheckCircle2
 } from "lucide-react"
-
-interface ChildAttendance {
-  child_id: string
-  name: string
-  kana: string
-  class_id: string | null
-  class_name: string
-  age_group: string
-  grade: number | null
-  grade_label: string
-  photo_url: string | null
-  status: 'present' | 'absent' | 'late' | 'not_arrived'
-  is_expected: boolean
-  checked_in_at: string | null
-  checked_out_at: string | null
-  check_in_method: string | null
-  is_unexpected: boolean
-}
-
-interface StatusPresentation {
-  label: string
-  className: string
-}
-
-// Helper function to check if a date is in the past
-const isPastDate = (dateString: string): boolean => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const target = new Date(dateString)
-  target.setHours(0, 0, 0, 0)
-
-  return target < today
-}
-
-// Get status presentation based on child attendance data
-const getStatusPresentation = (child: ChildAttendance, currentDate: string): StatusPresentation | null => {
-  if (child.is_unexpected) {
-    return {
-      label: '予定外登園',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200',
-    }
-  }
-
-  if (child.status === 'present') {
-    return {
-      label: '出席',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200',
-    }
-  }
-
-  if (child.status === 'late') {
-    return {
-      label: '遅刻',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200',
-    }
-  }
-
-  if (child.status === 'absent') {
-    const isPast = isPastDate(currentDate)
-
-    if (!child.is_expected) {
-      return {
-        label: '欠席予定',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
-      }
-    }
-
-    return {
-      label: isPast ? '欠席' : '出席予定',
-      className: isPast
-        ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200'
-        : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
-    }
-  }
-
-  if (child.status === 'not_arrived') {
-    if (child.is_expected) {
-      return {
-        label: '未到着',
-        className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200',
-      }
-    }
-
-    return {
-      label: '欠席予定',
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200',
-    }
-  }
-
-  return null
-}
+import {
+  type ChildAttendance,
+  type AttendanceData,
+  getStatusPresentation,
+  getStatusAction,
+  applyOptimisticStatusUpdate,
+  isPastDate,
+} from "./helpers"
 
 // Status badge component
 const StatusBadge = ({ child, currentDate }: { child: ChildAttendance; currentDate: string }) => {
@@ -129,11 +45,39 @@ const StatusActionButton = ({
   onMarkStatus: (childId: string, status: 'absent' | 'present') => void
   isLoading: boolean
 }) => {
-  const presentation = getStatusPresentation(child, currentDate)
+  if (isPastDate(currentDate)) {
+    // 過去日付: ステータスに応じて disabled 状態で両ボタンを表示
+    // 楽観的更新は status='absent', is_expected=true/false で状態を表現するため両方考慮
+    const isPresent = child.status === 'present' || child.status === 'late'
+    const isAbsent = child.status === 'absent'
 
-  if (!presentation) return null
+    return (
+      <div className="flex gap-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => onMarkStatus(child.child_id, 'absent')}
+          disabled={isLoading || isAbsent}
+        >
+          {isLoading ? '処理中...' : '欠席にする'}
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => onMarkStatus(child.child_id, 'present')}
+          disabled={isLoading || isPresent}
+        >
+          {isLoading ? '処理中...' : '出席にする'}
+        </Button>
+      </div>
+    )
+  }
 
-  if (presentation.label === '出席予定') {
+  // 今日/未来: 現行ロジック
+  const action = getStatusAction(child, currentDate)
+
+  if (!action) return null
+
+  if (action === 'absent') {
     return (
       <Button
         variant="destructive"
@@ -146,41 +90,15 @@ const StatusActionButton = ({
     )
   }
 
-  if (presentation.label === '欠席予定') {
-    return (
-      <Button
-        size="sm"
-        onClick={() => onMarkStatus(child.child_id, 'present')}
-        disabled={isLoading}
-      >
-        {isLoading ? '処理中...' : '出席にする'}
-      </Button>
-    )
-  }
-
-  return null
-}
-
-interface AttendanceData {
-  date: string
-  weekday: string
-  weekday_jp: string
-  summary: {
-    total_children: number
-    present_count: number
-    absent_count: number
-    late_count: number
-    not_checked_in_count: number
-  }
-  children: ChildAttendance[]
-  filters: {
-    classes: Array<{
-      class_id: string
-      class_name: string
-      present_count: number
-      total_count: number
-    }>
-  }
+  return (
+    <Button
+      size="sm"
+      onClick={() => onMarkStatus(child.child_id, 'present')}
+      disabled={isLoading}
+    >
+      {isLoading ? '処理中...' : '出席にする'}
+    </Button>
+  )
 }
 
 export default function AttendanceListPage() {
@@ -291,8 +209,14 @@ export default function AttendanceListPage() {
   const currentDate = attendanceData?.date || selectedDate
 
   const handleStatusChange = async (childId: string, nextStatus: 'absent' | 'present') => {
+    if (!attendanceData) return
+
     setActionError(null)
     setActionLoading(prev => ({ ...prev, [childId]: true }))
+
+    // 楽観的更新: APIコール前にUIを即座に更新
+    const previousData = attendanceData
+    setAttendanceData(applyOptimisticStatusUpdate(attendanceData, childId, nextStatus, currentDate))
 
     try {
       const response = await fetch('/api/attendance/status', {
@@ -312,10 +236,10 @@ export default function AttendanceListPage() {
       if (!response.ok || !result.success) {
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
-
-      await fetchAttendance(true)
     } catch (err) {
       console.error('Failed to update attendance status:', err)
+      // エラー時はロールバック
+      setAttendanceData(previousData)
       setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
     } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))

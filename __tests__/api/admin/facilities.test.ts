@@ -291,7 +291,7 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
     expect(json.error).toBe('Company not found');
   });
 
-  it('should return 400 when email already exists', async () => {
+  it('should return 400 when email already exists (signed-in user)', async () => {
     mockedGetMetadata.mockResolvedValue({
       role: 'site_admin',
       company_id: null,
@@ -328,7 +328,19 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       }),
     };
 
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: { user: { id: 'existing-user-id', user_metadata: { password_set: true } } },
+            error: null,
+          }),
+        },
+      },
+    };
+
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
 
     const request = buildRequest(validBody);
     const response = await POST(request, createParams('company-1'));
@@ -337,6 +349,108 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
     expect(json.error).toBe('このメールアドレスは既に使用されています');
+  });
+
+  it('should reinvite unsigned-in user when facility admin email exists', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      role: 'site_admin',
+      company_id: null,
+      current_facility_id: null,
+    });
+
+    const companyCheckQuery: any = {
+      select: jest.fn(() => companyCheckQuery),
+      eq: jest.fn(() => companyCheckQuery),
+      is: jest.fn(() => companyCheckQuery),
+      single: jest.fn().mockResolvedValue({
+        data: { id: 'company-1', name: 'テスト会社' },
+        error: null,
+      }),
+    };
+
+    const emailCheckQuery: any = {
+      select: jest.fn(() => emailCheckQuery),
+      eq: jest.fn(() => emailCheckQuery),
+      is: jest.fn(() => emailCheckQuery),
+      single: jest.fn().mockResolvedValue({
+        data: { id: 'existing-user-id' },
+        error: null,
+      }),
+    };
+
+    const facilityInsertQuery: any = {
+      insert: jest.fn(() => facilityInsertQuery),
+      select: jest.fn(() => facilityInsertQuery),
+      single: jest.fn().mockResolvedValue({
+        data: { id: 'facility-new', name: 'テスト学童保育' },
+        error: null,
+      }),
+    };
+
+    const mUsersUpdateQuery: any = {
+      update: jest.fn(() => mUsersUpdateQuery),
+      eq: jest.fn(() => mUsersUpdateQuery),
+      select: jest.fn(() => mUsersUpdateQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'existing-user-id',
+          name: '施設管理者太郎',
+          email: 'facility@example.com',
+          role: 'facility_admin',
+        },
+        error: null,
+      }),
+    };
+
+    const userFacilityInsertQuery: any = {
+      insert: jest.fn(() => userFacilityInsertQuery),
+    };
+    userFacilityInsertQuery.insert.mockResolvedValue({ error: null });
+
+    let fromCallCount = 0;
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
+        if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
+        if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
+        if (fromCallCount === 4 && table === 'm_users') return mUsersUpdateQuery;
+        if (fromCallCount === 5 && table === '_user_facility') return userFacilityInsertQuery;
+        throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
+      }),
+    };
+
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: { user: { id: 'existing-user-id', user_metadata: { password_set: false } } },
+            error: null,
+          }),
+          updateUserById: jest.fn().mockResolvedValue({ error: null }),
+          generateLink: jest.fn().mockResolvedValue({
+            data: {
+              properties: {
+                action_link: 'https://test.supabase.co/auth/v1/verify?token_hash=test-token&type=invite',
+              },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
+    const request = buildRequest(validBody);
+    const response = await POST(request, createParams('company-1'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.message).toBe('招待メールを再送しました');
+    expect(mockedSendWithGas).toHaveBeenCalled();
   });
 
   it('should create facility and admin successfully', async () => {
