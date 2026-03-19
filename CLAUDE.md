@@ -51,7 +51,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 - **代替案を検討する**: 既存パッケージ・標準APIで代替できる場合はそちらを優先し、新規パッケージは最終手段とする
 
 # Workflow Rules
-- **ALWAYS use a worktree**: Never work directly on the main branch. Create a NEW worktree at the start of each new task.
+- **Use a worktree for code changes**: Create a NEW worktree before starting any task that will modify code, docs, or other tracked files, or when parallel implementation may be useful. Notion確認・調査・チケット操作だけのような非コード作業では worktree は不要。
 - **Worktree cleanup**: Delete the worktree when the user says the session/task is done (e.g., "終了"). Discard uncommitted `package-lock.json` and `settings.json` without committing them.
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
 - **Code change workflow**: 実装完了後は以下の順で実行する
