@@ -55,10 +55,55 @@ export async function GET(request: NextRequest) {
 
     // 権限チェック（staffは閲覧不可）
     if (role === 'staff') {
-      return NextResponse.json(
-        { success: false, error: 'Permission denied' },
-        { status: 403 }
-      );
+      if (!current_facility_id) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden' },
+          { status: 403 }
+        );
+      }
+      const isActiveFilter = request.nextUrl.searchParams.get('is_active');
+
+      let staffQuery = supabase
+        .from('m_users')
+        .select(
+          `
+          id,
+          name,
+          is_active,
+          _user_facility!inner (
+            facility_id
+          )
+        `
+        )
+        .is('deleted_at', null)
+        .eq('company_id', company_id)
+        .eq('role', 'staff')
+        .eq('_user_facility.facility_id', current_facility_id)
+        .eq('_user_facility.is_current', true);
+
+      if (isActiveFilter !== null) {
+        staffQuery = staffQuery.eq('is_active', isActiveFilter === 'true');
+      }
+
+      const { data: staffUsers, error: staffError } = await staffQuery.order('name');
+
+      if (staffError) {
+        throw staffError;
+      }
+
+      const users = (staffUsers || []).map((u: { id: string; name: string; is_active: boolean }) => ({
+        user_id: u.id,
+        name: u.name,
+        is_active: u.is_active,
+      }));
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          users,
+          total: users.length,
+        },
+      });
     }
 
     // リクエストパラメータ取得
