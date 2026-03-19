@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Camera, Check, Loader2, RefreshCcw, TriangleAlert, VideoOff } from "lucide-react"
+import { Camera, Check, Loader2, SwitchCamera, TriangleAlert, VideoOff } from "lucide-react"
 import { BrowserQRCodeReader } from "@zxing/browser"
 
 import { StaffLayout } from "@/components/layout/staff-layout"
@@ -253,13 +253,24 @@ export default function QRAttendanceScannerPage() {
                 )}
                 <video
                   ref={videoRef}
-                  className="aspect-video h-full w-full bg-black object-cover"
+                  className="aspect-square sm:aspect-video h-full w-full bg-black object-cover"
                   playsInline
                   muted
                 />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="h-48 w-48 border-4 border-white/80 shadow-lg" />
+                  <div className="h-56 w-56 sm:h-48 sm:w-48 border-4 border-white/80 shadow-lg" />
                 </div>
+                {isScanning && (
+                  <button
+                    type="button"
+                    onClick={handleToggleCamera}
+                    disabled={isCheckingIn}
+                    aria-label="カメラを切り替え"
+                    className="absolute right-3 top-3 z-20 rounded-full bg-black/50 p-3 text-white backdrop-blur-sm transition hover:bg-black/70 active:scale-95 disabled:opacity-50"
+                  >
+                    <SwitchCamera className="h-6 w-6" />
+                  </button>
+                )}
               </div>
 
               {/* コントロールボタン */}
@@ -281,17 +292,6 @@ export default function QRAttendanceScannerPage() {
                       </>
                     )}
                   </Button>
-                  {hasMultipleCameras && (
-                    <Button
-                      variant="outline"
-                      onClick={handleToggleCamera}
-                      disabled={isCheckingIn}
-                      size="lg"
-                      className="text-lg"
-                    >
-                      <RefreshCcw className="mr-2 h-5 w-5" /> カメラを切り替え
-                    </Button>
-                  )}
                   <Button
                     variant="outline"
                     onClick={stopScanner}
