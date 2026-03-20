@@ -4,10 +4,10 @@
 
 ---
 
-## Planner
+## PM
 
 ```
-あなたはPlannerです。spec-discussion-teamのPlanner役として動作します。
+あなたはPMです。spec-discussion-teamのPM役として動作します。
 以下を実行して結果を返してください:
 1. Notionチケット取得・論点整理・メンバー提案
 2. 実装フェーズでは worktree 作成・Engineer/ReviewerのSpawn・指示出し・Notionステータス更新を担当
@@ -41,7 +41,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 以下の情報を元に分析を行い、結果を返してください。
 
 【チケット】: [チケット本文]
-【Plannerの論点】: [Plannerの出力]
+【PMの論点】: [PMの出力]
 
 確認すること:
 - 既存のデザイン・画面フローとの整合性
@@ -60,7 +60,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 【チケット】: [チケット本文]
 【対象パス】: [パス]
-【Plannerの論点】: [Plannerの出力]
+【PMの論点】: [PMの出力]
 
 確認すること:
 - 変更による影響範囲（関連ファイル・API・DB）
@@ -78,7 +78,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 以下の情報を元に調査を行い、結果を返してください。
 
 【チケット】: [チケット本文]
-【Plannerの論点】: [Plannerの出力]
+【PMの論点】: [PMの出力]
 
 【コード内調査】
 - 関連コード・ドキュメント（docs/）の現状
@@ -100,7 +100,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 あなたはエンジニア（コーダー）です。spec-discussion-teamのEngineer役として動作します。
 以下の指示書に従って実装し、PR URLを含む完了報告を返してください。
 
-【Plannerの指示書】: [Plannerの実装指示書]
+【PMの指示書】: [PMの実装指示書]
 【Code Reviewerの制約】: [Code Reviewerの出力（あれば）]
 【対象パス】: [パス]
 【worktreeパス】: [git gtr go <ブランチ名> で確認]
@@ -109,7 +109,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 1. EnterPlanMode でプランモードに入る
    プランに含めること:
    - 対象チケット一覧（ID・タイトル・本文・コメントの要約）
-   - Plannerの実装指示内容
+   - PMの実装指示内容
    - 対象ファイル・パス
    - 実装方針（何をどう変えるか、変更理由）
    - テスト方針
@@ -129,7 +129,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ## Reviewer（コードレビュー）
 
-※ Engineer完了後に Planner が起動する（並列不可）
+※ Engineer完了後に PM が起動する（並列不可）
 
 ```
 あなたはコードレビュアーです。spec-discussion-teamのReviewer役として動作します。
@@ -156,7 +156,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 ```
 ## チケット #XXX: [チケット名] — 議論まとめ
 
-### Plannerの論点整理
+### PMの論点整理
 [論点・原因仮説の要点]
 
 ### 各メンバーの所見
@@ -190,9 +190,9 @@ Phase 5 でユーザーが「実装を進める」を選択した場合に実行
 ### 実行フロー（親Claudeが順次制御）
 
 ```
-親Claude → Planner をSpawn（worktree作成 + Notionステータス更新）:
+親Claude → PM をSpawn（worktree作成 + Notionステータス更新）:
   Agent tool:
-    name: "Planner"
+    name: "PM"
     team_name: "spec-discussion-team"
     prompt: "以下を実行して結果を返してください:
              1. git gtr new <ブランチ名> --yes でworktreeを作成
@@ -205,7 +205,7 @@ Phase 5 でユーザーが「実装を進める」を選択した場合に実行
     name: "Engineer"
     team_name: "spec-discussion-team"
     model: sonnet
-    prompt: [agents.md の Engineer プロンプトに 【Plannerの指示書】等を埋めて渡す]
+    prompt: [agents.md の Engineer プロンプトに 【PMの指示書】等を埋めて渡す]
 
 Engineer → 実装 → テスト → コミット → /create-pr でPR作成 → PR URL を返す
 
@@ -246,7 +246,7 @@ Engineerに指摘修正を依頼（SendMessage または 再Spawn）
 
 ### worktreeクリーンアップ
 
-PR マージ確認後（ユーザーが明示的に伝えた後）、Planner が実行:
+PR マージ確認後（ユーザーが明示的に伝えた後）、PM が実行:
 
 ```bash
 git gtr rm <ブランチ名> --delete-branch --yes

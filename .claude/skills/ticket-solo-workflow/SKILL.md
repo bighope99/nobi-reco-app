@@ -20,7 +20,7 @@ description: |
 | 項目 | チーム版 | ソロ版（このスキル） |
 |------|---------|-------------------|
 | 並列処理 | あり（最大3グループ同時） | なし（1グループずつ順次） |
-| エージェントチーム | Leader/Planner/Coder/Reviewer | Claude自身が全役割 |
+| エージェントチーム | Leader/PM/Coder/Reviewer | Claude自身が全役割 |
 | 使用ツール | TeamCreate / SendMessage / Agent | 不要 |
 | 動作環境 | Claude Code（Mac/Linux推奨） | Codex・Windows・Claude Code |
 | 承認方法 | EnterPlanMode → UIで承認 | AskUserQuestion でチャット承認 |
