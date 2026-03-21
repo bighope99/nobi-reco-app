@@ -90,7 +90,8 @@ export async function PUT(request: NextRequest) {
 
         // 施設アクセス権限チェック
         if (allowedFacilityIds && allowedFacilityIds.length > 0) {
-          const scheduleFacilityId = (schedule.m_schools as any).facility_id;
+          const schoolData = schedule.m_schools as { facility_id: string } | { facility_id: string }[] | null;
+        const scheduleFacilityId = (Array.isArray(schoolData) ? schoolData[0]?.facility_id : schoolData?.facility_id) ?? '';
           if (!allowedFacilityIds.includes(scheduleFacilityId)) {
             results.push({
               schedule_id: update.schedule_id,
