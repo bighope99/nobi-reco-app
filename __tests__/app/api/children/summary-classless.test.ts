@@ -156,10 +156,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-1/summary');
@@ -205,10 +204,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-2/summary');
@@ -273,10 +271,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-3/summary');
@@ -312,10 +309,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-4/summary');
@@ -352,10 +348,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: null,
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-1/summary');
@@ -380,10 +375,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-999/summary');
@@ -405,10 +399,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-deleted/summary');
@@ -451,7 +444,7 @@ describe('GET /api/children/[id]/summary', () => {
 
       const supabase = createSupabaseMock({
         childData,
-        observationsData: null,
+        observationsData: null as unknown as any[],
         observationsError: { message: 'Query error' },
         attendanceData: [],
       });
@@ -459,10 +452,9 @@ describe('GET /api/children/[id]/summary', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/child-1/summary');

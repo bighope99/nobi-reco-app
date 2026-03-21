@@ -22,7 +22,7 @@ describe('/api/handover GET', () => {
   const mockMetadata = {
     user_id: 'test-user-id',
     current_facility_id: 'test-facility-id',
-    role: 'teacher' as const,
+    role: 'staff' as const,
     company_id: 'test-company-id',
   };
 

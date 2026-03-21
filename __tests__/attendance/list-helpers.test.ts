@@ -44,8 +44,9 @@ const makeAttendanceData = (children: ChildAttendance[]): AttendanceData => ({
 
 // 過去日付
 const PAST_DATE = '2020-01-01'
-// 今日の日付（fake timer で固定する値と一致させる）
-const TODAY = '2026-03-18'
+// 固定日付（テストの再現性を保証する）
+const FIXED_NOW = new Date('2026-03-18T10:00:00Z')
+const TODAY = FIXED_NOW.toISOString().split('T')[0]
 // 未来日付
 const FUTURE_DATE = '2099-12-31'
 
@@ -54,7 +55,7 @@ describe('isPastDate', () => {
     jest.useFakeTimers()
     // JST 2026-03-18 = UTC 2026-03-17T15:00:00Z 以降
     // テストで「今日 = 2026-03-18 JST」を保証するため UTC+9 相当の時刻を使用
-    jest.setSystemTime(new Date('2026-03-18T10:00:00Z'))
+    jest.setSystemTime(FIXED_NOW)
   })
 
   afterEach(() => {
@@ -77,7 +78,7 @@ describe('isPastDate', () => {
 describe('getStatusPresentation', () => {
   beforeEach(() => {
     jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-03-18T10:00:00Z'))
+    jest.setSystemTime(FIXED_NOW)
   })
 
   afterEach(() => {
@@ -140,7 +141,7 @@ describe('getStatusPresentation', () => {
 describe('getStatusAction', () => {
   beforeEach(() => {
     jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-03-18T10:00:00Z'))
+    jest.setSystemTime(FIXED_NOW)
   })
 
   afterEach(() => {
@@ -196,7 +197,15 @@ describe('getStatusAction', () => {
 })
 
 describe('applyOptimisticStatusUpdate', () => {
-  const TODAY = '2026-03-18'
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(FIXED_NOW)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   const PAST = '2020-01-01'
 
   it('出席予定の児童を欠席にすると summary.absent_count が増える', () => {

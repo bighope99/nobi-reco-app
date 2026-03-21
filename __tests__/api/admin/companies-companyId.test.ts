@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
 import { GET, PUT } from '@/app/api/admin/companies/[companyId]/route';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
+  createAdminClient: jest.fn(),
 }));
 
 jest.mock('@/lib/auth/jwt', () => ({
@@ -24,6 +25,7 @@ const buildPutRequest = (body: Record<string, unknown>) =>
 
 describe('GET /api/admin/companies/[companyId]', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
   const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
     typeof getAuthenticatedUserMetadata
   >;
@@ -46,8 +48,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
-      company_id: 'company-1',
+      company_id: 'test-company-id',
       current_facility_id: 'facility-1',
     });
 
@@ -62,8 +65,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return 404 when company not found', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -94,8 +98,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return company details with facilities and accounts', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -180,6 +185,13 @@ describe('GET /api/admin/companies/[companyId]', () => {
     };
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue({
+      auth: {
+        admin: {
+          listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+        },
+      },
+    } as any);
 
     const request = new NextRequest('http://localhost/api/admin/companies/company-1');
     const response = await GET(request, createParams('company-1'));
@@ -197,8 +209,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return 500 when database error occurs', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -255,8 +268,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
-      company_id: 'company-1',
+      company_id: 'test-company-id',
       current_facility_id: 'facility-1',
     });
 
@@ -274,8 +288,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 400 when company name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -293,8 +308,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 404 when company not found', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -328,8 +344,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should update company successfully', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -395,8 +412,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 500 when update fails', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 

@@ -189,7 +189,7 @@ describe('saveChild PII暗号化', () => {
       },
     };
 
-    await saveChild(payload, 'facility-1', supabase);
+    await saveChild(payload, 'facility-1', supabase as any);
 
     const insertedValues = supabase.__childInsert.mock.calls[0][0];
 
@@ -225,7 +225,7 @@ describe('saveChild PII暗号化', () => {
       },
     };
 
-    await saveChild(payload, 'facility-1', supabase);
+    await saveChild(payload, 'facility-1', supabase as any);
 
     const insertedValues = supabase.__childInsert.mock.calls[0][0];
     const normalizedParentPhone = normalizePhone(payload.contact?.parent_phone || '');
@@ -264,7 +264,7 @@ describe('saveChild PII暗号化', () => {
       },
     };
 
-    await saveChild(payload, 'facility-1', supabase, 'child-1');
+    await saveChild(payload, 'facility-1', supabase as any, 'child-1');
 
     const updateValues = supabase.__childUpdate.mock.calls[0][0];
     expect(updateValues.parent_name).toBeUndefined();
@@ -293,7 +293,7 @@ describe('saveChild PII暗号化', () => {
       },
     };
 
-    await saveChild(payload, 'facility-1', supabase, 'child-1');
+    await saveChild(payload, 'facility-1', supabase as any, 'child-1');
 
     expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
@@ -316,7 +316,7 @@ describe('saveChild PII暗号化', () => {
       },
     };
 
-    await saveChild(payload, 'facility-1', supabase);
+    await saveChild(payload, 'facility-1', supabase as any);
 
     const guardianInsertValues = supabase.__guardianInsert.mock.calls[0][0];
 
@@ -349,7 +349,7 @@ describe('saveChild PII暗号化', () => {
       },
     };
 
-    await saveChild(payload, 'facility-1', supabase);
+    await saveChild(payload, 'facility-1', supabase as any);
 
     const guardianInsertValues = supabase.__guardianInsert.mock.calls[0][0];
 

@@ -47,6 +47,7 @@ describe('GET /api/admin/companies', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -62,8 +63,9 @@ describe('GET /api/admin/companies', () => {
 
   it('should return companies list when user is site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -167,8 +169,9 @@ describe('GET /api/admin/companies', () => {
 
   it('should include facility count for each company', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -242,8 +245,9 @@ describe('GET /api/admin/companies', () => {
 
   it('should return 500 when database error occurs', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -283,7 +287,7 @@ describe('POST /api/admin/companies', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    mockedSendWithGas.mockResolvedValue(undefined);
+    mockedSendWithGas.mockResolvedValue({ ok: true });
   });
 
   it('should return 401 when user is not authenticated', async () => {
@@ -304,6 +308,7 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -324,8 +329,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when company name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -344,8 +350,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when admin_user name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -364,8 +371,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when admin_user email is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -384,8 +392,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when email already exists (signed-in user)', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -433,13 +442,14 @@ describe('POST /api/admin/companies', () => {
 
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
-    expect(json.error).toBe('Email already exists');
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
   });
 
   it('should reinvite unsigned-in user and return 200', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -548,8 +558,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should create company and admin user (without facility)', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -649,8 +660,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should create company and admin user with company_admin current_facility_id as null', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -745,8 +757,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 500 when company creation fails', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 

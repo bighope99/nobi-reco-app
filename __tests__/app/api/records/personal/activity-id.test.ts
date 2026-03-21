@@ -39,6 +39,19 @@ describe('POST /api/records/personal - activity_id機能', () => {
     mockSupabase = {
       auth: {
         getUser: jest.fn(),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: 'user-123',
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-123',
+                current_facility_id: 'facility-123',
+              },
+            },
+          },
+          error: null,
+        }),
       },
       from: jest.fn(),
     };

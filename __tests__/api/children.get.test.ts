@@ -51,6 +51,10 @@ describe('GET /api/children', () => {
             data: { session: null },
             error: { message: 'No session' },
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'No session' },
+          }),
         },
       };
 
@@ -69,6 +73,10 @@ describe('GET /api/children', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: null },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
           }),
         },
@@ -93,6 +101,19 @@ describe('GET /api/children', () => {
             data: {
               session: {
                 user: { id: 'user-1' },
+              },
+            },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'company_admin',
+                  company_id: 'company-1',
+                  current_facility_id: null,
+                },
               },
             },
             error: null,
@@ -128,6 +149,19 @@ describe('GET /api/children', () => {
             data: {
               session: {
                 user: { id: 'user-1' },
+              },
+            },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'company_admin',
+                  company_id: 'company-1',
+                  current_facility_id: null,
+                },
               },
             },
             error: null,
@@ -245,6 +279,19 @@ describe('GET /api/children', () => {
             },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn((table: string) => {
           callCount++;
@@ -295,6 +342,7 @@ describe('GET /api/children', () => {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
           data: [],
@@ -309,6 +357,19 @@ describe('GET /api/children', () => {
             data: {
               session: {
                 user: { id: 'user-1' },
+              },
+            },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
               },
             },
             error: null,
@@ -433,6 +494,19 @@ describe('GET /api/children', () => {
             },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn((table: string) => {
           callCount++;
@@ -500,6 +574,19 @@ describe('GET /api/children', () => {
             },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn(() => childrenQuery),
       };
@@ -552,6 +639,19 @@ describe('GET /api/children', () => {
             },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn(() => childrenQuery),
       };
@@ -600,6 +700,19 @@ describe('GET /api/children', () => {
             data: {
               session: {
                 user: { id: 'user-1' },
+              },
+            },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
               },
             },
             error: null,
@@ -658,6 +771,19 @@ describe('GET /api/children', () => {
             },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn(() => childrenQuery),
       };
@@ -693,6 +819,7 @@ describe('GET /api/children', () => {
       const mockSupabase = {
         auth: {
           getSession: jest.fn().mockRejectedValue(new Error('Unexpected error')),
+          getClaims: jest.fn().mockRejectedValue(new Error('Unexpected error')),
         },
       };
 
@@ -801,6 +928,19 @@ describe('GET /api/children', () => {
             data: {
               session: {
                 user: { id: 'user-1' },
+              },
+            },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'facility_admin',
+                  company_id: 'company-1',
+                  current_facility_id: 'facility-1',
+                },
               },
             },
             error: null,
