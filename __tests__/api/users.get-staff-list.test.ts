@@ -8,10 +8,10 @@
 
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/users/route';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
-jest.mock('@/utils/supabase/server', () => ({ createClient: jest.fn() }));
+jest.mock('@/utils/supabase/server', () => ({ createClient: jest.fn(), createAdminClient: jest.fn() }));
 jest.mock('@/lib/auth/jwt', () => ({ getAuthenticatedUserMetadata: jest.fn() }));
 
 // POST で使われる依存モジュールも念のためモック
@@ -19,8 +19,17 @@ jest.mock('@/lib/email/gas', () => ({ sendWithGas: jest.fn() }));
 jest.mock('@/lib/email/templates', () => ({ buildUserInvitationEmailHtml: jest.fn() }));
 jest.mock('@/lib/utils/timezone', () => ({ getCurrentDateJST: jest.fn(() => '2026-01-01') }));
 
+const mockAdminClient = {
+  auth: {
+    admin: {
+      listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+    },
+  },
+};
+
 describe('GET /api/users?is_active=true (記入者フィルター用スタッフ一覧)', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
   const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
     typeof getAuthenticatedUserMetadata
   >;
@@ -43,6 +52,8 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   /**

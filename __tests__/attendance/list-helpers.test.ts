@@ -197,6 +197,15 @@ describe('getStatusAction', () => {
 })
 
 describe('applyOptimisticStatusUpdate', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(FIXED_NOW)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   const PAST = '2020-01-01'
 
   it('出席予定の児童を欠席にすると summary.absent_count が増える', () => {

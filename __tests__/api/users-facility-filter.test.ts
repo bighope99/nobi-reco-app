@@ -26,6 +26,14 @@ jest.mock('@/lib/utils/timezone', () => ({
 
 const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
 const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
+
+const mockAdminClient = {
+  auth: {
+    admin: {
+      listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+    },
+  },
+};
 const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
   typeof getAuthenticatedUserMetadata
 >;
@@ -89,6 +97,8 @@ function buildClassQuery(classData: unknown[] = []) {
 describe('GET /api/users - facility_id フィルター', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   it('company_admin が facility_id パラメータを指定すると、その施設でフィルタされる', async () => {
@@ -253,6 +263,8 @@ describe('GET /api/users - facility_id フィルター', () => {
 describe('POST /api/users - facility_id 指定', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   it('company_admin が body.facility_id を指定してユーザーを作成できる', async () => {

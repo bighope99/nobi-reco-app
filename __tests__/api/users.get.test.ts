@@ -1,24 +1,36 @@
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/users/route';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
+  createAdminClient: jest.fn(),
 }));
 
 jest.mock('@/lib/auth/jwt', () => ({
   getAuthenticatedUserMetadata: jest.fn(),
 }));
 
+const mockAdminClient = {
+  auth: {
+    admin: {
+      listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+    },
+  },
+};
+
 describe('GET /api/users', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
   const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
     typeof getAuthenticatedUserMetadata
   >;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   it('maps class_role into assigned_classes.is_main', async () => {
