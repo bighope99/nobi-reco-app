@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { getCurrentDateJST } from "@/lib/utils/timezone"
@@ -32,6 +32,7 @@ import {
 } from "@/lib/drafts/aiDraftCookie"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap } from "@/lib/mention/mentionFormatter"
+import { compareChildrenByGradeAndKana } from "@/lib/children/sort"
 import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from "@/types/activity"
 import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/security/sanitize"
 import {
@@ -88,11 +89,17 @@ interface MentionSuggestion {
   name: string
   kana: string
   nickname?: string
-  grade?: string
+  grade?: number | null
   class_name?: string
   photo_url?: string | null
   display_name: string
   unique_key: string
+}
+
+interface MentionSuggestionSection {
+  key: string
+  label: string
+  children: MentionSuggestion[]
 }
 
 interface ActivitiesData {
@@ -104,6 +111,18 @@ interface ActivitiesData {
 interface StaffMember {
   user_id: string
   name: string
+}
+
+const MENTION_GRADE_SECTION_ORDER = [6, 5, 4, 3, 2, 1, 0] as const
+
+const getMentionGradeSectionKey = (grade?: number | null): number => {
+  if (!grade || grade < 1) return 0
+  return grade > 6 ? 6 : grade
+}
+
+const getMentionGradeSectionLabel = (gradeKey: number): string => {
+  if (gradeKey === 0) return "未就学"
+  return `${gradeKey}年生`
 }
 
 // AiObservationResult型は共通ファイルからimport済み
@@ -408,6 +427,40 @@ export default function ActivityRecordClient() {
     })
   }
 
+  const filteredMentionChildren = useMemo(
+    () => filterSuggestions(classChildren, mentionSearchQuery),
+    [classChildren, mentionSearchQuery]
+  )
+
+  const groupedMentionChildren = useMemo<MentionSuggestionSection[]>(() => {
+    const sectionMap = new Map<number, MentionSuggestion[]>()
+
+    filteredMentionChildren.forEach((child) => {
+      const gradeKey = getMentionGradeSectionKey(child.grade)
+      const existing = sectionMap.get(gradeKey) || []
+      existing.push(child)
+      sectionMap.set(gradeKey, existing)
+    })
+
+    return MENTION_GRADE_SECTION_ORDER
+      .map((gradeKey) => {
+        const children = sectionMap.get(gradeKey) || []
+        if (children.length === 0) return null
+
+        return {
+          key: String(gradeKey),
+          label: getMentionGradeSectionLabel(gradeKey),
+          children,
+        }
+      })
+      .filter((section): section is MentionSuggestionSection => section !== null)
+  }, [filteredMentionChildren])
+
+  const filteredMentionIndexMap = useMemo(
+    () => new Map(filteredMentionChildren.map((child, index) => [child.unique_key, index])),
+    [filteredMentionChildren]
+  )
+
   const handleClassChange = (value: string) => {
     setSelectedClass(value)
     setActivityContent("")
@@ -498,25 +551,23 @@ export default function ActivityRecordClient() {
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!showMentionPicker) return
 
-    const filteredChildren = filterSuggestions(classChildren, mentionSearchQuery)
-
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
         setSelectedIndex(prev =>
-          prev < filteredChildren.length - 1 ? prev + 1 : 0
+          prev < filteredMentionChildren.length - 1 ? prev + 1 : 0
         )
         break
       case 'ArrowUp':
         e.preventDefault()
         setSelectedIndex(prev =>
-          prev > 0 ? prev - 1 : filteredChildren.length - 1
+          prev > 0 ? prev - 1 : filteredMentionChildren.length - 1
         )
         break
       case 'Enter':
         e.preventDefault()
-        if (filteredChildren[selectedIndex]) {
-          handleMentionSelect(filteredChildren[selectedIndex])
+        if (filteredMentionChildren[selectedIndex]) {
+          handleMentionSelect(filteredMentionChildren[selectedIndex])
         }
         break
       case 'Escape':
@@ -546,7 +597,7 @@ export default function ActivityRecordClient() {
           name: string;
           kana: string;
           nickname?: string;
-          grade?: string;
+          grade?: number | null;
           class_name?: string;
           photo_url?: string | null;
         }) => ({
@@ -560,6 +611,8 @@ export default function ActivityRecordClient() {
           display_name: child.nickname || child.name,
           unique_key: child.child_id,
         })) as MentionSuggestion[]
+
+        children.sort(compareChildrenByGradeAndKana)
 
         setClassChildren(children)
       } catch (err) {
@@ -1764,24 +1817,33 @@ export default function ActivityRecordClient() {
                     <p className="text-center py-4 text-sm text-muted-foreground">読み込み中...</p>
                   ) : classChildren.length > 0 ? (
                     <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto">
-                      {filterSuggestions(classChildren, mentionSearchQuery).map((child, index) => {
-                        const isHighlighted = index === selectedIndex
-                        return (
-                          <button
-                            key={child.unique_key}
-                            type="button"
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-md text-sm",
-                              isHighlighted ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                            )}
-                            onClick={() => handleMentionSelect(child)}
-                            onMouseEnter={() => setSelectedIndex(index)}
-                          >
-                            <div className="font-medium">{child.display_name}</div>
-                            <div className="text-xs opacity-70">{child.class_name}</div>
-                          </button>
-                        )
-                      })}
+                      {groupedMentionChildren.map((section) => (
+                        <div key={section.key} className="space-y-1">
+                          <div className="px-3 py-1 text-xs font-semibold text-muted-foreground bg-muted/60 rounded-sm">
+                            {section.label}
+                          </div>
+                          {section.children.map((child) => {
+                            const index = filteredMentionIndexMap.get(child.unique_key) ?? -1
+                            const isHighlighted = index === selectedIndex
+
+                            return (
+                              <button
+                                key={child.unique_key}
+                                type="button"
+                                className={cn(
+                                  "w-full text-left px-3 py-2 rounded-md text-sm",
+                                  isHighlighted ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                                )}
+                                onClick={() => handleMentionSelect(child)}
+                                onMouseEnter={() => setSelectedIndex(index)}
+                              >
+                                <div className="font-medium">{child.display_name}</div>
+                                <div className="text-xs opacity-70">{child.class_name}</div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <p className="text-center py-4 text-sm text-muted-foreground">

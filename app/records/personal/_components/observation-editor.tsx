@@ -13,7 +13,7 @@ import { MentionTextarea } from '@/components/ui/mention-textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -155,6 +155,12 @@ type ChildOption = {
   grade?: number | null;
 };
 
+type ChildOptionSection = {
+  key: string;
+  label: string;
+  options: ChildOption[];
+};
+
 type ChildApi = {
   child_id: string;
   name: string;
@@ -233,20 +239,44 @@ const ChildSelect = ({
   testId?: string;
   disabled?: boolean;
   options: ChildOption[];
-}) => (
-  <Select value={value} onValueChange={onChange} disabled={disabled}>
-    <SelectTrigger data-testid={testId} aria-label={placeholder}>
-      <SelectValue placeholder={placeholder} />
-    </SelectTrigger>
-    <SelectContent>
-      {options.map((child) => (
-        <SelectItem key={child.id} value={child.id}>
-          {child.name}（{child.className}）
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
+}) => {
+  const sectionOrder = [6, 5, 4, 3, 2, 1, 0] as const;
+  const getSectionKey = (grade?: number | null) => (!grade || grade < 1 ? 0 : grade > 6 ? 6 : grade);
+  const getSectionLabel = (gradeKey: number) => (gradeKey === 0 ? '未就学' : `${gradeKey}年生`);
+
+  const groupedOptions = sectionOrder
+    .map((gradeKey) => {
+      const sectionOptions = options.filter((child) => getSectionKey(child.grade) === gradeKey);
+      if (sectionOptions.length === 0) return null;
+
+      return {
+        key: String(gradeKey),
+        label: getSectionLabel(gradeKey),
+        options: sectionOptions,
+      } satisfies ChildOptionSection;
+    })
+    .filter((section): section is ChildOptionSection => section !== null);
+
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger data-testid={testId} aria-label={placeholder}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {groupedOptions.map((section) => (
+          <SelectGroup key={section.key}>
+            <SelectLabel>{section.label}</SelectLabel>
+            {section.options.map((child) => (
+              <SelectItem key={child.id} value={child.id}>
+                {child.name}（{child.className}）
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
 
 export function ObservationEditor({ mode, observationId, initialChildId }: ObservationEditorProps) {
   const isNew = mode === 'new';

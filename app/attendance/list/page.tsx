@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,24 @@ import {
   applyOptimisticStatusUpdate,
   isPastDate,
 } from "./helpers"
+
+interface GradeSection {
+  key: string
+  label: string
+  children: ChildAttendance[]
+}
+
+const GRADE_SECTION_ORDER = [6, 5, 4, 3, 2, 1, 0] as const
+
+const getGradeSectionKey = (grade: number | null): number => {
+  if (!grade || grade < 1) return 0
+  return grade > 6 ? 6 : grade
+}
+
+const getGradeSectionLabel = (gradeKey: number): string => {
+  if (gradeKey === 0) return '未就学'
+  return `${gradeKey}年生`
+}
 
 // Status badge component
 const StatusBadge = ({ child, currentDate }: { child: ChildAttendance; currentDate: string }) => {
@@ -205,6 +223,30 @@ export default function AttendanceListPage() {
       : attendanceData.children.filter(c => c.class_id === filterClass)
     : []
 
+  const groupedChildren = useMemo<GradeSection[]>(() => {
+    const gradeMap = new Map<number, ChildAttendance[]>()
+
+    filteredChildren.forEach((child) => {
+      const gradeKey = getGradeSectionKey(child.grade)
+      const existing = gradeMap.get(gradeKey) || []
+      existing.push(child)
+      gradeMap.set(gradeKey, existing)
+    })
+
+    return GRADE_SECTION_ORDER
+      .map((gradeKey) => {
+        const children = gradeMap.get(gradeKey) || []
+        if (children.length === 0) return null
+
+        return {
+          key: String(gradeKey),
+          label: getGradeSectionLabel(gradeKey),
+          children,
+        }
+      })
+      .filter((section): section is GradeSection => section !== null)
+  }, [filteredChildren])
+
   // Current date for status presentation (use attendance data date if available, otherwise selected date)
   const currentDate = attendanceData?.date || selectedDate
 
@@ -281,6 +323,164 @@ export default function AttendanceListPage() {
       setTimeLoading(null)
     }
   }
+
+  const renderDesktopRow = (child: ChildAttendance) => (
+    <tr key={child.child_id} className="hover:bg-slate-50 transition-colors">
+      <td className="px-5 py-3">
+        <div className="font-bold text-slate-800">{child.name}</div>
+        <div className="text-xs text-slate-500">{child.kana}</div>
+      </td>
+      <td className="px-5 py-3">
+        <div className="text-slate-700">{child.class_name}</div>
+        <div className="text-xs text-slate-500">{child.grade_label || '-'}</div>
+      </td>
+      <td className="px-5 py-3"><StatusBadge child={child} currentDate={currentDate} /></td>
+      <td className="px-5 py-3 text-center">
+        <StatusActionButton
+          child={child}
+          currentDate={currentDate}
+          onMarkStatus={handleStatusChange}
+          isLoading={Boolean(actionLoading[child.child_id])}
+        />
+      </td>
+      <td className="px-5 py-3 text-slate-600">
+        {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
+          <span className="inline-flex items-center gap-1 text-indigo-500">
+            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+            <span className="text-xs">更新中</span>
+          </span>
+        ) : editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
+          <input
+            type="time"
+            defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
+            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            onBlur={(e) => {
+              if (editingTime?.childId === child.child_id && editingTime?.field === 'in') {
+                if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
+                else setEditingTime(null)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              if (e.key === 'Escape') {
+                setEditingTime(null)
+                e.currentTarget.blur()
+              }
+            }}
+            autoFocus
+          />
+        ) : child.checked_in_at ? (
+          <span
+            className={`text-emerald-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
+            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
+            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
+          >
+            {formatTime(child.checked_in_at)}
+          </span>
+        ) : (
+          <span className="text-slate-400">-</span>
+        )}
+      </td>
+      <td className="px-5 py-3 text-slate-600">
+        {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
+          <span className="inline-flex items-center gap-1 text-indigo-500">
+            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+            <span className="text-xs">更新中</span>
+          </span>
+        ) : editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
+          <input
+            type="time"
+            defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
+            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            onBlur={(e) => {
+              if (editingTime?.childId === child.child_id && editingTime?.field === 'out') {
+                if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
+                else setEditingTime(null)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              if (e.key === 'Escape') {
+                setEditingTime(null)
+                e.currentTarget.blur()
+              }
+            }}
+            autoFocus
+          />
+        ) : child.checked_out_at ? (
+          <span
+            className={`text-slate-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
+            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
+            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
+          >
+            {formatTime(child.checked_out_at)}
+          </span>
+        ) : (
+          <span className="text-slate-400">-</span>
+        )}
+      </td>
+    </tr>
+  )
+
+  const renderMobileCard = (child: ChildAttendance) => (
+    <div key={child.child_id} className="p-4 hover:bg-slate-50 transition-colors">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1">
+          <div className="font-bold text-slate-800 mb-1">{child.name}</div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>{child.class_name}</span>
+            <span>•</span>
+            <span>{child.grade_label || '-'}</span>
+          </div>
+        </div>
+        <StatusBadge child={child} currentDate={currentDate} />
+      </div>
+
+      <div className="mb-3">
+        <StatusActionButton
+          child={child}
+          currentDate={currentDate}
+          onMarkStatus={handleStatusChange}
+          isLoading={Boolean(actionLoading[child.child_id])}
+        />
+      </div>
+
+      {(child.checked_in_at || child.checked_out_at) && (
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <div className="text-slate-400 mb-1">チェックイン</div>
+            <div className="text-slate-600">
+              {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
+                <span className="inline-flex items-center gap-1 text-indigo-500">
+                  <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                  <span>更新中</span>
+                </span>
+              ) : child.checked_in_at ? (
+                <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
+              ) : (
+                <span className="text-slate-400">-</span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-slate-400 mb-1">チェックアウト</div>
+            <div className="text-slate-600">
+              {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
+                <span className="inline-flex items-center gap-1 text-indigo-500">
+                  <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+                  <span>更新中</span>
+                </span>
+              ) : child.checked_out_at ? (
+                <span className="font-medium">{formatTime(child.checked_out_at)}</span>
+              ) : (
+                <span className="text-slate-400">-</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 
   if (loading) {
     return (
@@ -469,102 +669,18 @@ export default function AttendanceListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredChildren.map(child => (
-                    <tr key={child.child_id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-3">
-                        <div className="font-bold text-slate-800">{child.name}</div>
-                        <div className="text-xs text-slate-500">{child.kana}</div>
-                      </td>
-                      <td className="px-5 py-3">
-                        <div className="text-slate-700">{child.class_name}</div>
-                        <div className="text-xs text-slate-500">{child.grade_label || '-'}</div>
-                      </td>
-                      <td className="px-5 py-3"><StatusBadge child={child} currentDate={currentDate} /></td>
-                      <td className="px-5 py-3 text-center">
-                        <StatusActionButton
-                          child={child}
-                          currentDate={currentDate}
-                          onMarkStatus={handleStatusChange}
-                          isLoading={Boolean(actionLoading[child.child_id])}
-                        />
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">
-                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
-                          <span className="inline-flex items-center gap-1 text-indigo-500">
-                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                            <span className="text-xs">更新中</span>
-                          </span>
-                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
-                          <input
-                            type="time"
-                            defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
-                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            onBlur={(e) => {
-                              if (editingTime?.childId === child.child_id && editingTime?.field === 'in') {
-                                if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
-                                else setEditingTime(null)
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                              if (e.key === 'Escape') {
-                                setEditingTime(null)
-                                e.currentTarget.blur()
-                              }
-                            }}
-                            autoFocus
-                          />
-                        ) : child.checked_in_at ? (
-                          <span
-                            className={`text-emerald-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
-                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
-                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
-                          >
-                            {formatTime(child.checked_in_at)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">
-                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
-                          <span className="inline-flex items-center gap-1 text-indigo-500">
-                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                            <span className="text-xs">更新中</span>
-                          </span>
-                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
-                          <input
-                            type="time"
-                            defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
-                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            onBlur={(e) => {
-                              if (editingTime?.childId === child.child_id && editingTime?.field === 'out') {
-                                if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
-                                else setEditingTime(null)
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                              if (e.key === 'Escape') {
-                                setEditingTime(null)
-                                e.currentTarget.blur()
-                              }
-                            }}
-                            autoFocus
-                          />
-                        ) : child.checked_out_at ? (
-                          <span
-                            className={`text-slate-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
-                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
-                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
-                          >
-                            {formatTime(child.checked_out_at)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-                    </tr>
+                  {groupedChildren.map((section) => (
+                    <Fragment key={section.key}>
+                      <tr className="bg-slate-100/80">
+                        <td colSpan={6} className="px-5 py-3 border-y border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold tracking-wide text-slate-700">{section.label}</span>
+                            <span className="text-xs font-medium text-slate-500">{section.children.length}名</span>
+                          </div>
+                        </td>
+                      </tr>
+                      {section.children.map(renderDesktopRow)}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -572,70 +688,22 @@ export default function AttendanceListPage() {
 
             {/* モバイル: カード表示 */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredChildren.length === 0 ? (
+              {groupedChildren.length === 0 ? (
                 <div className="p-12 text-center text-slate-400">
                   <UserX className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p className="text-sm">該当する児童が見つかりませんでした</p>
                 </div>
               ) : (
-                filteredChildren.map(child => (
-                  <div key={child.child_id} className="p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex-1">
-                        <div className="font-bold text-slate-800 mb-1">{child.name}</div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          <span>{child.class_name}</span>
-                          <span>•</span>
-                          <span>{child.grade_label || '-'}</span>
-                        </div>
+                groupedChildren.map((section) => (
+                  <Fragment key={section.key}>
+                    <div className="px-4 py-3 bg-slate-100/80 border-y border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold tracking-wide text-slate-700">{section.label}</span>
+                        <span className="text-xs font-medium text-slate-500">{section.children.length}名</span>
                       </div>
-                      <StatusBadge child={child} currentDate={currentDate} />
                     </div>
-
-                    <div className="mb-3">
-                      <StatusActionButton
-                        child={child}
-                        currentDate={currentDate}
-                        onMarkStatus={handleStatusChange}
-                        isLoading={Boolean(actionLoading[child.child_id])}
-                      />
-                    </div>
-
-                    {(child.checked_in_at || child.checked_out_at) && (
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <div className="text-slate-400 mb-1">チェックイン</div>
-                          <div className="text-slate-600">
-                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
-                              <span className="inline-flex items-center gap-1 text-indigo-500">
-                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                                <span>更新中</span>
-                              </span>
-                            ) : child.checked_in_at ? (
-                              <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-slate-400 mb-1">チェックアウト</div>
-                          <div className="text-slate-600">
-                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
-                              <span className="inline-flex items-center gap-1 text-indigo-500">
-                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                                <span>更新中</span>
-                              </span>
-                            ) : child.checked_out_at ? (
-                              <span className="font-medium">{formatTime(child.checked_out_at)}</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    {section.children.map(renderMobileCard)}
+                  </Fragment>
                 ))
               )}
             </div>

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import { useParams, useRouter } from 'next/navigation';
+import { compareChildrenByGradeAndKana } from '@/lib/children/sort';
 import {
   Users,
   Building2,
@@ -349,13 +350,9 @@ export default function ClassDetailPage() {
     )
     .sort((a, b) => {
       if (sortBy === 'grade') {
-        const gradeA = a.grade ?? a.age ?? Number.POSITIVE_INFINITY;
-        const gradeB = b.grade ?? b.age ?? Number.POSITIVE_INFINITY;
-        const diff = gradeA - gradeB;
-        if (diff !== 0) return diff;
-        return a.name_kana.localeCompare(b.name_kana);
+        return compareChildrenByGradeAndKana(a, b);
       } else {
-        return a.name_kana.localeCompare(b.name_kana);
+        return a.name_kana.localeCompare(b.name_kana, 'ja');
       }
     });
 

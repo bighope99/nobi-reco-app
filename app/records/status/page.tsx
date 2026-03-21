@@ -64,6 +64,12 @@ interface HistoryRecord {
     tag_ids?: string[];
 }
 
+interface GradeSection {
+    key: string;
+    label: string;
+    children: Child[];
+}
+
 // --- Helper Components ---
 
 const SortIcon = ({ colKey, currentSort }: { colKey: string, currentSort?: { key: string, order: 'asc' | 'desc' } }) => {
@@ -132,6 +138,18 @@ const MonthlyHeatmap = ({ history }: { history: string[] }) => {
     )
 }
 
+const GRADE_SECTION_ORDER = [6, 5, 4, 3, 2, 1, 0] as const
+
+const getGradeSectionKey = (grade: number | null): number => {
+    if (!grade || grade < 1) return 0
+    return grade > 6 ? 6 : grade
+}
+
+const getGradeSectionLabel = (gradeKey: number): string => {
+    if (gradeKey === 0) return '未就学'
+    return `${gradeKey}年生`
+}
+
 // --- Main Component ---
 
 export default function StatusPage() {
@@ -148,7 +166,7 @@ export default function StatusPage() {
     const [inputSearchTerm, setInputSearchTerm] = useState('')
     const [committedSearchTerm, setCommittedSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
-    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'asc' })
+    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
 
     // 日付の初期化（クライアント側でのみ実行）
     useEffect(() => {
@@ -280,6 +298,30 @@ export default function StatusPage() {
         return sorted
     }, [clientFilteredData, sortConfig])
 
+    const groupedData = useMemo<GradeSection[]>(() => {
+        const gradeMap = new Map<number, Child[]>()
+
+        sortedData.forEach((child) => {
+            const gradeKey = getGradeSectionKey(child.grade)
+            const existing = gradeMap.get(gradeKey) || []
+            existing.push(child)
+            gradeMap.set(gradeKey, existing)
+        })
+
+        return GRADE_SECTION_ORDER
+            .map((gradeKey) => {
+                const children = gradeMap.get(gradeKey) || []
+                if (children.length === 0) return null
+
+                return {
+                    key: String(gradeKey),
+                    label: getGradeSectionLabel(gradeKey),
+                    children,
+                }
+            })
+            .filter((section): section is GradeSection => section !== null)
+    }, [sortedData])
+
     const handleSort = (key: string) => {
         setSortConfig(current => ({
             key,
@@ -331,6 +373,63 @@ export default function StatusPage() {
     const handleEditRecord = (recordId: string) => {
         router.push(`/records/personal/${recordId}/edit`)
     }
+
+    const renderChildRow = (child: Child) => (
+        <tr key={child.child_id} className="hover:bg-slate-50 transition-colors group">
+
+            <td className="sticky left-0 z-20 bg-white px-4 sm:px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
+                <div className="flex flex-col">
+                    <span className="text-sm font-bold text-slate-900">{child.name}</span>
+                    <span className="text-xs text-slate-400">{child.kana}</span>
+                </div>
+            </td>
+
+            <td className="px-4 py-4 whitespace-nowrap">
+                <div className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-900">{child.grade_label || '-'}</span>
+                    <span className="text-xs text-slate-500">{child.class_name}</span>
+                </div>
+            </td>
+
+            <td className="px-4 py-4 whitespace-nowrap">
+                <LastRecordBadge dateStr={child.last_record_date} />
+            </td>
+
+            <td className="px-4 py-4 whitespace-nowrap align-middle">
+                {child.monthly.attendance_count > 0 ? (
+                    <ProgressBar value={child.monthly.record_count} max={child.monthly.attendance_count} />
+                ) : (
+                    <span className="text-xs text-slate-400">出欠データなし</span>
+                )}
+            </td>
+
+            <td className="px-4 py-4 whitespace-nowrap">
+                <MonthlyHeatmap history={child.monthly.daily_status} />
+            </td>
+
+            <td className="px-4 py-4 whitespace-nowrap align-middle">
+                <ProgressBar value={child.yearly.record_count} max={child.yearly.attendance_count} mini={true} />
+            </td>
+
+            <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div className="flex items-center justify-end gap-2">
+                    <button
+                        className="text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors"
+                        title="履歴"
+                        onClick={() => handleOpenHistory(child)}
+                    >
+                        <History className="w-4 h-4" />
+                    </button>
+                    <Link
+                        href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
+                        className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all"
+                    >
+                        作成
+                    </Link>
+                </div>
+            </td>
+        </tr>
+    )
 
     if (loading) {
         return (
@@ -555,62 +654,19 @@ export default function StatusPage() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200">
-                                {sortedData.length > 0 ? (
-                                    sortedData.map((child) => (
-                                        <tr key={child.child_id} className="hover:bg-slate-50 transition-colors group">
-
-                                            <td className="sticky left-0 z-20 bg-white px-4 sm:px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-900">{child.name}</span>
-                                                    <span className="text-xs text-slate-400">{child.kana}</span>
-                                                </div>
-                                            </td>
-
-                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-medium text-slate-900">{child.grade_label || '-'}</span>
-                                                    <span className="text-xs text-slate-500">{child.class_name}</span>
-                                                </div>
-                                            </td>
-
-                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                <LastRecordBadge dateStr={child.last_record_date} />
-                                            </td>
-
-                                            <td className="px-4 py-4 whitespace-nowrap align-middle">
-                                                {child.monthly.attendance_count > 0 ? (
-                                                    <ProgressBar value={child.monthly.record_count} max={child.monthly.attendance_count} />
-                                                ) : (
-                                                    <span className="text-xs text-slate-400">出欠データなし</span>
-                                                )}
-                                            </td>
-
-                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                <MonthlyHeatmap history={child.monthly.daily_status} />
-                                            </td>
-
-                                            <td className="px-4 py-4 whitespace-nowrap align-middle">
-                                                <ProgressBar value={child.yearly.record_count} max={child.yearly.attendance_count} mini={true} />
-                                            </td>
-
-                                            <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button
-                                                        className="text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors"
-                                                        title="履歴"
-                                                        onClick={() => handleOpenHistory(child)}
-                                                    >
-                                                        <History className="w-4 h-4" />
-                                                    </button>
-                                                    <Link
-                                                        href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
-                                                        className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all"
-                                                    >
-                                                        作成
-                                                    </Link>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                {groupedData.length > 0 ? (
+                                    groupedData.map((section) => (
+                                        <React.Fragment key={section.key}>
+                                            <tr className="bg-slate-100/80">
+                                                <td colSpan={7} className="px-4 sm:px-6 py-3 border-y border-slate-200">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-sm font-bold tracking-wide text-slate-700">{section.label}</span>
+                                                        <span className="text-xs font-medium text-slate-500">{section.children.length}名</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {section.children.map(renderChildRow)}
+                                        </React.Fragment>
                                     ))
                                 ) : (
                                     <tr>

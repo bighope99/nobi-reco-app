@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import { Badge } from "@/components/ui/badge";
+import { compareChildrenByGradeAndKana } from '@/lib/children/sort';
 
 import {
     Search,
@@ -76,7 +77,6 @@ interface Student {
     birthDate: string;
     grade: number | null;
     gradeLabel: string;
-    gradeOrder: number;
     className: string;
     parentName: string;
     parentPhone: string;
@@ -92,11 +92,16 @@ interface Student {
 type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings' | 'photoAllowed';
 type SortOrder = 'asc' | 'desc';
 
+interface GradeSection {
+    key: string;
+    label: string;
+    students: Student[];
+}
+
 // --- Helper Functions ---
 
 const convertAPIChildToStudent = (apiChild: APIChild): Student => {
     const gradeValue = apiChild.grade ?? null;
-    const gradeOrder = gradeValue ?? 0;
 
     // Map enrollment_status to status
     const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
@@ -112,7 +117,6 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         birthDate: apiChild.birth_date,
         grade: gradeValue,
         gradeLabel: apiChild.grade_label || '',
-        gradeOrder,
         className: apiChild.class_name,
         parentName: apiChild.parent_name || '',
         parentPhone: apiChild.parent_phone || '',
@@ -124,6 +128,18 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         status,
         contractType: apiChild.enrollment_type,
     };
+};
+
+const GRADE_SECTION_ORDER = [6, 5, 4, 3, 2, 1, 0] as const;
+
+const getGradeSectionKey = (grade: number | null): number => {
+    if (!grade || grade < 1) return 0;
+    return grade > 6 ? 6 : grade;
+};
+
+const getGradeSectionLabel = (gradeKey: number): string => {
+    if (gradeKey === 0) return '未就学';
+    return `${gradeKey}年生`;
 };
 
 // --- Components ---
@@ -143,7 +159,7 @@ export default function StudentList() {
 
     // Sort State
     const [sortKey, setSortKey] = useState<SortKey>('grade');
-    const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
     // Debounced search term
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -255,7 +271,7 @@ export default function StudentList() {
             setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSortKey(key);
-            setSortOrder('asc');
+            setSortOrder(key === 'grade' ? 'desc' : 'asc');
         }
     };
 
@@ -273,9 +289,7 @@ export default function StudentList() {
                     comparison = a.kana.localeCompare(b.kana);
                     break;
                 case 'grade':
-                    comparison = a.gradeOrder !== b.gradeOrder
-                        ? a.gradeOrder - b.gradeOrder
-                        : a.kana.localeCompare(b.kana);
+                    comparison = compareChildrenByGradeAndKana(a, b);
                     break;
                 case 'className':
                     comparison = a.className.localeCompare(b.className);
@@ -299,6 +313,30 @@ export default function StudentList() {
 
         return result;
     }, [students, sortKey, sortOrder]);
+
+    const groupedStudents = useMemo<GradeSection[]>(() => {
+        const gradeMap = new Map<number, Student[]>();
+
+        processedStudents.forEach((student) => {
+            const gradeKey = getGradeSectionKey(student.grade);
+            const existing = gradeMap.get(gradeKey) || [];
+            existing.push(student);
+            gradeMap.set(gradeKey, existing);
+        });
+
+        return GRADE_SECTION_ORDER
+            .map((gradeKey) => {
+                const sectionStudents = gradeMap.get(gradeKey) || [];
+                if (sectionStudents.length === 0) return null;
+
+                return {
+                    key: String(gradeKey),
+                    label: getGradeSectionLabel(gradeKey),
+                    students: sectionStudents,
+                };
+            })
+            .filter((section): section is GradeSection => section !== null);
+    }, [processedStudents]);
 
     const parseFilename = (contentDisposition: string | null, fallback: string) => {
         if (!contentDisposition) return fallback;
@@ -398,6 +436,141 @@ export default function StudentList() {
             />
         );
     };
+
+    const renderStudentRow = (student: Student) => (
+        <tr
+            key={student.id}
+            className={`group transition-colors cursor-pointer ${student.status === 'inactive' ? 'bg-slate-50/50' : 'hover:bg-indigo-50/30'}`}
+            onClick={() => window.location.href = `/children/${student.id}/edit`}
+        >
+            <td className="px-2 py-4 text-center" >
+                <button
+                    onClick={
+                        (e) => {
+                            e.stopPropagation();
+                            toggleStatus(student.id, student.status);
+                        }
+                    }
+                    className={`p-1.5 rounded-full border transition-all ${student.status === 'active'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
+                        : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'
+                        }`}
+                    title={student.status === 'active' ? "退所にする" : "復帰させる"}
+                >
+                    {student.status === 'active' ? <Power size={16} /> : <RotateCcw size={16} />}
+                </button>
+            </td>
+
+            <td className="px-3 py-4" >
+                <div>
+                    <div className="flex items-center gap-2 flex-wrap" >
+                        <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
+                            {student.name}
+                        </span>
+                        {
+                            student.status === 'inactive' && (
+                                <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
+                            )
+                        }
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5 font-mono" >
+                        {student.kana}
+                    </div>
+                </div>
+            </td>
+
+            <td className="px-2 py-4" >
+                <span className="text-sm font-medium text-slate-700" > {student.gradeLabel || '-'} </span>
+            </td>
+
+            <td className="px-3 py-4" >
+                <span className="text-sm text-slate-600" > {student.className} </span>
+            </td>
+
+            <td className="px-2 py-4" >
+                {getContractBadge(student.contractType)}
+            </td>
+
+            <td className="px-3 py-4" >
+                {
+                    student.siblings.length > 0 ? (
+                        <div className="flex items-center gap-1 text-sm text-slate-600" >
+                            <Users size={14} className="text-indigo-400" />
+                            <span className="truncate" title={student.siblings.join(', ')} >
+                                {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
+                            </span>
+                        </div>
+                    ) : (
+                        <span className="text-slate-300 text-sm" > -</span>
+                    )}
+            </td>
+
+            <td className="px-2 py-4">
+                {!student.photoAllowed ? (
+                    <Badge variant="destructive" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold">
+                        <CameraOff size={10} />
+                        撮影NG
+                    </Badge>
+                ) : (
+                    <span className="text-slate-300 text-sm">-</span>
+                )}
+            </td>
+
+            <td className="px-2 py-4" >
+                {
+                    student.hasAllergy ? (
+                        <div
+                            className="text-sm text-rose-600 font-medium leading-tight line-clamp-2"
+                            title={student.allergyDetail}
+                        >
+                            {student.allergyDetail || 'あり'}
+                        </div>
+                    ) : (
+                        <span className="text-slate-300 text-sm" > -</span>
+                    )}
+            </td>
+
+            <td className="px-3 py-4" >
+                <div className="flex items-center gap-3" >
+                    <button
+                        className="p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            alert(`発信: ${student.parentPhone}`);
+                        }}
+                    >
+                        <Phone size={14} />
+                    </button>
+                    <div className="text-sm truncate" >
+                        <div className="font-medium text-slate-700" > {student.parentName} </div>
+                        <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
+                    </div>
+                </div>
+            </td>
+
+            <td className="px-1 py-4 text-center" >
+                <button
+                    className={`inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${qrGeneratingId === student.id || batchGenerating
+                        ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'
+                        }`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadQr(student);
+                    }}
+                    disabled={qrGeneratingId === student.id || batchGenerating}
+                    title="児童のQRコードをPDFで出力"
+                >
+
+                    PDF出力
+                </button>
+            </td>
+
+            <td className="px-4 py-2 text-right" >
+                <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+            </td>
+        </tr>
+    );
 
     return (
         <StaffLayout title="子ども一覧">
@@ -587,157 +760,24 @@ export default function StudentList() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100" >
-                                        {
-                                            processedStudents.map((student) => (
-                                                <tr
-                                                    key={student.id}
-                                                    className={`group transition-colors cursor-pointer ${student.status === 'inactive' ? 'bg-slate-50/50' : 'hover:bg-indigo-50/30'}`}
-                                                    onClick={() => window.location.href = `/children/${student.id}/edit`}
-                                                >
-                                                    {/* Status Toggle */}
-                                                    <td className="px-2 py-4 text-center" >
-                                                        <button
-                                                            onClick={
-                                                                (e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleStatus(student.id, student.status);
-                                                                }
-                                                            }
-                                                            className={`p-1.5 rounded-full border transition-all ${student.status === 'active'
-                                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
-                                                                : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'
-                                                                }`}
-                                                            title={student.status === 'active' ? "退所にする" : "復帰させる"}
-                                                        >
-                                                            {student.status === 'active' ? <Power size={16} /> : <RotateCcw size={16} />}
-                                                        </button>
-                                                    </td>
-
-                                                    {/* Name */}
-                                                    <td className="px-3 py-4" >
-                                                        <div>
-                                                            <div className="flex items-center gap-2 flex-wrap" >
-                                                                <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
-                                                                    {student.name}
-                                                                </span>
-                                                                {
-                                                                    student.status === 'inactive' && (
-                                                                        <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
-                                                                    )
-                                                                }
-                                                            </div>
-                                                            <div className="text-xs text-slate-400 mt-0.5 font-mono" >
-                                                                {student.kana}
-                                                            </div>
+                                        {groupedStudents.map((section) => (
+                                            <React.Fragment key={section.key}>
+                                                <tr className="bg-slate-100/80">
+                                                    <td colSpan={11} className="px-6 py-3 border-y border-slate-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-sm font-bold tracking-wide text-slate-700">{section.label}</span>
+                                                            <span className="text-xs font-medium text-slate-500">{section.students.length}名</span>
                                                         </div>
-                                                    </td>
-
-                                                    {/* Grade */}
-                                                    <td className="px-2 py-4" >
-                                                        <span className="text-sm font-medium text-slate-700" > {student.gradeLabel || '-'} </span>
-                                                    </td>
-
-                                                    {/* Class */}
-                                                    <td className="px-3 py-4" >
-                                                        <span className="text-sm text-slate-600" > {student.className} </span>
-                                                    </td>
-
-                                                    {/* Contract Type */}
-                                                    <td className="px-2 py-4" >
-                                                        {getContractBadge(student.contractType)}
-                                                    </td>
-
-                                                    {/* Siblings */}
-                                                    <td className="px-3 py-4" >
-                                                        {
-                                                            student.siblings.length > 0 ? (
-                                                                <div className="flex items-center gap-1 text-sm text-slate-600" >
-                                                                    <Users size={14} className="text-indigo-400" />
-                                                                    <span className="truncate" title={student.siblings.join(', ')} >
-                                                                        {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
-                                                                    </span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-sm" > -</span>
-                                                            )}
-                                                    </td>
-
-                                                    {/* Photo Restriction */}
-                                                    <td className="px-2 py-4">
-                                                        {!student.photoAllowed ? (
-                                                            <Badge variant="destructive" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold">
-                                                                <CameraOff size={10} />
-                                                                撮影NG
-                                                            </Badge>
-                                                        ) : (
-                                                            <span className="text-slate-300 text-sm">-</span>
-                                                        )}
-                                                    </td>
-
-                                                    {/* Allergy (Max 2 lines) */}
-                                                    <td className="px-2 py-4" >
-                                                        {
-                                                            student.hasAllergy ? (
-                                                                <div
-                                                                    className="text-sm text-rose-600 font-medium leading-tight line-clamp-2"
-                                                                    title={student.allergyDetail}
-                                                                >
-                                                                    {student.allergyDetail || 'あり'}
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-sm" > -</span>
-                                                            )}
-                                                    </td>
-
-                                                    {/* Parent Contact */}
-                                                    <td className="px-3 py-4" >
-                                                        <div className="flex items-center gap-3" >
-                                                            <button
-                                                                className="p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    alert(`発信: ${student.parentPhone}`);
-                                                                }}
-                                                            >
-                                                                <Phone size={14} />
-                                                            </button>
-                                                            <div className="text-sm truncate" >
-                                                                <div className="font-medium text-slate-700" > {student.parentName} </div>
-                                                                <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-
-                                                    {/* QR Download */}
-                                                    <td className="px-1 py-4 text-center" >
-                                                        <button
-                                                            className={`inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${qrGeneratingId === student.id || batchGenerating
-                                                                ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
-                                                                : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'
-                                                                }`}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDownloadQr(student);
-                                                            }}
-                                                            disabled={qrGeneratingId === student.id || batchGenerating}
-                                                            title="児童のQRコードをPDFで出力"
-                                                        >
-
-                                                            PDF出力
-                                                        </button>
-                                                    </td>
-
-                                                    {/* Action */}
-                                                    <td className="px-4 py-2 text-right" >
-                                                        <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
                                                     </td>
                                                 </tr>
-                                            ))}
+                                                {section.students.map(renderStudentRow)}
+                                            </React.Fragment>
+                                        ))}
                                     </tbody>
                                 </table>
 
                                 {
-                                    processedStudents.length === 0 && !loading && (
+                                    groupedStudents.length === 0 && !loading && (
                                         <div className="p-12 text-center text-slate-400" >
                                             <p>該当する児童は見つかりませんでした </p>
                                         </div>

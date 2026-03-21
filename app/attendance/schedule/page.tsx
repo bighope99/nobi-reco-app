@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { Fragment, useState, useEffect, useMemo } from "react"
 import { normalizeKana } from '@/lib/utils/kana'
+import { compareChildrenByGradeAndKana } from '@/lib/children/sort'
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -52,8 +53,26 @@ interface ScheduleData {
   total: number
 }
 
+interface GradeSection {
+  key: string
+  label: string
+  children: ChildSchedule[]
+}
+
 type SortKey = 'name' | 'class' | 'grade'
 type SortOrder = 'asc' | 'desc'
+
+const GRADE_SECTION_ORDER = [6, 5, 4, 3, 2, 1, 0] as const
+
+const getGradeSectionKey = (grade: number | null): number => {
+  if (!grade || grade < 1) return 0
+  return grade > 6 ? 6 : grade
+}
+
+const getGradeSectionLabel = (gradeKey: number): string => {
+  if (gradeKey === 0) return '未就学'
+  return `${gradeKey}年生`
+}
 
 export default function AttendanceSchedulePage() {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
@@ -61,8 +80,8 @@ export default function AttendanceSchedulePage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterClass, setFilterClass] = useState('all')
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [sortKey, setSortKey] = useState<SortKey>('grade')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [editMode, setEditMode] = useState(false)
   const [modifiedSchedules, setModifiedSchedules] = useState<Map<string, ChildSchedule['schedule']>>(new Map())
   const [saving, setSaving] = useState(false)
@@ -144,10 +163,7 @@ export default function AttendanceSchedulePage() {
           comparison = a.class_name.localeCompare(b.class_name)
           break
         case 'grade':
-          comparison = (a.grade || 0) - (b.grade || 0)
-          if (comparison === 0) {
-            comparison = a.kana.localeCompare(b.kana)
-          }
+          comparison = compareChildrenByGradeAndKana(a, b)
           break
       }
       return sortOrder === 'asc' ? comparison : -comparison
@@ -156,12 +172,36 @@ export default function AttendanceSchedulePage() {
     return result
   }, [scheduleData, searchTerm, filterClass, sortKey, sortOrder])
 
+  const groupedData = useMemo<GradeSection[]>(() => {
+    const gradeMap = new Map<number, ChildSchedule[]>()
+
+    processedData.forEach((child) => {
+      const gradeKey = getGradeSectionKey(child.grade)
+      const existing = gradeMap.get(gradeKey) || []
+      existing.push(child)
+      gradeMap.set(gradeKey, existing)
+    })
+
+    return GRADE_SECTION_ORDER
+      .map((gradeKey) => {
+        const children = gradeMap.get(gradeKey) || []
+        if (children.length === 0) return null
+
+        return {
+          key: String(gradeKey),
+          label: getGradeSectionLabel(gradeKey),
+          children,
+        }
+      })
+      .filter((section): section is GradeSection => section !== null)
+  }, [processedData])
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
     } else {
       setSortKey(key)
-      setSortOrder('asc')
+      setSortOrder(key === 'grade' ? 'desc' : 'asc')
     }
   }
 
@@ -266,6 +306,53 @@ export default function AttendanceSchedulePage() {
   const handleCancel = () => {
     setModifiedSchedules(new Map())
     setEditMode(false)
+  }
+
+  const renderChildRow = (child: ChildSchedule) => {
+    const currentSchedule = getCurrentSchedule(child.child_id)
+    const hasChanges = modifiedSchedules.has(child.child_id)
+
+    return (
+      <tr
+        key={child.child_id}
+        className={`transition-colors ${hasChanges ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
+      >
+        <td className="px-3 py-4">
+          <div>
+            <div className="font-bold text-base text-slate-800">
+              {child.name}
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5 font-mono">
+              {child.kana}
+            </div>
+          </div>
+        </td>
+        <td className="px-2 py-4">
+          <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
+        </td>
+        <td className="px-3 py-4">
+          <span className="text-sm text-slate-600">{child.class_name}</span>
+        </td>
+        {weekdays.map((day) => (
+          <td key={day.key} className="px-4 py-4 text-center">
+            <div className="flex justify-center">
+              <Checkbox
+                checked={currentSchedule[day.key as keyof typeof currentSchedule]}
+                disabled={!editMode}
+                onCheckedChange={() =>
+                  handleCheckboxChange(
+                    child.child_id,
+                    day.key as keyof ChildSchedule['schedule'],
+                    currentSchedule[day.key as keyof typeof currentSchedule]
+                  )
+                }
+                className={editMode ? 'cursor-pointer' : 'cursor-not-allowed'}
+              />
+            </div>
+          </td>
+        ))}
+      </tr>
+    )
   }
 
   return (
@@ -428,56 +515,23 @@ export default function AttendanceSchedulePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {processedData.map((child) => {
-                      const currentSchedule = getCurrentSchedule(child.child_id)
-                      const hasChanges = modifiedSchedules.has(child.child_id)
-
-                      return (
-                        <tr
-                          key={child.child_id}
-                          className={`transition-colors ${hasChanges ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
-                        >
-                          <td className="px-3 py-4">
-                            <div>
-                              <div className="font-bold text-base text-slate-800">
-                                {child.name}
-                              </div>
-                              <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                                {child.kana}
-                              </div>
+                    {groupedData.map((section) => (
+                      <Fragment key={section.key}>
+                        <tr className="bg-slate-100/80">
+                          <td colSpan={8} className="px-3 py-3 border-y border-slate-200">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-bold tracking-wide text-slate-700">{section.label}</span>
+                              <span className="text-xs font-medium text-slate-500">{section.children.length}名</span>
                             </div>
                           </td>
-                          <td className="px-2 py-4">
-                            <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
-                          </td>
-                          <td className="px-3 py-4">
-                            <span className="text-sm text-slate-600">{child.class_name}</span>
-                          </td>
-                          {weekdays.map((day) => (
-                            <td key={day.key} className="px-4 py-4 text-center">
-                              <div className="flex justify-center">
-                                <Checkbox
-                                  checked={currentSchedule[day.key as keyof typeof currentSchedule]}
-                                  disabled={!editMode}
-                                  onCheckedChange={() =>
-                                    handleCheckboxChange(
-                                      child.child_id,
-                                      day.key as keyof ChildSchedule['schedule'],
-                                      currentSchedule[day.key as keyof typeof currentSchedule]
-                                    )
-                                  }
-                                  className={editMode ? 'cursor-pointer' : 'cursor-not-allowed'}
-                                />
-                              </div>
-                            </td>
-                          ))}
                         </tr>
-                      )
-                    })}
+                        {section.children.map(renderChildRow)}
+                      </Fragment>
+                    ))}
                   </tbody>
                 </table>
 
-                {processedData.length === 0 && (
+                {groupedData.length === 0 && (
                   <div className="p-12 text-center">
                     <Filter className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="text-slate-400">条件に一致する児童は見つかりませんでした</p>
