@@ -170,10 +170,11 @@ export async function GET(request: NextRequest) {
 
     // ユーザーごとのクラス割当マップ構築
     const classAssignmentMap = new Map<string, { class_id: string; class_name: string; is_main: boolean }[]>();
-    (allClassAssignments || []).forEach((ca: { user_id: string; class_role: string | null; m_classes: { id: string; name: string } }) => {
+    (allClassAssignments || []).forEach((ca) => {
+      const mClasses = Array.isArray(ca.m_classes) ? ca.m_classes[0] : ca.m_classes;
       const entry = {
-        class_id: ca.m_classes.id,
-        class_name: ca.m_classes.name,
+        class_id: mClasses?.id,
+        class_name: mClasses?.name,
         is_main: ca.class_role === 'main',
       };
       const existing = classAssignmentMap.get(ca.user_id) || [];
@@ -182,7 +183,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 同期的にデータを結合
-    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => ({
+    const usersWithDetails = (usersData || []).map((u) => ({
       user_id: u.id,
       email: u.email,
       name: u.name,
@@ -192,7 +193,7 @@ export async function GET(request: NextRequest) {
       hire_date: u.hire_date,
       is_active: u.is_active,
       assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: u.last_login_at,
+      last_login_at: (u as any).last_login_at,
       created_at: u.created_at,
       updated_at: u.updated_at,
     }));

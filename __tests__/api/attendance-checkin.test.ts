@@ -919,13 +919,13 @@ describe('POST /api/attendance/checkin', () => {
         error: { message: 'db error' },
       });
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           if (table === 'h_attendance') {
-            const callCount = mockSupabase.from.mock.calls.filter(
-              (call) => call[0] === 'h_attendance'
+            const callCount: number = (mockSupabase.from as jest.Mock).mock.calls.filter(
+              (call: unknown[]) => call[0] === 'h_attendance'
             ).length;
             return callCount === 1 ? attendanceCheckQuery : attendanceInsertQuery;
           }

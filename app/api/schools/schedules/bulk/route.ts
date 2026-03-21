@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest) {
         }
 
         // 施設アクセス権限チェック
-        if (allowedFacilityIds.length > 0) {
+        if (allowedFacilityIds && allowedFacilityIds.length > 0) {
           const scheduleFacilityId = (schedule.m_schools as any).facility_id;
           if (!allowedFacilityIds.includes(scheduleFacilityId)) {
             results.push({

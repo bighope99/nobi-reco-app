@@ -158,6 +158,7 @@ type ChildOption = {
 type ChildApi = {
   child_id: string;
   name: string;
+  kana?: string | null;
   class_name?: string | null;
   grade?: number | null;
 };

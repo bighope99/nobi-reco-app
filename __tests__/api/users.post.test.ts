@@ -32,6 +32,7 @@ describe('POST /api/users (email invite flow)', () => {
 
   it('sends an invitation email instead of generating a password', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',

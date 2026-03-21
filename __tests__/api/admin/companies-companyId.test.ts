@@ -46,8 +46,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
-      company_id: 'company-1',
+      company_id: 'test-company-id',
       current_facility_id: 'facility-1',
     });
 
@@ -62,8 +63,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return 404 when company not found', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -94,8 +96,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return company details with facilities and accounts', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -197,8 +200,9 @@ describe('GET /api/admin/companies/[companyId]', () => {
 
   it('should return 500 when database error occurs', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -255,8 +259,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
-      company_id: 'company-1',
+      company_id: 'test-company-id',
       current_facility_id: 'facility-1',
     });
 
@@ -274,8 +279,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 400 when company name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -293,8 +299,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 404 when company not found', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -328,8 +335,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should update company successfully', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -395,8 +403,9 @@ describe('PUT /api/admin/companies/[companyId]', () => {
 
   it('should return 500 when update fails', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 

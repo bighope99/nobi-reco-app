@@ -93,6 +93,7 @@ describe('GET /api/users - facility_id フィルター', () => {
 
   it('company_admin が facility_id パラメータを指定すると、その施設でフィルタされる', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -143,6 +144,7 @@ describe('GET /api/users - facility_id フィルター', () => {
 
   it('company_admin が別会社の施設IDを指定しても company_id フィルターにより別会社のユーザーは取得されない', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -187,6 +189,7 @@ describe('GET /api/users - facility_id フィルター', () => {
 
   it('facility_admin が facility_id パラメータを指定しても current_facility_id でフィルタされる（上書き不可）', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -254,6 +257,7 @@ describe('POST /api/users - facility_id 指定', () => {
 
   it('company_admin が body.facility_id を指定してユーザーを作成できる', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -370,6 +374,7 @@ describe('POST /api/users - facility_id 指定', () => {
 
   it('facility_admin が body.facility_id を指定しても current_facility_id で施設紐付けされる', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',

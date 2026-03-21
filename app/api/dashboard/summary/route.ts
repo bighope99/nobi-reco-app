@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
       return `${hours}:${minutes}`;
     };
 
-    const attendanceList: AttendanceListItem[] = childrenData.map((child: any) => {
+    const attendanceList: AttendanceListItem[] = (childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
@@ -344,7 +344,7 @@ export async function GET(request: NextRequest) {
         last_record_date: lastRecordDate,
         weekly_record_count: weeklyRecordCount,
       };
-    });
+    }) as unknown as AttendanceListItem[]);
 
     // KPI計算
     const scheduledToday = attendanceList.filter(c => c.is_scheduled_today).length;

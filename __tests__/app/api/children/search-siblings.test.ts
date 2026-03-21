@@ -132,10 +132,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -185,10 +184,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -264,10 +262,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -342,10 +339,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -372,10 +368,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -405,10 +400,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -458,10 +452,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -508,10 +501,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: null, // 施設未設定
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -535,10 +527,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -561,10 +552,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -593,10 +583,9 @@ describe('POST /api/children/search-siblings', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {
@@ -617,17 +606,16 @@ describe('POST /api/children/search-siblings', () => {
       // m_guardians は成功するが m_children クエリがエラーになるケース
       mockSearchByPhone.mockResolvedValue(['guardian-1']);
       const supabase = createSupabaseMock({
-        childrenData: null,
+        childrenData: null as unknown as any[],
         childrenError: { message: 'Database error' },
         guardiansData: [{ id: 'guardian-1', _child_guardian: [{ child_id: 'child-1' }] }],
       });
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/children/search-siblings', {

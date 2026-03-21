@@ -122,7 +122,7 @@ test('Activity Record - Class Selection, Mention, and Save Flow', async ({ page 
   
   // Get button state for debugging
   const buttonClass = await saveButton.getAttribute('class').catch(() => '');
-  console.log('  Save button has disabled attr:', buttonClass.includes('disabled'));
+  console.log('  Save button has disabled attr:', (buttonClass ?? '').includes('disabled'));
   
   // Try to click save button - even if disabled to see what happens
   if (isSaveVisible) {
@@ -131,7 +131,7 @@ test('Activity Record - Class Selection, Mention, and Save Flow', async ({ page 
       await saveButton.click({ timeout: 3000, force: true });
       console.log('  Clicked save button (forced)');
     } catch (e) {
-      console.log('  Save button click failed (expected if disabled):', e.message);
+      console.log('  Save button click failed (expected if disabled):', (e as Error).message);
     }
     await page.waitForTimeout(1500);
   }

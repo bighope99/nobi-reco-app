@@ -3,7 +3,7 @@ import ChildForm from '@/components/children/ChildForm';
 
 beforeEach(() => {
   global.fetch = jest.fn(async (input) => {
-    const url = typeof input === 'string' ? input : input.url;
+    const url = typeof input === 'string' ? input : (input as Request).url;
     if (url === '/api/children/classes') {
       return { ok: true, json: async () => ({ success: true, data: { classes: [] } }) } as Response;
     }

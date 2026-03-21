@@ -23,6 +23,7 @@ describe('GET /api/users', () => {
 
   it('maps class_role into assigned_classes.is_main', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',

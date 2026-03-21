@@ -64,7 +64,7 @@ describe('middleware', () => {
     mockRequest = {
       nextUrl: {
         pathname: '/login',
-      } as URL,
+      } as any,
       url: 'http://localhost:3000/login',
       cookies: {
         get: jest.fn(),
