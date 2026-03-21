@@ -30,6 +30,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // facility_admin は current_facility_id が必須（fail-closed）
+    if (role === 'facility_admin' && !current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     if (!body.updates || !Array.isArray(body.updates)) {

@@ -191,9 +191,9 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' },
+        error: null,
       }),
     };
 
@@ -228,7 +228,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -238,7 +238,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'existing-user-id' },
         error: null,
       }),
@@ -298,7 +298,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -308,7 +308,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'existing-user-id' },
         error: null,
       }),
@@ -318,7 +318,7 @@ describe('POST /api/admin/company-admins', () => {
       update: jest.fn(() => userUpdateQuery),
       eq: jest.fn(() => userUpdateQuery),
       select: jest.fn(() => userUpdateQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: {
           id: 'existing-user-id',
           name: '管理者太郎',
@@ -397,7 +397,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -407,7 +407,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'signed-in-user-id' },
         error: null,
       }),
@@ -463,7 +463,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-2', name: '別の会社' },
         error: null,
       }),
@@ -473,7 +473,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'existing-user-id' },
         error: null,
       }),
@@ -484,7 +484,7 @@ describe('POST /api/admin/company-admins', () => {
       update: mockUpdate,
       eq: jest.fn(() => userUpdateQuery),
       select: jest.fn(() => userUpdateQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: {
           id: 'existing-user-id',
           name: '新しい管理者',
@@ -565,7 +565,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -575,16 +575,16 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' },
+        error: null,
       }),
     };
 
     const userInsertQuery: any = {
       insert: jest.fn(() => userInsertQuery),
       select: jest.fn(() => userInsertQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: {
           id: 'user-1',
           name: '管理者太郎',
@@ -679,7 +679,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -689,9 +689,9 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' },
+        error: null,
       }),
     };
 

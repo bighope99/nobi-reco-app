@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
 import { GET, PUT } from '@/app/api/admin/companies/[companyId]/route';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
+  createAdminClient: jest.fn(),
 }));
 
 jest.mock('@/lib/auth/jwt', () => ({
@@ -24,6 +25,7 @@ const buildPutRequest = (body: Record<string, unknown>) =>
 
 describe('GET /api/admin/companies/[companyId]', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
   const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
     typeof getAuthenticatedUserMetadata
   >;
@@ -183,6 +185,13 @@ describe('GET /api/admin/companies/[companyId]', () => {
     };
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue({
+      auth: {
+        admin: {
+          listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+        },
+      },
+    } as any);
 
     const request = new NextRequest('http://localhost/api/admin/companies/company-1');
     const response = await GET(request, createParams('company-1'));
