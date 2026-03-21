@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
       hire_date: u.hire_date,
       is_active: u.is_active,
       assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: (u as any).last_login_at,
+      last_login_at: null,
       created_at: u.created_at,
       updated_at: u.updated_at,
     }));

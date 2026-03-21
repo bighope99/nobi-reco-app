@@ -62,7 +62,8 @@ describe('calculateGrade', () => {
         const gradeApril1_2018 = calculateGrade('2018-04-01'); // Grade 2 (cohort: 2017-04-02 ~ 2018-04-01)
         const gradeApril2_2018 = calculateGrade('2018-04-02'); // Grade 1 (cohort: 2018-04-02 ~ 2019-04-01)
 
-        expect(gradeApril1_2018).toBe(gradeApril2_2018! + 1);
+        expect(gradeApril2_2018).not.toBeNull();
+        expect(gradeApril1_2018).toBe((gradeApril2_2018 as number) + 1);
       });
     });
 

@@ -50,7 +50,7 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
   const mockedSendWithGas = sendWithGas as jest.MockedFunction<typeof sendWithGas>;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
     mockedSendWithGas.mockResolvedValue({ ok: true });
   });
 

@@ -181,7 +181,14 @@ export async function GET(request: NextRequest) {
 
     // 4. バッチ復号化 - 施設IDでキャッシュ分離
     const decryptedChildren = cachedBatchDecryptChildren(childrenData, facility_id);
-    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data as unknown as Array<{ child_id: string; is_primary?: boolean; guardian?: { phone?: string | null } | null }> || [], facility_id);
+    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(
+      (guardianLinksResult.data ?? []) as unknown as Array<{
+        child_id: string;
+        is_primary?: boolean;
+        guardian?: { id: string; phone: string | null } | null;
+      }>,
+      facility_id
+    );
 
     // 5. ヘルパー関数
     const getSchoolStartTime = (schoolId: string | null, grade: number | null): string | null => {
