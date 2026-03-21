@@ -85,11 +85,11 @@ describe('sanitize utilities', () => {
     });
 
     it('should handle objects with missing fields', () => {
-      const input = { menu: 'Test' };
+      const input = { menu: 'Test' } as Record<string, string>;
       const result = sanitizeObjectFields(input, ['menu', 'notes']);
 
       expect(result?.menu).toBe('Test');
-      expect(result?.notes).toBeUndefined();
+      expect((result as any)?.notes).toBeUndefined();
     });
   });
 });

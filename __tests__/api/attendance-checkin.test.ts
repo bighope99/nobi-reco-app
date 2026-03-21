@@ -42,6 +42,7 @@ interface MockInsertQuery {
 
 interface MockAuthQuery {
   getSession: jest.Mock<Promise<{ data: { session: { user: { id: string } } | null }; error: unknown | null }>>;
+  getClaims: jest.Mock<Promise<{ data: { claims: { sub: string; app_metadata: { role: string; company_id: string; current_facility_id: string } } } | null; error: unknown | null }>>;
 }
 
 interface MockSupabaseClient {
@@ -119,6 +120,19 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
+            },
+          },
+          error: null,
+        }),
       };
 
       // Mock child query
@@ -187,12 +201,8 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.data?.child_name).toBe('Test Child');
       expect(json.data?.class_name).toBe('さくら組');
 
-      // Assert getUserSession was called with correct userId
-      expect(mockedGetUserSession).toHaveBeenCalledWith(userId);
-      expect(mockedGetUserSession).toHaveBeenCalledTimes(1);
-
-      // Assert auth.getSession was called
-      expect(authQuery.getSession).toHaveBeenCalledTimes(1);
+      // Assert auth.getClaims was called (new JWT-based auth)
+      expect(authQuery.getClaims).toHaveBeenCalledTimes(1);
 
       // Assert m_children query structure
       expect(mockSupabase.from).toHaveBeenCalledWith('m_children');
@@ -250,6 +260,19 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
+            },
+          },
+          error: null,
+        }),
       };
 
       const mockSupabase = {
@@ -301,6 +324,19 @@ describe('POST /api/attendance/checkin', () => {
           data: {
             session: {
               user: { id: userId },
+            },
+          },
+          error: null,
+        }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
             },
           },
           error: null,
@@ -373,6 +409,19 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
+            },
+          },
+          error: null,
+        }),
       };
 
       const childQuery = createSelectQuery();
@@ -427,10 +476,6 @@ describe('POST /api/attendance/checkin', () => {
       expect(response.status).toBe(200);
       expect(json.success).toBe(true);
 
-      // Assert getUserSession was called with correct userId
-      expect(mockedGetUserSession).toHaveBeenCalledWith(userId);
-      expect(mockedGetUserSession).toHaveBeenCalledTimes(1);
-
       // Assert attendance insert was called with correct parameters
       expect(attendanceInsertQuery.insert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -454,6 +499,10 @@ describe('POST /api/attendance/checkin', () => {
             session: null,
           },
           error: null,
+        }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'No session' },
         }),
       };
 
@@ -509,6 +558,10 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'No facility' },
+        }),
       };
 
       const mockSupabase = {
@@ -557,6 +610,19 @@ describe('POST /api/attendance/checkin', () => {
           data: {
             session: {
               user: { id: userId },
+            },
+          },
+          error: null,
+        }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
             },
           },
           error: null,
@@ -614,6 +680,19 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
+            },
+          },
+          error: null,
+        }),
       };
 
       const mockSupabase = {
@@ -664,6 +743,19 @@ describe('POST /api/attendance/checkin', () => {
           data: {
             session: {
               user: { id: userId },
+            },
+          },
+          error: null,
+        }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: userFacilityId,
+              },
             },
           },
           error: null,
@@ -732,6 +824,19 @@ describe('POST /api/attendance/checkin', () => {
           data: {
             session: {
               user: { id: userId },
+            },
+          },
+          error: null,
+        }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
             },
           },
           error: null,
@@ -828,6 +933,19 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
+            },
+          },
+          error: null,
+        }),
       };
 
       // Mock child query returning error
@@ -891,6 +1009,19 @@ describe('POST /api/attendance/checkin', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
+            },
+          },
+          error: null,
+        }),
       };
 
       const childQuery = createSelectQuery();
@@ -919,13 +1050,13 @@ describe('POST /api/attendance/checkin', () => {
         error: { message: 'db error' },
       });
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           if (table === 'h_attendance') {
-            const callCount = mockSupabase.from.mock.calls.filter(
-              (call) => call[0] === 'h_attendance'
+            const callCount: number = (mockSupabase.from as jest.Mock).mock.calls.filter(
+              (call: unknown[]) => call[0] === 'h_attendance'
             ).length;
             return callCount === 1 ? attendanceCheckQuery : attendanceInsertQuery;
           }
@@ -975,6 +1106,19 @@ describe('POST /api/attendance/checkin', () => {
           data: {
             session: {
               user: { id: userId },
+            },
+          },
+          error: null,
+        }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: userId,
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: facilityId,
+              },
             },
           },
           error: null,

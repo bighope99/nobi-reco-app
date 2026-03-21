@@ -52,7 +52,7 @@ export async function PUT(
     }
 
     // 施設アクセス権限チェック
-    if (role === 'facility_admin' || role === 'staff') {
+    if (role === 'facility_admin') {
       if (current_facility_id !== school.facility_id) {
         return NextResponse.json(
           { success: false, error: 'School not found' },
@@ -114,36 +114,19 @@ export async function DELETE(
   const params = await props.params;
   try {
     const supabase = await createClient();
+    const metadata = await getAuthenticatedUserMetadata();
 
-    // 認証チェック
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    if (!metadata) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // ユーザー情報取得
-    const { data: userData } = await supabase
-      .from('m_users')
-      .select('role, company_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!userData) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { role, current_facility_id } = metadata;
 
     // 権限チェック（staffは削除不可）
-    if (userData.role === 'staff') {
+    if (role === 'staff') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -168,7 +151,7 @@ export async function DELETE(
     }
 
     // 施設アクセス権限チェック
-    if (role === 'facility_admin' || role === 'staff') {
+    if (role === 'facility_admin') {
       if (current_facility_id !== school.facility_id) {
         return NextResponse.json(
           { success: false, error: 'School not found' },

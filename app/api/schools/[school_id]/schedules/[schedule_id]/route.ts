@@ -53,7 +53,7 @@ export async function PUT(
     }
 
     // 施設アクセス権限チェック
-    if (role === 'facility_admin' || role === 'staff') {
+    if (role === 'facility_admin') {
       const scheduleFacilityId = (schedule.m_schools as any).facility_id;
       if (current_facility_id !== scheduleFacilityId) {
         return NextResponse.json(
@@ -189,7 +189,7 @@ export async function DELETE(
     }
 
     // 施設アクセス権限チェック
-    if (role === 'facility_admin' || role === 'staff') {
+    if (role === 'facility_admin') {
       const scheduleFacilityId = (schedule.m_schools as any).facility_id;
       if (current_facility_id !== scheduleFacilityId) {
         return NextResponse.json(

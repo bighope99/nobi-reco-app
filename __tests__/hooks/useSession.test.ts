@@ -114,7 +114,7 @@ describe('useSession', () => {
   // Then:  /api/auth/session API からセッションを復旧してセットすること
   // ------------------------------------------------------------------
   it('sessionStorage が空で Supabase Auth にユーザーがいる場合、APIからセッションを復旧すること', async () => {
-    mockSessionStorage.getItem.mockReturnValue(null)
+    mockSessionStorage.getItem.mockReturnValue(null as unknown as string)
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase({ id: 'user-abc-123' })
     )
@@ -135,7 +135,7 @@ describe('useSession', () => {
       '/api/auth/session',
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Skip-SessionGuard': '1' },
         body: JSON.stringify({ user_id: 'user-abc-123' }),
       })
     )
@@ -153,7 +153,7 @@ describe('useSession', () => {
   // Then:  null が返され続けること
   // ------------------------------------------------------------------
   it('sessionStorage が空で Supabase Auth にユーザーがいない場合、null を返すこと', async () => {
-    mockSessionStorage.getItem.mockReturnValue(null)
+    mockSessionStorage.getItem.mockReturnValue(null as unknown as string)
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase(null)
     )
@@ -210,7 +210,7 @@ describe('useSession', () => {
   // Then:  session は null のまま維持されること
   // ------------------------------------------------------------------
   it('/api/auth/session API が失敗する場合、null のまま維持すること', async () => {
-    mockSessionStorage.getItem.mockReturnValue(null)
+    mockSessionStorage.getItem.mockReturnValue(null as unknown as string)
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase({ id: 'user-abc-123' })
     )

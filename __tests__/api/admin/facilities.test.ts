@@ -50,8 +50,8 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
   const mockedSendWithGas = sendWithGas as jest.MockedFunction<typeof sendWithGas>;
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    mockedSendWithGas.mockResolvedValue(undefined);
+    jest.clearAllMocks();
+    mockedSendWithGas.mockResolvedValue({ ok: true });
   });
 
   it('should return 401 when user is not authenticated', async () => {
@@ -68,6 +68,7 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 403 when user is facility_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -84,6 +85,7 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 403 when company_admin of different company', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'other-company',
       current_facility_id: null,
@@ -200,8 +202,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 400 when required params missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -220,8 +223,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 400 for invalid email format', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -240,8 +244,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 400 when admin name exceeds 100 chars', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -261,8 +266,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 404 when company not found', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -293,8 +299,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should return 400 when email already exists (signed-in user)', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -353,8 +360,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should reinvite unsigned-in user when facility admin email exists', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -387,6 +395,22 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       }),
     };
 
+    // ロールバック用に元データを取得する select クエリ（call 4）
+    const mUsersSelectQuery: any = {
+      select: jest.fn(() => mUsersSelectQuery),
+      eq: jest.fn(() => mUsersSelectQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          company_id: 'old-company-id',
+          name: '旧施設管理者',
+          name_kana: null,
+          role: 'facility_admin',
+          hire_date: '2020-01-01',
+        },
+        error: null,
+      }),
+    };
+
     const mUsersUpdateQuery: any = {
       update: jest.fn(() => mUsersUpdateQuery),
       eq: jest.fn(() => mUsersUpdateQuery),
@@ -402,6 +426,15 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       }),
     };
 
+    // 既存 is_primary を false に更新するクエリ（call 6）
+    // .update(...).eq('user_id', ...).eq('is_primary', true) の2段チェーン
+    const userFacilityUpdateQuery: any = {
+      update: jest.fn(() => userFacilityUpdateQuery),
+      eq: jest.fn()
+        .mockImplementationOnce(() => userFacilityUpdateQuery)  // 1回目: チェーン継続
+        .mockResolvedValue({ error: null }),                    // 2回目: 最終結果
+    };
+
     const userFacilityInsertQuery: any = {
       insert: jest.fn(() => userFacilityInsertQuery),
     };
@@ -414,8 +447,10 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
         if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
-        if (fromCallCount === 4 && table === 'm_users') return mUsersUpdateQuery;
-        if (fromCallCount === 5 && table === '_user_facility') return userFacilityInsertQuery;
+        if (fromCallCount === 4 && table === 'm_users') return mUsersSelectQuery;
+        if (fromCallCount === 5 && table === 'm_users') return mUsersUpdateQuery;
+        if (fromCallCount === 6 && table === '_user_facility') return userFacilityUpdateQuery;
+        if (fromCallCount === 7 && table === '_user_facility') return userFacilityInsertQuery;
         throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
       }),
     };
@@ -455,8 +490,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should create facility and admin successfully', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -563,8 +599,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
 
   it('should rollback on auth user creation failure', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 

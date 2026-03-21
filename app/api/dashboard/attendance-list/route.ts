@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     // 除外IDを適用
     const excludeIdSet = new Set(excludeIds);
-    const childrenData = ((childrenDataRaw ?? []) as ChildDataRaw[]).filter((c) => !excludeIdSet.has(c.id));
+    const childrenData = ((childrenDataRaw ?? []) as unknown as ChildDataRaw[]).filter((c) => !excludeIdSet.has(c.id));
     const childIds = childrenData.map((c) => c.id);
 
     // 学校ID一覧
@@ -181,7 +181,14 @@ export async function GET(request: NextRequest) {
 
     // 4. バッチ復号化 - 施設IDでキャッシュ分離
     const decryptedChildren = cachedBatchDecryptChildren(childrenData, facility_id);
-    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data || [], facility_id);
+    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(
+      (guardianLinksResult.data ?? []) as unknown as Array<{
+        child_id: string;
+        is_primary?: boolean;
+        guardian?: { id: string; phone: string | null } | null;
+      }>,
+      facility_id
+    );
 
     // 5. ヘルパー関数
     const getSchoolStartTime = (schoolId: string | null, grade: number | null): string | null => {

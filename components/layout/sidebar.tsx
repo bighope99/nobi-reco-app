@@ -2,6 +2,7 @@
 
 import type React from "react"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -152,13 +153,10 @@ export function Sidebar({ type, userName, isOpen = false, onClose }: SidebarProp
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-      <div className="border-b border-sidebar-border px-6 py-3">
+      <div className="border-b border-sidebar-border px-6 pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-              の
-            </div>
-            <span className="text-lg font-bold text-sidebar-foreground">のびレコ</span>
+            <Image src="/nobireco-logo.png" alt="のびレコ" width={70} height={48} />
           </div>
           {/* モバイル用閉じるボタン */}
           <Button

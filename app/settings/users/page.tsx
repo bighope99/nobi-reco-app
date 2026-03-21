@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { normalizeSearch } from '@/lib/utils/kana';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Users,
@@ -81,6 +82,7 @@ export default function UsersSettingsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // New user form
@@ -128,11 +130,17 @@ export default function UsersSettingsPage() {
     fetchUsers();
   };
 
-  const filteredUsers = users.filter(user =>
-    user.name.includes(searchTerm) ||
-    (user.email && user.email.includes(searchTerm)) ||
-    (user.phone && user.phone.includes(searchTerm))
-  );
+  const filteredUsers = (() => {
+    const normalize = (s: string) => normalizeSearch(s)
+    const normalizedTerm = normalize(searchTerm).trim()
+    if (!normalizedTerm) return users
+    return users.filter(user =>
+      normalize(user.name).includes(normalizedTerm) ||
+      (user.name_kana && normalize(user.name_kana).includes(normalizedTerm)) ||
+      (user.email && user.email.toLowerCase().includes(normalizedTerm)) ||
+      (user.phone && user.phone.includes(normalizedTerm))
+    )
+  })();
 
   const isEmailRequired = newUser.role !== 'staff';
 
@@ -141,7 +149,9 @@ export default function UsersSettingsPage() {
     const normalizedEmail = newUser.email.trim();
     const normalizedPhone = (newUser.phone || '').trim() || null;
     if (!normalizedName || (isEmailRequired && !normalizedEmail)) return;
+    if (submitting) return;
 
+    setSubmitting(true);
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
@@ -167,6 +177,8 @@ export default function UsersSettingsPage() {
     } catch (err) {
       console.error('Error creating user:', err);
       alert(err instanceof Error ? err.message : 'Failed to create user');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -476,11 +488,15 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  disabled={!newUser.name.trim() || (isEmailRequired && !newUser.email.trim())}
+                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim())}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Plus size={16} />
-                  追加する
+                  {submitting ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <Plus size={16} />
+                  )}
+                  {submitting ? '追加中...' : '追加する'}
                 </button>
               </div>
             </div>

@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    const childrenData = (childrenDataRaw ?? []) as ChildDataRaw[];
+    const childrenData = (childrenDataRaw ?? []) as unknown as ChildDataRaw[];
     const childIds = childrenData.map((c) => c.id);
 
     // 学校ID一覧
@@ -203,7 +203,7 @@ export async function GET(request: NextRequest) {
     );
 
     // 4. バッチ復号化（電話番号）- 施設IDでキャッシュ分離
-    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data || [], facility_id);
+    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data as unknown as Array<{ child_id: string; is_primary?: boolean; guardian?: { phone?: string | null } | null }> || [], facility_id);
 
     // 5. ヘルパー関数
     const getSchoolStartTime = (schoolId: string | null, grade: number | null): string | null => {

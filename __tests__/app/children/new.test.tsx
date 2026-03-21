@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
 beforeEach(() => {
+  jest.useFakeTimers();
   global.fetch = jest.fn(async (input) => {
-    const url = typeof input === 'string' ? input : input.url;
+    const url = typeof input === 'string' ? input : (input as Request).url;
     if (url === '/api/children/classes') {
       return {
         ok: true,
@@ -25,10 +26,23 @@ beforeEach(() => {
         }),
       } as Response;
     }
+    if (url === '/api/children/search-siblings') {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { found: false, candidates: [] },
+        }),
+      } as Response;
+    }
     return { ok: false, json: async () => ({ success: false }) } as Response;
   });
 
   window.alert = jest.fn();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('ChildForm new', () => {
@@ -129,5 +143,27 @@ describe('ChildForm new', () => {
         parent_email: 'taro@example.com',
       }),
     );
+  });
+
+  it('automatically searches siblings when phone number is entered', async () => {
+    render(<ChildForm mode="new" />);
+
+    fireEvent.change(screen.getByPlaceholderText('090-0000-0000'), {
+      target: { value: '090-9876-5432' },
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(600);
+    });
+
+    await waitFor(() => {
+      const siblingSearchCalls = (global.fetch as jest.Mock).mock.calls.filter(
+        (call) => {
+          const url = typeof call[0] === 'string' ? call[0] : call[0].url;
+          return url === '/api/children/search-siblings';
+        },
+      );
+      expect(siblingSearchCalls.length).toBeGreaterThan(0);
+    });
   });
 });
