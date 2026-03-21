@@ -115,6 +115,19 @@ describe('/api/activities GET - individual_records機能', () => {
             data: { session: { user: { id: 'test-user-id' } } },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         storage: {
           from: jest.fn(() => ({
@@ -195,6 +208,19 @@ describe('/api/activities GET - individual_records機能', () => {
             data: { session: { user: { id: 'test-user-id' } } },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         storage: {
           from: jest.fn(() => ({
@@ -253,6 +279,19 @@ describe('/api/activities GET - individual_records機能', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -315,6 +354,19 @@ describe('/api/activities GET - individual_records機能', () => {
             data: { session: { user: { id: 'test-user-id' } } },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
+            error: null,
+          }),
         },
         storage: {
           from: jest.fn(() => ({
@@ -368,6 +420,19 @@ describe('/api/activities GET - individual_records機能', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },

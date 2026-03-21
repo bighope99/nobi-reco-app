@@ -135,7 +135,7 @@ describe('useSession', () => {
       '/api/auth/session',
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Skip-SessionGuard': '1' },
         body: JSON.stringify({ user_id: 'user-abc-123' }),
       })
     )

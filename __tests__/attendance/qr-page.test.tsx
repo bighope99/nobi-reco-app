@@ -69,11 +69,8 @@ describe("QRAttendanceScannerPage", () => {
     })
   })
 
-  it("switches to the front camera when toggled before starting", async () => {
+  it("switches to the front camera when toggled during scanning", async () => {
     render(<QRAttendanceScannerPage />)
-
-    const toggleButton = await screen.findByRole("button", { name: /カメラを切り替え/ })
-    fireEvent.click(toggleButton)
 
     const startButton = screen.getByRole("button", { name: /カメラを起動/ })
     fireEvent.click(startButton)
@@ -82,7 +79,14 @@ describe("QRAttendanceScannerPage", () => {
       expect(decodeFromConstraints).toHaveBeenCalled()
     })
 
-    const [constraints] = decodeFromConstraints.mock.calls[0]
+    const toggleButton = await screen.findByRole("button", { name: /カメラを切り替え/ })
+    fireEvent.click(toggleButton)
+
+    await waitFor(() => {
+      expect(decodeFromConstraints).toHaveBeenCalledTimes(2)
+    })
+
+    const [constraints] = decodeFromConstraints.mock.calls[1]
     expect(constraints).toMatchObject({
       video: {
         facingMode: { ideal: "user" },

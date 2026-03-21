@@ -442,7 +442,7 @@ describe('POST /api/admin/companies', () => {
 
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
-    expect(json.error).toBe('Email already exists');
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
   });
 
   it('should reinvite unsigned-in user and return 200', async () => {

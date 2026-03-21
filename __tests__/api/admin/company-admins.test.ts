@@ -283,7 +283,7 @@ describe('POST /api/admin/company-admins', () => {
 
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
-    expect(json.error).toBe('Email already exists');
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
   });
 
   it('should reinvite unsigned-in user and return 200', async () => {
@@ -318,7 +318,7 @@ describe('POST /api/admin/company-admins', () => {
       update: jest.fn(() => userUpdateQuery),
       eq: jest.fn(() => userUpdateQuery),
       select: jest.fn(() => userUpdateQuery),
-      maybeSingle: jest.fn().mockResolvedValue({
+      single: jest.fn().mockResolvedValue({
         data: {
           id: 'existing-user-id',
           name: '管理者太郎',
@@ -448,7 +448,7 @@ describe('POST /api/admin/company-admins', () => {
 
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
-    expect(json.error).toBe('Email already exists');
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
   });
 
   it('should update name and company_id in m_users when reinviting', async () => {
@@ -484,7 +484,7 @@ describe('POST /api/admin/company-admins', () => {
       update: mockUpdate,
       eq: jest.fn(() => userUpdateQuery),
       select: jest.fn(() => userUpdateQuery),
-      maybeSingle: jest.fn().mockResolvedValue({
+      single: jest.fn().mockResolvedValue({
         data: {
           id: 'existing-user-id',
           name: '新しい管理者',
@@ -584,7 +584,7 @@ describe('POST /api/admin/company-admins', () => {
     const userInsertQuery: any = {
       insert: jest.fn(() => userInsertQuery),
       select: jest.fn(() => userInsertQuery),
-      maybeSingle: jest.fn().mockResolvedValue({
+      single: jest.fn().mockResolvedValue({
         data: {
           id: 'user-1',
           name: '管理者太郎',

@@ -395,6 +395,22 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       }),
     };
 
+    // ロールバック用に元データを取得する select クエリ（call 4）
+    const mUsersSelectQuery: any = {
+      select: jest.fn(() => mUsersSelectQuery),
+      eq: jest.fn(() => mUsersSelectQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          company_id: 'old-company-id',
+          name: '旧施設管理者',
+          name_kana: null,
+          role: 'facility_admin',
+          hire_date: '2020-01-01',
+        },
+        error: null,
+      }),
+    };
+
     const mUsersUpdateQuery: any = {
       update: jest.fn(() => mUsersUpdateQuery),
       eq: jest.fn(() => mUsersUpdateQuery),
@@ -410,6 +426,15 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       }),
     };
 
+    // 既存 is_primary を false に更新するクエリ（call 6）
+    // .update(...).eq('user_id', ...).eq('is_primary', true) の2段チェーン
+    const userFacilityUpdateQuery: any = {
+      update: jest.fn(() => userFacilityUpdateQuery),
+      eq: jest.fn()
+        .mockImplementationOnce(() => userFacilityUpdateQuery)  // 1回目: チェーン継続
+        .mockResolvedValue({ error: null }),                    // 2回目: 最終結果
+    };
+
     const userFacilityInsertQuery: any = {
       insert: jest.fn(() => userFacilityInsertQuery),
     };
@@ -422,8 +447,10 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
         if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
-        if (fromCallCount === 4 && table === 'm_users') return mUsersUpdateQuery;
-        if (fromCallCount === 5 && table === '_user_facility') return userFacilityInsertQuery;
+        if (fromCallCount === 4 && table === 'm_users') return mUsersSelectQuery;
+        if (fromCallCount === 5 && table === 'm_users') return mUsersUpdateQuery;
+        if (fromCallCount === 6 && table === '_user_facility') return userFacilityUpdateQuery;
+        if (fromCallCount === 7 && table === '_user_facility') return userFacilityInsertQuery;
         throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
       }),
     };

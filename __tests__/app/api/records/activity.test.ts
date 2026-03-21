@@ -646,8 +646,8 @@ describe('/api/records/activity', () => {
         { time: '12:00', content: '昼食' },
       ],
       role_assignments: [
-        { user_id: 'user-001', user_name: '山田太郎', role: '主担当' },
-        { user_id: 'user-002', user_name: '佐藤花子', role: '配膳' },
+        { user_id: '550e8400-e29b-41d4-a716-446655440001', user_name: '山田太郎', role: '主担当' },
+        { user_id: '550e8400-e29b-41d4-a716-446655440002', user_name: '佐藤花子', role: '配膳' },
       ],
       special_notes: 'アレルギー対応が必要な児童が3名います',
       meal: {
@@ -919,8 +919,8 @@ describe('/api/records/activity', () => {
         const dataWithRoles = {
           ...mockActivityData,
           role_assignments: [
-            { user_id: 'user-001', user_name: '山田太郎', role: '主担当' },
-            { user_id: 'user-002', user_name: '佐藤花子', role: '配膳' },
+            { user_id: '550e8400-e29b-41d4-a716-446655440001', user_name: '山田太郎', role: '主担当' },
+            { user_id: '550e8400-e29b-41d4-a716-446655440002', user_name: '佐藤花子', role: '配膳' },
           ],
         };
 
@@ -1144,7 +1144,7 @@ describe('/api/records/activity', () => {
           mentioned_children: [],
           event_name: '遠足',
           daily_schedule: [{ time: '08:00', content: '出発' }],
-          role_assignments: [{ user_id: 'user-003', user_name: '鈴木一郎', role: '引率' }],
+          role_assignments: [{ user_id: '550e8400-e29b-41d4-a716-446655440003', user_name: '鈴木一郎', role: '引率' }],
           special_notes: '雨天の場合は延期',
           meal: { menu: 'お弁当', notes: '現地調達' },
         };

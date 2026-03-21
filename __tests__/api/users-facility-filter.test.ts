@@ -268,6 +268,7 @@ describe('POST /api/users - facility_id 指定', () => {
       eq: jest.fn(),
       is: jest.fn(),
       single: jest.fn(),
+      maybeSingle: jest.fn(),
       insert: jest.fn(),
     };
     mUsersQuery.select.mockReturnValue(mUsersQuery);
@@ -276,20 +277,20 @@ describe('POST /api/users - facility_id 指定', () => {
     mUsersQuery.insert.mockReturnValue(mUsersQuery);
 
     // メールアドレス重複チェック → 存在しない
-    mUsersQuery.single
-      .mockResolvedValueOnce({ data: null, error: null })
-      // m_users insert 後の select().single()
-      .mockResolvedValueOnce({
-        data: {
-          id: 'new-user-id',
-          email: 'newuser@example.com',
-          name: 'New User',
-          role: 'staff',
-          hire_date: '2026-03-18',
-          created_at: '2026-03-18T00:00:00.000Z',
-        },
-        error: null,
-      });
+    mUsersQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    // m_users insert 後の select().single() でユーザーデータを返す
+    mUsersQuery.single.mockResolvedValue({
+      data: {
+        id: 'new-user-id',
+        email: 'newuser@example.com',
+        name: 'New User',
+        role: 'staff',
+        hire_date: '2026-03-18',
+        created_at: '2026-03-18T00:00:00.000Z',
+      },
+      error: null,
+    });
 
     const userFacilityQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
     const userClassQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
@@ -304,10 +305,13 @@ describe('POST /api/users - facility_id 指定', () => {
     const facilitiesQuery: Record<string, jest.Mock> = {
       select: jest.fn(),
       eq: jest.fn(),
+      is: jest.fn(),
       single: jest.fn().mockResolvedValue({ data: { name: 'テスト施設B' }, error: null }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'facility-2' }, error: null }),
     };
     facilitiesQuery.select.mockReturnValue(facilitiesQuery);
     facilitiesQuery.eq.mockReturnValue(facilitiesQuery);
+    facilitiesQuery.is.mockReturnValue(facilitiesQuery);
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
@@ -385,6 +389,7 @@ describe('POST /api/users - facility_id 指定', () => {
       eq: jest.fn(),
       is: jest.fn(),
       single: jest.fn(),
+      maybeSingle: jest.fn(),
       insert: jest.fn(),
     };
     mUsersQuery.select.mockReturnValue(mUsersQuery);
@@ -392,19 +397,21 @@ describe('POST /api/users - facility_id 指定', () => {
     mUsersQuery.is.mockReturnValue(mUsersQuery);
     mUsersQuery.insert.mockReturnValue(mUsersQuery);
 
-    mUsersQuery.single
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: {
-          id: 'new-user-id',
-          email: 'staff2@example.com',
-          name: 'New Staff',
-          role: 'staff',
-          hire_date: '2026-03-18',
-          created_at: '2026-03-18T00:00:00.000Z',
-        },
-        error: null,
-      });
+    // メールアドレス重複チェック → 存在しない
+    mUsersQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    // m_users insert 後の select().single() でユーザーデータを返す
+    mUsersQuery.single.mockResolvedValue({
+      data: {
+        id: 'new-user-id',
+        email: 'staff2@example.com',
+        name: 'New Staff',
+        role: 'staff',
+        hire_date: '2026-03-18',
+        created_at: '2026-03-18T00:00:00.000Z',
+      },
+      error: null,
+    });
 
     const userFacilityQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
     const userClassQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
@@ -419,10 +426,13 @@ describe('POST /api/users - facility_id 指定', () => {
     const facilitiesQuery: Record<string, jest.Mock> = {
       select: jest.fn(),
       eq: jest.fn(),
+      is: jest.fn(),
       single: jest.fn().mockResolvedValue({ data: { name: 'テスト施設A' }, error: null }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'facility-1' }, error: null }),
     };
     facilitiesQuery.select.mockReturnValue(facilitiesQuery);
     facilitiesQuery.eq.mockReturnValue(facilitiesQuery);
+    facilitiesQuery.is.mockReturnValue(facilitiesQuery);
 
     const mockSupabase = {
       from: jest.fn((table: string) => {

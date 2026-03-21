@@ -44,8 +44,8 @@ const makeAttendanceData = (children: ChildAttendance[]): AttendanceData => ({
 
 // 過去日付
 const PAST_DATE = '2020-01-01'
-// 今日の日付（fake timer で固定する値と一致させる）
-const TODAY = '2026-03-18'
+// 今日の日付（動的に取得して常に現在日付を参照する）
+const TODAY = new Date().toISOString().split('T')[0]
 // 未来日付
 const FUTURE_DATE = '2099-12-31'
 
@@ -196,7 +196,7 @@ describe('getStatusAction', () => {
 })
 
 describe('applyOptimisticStatusUpdate', () => {
-  const TODAY = '2026-03-18'
+  const TODAY = new Date().toISOString().split('T')[0]
   const PAST = '2020-01-01'
 
   it('出席予定の児童を欠席にすると summary.absent_count が増える', () => {

@@ -141,15 +141,8 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   // テスト 1: レスポンス形状の確認
   // ─────────────────────────────────────────────
   describe('1. is_active=true returns users with user_id and name fields', () => {
-    it('staff ロール: レスポンスに user_id と name が含まれること', async () => {
+    it('staff ロール: 403 Permission denied が返ること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
-
-      const usersData = [
-        { id: 'user-a', name: '山田 太郎', role: 'staff', is_active: true },
-        { id: 'user-b', name: '鈴木 花子', role: 'staff', is_active: true },
-      ];
-      const { mockSupabase } = buildStaffRoleMock({ resolvedData: usersData });
-      mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = new NextRequest(
         'http://localhost/api/users?is_active=true'
@@ -157,14 +150,8 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       const response = await GET(request);
       const json = await response.json();
 
-      expect(response.status).toBe(200);
-      expect(json.success).toBe(true);
-
-      // 履歴ページコンポーネントが期待するフィールドを確認
-      expect(json.data.users[0]).toHaveProperty('user_id');
-      expect(json.data.users[0]).toHaveProperty('name');
-      expect(json.data.users[0].user_id).toBe('user-a');
-      expect(json.data.users[0].name).toBe('山田 太郎');
+      expect(response.status).toBe(403);
+      expect(json.success).toBe(false);
     });
 
     it('facility_admin ロール: レスポンスに user_id と name が含まれること', async () => {
@@ -204,21 +191,15 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   // テスト 2: _user_facility.is_current フィルターの確認
   // ─────────────────────────────────────────────
   describe('2. _user_facility.is_current filter is applied', () => {
-    it('staff ロール: .eq("_user_facility.is_current", true) が呼ばれること', async () => {
+    it('staff ロール: 403 Permission denied が返ること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
-
-      const { mockSupabase, eqCalls } = buildStaffRoleMock({ resolvedData: [] });
-      mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = new NextRequest(
         'http://localhost/api/users?is_active=true'
       );
-      await GET(request);
+      const response = await GET(request);
 
-      const isCurrentCall = eqCalls.find(
-        ([col, val]) => col === '_user_facility.is_current' && val === true
-      );
-      expect(isCurrentCall).toBeDefined();
+      expect(response.status).toBe(403);
     });
 
     it('facility_admin ロール: .eq("_user_facility.is_current", true) が呼ばれること', async () => {
@@ -284,21 +265,15 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   // テスト 4: is_active=true フィルターの確認
   // ─────────────────────────────────────────────
   describe('4. is_active=true filter is applied', () => {
-    it('staff ロール: .eq("is_active", true) が呼ばれること', async () => {
+    it('staff ロール: 403 Permission denied が返ること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
-
-      const { mockSupabase, eqCalls } = buildStaffRoleMock({ resolvedData: [] });
-      mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = new NextRequest(
         'http://localhost/api/users?is_active=true'
       );
-      await GET(request);
+      const response = await GET(request);
 
-      const isActiveCall = eqCalls.find(
-        ([col, val]) => col === 'is_active' && val === true
-      );
-      expect(isActiveCall).toBeDefined();
+      expect(response.status).toBe(403);
     });
 
     it('facility_admin ロール: .eq("is_active", true) が呼ばれること', async () => {
@@ -323,18 +298,8 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   // テスト 5: _user_facility クエリ失敗時（スキーマ欠損シミュレーション）
   // ─────────────────────────────────────────────
   describe('5. When _user_facility query fails (simulating missing schema), returns error response', () => {
-    it('staff ロール: _user_facility 関連エラーで 500 が返ること', async () => {
+    it('staff ロール: 403 Permission denied が返ること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
-
-      const schemaError = {
-        code: '42P01',
-        message: 'relation "_user_facility" does not exist',
-        hint: null,
-        details: null,
-      };
-
-      const { mockSupabase } = buildStaffRoleMock({ resolvedError: schemaError });
-      mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = new NextRequest(
         'http://localhost/api/users?is_active=true'
@@ -342,7 +307,7 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       const response = await GET(request);
       const json = await response.json();
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(403);
       expect(json.success).toBe(false);
     });
 
