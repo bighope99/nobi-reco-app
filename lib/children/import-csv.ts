@@ -7,6 +7,12 @@ export type ImportDefaults = {
   class_id?: string | null;
 };
 
+export type DuplicateInfo = {
+  child_id: string;
+  name: string;
+  birth_date: string;
+};
+
 export type ImportPreviewRow = {
   row: number;
   family_name: string;
@@ -17,9 +23,11 @@ export type ImportPreviewRow = {
   enrolled_at: string;
   parent_name: string;
   errors: string[];
+  duplicates?: DuplicateInfo[];
 };
 
 const headerLabels = {
+  id: 'ID',
   family_name: '姓',
   given_name: '名',
   family_name_kana: 'セイ',
@@ -75,6 +83,7 @@ export function buildChildPayload(
 ): { payload?: ChildPayload; errors: string[] } {
   const errors: string[] = [];
 
+  const childId = getValue(row, headerLabels.id) || undefined;
   const familyName = getValue(row, headerLabels.family_name);
   const givenName = getValue(row, headerLabels.given_name);
   const birthDate = getValue(row, headerLabels.birth_date);
@@ -105,6 +114,7 @@ export function buildChildPayload(
   const emergencyContacts = buildEmergencyContacts(row);
 
   const payload: ChildPayload = {
+    child_id: childId,
     basic_info: {
       family_name: familyName,
       given_name: givenName,

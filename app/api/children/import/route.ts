@@ -2,10 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { saveChild } from '@/app/api/children/save/route';
-import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText } from '@/lib/children/import-csv';
+import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText, type DuplicateInfo } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { deleteSearchIndex, searchByPhone } from '@/utils/pii/searchIndex';
+import { deleteSearchIndex, searchByName, searchByPhone } from '@/utils/pii/searchIndex';
+
+async function checkDuplicateChildren(
+  supabase: any,
+  facilityId: string,
+  familyName: string,
+  givenName: string,
+  birthDate: string,
+): Promise<DuplicateInfo[]> {
+  const fullName = `${familyName} ${givenName}`.trim();
+  if (!fullName || !birthDate) return [];
+
+  // 検索インデックスから名前で候補を取得
+  const candidateIds = await searchByName(supabase, 'child', 'name', fullName);
+  if (candidateIds.length === 0) return [];
+
+  // 候補の中から同施設・同生年月日のものを絞り込み
+  const { data: matches, error } = await supabase
+    .from('m_children')
+    .select('id, family_name, given_name, birth_date')
+    .eq('facility_id', facilityId)
+    .eq('birth_date', birthDate)
+    .in('id', candidateIds)
+    .is('deleted_at', null);
+
+  if (error || !matches || matches.length === 0) return [];
+
+  return matches.map((child: any) => ({
+    child_id: child.id,
+    name: formatName([decryptOrFallback(child.family_name), decryptOrFallback(child.given_name)], ''),
+    birth_date: child.birth_date,
+  }));
+}
 
 async function fetchExistingSiblingRows(
   supabase: any,
@@ -176,6 +208,28 @@ export async function POST(request: NextRequest) {
       class_id: classId || null,
     };
 
+    // 承認済み重複行の取得（commitモード用）
+    let approvedDuplicateRows: number[] = [];
+    if (mode !== 'preview') {
+      const approvedDuplicateRaw = formData.get('approved_duplicate_rows');
+      if (typeof approvedDuplicateRaw === 'string' && approvedDuplicateRaw.trim().length > 0) {
+        try {
+          approvedDuplicateRows = JSON.parse(approvedDuplicateRaw) as number[];
+          if (!Array.isArray(approvedDuplicateRows)) {
+            return NextResponse.json(
+              { success: false, error: 'approved_duplicate_rows must be a JSON array' },
+              { status: 400 }
+            );
+          }
+        } catch {
+          return NextResponse.json(
+            { success: false, error: 'Invalid JSON format for approved_duplicate_rows' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const results: Array<{ row: number; success: boolean; message?: string }> = [];
     const previewRows: ReturnType<typeof buildPreviewRow>[] = [];
     const incomingSiblingRows: IncomingSiblingRow[] = [];
@@ -260,7 +314,25 @@ export async function POST(request: NextRequest) {
       const { payload, errors } = buildChildPayload(rows[i], defaults);
 
       if (mode === 'preview') {
-        previewRows.push(buildPreviewRow(rows[i], rowNumber, payload, errors));
+        // 重複検知（バリデーションエラーがない行のみ）
+        let duplicates: DuplicateInfo[] = [];
+        if (errors.length === 0 && payload?.basic_info?.family_name && payload?.basic_info?.given_name && payload?.basic_info?.birth_date) {
+          duplicates = await checkDuplicateChildren(
+            supabase,
+            targetFacilityId,
+            payload.basic_info.family_name,
+            payload.basic_info.given_name,
+            payload.basic_info.birth_date,
+          );
+        }
+
+        const previewRow = buildPreviewRow(rows[i], rowNumber, payload, errors);
+        if (duplicates.length > 0) {
+          previewRow.duplicates = duplicates;
+          previewRow.errors.push(`重複: 同姓同名・同生年月日の児童が${duplicates.length}名存在します（${duplicates.map(d => d.name).join(', ')}）`);
+        }
+        previewRows.push(previewRow);
+
         if (payload?.contact?.parent_phone && payload?.basic_info?.family_name && payload?.basic_info?.given_name) {
           incomingSiblingRows.push({
             row: rowNumber,
@@ -269,12 +341,48 @@ export async function POST(request: NextRequest) {
             phone: payload.contact.parent_phone,
           });
         }
-        if (errors.length > 0) {
+        if (errors.length > 0 || (duplicates.length > 0)) {
           failureCount += 1;
         } else {
           successCount += 1;
         }
         continue;
+      }
+
+      // commitモード: 重複チェック（承認済みでない行はブロック）
+      if (payload?.basic_info?.family_name && payload?.basic_info?.given_name && payload?.basic_info?.birth_date) {
+        if (!approvedDuplicateRows.includes(rowNumber)) {
+          const duplicates = await checkDuplicateChildren(
+            supabase,
+            targetFacilityId,
+            payload.basic_info.family_name,
+            payload.basic_info.given_name,
+            payload.basic_info.birth_date,
+          );
+          if (duplicates.length > 0) {
+            failureCount += 1;
+            results.push({
+              row: rowNumber,
+              success: false,
+              message: `重複: 同姓同名・同生年月日の児童が存在します（${duplicates.map(d => d.name).join(', ')}）`,
+            });
+
+            try {
+              await rollbackInsertedChildren();
+            } catch (rollbackErr) {
+              console.error('Rollback failed after duplicate check:', rollbackErr);
+              return NextResponse.json(
+                { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
+                { status: 500 }
+              );
+            }
+
+            return NextResponse.json({
+              success: false,
+              error: `${rowNumber}行目に重複児童が存在するためインポートを中止しました`,
+            }, { status: 400 });
+          }
+        }
       }
 
       if (!payload) {
@@ -304,7 +412,9 @@ export async function POST(request: NextRequest) {
       let response: Response;
       let json: { data?: { child_id?: string }; error?: string };
       try {
-        response = await saveChild(payload, targetFacilityId, supabase, undefined, {
+        // IDがある場合は既存レコードの上書き更新、ない場合は新規作成
+        const targetChildId = payload.child_id || undefined;
+        response = await saveChild(payload, targetFacilityId, supabase, targetChildId, {
           skipParentLegacy: true,
         });
         json = await response.json();

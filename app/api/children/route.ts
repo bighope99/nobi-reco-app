@@ -37,34 +37,40 @@ export async function GET(request: NextRequest) {
 
     // 施設全体のサマリーとフィルター情報を取得するヘルパー
     const fetchSummaryAndFilters = async () => {
-      const { data: summaryData } = await supabase
-        .from('m_children')
-        .select('enrollment_status, allergies', { count: 'exact' })
-        .eq('facility_id', facility_id)
-        .is('deleted_at', null);
+      // サマリーとクラス一覧を並列取得
+      const [{ data: summaryData }, { data: classesData }] = await Promise.all([
+        supabase
+          .from('m_children')
+          .select('enrollment_status, allergies')
+          .eq('facility_id', facility_id)
+          .is('deleted_at', null),
+        supabase
+          .from('m_classes')
+          .select('id, name')
+          .eq('facility_id', facility_id)
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .order('name'),
+      ]);
 
       const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
       const withdrawnCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'withdrawn').length;
       const hasAllergyCount = (summaryData || []).filter((c: any) => c.allergies !== null).length;
 
-      const { data: classesData } = await supabase
-        .from('m_classes')
-        .select('id, name')
-        .eq('facility_id', facility_id)
-        .eq('is_active', true)
-        .is('deleted_at', null)
-        .order('name');
+      // クラスに紐づく児童数を取得
+      const classIds = (classesData || []).map((c: any) => c.id);
+      let classCountMap: Record<string, number> = {};
+      if (classIds.length > 0) {
+        const { data: classChildrenCount } = await supabase
+          .from('_child_class')
+          .select('class_id, child_id')
+          .eq('is_current', true)
+          .in('class_id', classIds);
 
-      const { data: classChildrenCount } = await supabase
-        .from('_child_class')
-        .select('class_id, child_id')
-        .eq('is_current', true)
-        .in('class_id', (classesData || []).map((c: any) => c.id));
-
-      const classCountMap: Record<string, number> = {};
-      (classChildrenCount || []).forEach((cc: any) => {
-        classCountMap[cc.class_id] = (classCountMap[cc.class_id] || 0) + 1;
-      });
+        (classChildrenCount || []).forEach((cc: any) => {
+          classCountMap[cc.class_id] = (classCountMap[cc.class_id] || 0) + 1;
+        });
+      }
 
       return {
         summary: {
@@ -241,31 +247,29 @@ export async function GET(request: NextRequest) {
 
     const childIds = childrenData.map((c: any) => c.id);
 
-    // 2. 兄弟情報取得
-    const { data: siblingsData } = await supabase
-      .from('_child_sibling')
-      .select(`
-        child_id,
-        sibling_id,
-        relationship,
-        m_children!_child_sibling_sibling_id_fkey (
-          id,
-          family_name,
-          given_name,
-          _child_class (
-            m_classes (
-              name,
-              age_group
+    // 2. 兄弟情報とサマリー・フィルターを並列取得
+    const [{ data: siblingsData }, { summary, filters }] = await Promise.all([
+      supabase
+        .from('_child_sibling')
+        .select(`
+          child_id,
+          sibling_id,
+          relationship,
+          m_children!_child_sibling_sibling_id_fkey (
+            id,
+            family_name,
+            given_name,
+            _child_class (
+              m_classes (
+                name,
+                age_group
+              )
             )
           )
-        )
-      `)
-      .in('child_id', childIds);
-
-    // PIIフィールドを復号化（失敗時は平文として扱う - 後方互換性）
-  
-
-  
+        `)
+        .in('child_id', childIds),
+      fetchSummaryAndFilters(),
+    ]);
 
     // データ整形
     const children = childrenData.map((child: any) => {
@@ -368,8 +372,6 @@ export async function GET(request: NextRequest) {
       filteredChildren = filteredChildren.filter(c => c.class_id === null);
     }
 
-    // サマリーとフィルター取得
-    const { summary, filters } = await fetchSummaryAndFilters();
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
     summary.has_sibling_count = hasSiblingCount;
 
