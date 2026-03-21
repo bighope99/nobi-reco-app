@@ -78,9 +78,30 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id: facilityId } = metadata;
+    const { role, current_facility_id, company_id } = metadata;
+
+    // ロールチェック: エクスポート権限のあるロールのみ許可
+    if (!['site_admin', 'company_admin', 'facility_admin', 'staff'].includes(role)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+
+    const facilityId = current_facility_id;
     if (!facilityId) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
+    }
+
+    // company_adminのスコープチェック: 自社施設のみエクスポート可能
+    if (role === 'company_admin') {
+      const { data: scopedFacility, error: scopeError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', facilityId)
+        .eq('company_id', company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (scopeError || !scopedFacility) {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     // 児童一覧を取得（保護者・緊急連絡先含む）
@@ -144,7 +165,7 @@ export async function GET() {
       let parentPhone = '';
       let parentEmail = '';
       if (primaryGuardian?.m_guardians) {
-        const g = primaryGuardian.m_guardians;
+        const g = primaryGuardian.m_guardians as any;
         const gFamily = decryptOrFallback(g.family_name) || '';
         const gGiven = decryptOrFallback(g.given_name) || '';
         parentName = `${gFamily} ${gGiven}`.trim() || gFamily;
@@ -156,12 +177,13 @@ export async function GET() {
       const ecData: Array<{ name: string; relation: string; phone: string }> = [];
       for (const ec of emergencyContacts) {
         if (ec.m_guardians) {
-          const ecFamily = decryptOrFallback(ec.m_guardians.family_name) || '';
-          const ecGiven = decryptOrFallback(ec.m_guardians.given_name) || '';
+          const ecG = ec.m_guardians as any;
+          const ecFamily = decryptOrFallback(ecG.family_name) || '';
+          const ecGiven = decryptOrFallback(ecG.given_name) || '';
           ecData.push({
             name: `${ecFamily} ${ecGiven}`.trim() || ecFamily,
             relation: ec.relationship || '',
-            phone: decryptOrFallback(ec.m_guardians.phone) || '',
+            phone: decryptOrFallback(ecG.phone) || '',
           });
         }
       }

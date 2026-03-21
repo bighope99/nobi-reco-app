@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
-import { saveChild } from '@/app/api/children/save/route';
+import { saveChild, type ChildPayload } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText, type DuplicateInfo } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
@@ -13,6 +13,7 @@ async function checkDuplicateChildren(
   familyName: string,
   givenName: string,
   birthDate: string,
+  excludeChildId?: string,
 ): Promise<DuplicateInfo[]> {
   const fullName = `${familyName} ${givenName}`.trim();
   if (!fullName || !birthDate) return [];
@@ -32,7 +33,12 @@ async function checkDuplicateChildren(
 
   if (error || !matches || matches.length === 0) return [];
 
-  return matches.map((child: any) => ({
+  // 自身を除外（上書きインポート時に自己一致を防止）
+  const filtered = excludeChildId
+    ? matches.filter((child: any) => child.id !== excludeChildId)
+    : matches;
+
+  return filtered.map((child: any) => ({
     child_id: child.id,
     name: formatName([decryptOrFallback(child.family_name), decryptOrFallback(child.given_name)], ''),
     birth_date: child.birth_date,
@@ -309,6 +315,8 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    const validatedPayloads: Array<{ rowNumber: number; payload: ChildPayload }> = [];
+
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
@@ -323,6 +331,7 @@ export async function POST(request: NextRequest) {
             payload.basic_info.family_name,
             payload.basic_info.given_name,
             payload.basic_info.birth_date,
+            payload.child_id,
           );
         }
 
@@ -349,8 +358,15 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // commitモード: 重複チェック（承認済みでない行はブロック）
-      if (payload?.basic_info?.family_name && payload?.basic_info?.given_name && payload?.basic_info?.birth_date) {
+      // commitモード パス1: バリデーション+重複チェック（DB書き込み前に全行チェック）
+      if (!payload) {
+        return NextResponse.json({
+          success: false,
+          error: `${rowNumber}行目にエラーがあるためインポートを中止しました: ${errors.join(', ')}`,
+        }, { status: 400 });
+      }
+
+      if (payload.basic_info?.family_name && payload.basic_info?.given_name && payload.basic_info?.birth_date) {
         if (!approvedDuplicateRows.includes(rowNumber)) {
           const duplicates = await checkDuplicateChildren(
             supabase,
@@ -358,25 +374,9 @@ export async function POST(request: NextRequest) {
             payload.basic_info.family_name,
             payload.basic_info.given_name,
             payload.basic_info.birth_date,
+            payload.child_id,
           );
           if (duplicates.length > 0) {
-            failureCount += 1;
-            results.push({
-              row: rowNumber,
-              success: false,
-              message: `重複: 同姓同名・同生年月日の児童が存在します（${duplicates.map(d => d.name).join(', ')}）`,
-            });
-
-            try {
-              await rollbackInsertedChildren();
-            } catch (rollbackErr) {
-              console.error('Rollback failed after duplicate check:', rollbackErr);
-              return NextResponse.json(
-                { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
-                { status: 500 }
-              );
-            }
-
             return NextResponse.json({
               success: false,
               error: `${rowNumber}行目に重複児童が存在するためインポートを中止しました`,
@@ -385,30 +385,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!payload) {
-        failureCount += 1;
-        results.push({
-          row: rowNumber,
-          success: false,
-          message: errors.join(', '),
-        });
+      validatedPayloads.push({ rowNumber, payload });
+    }
 
-        try {
-          await rollbackInsertedChildren();
-        } catch (rollbackErr) {
-          console.error('Rollback failed after validation error:', rollbackErr);
-          return NextResponse.json(
-            { success: false, error: 'ロールバックに失敗しました。登録状況を確認してください。' },
-            { status: 500 }
-          );
-        }
-
-        return NextResponse.json({
-          success: false,
-          error: `${rowNumber}行目にエラーがあるためインポートを中止しました: ${errors.join(', ')}`,
-        }, { status: 400 });
-      }
-
+    // commitモード パス2: 全行バリデーション通過後にDB書き込み
+    for (const { rowNumber, payload } of validatedPayloads) {
       let response: Response;
       let json: { data?: { child_id?: string }; error?: string };
       try {
@@ -451,8 +432,8 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // 登録成功時はchild_idを記録
-      if (json.data?.child_id) {
+      // 登録成功時はchild_idを記録（新規作成分のみロールバック対象）
+      if (!payload.child_id && json.data?.child_id) {
         insertedChildIds.push(json.data.child_id);
       }
 
