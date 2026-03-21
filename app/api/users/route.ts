@@ -182,6 +182,16 @@ export async function GET(request: NextRequest) {
       classAssignmentMap.set(ca.user_id, existing);
     });
 
+    // auth.users から last_sign_in_at を取得してマップ構築
+    const adminClient = await createAdminClient();
+    const { data: authUsersData } = await adminClient.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    const authUserMap = new Map<string, string | null>(
+      (authUsersData?.users ?? []).map((au) => [au.id, au.last_sign_in_at ?? null])
+    );
+
     // 同期的にデータを結合
     const usersWithDetails = (usersData || []).map((u) => ({
       user_id: u.id,
@@ -193,7 +203,7 @@ export async function GET(request: NextRequest) {
       hire_date: u.hire_date,
       is_active: u.is_active,
       assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: null,
+      last_login_at: authUserMap.get(u.id) ?? null,
       created_at: u.created_at,
       updated_at: u.updated_at,
     }));
