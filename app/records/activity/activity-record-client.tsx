@@ -1574,9 +1574,9 @@ export default function ActivityRecordClient() {
                       }}
                       onDrop={(event) => handleScheduleDrop(event, index)}
                       className={cn(
-                        "rounded-md border border-border/60 p-3 transition-colors",
+                        "p-1 transition-colors",
                         isDragging && "opacity-60",
-                        isDropTarget && "border-primary bg-primary/5"
+                        isDropTarget && "rounded-md bg-primary/5"
                       )}
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -1587,11 +1587,10 @@ export default function ActivityRecordClient() {
                             handleScheduleDragStart(index)
                           }}
                           onDragEnd={handleScheduleDragEnd}
-                          className="flex cursor-grab items-center gap-2 text-muted-foreground active:cursor-grabbing"
+                          className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing"
                           aria-label={`${index + 1}行目をドラッグして並び替え`}
                         >
                           <GripVertical className="h-4 w-4" />
-                          <span className="text-xs">並び替え</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Select
