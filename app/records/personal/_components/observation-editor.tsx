@@ -1727,7 +1727,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 <CardHeader>
                   <CardTitle className="text-lg">過去の記録（直近10件）</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent>
                   {recentLoading ? (
                     <p className="text-sm text-gray-500">読み込み中...</p>
                   ) : recentError ? (
@@ -1735,46 +1735,70 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   ) : recentObservations.length === 0 ? (
                     <p className="text-sm text-gray-500">過去の記録はありません。</p>
                   ) : (
-                    recentObservations.map((item) => {
-                      const tagBadges = getTagBadges(item.tag_ids);
-                      return (
-                        <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                          <div className="flex items-start justify-between gap-2 text-xs text-gray-500">
-                            <span>{item.observation_date ? formatDate(item.observation_date) : '日付不明'}</span>
-                            <div className="flex gap-1">
-                              <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
-                                編集
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteClick(item.id)}
-                                disabled={deletingObservationId === item.id}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                              >
-                                {deletingObservationId === item.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">
-                            {displayRecentContent(item.content)}
-                          </p>
-                          {tagBadges.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              {tagBadges.map((tag) => (
-                                <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200">
-                                  {tag.name}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
+                    <div className="overflow-x-auto rounded-lg border">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">内容</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">タグ</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {recentObservations.map((item) => {
+                            const tagBadges = getTagBadges(item.tag_ids);
+                            const contentText = displayRecentContent(item.content);
+                            const truncated = contentText.length > 60
+                              ? contentText.slice(0, 60) + '...'
+                              : contentText;
+                            return (
+                              <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                                <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+                                  {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
+                                </td>
+                                <td className="px-3 py-2 max-w-xs">
+                                  <p className="text-sm text-gray-800 truncate" title={contentText}>
+                                    {truncated}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-2">
+                                  {tagBadges.length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {tagBadges.map((tag) => (
+                                        <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
+                                          {tag.name}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex justify-end gap-1">
+                                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleEditRecent(item.id)}>
+                                      編集
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                      onClick={() => handleDeleteClick(item.id)}
+                                      disabled={deletingObservationId === item.id}
+                                    >
+                                      {deletingObservationId === item.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
