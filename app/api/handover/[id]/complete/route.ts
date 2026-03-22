@@ -54,8 +54,14 @@ export async function PATCH(
     }
 
     // リクエストボディ取得
-    const body = await request.json();
-    const { completed } = body;
+    const body = await request.json().catch(() => undefined);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json(
+        { success: false, error: 'Request body must be a JSON object' },
+        { status: 400 }
+      );
+    }
+    const { completed } = body as { completed?: unknown };
 
     if (typeof completed !== 'boolean') {
       return NextResponse.json(

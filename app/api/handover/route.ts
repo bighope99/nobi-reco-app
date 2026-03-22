@@ -170,7 +170,14 @@ export async function GET(request: NextRequest) {
       nextRecordQuery = nextRecordQuery.eq('class_id', class_id);
     }
 
-    const { count: nextRecordCount } = await nextRecordQuery;
+    const { count: nextRecordCount, error: nextRecordError } = await nextRecordQuery;
+    if (nextRecordError) {
+      console.error('Database error:', nextRecordError);
+      return NextResponse.json(
+        { success: false, error: 'Database error' },
+        { status: 500 }
+      );
+    }
     const has_next_record = (nextRecordCount ?? 0) > 0;
 
     const items = latestActivities.map((activity) => {

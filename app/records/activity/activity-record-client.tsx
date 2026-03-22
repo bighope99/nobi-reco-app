@@ -2038,6 +2038,7 @@ export default function ActivityRecordClient() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
+                              aria-label="活動記録を編集"
                               onClick={() => handleEdit(activity)}
                             >
                               <Edit2 className="h-3.5 w-3.5" />
@@ -2046,6 +2047,7 @@ export default function ActivityRecordClient() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="活動記録を削除"
                               onClick={() => handleDelete(activity.activity_id)}
                               disabled={isDeletingId === activity.activity_id}
                             >
