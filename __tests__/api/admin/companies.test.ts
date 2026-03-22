@@ -47,6 +47,7 @@ describe('GET /api/admin/companies', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -62,8 +63,9 @@ describe('GET /api/admin/companies', () => {
 
   it('should return companies list when user is site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -167,8 +169,9 @@ describe('GET /api/admin/companies', () => {
 
   it('should include facility count for each company', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -242,8 +245,9 @@ describe('GET /api/admin/companies', () => {
 
   it('should return 500 when database error occurs', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -283,7 +287,7 @@ describe('POST /api/admin/companies', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    mockedSendWithGas.mockResolvedValue(undefined);
+    mockedSendWithGas.mockResolvedValue({ ok: true });
   });
 
   it('should return 401 when user is not authenticated', async () => {
@@ -304,6 +308,7 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -324,8 +329,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when company name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -344,8 +350,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when admin_user name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -364,8 +371,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 400 when admin_user email is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -382,10 +390,11 @@ describe('POST /api/admin/companies', () => {
     expect(json.error).toContain('admin_user.email');
   });
 
-  it('should return 400 when email already exists', async () => {
+  it('should return 400 when email already exists (signed-in user)', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -405,6 +414,24 @@ describe('POST /api/admin/companies', () => {
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: {
+              user: {
+                id: 'existing-user-id',
+                user_metadata: { password_set: true },
+              },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
     const request = buildRequest({
       company: { name: 'テスト株式会社' },
       admin_user: { name: '管理者太郎', email: 'existing@example.com' },
@@ -415,13 +442,125 @@ describe('POST /api/admin/companies', () => {
 
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
-    expect(json.error).toBe('Email already exists');
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
+  });
+
+  it('should reinvite unsigned-in user and return 200', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'site_admin',
+      company_id: 'test-company-id',
+      current_facility_id: null,
+    });
+
+    const usersEmailCheckQuery: any = {
+      select: jest.fn(() => usersEmailCheckQuery),
+      eq: jest.fn(() => usersEmailCheckQuery),
+      is: jest.fn(() => usersEmailCheckQuery),
+      single: jest.fn().mockResolvedValue({
+        data: { id: 'existing-user-id' },
+        error: null,
+      }),
+    };
+
+    const usersUpdateQuery: any = {
+      update: jest.fn(() => usersUpdateQuery),
+      eq: jest.fn(() => usersUpdateQuery),
+      select: jest.fn(() => usersUpdateQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'existing-user-id',
+          name: '管理者太郎',
+          email: 'reinvite@example.com',
+          role: 'company_admin',
+          company_id: 'company-new-reinvite',
+        },
+        error: null,
+      }),
+    };
+
+    const companyInsertQuery: any = {
+      insert: jest.fn(() => companyInsertQuery),
+      select: jest.fn(() => companyInsertQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'company-new-reinvite',
+          name: '再招待株式会社',
+          is_active: true,
+        },
+        error: null,
+      }),
+    };
+
+    let usersQueryCallCount = 0;
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyInsertQuery;
+        if (table === 'm_users') {
+          usersQueryCallCount++;
+          if (usersQueryCallCount === 1) return usersEmailCheckQuery;
+          return usersUpdateQuery;
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: {
+              user: {
+                id: 'existing-user-id',
+                user_metadata: { password_set: false },
+              },
+            },
+            error: null,
+          }),
+          updateUserById: jest.fn().mockResolvedValue({
+            data: { user: { id: 'existing-user-id' } },
+            error: null,
+          }),
+          generateLink: jest.fn().mockResolvedValue({
+            data: {
+              properties: {
+                action_link: 'https://test.supabase.co/auth/v1/verify?token_hash=reinvite-token&type=invite',
+              },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
+    const request = buildRequest({
+      company: { name: '再招待株式会社' },
+      admin_user: { name: '管理者太郎', email: 'reinvite@example.com' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.message).toBe('招待メールを再送しました');
+    expect(mockedSendWithGas).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'reinvite@example.com',
+        subject: '【のびレコ】アカウント登録のご案内',
+      })
+    );
   });
 
   it('should create company and admin user (without facility)', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -521,8 +660,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should create company and admin user with company_admin current_facility_id as null', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -617,8 +757,9 @@ describe('POST /api/admin/companies', () => {
 
   it('should return 500 when company creation fails', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 

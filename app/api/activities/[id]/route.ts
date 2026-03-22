@@ -5,6 +5,7 @@ import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
+import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
 const SIGNED_URL_EXPIRES_IN = 300;
@@ -36,6 +37,245 @@ interface ActivityUpdateData {
   handover?: string | null;
   meal?: Meal | null;
   recorded_by?: string | null;
+}
+
+const signActivityPhotos = async (
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  facilityId: string,
+  photos: unknown
+) => {
+  if (!Array.isArray(photos)) return photos || [];
+
+  const signedPhotos = await Promise.all(
+    photos.map(async (photo) => {
+      if (!photo || typeof photo !== 'object') return photo;
+
+      const filePath =
+        'file_path' in photo && typeof photo.file_path === 'string'
+          ? photo.file_path
+          : null;
+
+      if (!filePath || !filePath.startsWith(`${facilityId}/`)) {
+        return photo;
+      }
+
+      const { data: signed, error } = await supabase.storage
+        .from(ACTIVITY_PHOTO_BUCKET)
+        .createSignedUrl(filePath, SIGNED_URL_EXPIRES_IN);
+
+      if (error || !signed) {
+        console.error('Failed to sign activity photo URL:', error);
+        return photo;
+      }
+
+      return {
+        ...photo,
+        url: signed.signedUrl,
+        thumbnail_url: signed.signedUrl,
+        expires_in: SIGNED_URL_EXPIRES_IN,
+      };
+    })
+  );
+
+  return signedPhotos;
+};
+
+export async function GET(
+  request: NextRequest,
+  context: RouteContext
+) {
+  try {
+    const supabase = await createClient();
+    const { id: activityId } = await context.params;
+
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const facility_id = metadata.current_facility_id;
+
+    const { data: activity, error } = await supabase
+      .from('r_activity')
+      .select(`
+        id,
+        activity_date,
+        title,
+        content,
+        snack,
+        photos,
+        class_id,
+        mentioned_children,
+        event_name,
+        daily_schedule,
+        role_assignments,
+        special_notes,
+        handover,
+        meal,
+        recorded_by,
+        created_at,
+        updated_at,
+        m_classes (
+          id,
+          name
+        ),
+        m_users!r_activity_created_by_fkey (
+          id,
+          name
+        ),
+        recorded_by_user:m_users!recorded_by(id, name)
+      `)
+      .eq('id', activityId)
+      .eq('facility_id', facility_id)
+      .is('deleted_at', null)
+      .single();
+
+    if (error || !activity) {
+      return NextResponse.json(
+        { success: false, error: 'Activity not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    const [observationsResult, mentionedChildrenResult] = await Promise.all([
+      supabase
+        .from('r_observation')
+        .select(`
+          id,
+          activity_id,
+          child_id,
+          m_children (
+            family_name,
+            given_name,
+            nickname
+          )
+        `)
+        .eq('activity_id', activityId)
+        .is('deleted_at', null),
+      Array.isArray(activity.mentioned_children) && activity.mentioned_children.length > 0
+        ? supabase
+            .from('m_children')
+            .select('id, family_name, given_name, nickname')
+            .in('id', activity.mentioned_children)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (observationsResult.error) {
+      console.error('Failed to fetch observations:', observationsResult.error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch activity observations' },
+        { status: 500 }
+      );
+    }
+
+    if (mentionedChildrenResult.error) {
+      console.error('Failed to fetch mentioned children:', mentionedChildrenResult.error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch mentioned children' },
+        { status: 500 }
+      );
+    }
+
+    const mentionedChildrenNamesMap = new Map<string, string>();
+    (mentionedChildrenResult.data || []).forEach((child: {
+      id: string;
+      family_name: string | null;
+      given_name: string | null;
+      nickname: string | null;
+    }) => {
+      const familyName = decryptOrFallback(child.family_name) ?? '';
+      const givenName = decryptOrFallback(child.given_name) ?? '';
+      const displayName = child.nickname || formatName([familyName, givenName]) || '';
+      mentionedChildrenNamesMap.set(child.id, displayName);
+    });
+
+    const individualRecords = (observationsResult.data || []).map((obs: {
+      id: string;
+      child_id: string;
+      m_children:
+        | {
+            family_name: string | null;
+            given_name: string | null;
+            nickname: string | null;
+          }
+        | Array<{
+            family_name: string | null;
+            given_name: string | null;
+            nickname: string | null;
+          }>
+        | null;
+    }) => {
+      const child = Array.isArray(obs.m_children) ? obs.m_children[0] : obs.m_children;
+      const childName = child?.nickname || formatName([
+        decryptOrFallback(child?.family_name),
+        decryptOrFallback(child?.given_name),
+      ], '不明');
+
+      return {
+        observation_id: obs.id,
+        child_id: obs.child_id,
+        child_name: childName,
+      };
+    });
+
+    const activityClass = Array.isArray(activity.m_classes)
+      ? activity.m_classes[0]
+      : activity.m_classes;
+    const createdByUser = Array.isArray(activity.m_users)
+      ? activity.m_users[0]
+      : activity.m_users;
+    const recordedByUser = Array.isArray(activity.recorded_by_user)
+      ? activity.recorded_by_user[0]
+      : activity.recorded_by_user;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        activity: {
+          activity_id: activity.id,
+          activity_date: activity.activity_date,
+          title: activity.title || '無題',
+          content: activity.content,
+          snack: activity.snack,
+          photos: await signActivityPhotos(supabase, facility_id, activity.photos || []),
+          class_id: activity.class_id,
+          class_name: activityClass?.name || '',
+          mentioned_children: activity.mentioned_children || [],
+          mentioned_children_names: (activity.mentioned_children || []).reduce(
+            (acc: Record<string, string>, childId: string) => {
+              const name = mentionedChildrenNamesMap.get(childId);
+              if (name) {
+                acc[childId] = name;
+              }
+              return acc;
+            },
+            {} as Record<string, string>
+          ),
+          event_name: activity.event_name,
+          daily_schedule: activity.daily_schedule,
+          role_assignments: activity.role_assignments,
+          special_notes: activity.special_notes,
+          handover: activity.handover,
+          meal: activity.meal,
+          recorded_by: activity.recorded_by || null,
+          recorded_by_name: recordedByUser?.name || null,
+          created_by: createdByUser?.name || '',
+          created_at: activity.created_at,
+          individual_record_count: individualRecords.length,
+          individual_records: individualRecords,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PATCH(

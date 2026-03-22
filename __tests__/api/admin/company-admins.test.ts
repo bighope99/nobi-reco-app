@@ -34,7 +34,7 @@ describe('POST /api/admin/company-admins', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    mockedSendWithGas.mockResolvedValue(undefined);
+    mockedSendWithGas.mockResolvedValue({ ok: true });
   });
 
   it('should return 401 when user is not authenticated', async () => {
@@ -55,6 +55,7 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 403 when user is not site_admin', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -75,8 +76,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 400 when company_id is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -94,8 +96,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 400 when admin_user.name is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -114,8 +117,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 400 when admin_user.email is missing', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -134,8 +138,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 400 for invalid email format', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -154,8 +159,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 400 when admin name exceeds 100 chars', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -175,8 +181,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 404 when company not found', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -184,9 +191,9 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' },
+        error: null,
       }),
     };
 
@@ -211,8 +218,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 400 when email already exists', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -220,7 +228,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -230,7 +238,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'existing-user-id' },
         error: null,
       }),
@@ -248,7 +256,22 @@ describe('POST /api/admin/company-admins', () => {
       }),
     };
 
+    // existingUser が存在する場合、supabaseAdmin.auth.admin.getUserById が呼ばれる
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: {
+              user: { id: 'existing-user-id', user_metadata: { password_set: true } },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
 
     const request = buildRequest({
       company_id: 'company-1',
@@ -260,13 +283,14 @@ describe('POST /api/admin/company-admins', () => {
 
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
-    expect(json.error).toBe('Email already exists');
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
   });
 
-  it('should create company admin successfully', async () => {
+  it('should reinvite unsigned-in user and return 200', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -274,7 +298,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -284,9 +308,276 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'existing-user-id' },
+        error: null,
+      }),
+    };
+
+    const userUpdateQuery: any = {
+      update: jest.fn(() => userUpdateQuery),
+      eq: jest.fn(() => userUpdateQuery),
+      select: jest.fn(() => userUpdateQuery),
       single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'existing-user-id',
+          name: '管理者太郎',
+          email: 'uninvited@example.com',
+          role: 'company_admin',
+          company_id: 'company-1',
+        },
+        error: null,
+      }),
+    };
+
+    let userQueryCallCount = 0;
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyCheckQuery;
+        if (table === 'm_users') {
+          userQueryCallCount++;
+          // 1回目: emailCheckQuery (メール重複チェック), 2回目: userUpdateQuery (更新)
+          if (userQueryCallCount === 1) return emailCheckQuery;
+          return userUpdateQuery;
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: {
+              user: { id: 'existing-user-id', user_metadata: { password_set: false } },
+            },
+            error: null,
+          }),
+          updateUserById: jest.fn().mockResolvedValue({
+            data: { user: { id: 'existing-user-id' } },
+            error: null,
+          }),
+          generateLink: jest.fn().mockResolvedValue({
+            data: {
+              properties: {
+                action_link: 'https://test.supabase.co/auth/v1/verify?token_hash=reinvite-token&type=invite',
+              },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
+    const request = buildRequest({
+      company_id: 'company-1',
+      admin_user: { name: '管理者太郎', email: 'uninvited@example.com' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.message).toBe('招待メールを再送しました');
+  });
+
+  it('should return 400 when signed-in user tries to re-register', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'site_admin',
+      company_id: 'test-company-id',
+      current_facility_id: null,
+    });
+
+    const companyCheckQuery: any = {
+      select: jest.fn(() => companyCheckQuery),
+      eq: jest.fn(() => companyCheckQuery),
+      is: jest.fn(() => companyCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'company-1', name: 'テスト会社' },
+        error: null,
+      }),
+    };
+
+    const emailCheckQuery: any = {
+      select: jest.fn(() => emailCheckQuery),
+      eq: jest.fn(() => emailCheckQuery),
+      is: jest.fn(() => emailCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'signed-in-user-id' },
+        error: null,
+      }),
+    };
+
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyCheckQuery;
+        if (table === 'm_users') return emailCheckQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    // password_set: true → パスワード設定済みユーザー
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: {
+              user: { id: 'signed-in-user-id', user_metadata: { password_set: true } },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
+    const request = buildRequest({
+      company_id: 'company-1',
+      admin_user: { name: '管理者太郎', email: 'signedin@example.com' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error).toBe('このメールアドレスは既に使用されています');
+  });
+
+  it('should update name and company_id in m_users when reinviting', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'site_admin',
+      company_id: 'test-company-id',
+      current_facility_id: null,
+    });
+
+    const companyCheckQuery: any = {
+      select: jest.fn(() => companyCheckQuery),
+      eq: jest.fn(() => companyCheckQuery),
+      is: jest.fn(() => companyCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'company-2', name: '別の会社' },
+        error: null,
+      }),
+    };
+
+    const emailCheckQuery: any = {
+      select: jest.fn(() => emailCheckQuery),
+      eq: jest.fn(() => emailCheckQuery),
+      is: jest.fn(() => emailCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'existing-user-id' },
+        error: null,
+      }),
+    };
+
+    const mockUpdate = jest.fn(() => userUpdateQuery);
+    const userUpdateQuery: any = {
+      update: mockUpdate,
+      eq: jest.fn(() => userUpdateQuery),
+      select: jest.fn(() => userUpdateQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'existing-user-id',
+          name: '新しい管理者',
+          email: 'reinvite@example.com',
+          role: 'company_admin',
+          company_id: 'company-2',
+        },
+        error: null,
+      }),
+    };
+
+    let userQueryCallCount = 0;
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyCheckQuery;
+        if (table === 'm_users') {
+          userQueryCallCount++;
+          if (userQueryCallCount === 1) return emailCheckQuery;
+          return userUpdateQuery;
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    const mockAdminClient = {
+      auth: {
+        admin: {
+          getUserById: jest.fn().mockResolvedValue({
+            data: {
+              user: { id: 'existing-user-id', user_metadata: { password_set: false } },
+            },
+            error: null,
+          }),
+          updateUserById: jest.fn().mockResolvedValue({
+            data: { user: { id: 'existing-user-id' } },
+            error: null,
+          }),
+          generateLink: jest.fn().mockResolvedValue({
+            data: {
+              properties: {
+                action_link: 'https://test.supabase.co/auth/v1/verify?token_hash=reinvite-token&type=invite',
+              },
+            },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
+    const request = buildRequest({
+      company_id: 'company-2',
+      admin_user: { name: '新しい管理者', email: 'reinvite@example.com' },
+    });
+
+    await POST(request);
+
+    // m_users の update が呼ばれていること
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '新しい管理者',
+        company_id: 'company-2',
+      })
+    );
+  });
+
+  it('should create company admin successfully', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'site_admin',
+      company_id: 'test-company-id',
+      current_facility_id: null,
+    });
+
+    const companyCheckQuery: any = {
+      select: jest.fn(() => companyCheckQuery),
+      eq: jest.fn(() => companyCheckQuery),
+      is: jest.fn(() => companyCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'company-1', name: 'テスト会社' },
+        error: null,
+      }),
+    };
+
+    const emailCheckQuery: any = {
+      select: jest.fn(() => emailCheckQuery),
+      eq: jest.fn(() => emailCheckQuery),
+      is: jest.fn(() => emailCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' },
+        error: null,
       }),
     };
 
@@ -378,8 +669,9 @@ describe('POST /api/admin/company-admins', () => {
 
   it('should return 500 when auth user creation fails', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'site_admin',
-      company_id: null,
+      company_id: 'test-company-id',
       current_facility_id: null,
     });
 
@@ -387,7 +679,7 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => companyCheckQuery),
       eq: jest.fn(() => companyCheckQuery),
       is: jest.fn(() => companyCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: { id: 'company-1', name: 'テスト会社' },
         error: null,
       }),
@@ -397,9 +689,9 @@ describe('POST /api/admin/company-admins', () => {
       select: jest.fn(() => emailCheckQuery),
       eq: jest.fn(() => emailCheckQuery),
       is: jest.fn(() => emailCheckQuery),
-      single: jest.fn().mockResolvedValue({
+      maybeSingle: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' },
+        error: null,
       }),
     };
 

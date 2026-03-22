@@ -5,12 +5,29 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
+
+function toJapaneseAuthError(message: string): string {
+  if (message.includes("Invalid login credentials")) {
+    return "メールアドレスまたはパスワードが正しくありません"
+  }
+  if (message.includes("User not found") || message.includes("user not found")) {
+    return "このメールアドレスのアカウントは存在しません"
+  }
+  if (message.includes("Email not confirmed")) {
+    return "メールアドレスが確認されていません。確認メールをご確認ください"
+  }
+  if (message.includes("Too many requests")) {
+    return "しばらく時間をおいてから再度お試しください"
+  }
+  return "ログインに失敗しました"
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -34,7 +51,7 @@ export default function LoginPage() {
       })
 
       if (authError) {
-        throw new Error(authError.message)
+        throw new Error(toJapaneseAuthError(authError.message))
       }
 
       if (!authData.user) {
@@ -70,6 +87,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error("Login error:", err)
+      setPassword("")
       setError(err instanceof Error ? err.message : "ログインに失敗しました")
       setIsLoading(false)
     }
@@ -79,8 +97,15 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground">
-            の
+          {/* ロゴ画像: public/nobireco-logo.png に画像ファイルを配置してください */}
+          <div className="mx-auto mb-4">
+            <Image
+              src="/nobireco-logo.png"
+              alt="のびレコ"
+              width={120}
+              height={48}
+              priority
+            />
           </div>
           <CardTitle className="text-2xl">のびレコ</CardTitle>
           <CardDescription>アカウントにログインしてください</CardDescription>

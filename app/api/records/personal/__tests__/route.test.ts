@@ -26,6 +26,19 @@ describe('POST /api/records/personal', () => {
     mockSupabase = {
       auth: {
         getUser: jest.fn(),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: 'user-123',
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-123',
+                current_facility_id: 'facility-123',
+              },
+            },
+          },
+          error: null,
+        }),
       },
       from: jest.fn(),
     };
@@ -82,10 +95,22 @@ describe('POST /api/records/personal', () => {
         }),
       };
 
+      // 記録者確認のモック
+      const mockRecorderQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { id: 'recorder-123' },
+          error: null,
+        }),
+      };
+
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
+        if (table === 'm_users') return mockRecorderQuery;
         return {};
       });
 
@@ -96,6 +121,7 @@ describe('POST /api/records/personal', () => {
         content: 'テスト観察内容',
         ai_action: '客観的事実',
         ai_opinion: '主観的解釈',
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         tag_flags: {
           'tag-001': true,
           'tag-002': false,
@@ -189,9 +215,21 @@ describe('POST /api/records/personal', () => {
         }),
       };
 
+      // 記録者確認のモック
+      const mockRecorderQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { id: 'recorder-123' },
+          error: null,
+        }),
+      };
+
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
         if (table === 'r_observation') return mockObservationInsert;
+        if (table === 'm_users') return mockRecorderQuery;
         return {};
       });
 
@@ -200,6 +238,7 @@ describe('POST /api/records/personal', () => {
         child_id: 'child-123',
         observation_date: '2024-01-16',
         content: 'タグなしテスト',
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       };
 
       const request = new NextRequest('http://localhost:3000/api/records/personal', {
@@ -230,11 +269,95 @@ describe('POST /api/records/personal', () => {
     });
   });
 
+  describe('recorded_byバリデーション', () => {
+    it('recorded_byが未指定の場合は400を返す', async () => {
+      mockSupabase.auth.getUser.mockResolvedValue({
+        data: { user: { id: 'user-123', email: 'test@example.com' } },
+        error: null,
+      });
+
+      mockGetUserSession.mockResolvedValue({
+        user_id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test User',
+        role: 'staff',
+        company_id: 'company-123',
+        company_name: 'Test Company',
+        current_facility_id: 'facility-123',
+        facilities: [],
+        classes: [],
+      });
+
+      const requestBody = {
+        child_id: 'child-123',
+        observation_date: '2024-01-15',
+        content: 'テスト観察内容',
+        // recorded_by is missing
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/records/personal', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.error).toContain('recorded_by');
+    });
+
+    it('recorded_byが空文字の場合は400を返す', async () => {
+      mockSupabase.auth.getUser.mockResolvedValue({
+        data: { user: { id: 'user-123', email: 'test@example.com' } },
+        error: null,
+      });
+
+      mockGetUserSession.mockResolvedValue({
+        user_id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test User',
+        role: 'staff',
+        company_id: 'company-123',
+        company_name: 'Test Company',
+        current_facility_id: 'facility-123',
+        facilities: [],
+        classes: [],
+      });
+
+      const requestBody = {
+        child_id: 'child-123',
+        observation_date: '2024-01-15',
+        content: 'テスト観察内容',
+        recorded_by: '',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/records/personal', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.error).toContain('recorded_by');
+    });
+  });
+
   describe('異常系', () => {
     it('未認証の場合は401を返す', async () => {
       mockSupabase.auth.getUser.mockResolvedValue({
         data: { user: null },
         error: new Error('Unauthorized'),
+      });
+      mockSupabase.auth.getClaims.mockResolvedValue({
+        data: null,
+        error: { message: 'Unauthorized' },
       });
 
       const requestBody = {
@@ -324,8 +447,20 @@ describe('POST /api/records/personal', () => {
         }),
       };
 
+      // 記録者確認のモック
+      const mockRecorderQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { id: 'recorder-123' },
+          error: null,
+        }),
+      };
+
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'm_children') return mockChildQuery;
+        if (table === 'm_users') return mockRecorderQuery;
         return {};
       });
 
@@ -333,6 +468,7 @@ describe('POST /api/records/personal', () => {
         child_id: 'child-123',
         observation_date: '2024-01-15',
         content: 'テスト',
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       };
 
       const request = new NextRequest('http://localhost:3000/api/records/personal', {

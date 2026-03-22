@@ -259,12 +259,13 @@ export async function GET(request: NextRequest) {
 
         if (isRecorded && isAttended) {
           dailyStatus.push('present');
+        } else if (isRecorded && !isAttended) {
+          // 来所なし（出欠なし）でも記録を書いた日
+          dailyStatus.push('recorded_absent');
         } else if (isAttended && !isRecorded) {
           dailyStatus.push('late');
-        } else if (!isAttended) {
-          dailyStatus.push('absent');
         } else {
-          dailyStatus.push('none');
+          dailyStatus.push('absent');
         }
       }
 

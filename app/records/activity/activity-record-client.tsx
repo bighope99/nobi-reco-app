@@ -68,6 +68,7 @@ interface Activity {
   class_id?: string
   recorded_by?: string
   created_by: string
+  recorded_by_name?: string | null
   created_at: string
   individual_record_count: number
   individual_records: IndividualRecord[]
@@ -159,6 +160,7 @@ export default function ActivityRecordClient() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const autoOpenedActivityIdRef = useRef<string | null>(null)
   const [originalContent, setOriginalContent] = useState<string>("")
 
   // 新規フィールドの状態
@@ -287,6 +289,52 @@ export default function ActivityRecordClient() {
   useEffect(() => {
     fetchActivities()
   }, [fetchActivities])
+
+  useEffect(() => {
+    const activityId = searchParams.get('activityId')
+
+    if (!activityId) {
+      autoOpenedActivityIdRef.current = null
+      return
+    }
+
+    if (autoOpenedActivityIdRef.current === activityId) return
+
+    const target = activitiesData?.activities.find((activity) => activity.activity_id === activityId)
+    if (target) {
+      autoOpenedActivityIdRef.current = activityId
+      void handleEdit(target)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const fetchActivity = async () => {
+      try {
+        const response = await fetch(`/api/activities/${activityId}`, { signal: controller.signal })
+        const result = await response.json()
+
+        if (!response.ok || !result.success || !result.data?.activity) {
+          throw new Error(result.error || 'Failed to fetch activity')
+        }
+
+        autoOpenedActivityIdRef.current = activityId
+        await handleEdit(result.data.activity as Activity)
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        console.error('Failed to fetch target activity:', err)
+      }
+    }
+
+    void fetchActivity()
+
+    return () => {
+      controller.abort()
+    }
+    // handleEdit は useCallback でラップされていないため依存リストから除外
+    // searchParams と activitiesData の変化に追従して activityId ごとに1回だけ処理する
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activitiesData, searchParams])
 
   useEffect(() => {
     const syncDrafts = () => {

@@ -36,7 +36,7 @@
 - **代替案を検討する**: 既存パッケージ・標準APIで代替できる場合はそちらを優先し、新規パッケージは最終手段とする
 
 # Workflow Rules
-- **ALWAYS use a worktree**: Never work directly on the main branch. Create a NEW worktree at the start of each new task.
+- **ALWAYS use a worktree**: Never work directly on ANY branch (including feature branches). Always create a NEW worktree before making any code changes. The only exception is non-code tasks (Notion操作・調査・チケット確認のみ)。
 - **Worktree cleanup**: Delete the worktree ONLY after the user explicitly says the PR is published/merged. Never assume it's done on your own.
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
 - **Code change workflow**: 実装完了後は以下の順で実行する

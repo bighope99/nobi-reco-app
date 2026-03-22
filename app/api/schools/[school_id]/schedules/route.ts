@@ -52,7 +52,7 @@ export async function POST(
     }
 
     // 施設アクセス権限チェック
-    if (role === 'facility_admin' || role === 'staff') {
+    if (role === 'facility_admin') {
       if (current_facility_id !== school.facility_id) {
         return NextResponse.json(
           { success: false, error: 'School not found' },

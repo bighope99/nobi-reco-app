@@ -39,6 +39,19 @@ describe('POST /api/records/personal - activity_id機能', () => {
     mockSupabase = {
       auth: {
         getUser: jest.fn(),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: 'user-123',
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-123',
+                current_facility_id: 'facility-123',
+              },
+            },
+          },
+          error: null,
+        }),
       },
       from: jest.fn(),
     };
@@ -106,6 +119,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
+        if (table === 'm_users') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), is: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: { id: 'recorder-123' }, error: null }) };
         return {};
       });
 
@@ -115,6 +129,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         observation_date: '2026-01-09',
         content: 'テスト観察内容',
         activity_id: 'activity-456', // ← activity_idを指定
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         ai_action: '客観的事実',
         ai_opinion: '主観的解釈',
         tag_flags: {
@@ -198,6 +213,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
+        if (table === 'm_users') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), is: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: { id: 'recorder-123' }, error: null }) };
         return {};
       });
 
@@ -207,6 +223,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         observation_date: '2026-01-09',
         content: 'テスト観察内容',
         activity_id: null, // ← nullを明示的に指定
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         ai_action: '客観的事実',
         ai_opinion: '主観的解釈',
         tag_flags: {},
@@ -287,6 +304,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
+        if (table === 'm_users') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), is: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: { id: 'recorder-123' }, error: null }) };
         return {};
       });
 
@@ -296,6 +314,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         observation_date: '2026-01-09',
         content: 'テスト観察内容',
         // activity_id: 指定しない
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         ai_action: '客観的事実',
         ai_opinion: '主観的解釈',
         tag_flags: {},
@@ -375,6 +394,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
+        if (table === 'm_users') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), is: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: { id: 'recorder-123' }, error: null }) };
         return {};
       });
 
@@ -383,6 +403,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         observation_date: '2026-01-09',
         content: 'テスト観察内容',
         activity_id: 'valid-uuid-string',
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         ai_action: '',
         ai_opinion: '',
         tag_flags: {},
@@ -454,6 +475,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         if (table === 'r_activity') return mockActivityQuery;
         if (table === 'r_observation') return mockObservationInsert;
         if (table === '_record_tag') return mockTagInsert;
+        if (table === 'm_users') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), is: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: { id: 'recorder-123' }, error: null }) };
         return {};
       });
 
@@ -462,6 +484,7 @@ describe('POST /api/records/personal - activity_id機能', () => {
         observation_date: '2026-01-09',
         content: 'テスト観察内容',
         activity_id: '', // ← 空文字列
+        recorded_by: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         ai_action: '',
         ai_opinion: '',
         tag_flags: {},

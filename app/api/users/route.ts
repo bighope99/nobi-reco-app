@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
 
 interface ClassAssignmentInput {
   class_id: string;
@@ -97,10 +98,30 @@ export async function GET(request: NextRequest) {
       .is('deleted_at', null)
       .eq('company_id', company_id); // 会社でフィルター
 
-    // 施設フィルター（site_admin以外の場合のみ適用）
-    if (role !== 'site_admin' && current_facility_id) {
-      query = query.eq('_user_facility.facility_id', current_facility_id);
-      query = query.eq('_user_facility.is_current', true);
+    // facility_idパラメータ（company_admin以上のみ使用可能）
+    const facilityIdParam = searchParams.get('facility_id');
+
+    // 施設フィルター
+    if (role === 'site_admin') {
+      // site_adminはフィルターなし（company_id でのみ絞り込み）
+      // ただしfacility_idパラメータがあれば適用
+      if (facilityIdParam) {
+        query = query.eq('_user_facility.facility_id', facilityIdParam);
+        query = query.eq('_user_facility.is_current', true);
+      }
+    } else if (role === 'company_admin') {
+      // company_adminはfacility_idパラメータを使用可能（自社施設のみ - company_idフィルターで担保）
+      const targetFacility = facilityIdParam || current_facility_id;
+      if (targetFacility) {
+        query = query.eq('_user_facility.facility_id', targetFacility);
+        query = query.eq('_user_facility.is_current', true);
+      }
+    } else {
+      // facility_admin: current_facility_idのみ使用（facility_idパラメータは無視）
+      if (current_facility_id) {
+        query = query.eq('_user_facility.facility_id', current_facility_id);
+        query = query.eq('_user_facility.is_current', true);
+      }
     }
 
     // ロールフィルター
@@ -149,10 +170,11 @@ export async function GET(request: NextRequest) {
 
     // ユーザーごとのクラス割当マップ構築
     const classAssignmentMap = new Map<string, { class_id: string; class_name: string; is_main: boolean }[]>();
-    (allClassAssignments || []).forEach((ca: { user_id: string; class_role: string | null; m_classes: { id: string; name: string } }) => {
+    (allClassAssignments || []).forEach((ca) => {
+      const mClasses = Array.isArray(ca.m_classes) ? ca.m_classes[0] : ca.m_classes;
       const entry = {
-        class_id: ca.m_classes.id,
-        class_name: ca.m_classes.name,
+        class_id: mClasses?.id,
+        class_name: mClasses?.name,
         is_main: ca.class_role === 'main',
       };
       const existing = classAssignmentMap.get(ca.user_id) || [];
@@ -160,8 +182,18 @@ export async function GET(request: NextRequest) {
       classAssignmentMap.set(ca.user_id, existing);
     });
 
+    // auth.users から last_sign_in_at を取得してマップ構築
+    const adminClient = await createAdminClient();
+    const { data: authUsersData } = await adminClient.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    const authUserMap = new Map<string, string | null>(
+      (authUsersData?.users ?? []).map((au) => [au.id, au.last_sign_in_at ?? null])
+    );
+
     // 同期的にデータを結合
-    const usersWithDetails = (usersData || []).map((u: { id: string; email: string | null; name: string; name_kana: string | null; role: string; phone: string | null; hire_date: string | null; is_active: boolean; last_login_at: string | null; created_at: string; updated_at: string }) => ({
+    const usersWithDetails = (usersData || []).map((u) => ({
       user_id: u.id,
       email: u.email,
       name: u.name,
@@ -171,7 +203,7 @@ export async function GET(request: NextRequest) {
       hire_date: u.hire_date,
       is_active: u.is_active,
       assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: u.last_login_at,
+      last_login_at: authUserMap.get(u.id) ?? null,
       created_at: u.created_at,
       updated_at: u.updated_at,
     }));
@@ -278,10 +310,28 @@ export async function POST(request: NextRequest) {
     }
     body.name = userName;
 
-    // 施設IDの決定（site_adminの場合はbody.facility_idを使用）
-    const targetFacilityId = role === 'site_admin'
+    // 施設IDの決定（site_adminとcompany_adminの場合はbody.facility_idを使用可能）
+    const targetFacilityId = (role === 'site_admin' || role === 'company_admin')
       ? (body.facility_id || current_facility_id)
       : current_facility_id;
+
+    // 施設の所有権確認（クロステナントリンク防止）
+    if (targetFacilityId && body.facility_id) {
+      const { data: facilityCheck, error: facilityCheckError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', targetFacilityId)
+        .eq('company_id', company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (facilityCheckError || !facilityCheck) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid facility_id for current company' },
+          { status: 403 }
+        );
+      }
+    }
 
     // ---- メールなしスタッフ登録（auth.users に登録しない） ----
     if (isEmaillessStaff) {
@@ -342,20 +392,91 @@ export async function POST(request: NextRequest) {
     // メールアドレス重複チェック
     const { data: existingUser } = await supabase
       .from('m_users')
-      .select('id')
+      .select('id, name, role')
       .eq('email', body.email)
+      .eq('company_id', company_id)
       .is('deleted_at', null)
-      .single();
-
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'Email already exists' },
-        { status: 400 }
-      );
-    }
+      .maybeSingle();
 
     // Admin クライアントを作成（サービスロールキー使用）
+    // ※ 再招待フローでも使い回すため、重複チェック後に宣言する
     const supabaseAdmin = await createAdminClient();
+
+    if (existingUser) {
+      // 既存ユーザーがいる場合、パスワード設定済みかどうかで処理を分岐する
+      const { data: authUserData } = await supabaseAdmin.auth.admin.getUserById(existingUser.id);
+
+      if (!authUserData?.user) {
+        // Auth ユーザーが見つからない場合は通常の重複エラーとして扱う
+        return NextResponse.json(
+          { success: false, error: 'Email already exists' },
+          { status: 400 }
+        );
+      }
+
+      if (hasCompletedPasswordSetup(authUserData.user)) {
+        // パスワード設定済み → 通常の重複エラー
+        return NextResponse.json(
+          { success: false, error: 'Email already exists' },
+          { status: 400 }
+        );
+      }
+
+      // パスワード未設定 → 再招待フロー
+      // メールが確認済みの場合は 'invite' が失敗するため 'magiclink' を使用する
+      const reinviteLinkType = authUserData.user.email_confirmed_at ? 'magiclink' : 'invite';
+
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: reinviteLinkType,
+        email: body.email,
+      });
+
+      if (linkError || !linkData) {
+        throw linkError || new Error('Failed to generate invite link');
+      }
+
+      // Supabaseが生成したURLからトークンハッシュを抽出
+      const supabaseUrl = linkData.properties.action_link;
+      const urlObj = new URL(supabaseUrl);
+      const tokenHash = urlObj.searchParams.get('token_hash') || urlObj.searchParams.get('token');
+      const type = urlObj.searchParams.get('type') || 'invite';
+
+      if (!tokenHash) {
+        console.error('Failed to extract token from invite link for re-invite, user:', existingUser.id);
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Failed to generate valid invite link',
+            message: 'Token hash is missing from the generated link',
+          },
+          { status: 500 }
+        );
+      }
+
+      // 独自のパスワード設定ページURLを構築
+      const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+      const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
+
+      // 再招待メールを送信
+      sendWithGas({
+        to: body.email,
+        subject: '【のびレコ】アカウント登録のご案内',
+        htmlBody: buildUserInvitationEmailHtml({
+          userName: existingUser.name,
+          userEmail: body.email,
+          role: existingUser.role,
+          inviteUrl,
+        }),
+        senderName: 'のびレコ',
+      }).catch((emailError) => {
+        console.error('Failed to send re-invite email:', emailError);
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: '招待メールを再送信しました',
+      });
+    }
 
     // Supabase Auth にユーザーを作成（メール送信なし）
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
@@ -407,11 +528,6 @@ export async function POST(request: NextRequest) {
 
     // 独自のパスワード設定ページURLを構築
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    if (!baseUrl) {
-      console.error('NEXT_PUBLIC_SITE_URL is not configured');
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-    }
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）

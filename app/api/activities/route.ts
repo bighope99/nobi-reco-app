@@ -19,6 +19,15 @@ const MAX_TITLE_LENGTH = 100;
 // Pagination constants
 const MAX_LIMIT = 100;
 
+const escapeIlikePattern = (value: string) =>
+  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+
+const isValidDateParam = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(value);
+  return !isNaN(d.getTime());
+};
+
 const signActivityPhotos = async (
   supabase: Awaited<ReturnType<typeof createClient>>,
   facilityId: string,
@@ -72,6 +81,44 @@ export async function GET(request: NextRequest) {
     const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
     const class_id = searchParams.get('class_id');
+    const from_date = searchParams.get('from_date');
+    const to_date = searchParams.get('to_date');
+    // 日付バリデーション
+    if (from_date && !isValidDateParam(from_date)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid from_date format. Use YYYY-MM-DD.' },
+        { status: 400 }
+      );
+    }
+    if (to_date && !isValidDateParam(to_date)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid to_date format. Use YYYY-MM-DD.' },
+        { status: 400 }
+      );
+    }
+    if (from_date && to_date && from_date > to_date) {
+      return NextResponse.json(
+        { success: false, error: 'from_date must not be after to_date.' },
+        { status: 400 }
+      );
+    }
+
+    const staff_id_raw = searchParams.get('staff_id');
+    if (staff_id_raw && !isValidUUID(staff_id_raw)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid staff_id format' },
+        { status: 400 }
+      );
+    }
+    const staff_id = staff_id_raw ?? undefined;
+    const keywordRaw = searchParams.get('keyword');
+    if (keywordRaw && keywordRaw.length > 100) {
+      return NextResponse.json(
+        { success: false, error: 'keyword must be 100 characters or less' },
+        { status: 400 }
+      );
+    }
+    const keyword = keywordRaw ?? null;
 
     // Parse pagination parameters
     const parsedLimit = parseInt(searchParams.get('limit') || '20');
@@ -120,8 +167,9 @@ export async function GET(request: NextRequest) {
         m_users!r_activity_created_by_fkey (
           id,
           name
-        )
-      `)
+        ),
+        recorded_by_user:m_users!recorded_by(id, name)
+      `, { count: 'exact' })
       .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .order('activity_date', { ascending: false })
@@ -138,12 +186,38 @@ export async function GET(request: NextRequest) {
       query = query.eq('class_id', class_id);
     }
 
+    // 日付範囲フィルター
+    if (from_date) {
+      query = query.gte('activity_date', from_date);
+    }
+    if (to_date) {
+      query = query.lte('activity_date', to_date);
+    }
+
+    // スタッフフィルターとキーワードフィルター
+    const escapedKeyword = keyword ? escapeIlikePattern(keyword) : null;
+    const keywordFilter = escapedKeyword
+      ? `or(content.ilike.%${escapedKeyword}%,title.ilike.%${escapedKeyword}%,handover.ilike.%${escapedKeyword}%,special_notes.ilike.%${escapedKeyword}%)`
+      : null;
+
+    if (staff_id && keywordFilter) {
+      query = query.or(
+        `and(recorded_by.eq.${staff_id},${keywordFilter})`
+      );
+    } else if (staff_id) {
+      query = query.or(`recorded_by.eq.${staff_id}`);
+    } else if (keywordFilter) {
+      query = query.or(
+        `content.ilike.%${escapedKeyword}%,title.ilike.%${escapedKeyword}%,handover.ilike.%${escapedKeyword}%,special_notes.ilike.%${escapedKeyword}%`
+      );
+    }
+
     const { data: activities, error, count } = await query;
 
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { success: false, error: 'Database error' },
+        { success: false, error: 'データの取得に失敗しました' },
         { status: 500 }
       );
     }
@@ -177,17 +251,16 @@ export async function GET(request: NextRequest) {
         console.error('Failed to fetch mentioned children names:', mentionedChildrenError);
       } else if (mentionedChildren) {
         mentionedChildren.forEach((child: { id: string; family_name: string | null; given_name: string | null; nickname: string | null }) => {
-          const displayName = child.nickname || formatName([
-            decryptOrFallback(child.family_name),
-            decryptOrFallback(child.given_name),
-          ]);
+          const familyName = decryptOrFallback(child.family_name) ?? '';
+          const givenName = decryptOrFallback(child.given_name) ?? '';
+          const displayName = child.nickname || formatName([familyName, givenName]) || '';
           mentionedChildrenNamesMap.set(child.id, displayName);
         });
       }
     }
 
     if (activityIds.length > 0) {
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations } = await supabase
         .from('r_observation')
         .select(`
           id,
@@ -210,9 +283,10 @@ export async function GET(request: NextRequest) {
 
           // 子ども名の取得（nicknameを優先、なければ姓名）
           const child = Array.isArray(obs.m_children) ? obs.m_children[0] : obs.m_children;
-          const childName = child?.nickname ||
-                            [child?.family_name, child?.given_name].filter(Boolean).join(' ') ||
-                            '不明';
+          const childName = child?.nickname || formatName([
+            decryptOrFallback(child?.family_name),
+            decryptOrFallback(child?.given_name),
+          ], '不明');
 
           observationsByActivity[obs.activity_id].push({
             observation_id: obs.id,
@@ -253,7 +327,8 @@ export async function GET(request: NextRequest) {
         handover: activity.handover,
         meal: activity.meal,
         recorded_by: activity.recorded_by || null,
-        created_by: activity.m_users?.name || '',
+        recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name ?? null,
+        created_by: (activity.m_users as { id: string; name: string } | null)?.name ?? null,
         created_at: activity.created_at,
         individual_record_count: individualRecords.length,
         individual_records: individualRecords,

@@ -17,12 +17,6 @@
 
 import { AiObservationDraft } from '@/lib/drafts/aiDraftCookie';
 
-/**
- * グローバルfetchのモック型定義
- */
-declare global {
-  var fetch: jest.Mock;
-}
 
 describe('handleSaveObservation - activity_id優先度', () => {
   let originalFetch: typeof global.fetch;

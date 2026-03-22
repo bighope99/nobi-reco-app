@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { normalizeSearch } from '@/lib/utils/kana';
 
 /**
  * GET /api/facilities
@@ -45,11 +46,6 @@ export async function GET(request: NextRequest) {
 
     // 自分が所属している会社の全施設を取得（設定ページでは権限によるフィルタリングは後ほど実装）
     query = query.eq('company_id', company_id);
-
-    // 検索フィルタ
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%`);
-    }
 
     const { data: facilities, error: facilitiesError } = await query.order(
       'name',
@@ -100,95 +96,26 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // 検索フィルタ（ひらがな/カタカナ表記ゆれ・全角半角スペース対応）
+    let filteredFacilities = facilitiesWithStats;
+    if (search) {
+      const normalizedSearch = normalizeSearch(search);
+      filteredFacilities = facilitiesWithStats.filter(
+        (f) =>
+          normalizeSearch(f.name).includes(normalizedSearch) ||
+          normalizeSearch(f.address || '').includes(normalizedSearch)
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        facilities: facilitiesWithStats,
-        total: facilitiesWithStats.length,
+        facilities: filteredFacilities,
+        total: filteredFacilities.length,
       },
     });
   } catch (error) {
     console.error('Error fetching facilities:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * POST /api/facilities
- * 施設新規作成
- */
-export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient();
-
-    // JWTメタデータから認証情報を取得
-    const metadata = await getAuthenticatedUserMetadata();
-
-    if (!metadata) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const { role, company_id } = metadata;
-
-    // 権限チェック（company_adminのみ作成可能）
-    if (role !== 'company_admin') {
-      return NextResponse.json(
-        { success: false, error: 'Permission denied' },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-
-    // 必須パラメータチェック
-    if (!body.name || !body.address || !body.phone) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required parameters' },
-        { status: 400 }
-      );
-    }
-
-    // 施設作成
-    const { data: newFacility, error: createError } = await supabase
-      .from('m_facilities')
-      .insert({
-        company_id: company_id,
-        name: body.name,
-        address: body.address,
-        phone: body.phone,
-        email: body.email,
-        postal_code: body.postal_code,
-        capacity: body.capacity,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (createError) {
-      throw createError;
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        facility_id: newFacility.id,
-        name: newFacility.name,
-        created_at: newFacility.created_at,
-      },
-      message: '施設を作成しました',
-    });
-  } catch (error) {
-    console.error('Error creating facility:', error);
     return NextResponse.json(
       {
         success: false,

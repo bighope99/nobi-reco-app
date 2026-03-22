@@ -30,6 +30,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // facility_admin は current_facility_id が必須（fail-closed）
+    if (role === 'facility_admin' && !current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     if (!body.updates || !Array.isArray(body.updates)) {
@@ -81,8 +89,9 @@ export async function PUT(request: NextRequest) {
         }
 
         // 施設アクセス権限チェック
-        if (allowedFacilityIds.length > 0) {
-          const scheduleFacilityId = (schedule.m_schools as any).facility_id;
+        if (allowedFacilityIds && allowedFacilityIds.length > 0) {
+          const schoolData = schedule.m_schools as { facility_id: string } | { facility_id: string }[] | null;
+        const scheduleFacilityId = (Array.isArray(schoolData) ? schoolData[0]?.facility_id : schoolData?.facility_id) ?? '';
           if (!allowedFacilityIds.includes(scheduleFacilityId)) {
             results.push({
               schedule_id: update.schedule_id,
