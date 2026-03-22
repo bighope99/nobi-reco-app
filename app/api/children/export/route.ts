@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper';
@@ -69,7 +69,7 @@ function escapeCsvField(value: string): string {
   return value;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
@@ -85,7 +85,22 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const facilityId = current_facility_id;
+    // site_admin/company_admin はクエリパラメータからも施設IDを受け取れる（import と同様）
+    const { searchParams } = new URL(request.url);
+    const facilityIdQuery = searchParams.get('facility_id') || '';
+
+    let facilityId: string;
+    if (role === 'facility_admin' || role === 'staff') {
+      // facility_admin/staff は自施設のみ
+      if (!current_facility_id) {
+        return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
+      }
+      facilityId = current_facility_id;
+    } else {
+      // site_admin/company_admin はクエリパラメータ → JWTの施設ID の優先順で取得
+      facilityId = facilityIdQuery || current_facility_id || '';
+    }
+
     if (!facilityId) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
     }
@@ -159,6 +174,8 @@ export async function GET() {
 
       const decryptedFamilyName = decryptOrFallback(child.family_name) || '';
       const decryptedGivenName = decryptOrFallback(child.given_name) || '';
+      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana) || '';
+      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana) || '';
 
       // 保護者情報の復号化
       let parentName = '';
@@ -192,8 +209,8 @@ export async function GET() {
         child.id,
         decryptedFamilyName,
         decryptedGivenName,
-        child.family_name_kana || '',
-        child.given_name_kana || '',
+        decryptedFamilyNameKana,
+        decryptedGivenNameKana,
         child.nickname || '',
         formatGender(child.gender),
         child.birth_date || '',

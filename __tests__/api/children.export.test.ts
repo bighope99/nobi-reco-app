@@ -1,6 +1,10 @@
 import { GET } from '@/app/api/children/export/route';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { NextRequest } from 'next/server';
+
+const makeRequest = (url = 'http://localhost/api/children/export') =>
+  new NextRequest(url);
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
@@ -31,7 +35,7 @@ describe('GET /api/children/export', () => {
   it('should return 401 when user is not authenticated', async () => {
     mockedGetMetadata.mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(makeRequest());
     const json = await response.json();
 
     expect(response.status).toBe(401);
@@ -98,7 +102,7 @@ describe('GET /api/children/export', () => {
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-    const response = await GET();
+    const response = await GET(makeRequest());
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('text/csv');
@@ -142,7 +146,7 @@ describe('GET /api/children/export', () => {
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-    const response = await GET();
+    const response = await GET(makeRequest());
 
     expect(response.status).toBe(200);
     const text = await response.text();

@@ -31,7 +31,12 @@ async function checkDuplicateChildren(
     .in('id', candidateIds)
     .is('deleted_at', null);
 
-  if (error || !matches || matches.length === 0) return [];
+  if (error) {
+    // エラー時は重複チェック失敗として上位に伝播させる（サイレント無視しない）
+    throw new Error(`重複チェックに失敗しました: ${error.message}`);
+  }
+
+  if (!matches || matches.length === 0) return [];
 
   // 自身を除外（上書きインポート時に自己一致を防止）
   const filtered = excludeChildId
@@ -223,13 +228,13 @@ export async function POST(request: NextRequest) {
           approvedDuplicateRows = JSON.parse(approvedDuplicateRaw) as number[];
           if (!Array.isArray(approvedDuplicateRows)) {
             return NextResponse.json(
-              { success: false, error: 'approved_duplicate_rows must be a JSON array' },
+              { success: false, error: 'approved_duplicate_rows は JSON 配列である必要があります' },
               { status: 400 }
             );
           }
         } catch {
           return NextResponse.json(
-            { success: false, error: 'Invalid JSON format for approved_duplicate_rows' },
+            { success: false, error: 'approved_duplicate_rows の JSON 形式が無効です' },
             { status: 400 }
           );
         }
@@ -244,8 +249,18 @@ export async function POST(request: NextRequest) {
 
     // commitモード: ロールバック用に登録済みchild_idを記録
     const insertedChildIds: string[] = [];
+    // commitモード: 更新済みchild_idも記録（ロールバック時に警告用）
+    const updatedChildIds: string[] = [];
 
     const rollbackInsertedChildren = async (): Promise<void> => {
+      // 更新済みレコードは元の状態に戻せないため警告のみ
+      if (updatedChildIds.length > 0) {
+        console.warn(
+          'Rollback warning: updated children cannot be automatically restored.',
+          { updatedChildIds }
+        );
+      }
+
       if (insertedChildIds.length === 0) return;
 
       // 1. child_id に紐づく guardian_id を取得（_child_guardian 経由）
@@ -317,6 +332,9 @@ export async function POST(request: NextRequest) {
 
     const validatedPayloads: Array<{ rowNumber: number; payload: ChildPayload }> = [];
 
+    // CSV内重複検出用セット（key: 正規化姓名 + 生年月日）
+    const seenInCsv = new Set<string>();
+
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
@@ -324,19 +342,32 @@ export async function POST(request: NextRequest) {
       if (mode === 'preview') {
         // 重複検知（バリデーションエラーがない行のみ）
         let duplicates: DuplicateInfo[] = [];
+        let csvDuplicate = false;
         if (errors.length === 0 && payload?.basic_info?.family_name && payload?.basic_info?.given_name && payload?.basic_info?.birth_date) {
-          duplicates = await checkDuplicateChildren(
-            supabase,
-            targetFacilityId,
-            payload.basic_info.family_name,
-            payload.basic_info.given_name,
-            payload.basic_info.birth_date,
-            payload.child_id,
-          );
+          // CSV内の重複チェック
+          const csvKey = `${payload.basic_info.family_name.trim()}_${payload.basic_info.given_name.trim()}_${payload.basic_info.birth_date}`;
+          if (seenInCsv.has(csvKey)) {
+            csvDuplicate = true;
+          } else {
+            seenInCsv.add(csvKey);
+          }
+
+          if (!csvDuplicate) {
+            duplicates = await checkDuplicateChildren(
+              supabase,
+              targetFacilityId,
+              payload.basic_info.family_name,
+              payload.basic_info.given_name,
+              payload.basic_info.birth_date,
+              payload.child_id,
+            );
+          }
         }
 
         const previewRow = buildPreviewRow(rows[i], rowNumber, payload, errors);
-        if (duplicates.length > 0) {
+        if (csvDuplicate) {
+          previewRow.errors.push('重複: 同じCSV内に同姓同名・同生年月日の児童が存在します');
+        } else if (duplicates.length > 0) {
           previewRow.duplicates = duplicates;
           previewRow.errors.push(`重複: 同姓同名・同生年月日の児童が${duplicates.length}名存在します（${duplicates.map(d => d.name).join(', ')}）`);
         }
@@ -350,7 +381,7 @@ export async function POST(request: NextRequest) {
             phone: payload.contact.parent_phone,
           });
         }
-        if (errors.length > 0 || (duplicates.length > 0)) {
+        if (errors.length > 0 || csvDuplicate || duplicates.length > 0) {
           failureCount += 1;
         } else {
           successCount += 1;
@@ -367,6 +398,16 @@ export async function POST(request: NextRequest) {
       }
 
       if (payload.basic_info?.family_name && payload.basic_info?.given_name && payload.basic_info?.birth_date) {
+        // CSV内の重複チェック
+        const csvKey = `${payload.basic_info.family_name.trim()}_${payload.basic_info.given_name.trim()}_${payload.basic_info.birth_date}`;
+        if (seenInCsv.has(csvKey)) {
+          return NextResponse.json({
+            success: false,
+            error: `${rowNumber}行目: 同じCSV内に同姓同名・同生年月日の児童が存在するためインポートを中止しました`,
+          }, { status: 400 });
+        }
+        seenInCsv.add(csvKey);
+
         if (!approvedDuplicateRows.includes(rowNumber)) {
           const duplicates = await checkDuplicateChildren(
             supabase,
@@ -432,9 +473,15 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // 登録成功時はchild_idを記録（新規作成分のみロールバック対象）
-      if (!payload.child_id && json.data?.child_id) {
-        insertedChildIds.push(json.data.child_id);
+      // 登録成功時はchild_idを記録
+      if (json.data?.child_id) {
+        if (!payload.child_id) {
+          // 新規作成: ロールバック（soft delete）対象
+          insertedChildIds.push(json.data.child_id);
+        } else {
+          // 更新: 元の状態への自動復元は不可のためリストのみ記録
+          updatedChildIds.push(json.data.child_id);
+        }
       }
 
       successCount += 1;
