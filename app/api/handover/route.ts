@@ -16,10 +16,12 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
  *   success: true,
  *   data: {
  *     handover_date: "2026-02-24",
+ *     has_next_record: false,
  *     items: [
  *       {
  *         activity_id: "...",
  *         handover: "...",
+ *         handover_completed: false,
  *         class_name: "...",
  *         created_by_name: "..."
  *       }
@@ -106,6 +108,7 @@ export async function GET(request: NextRequest) {
         id,
         activity_date,
         handover,
+        handover_completed,
         class_id,
         m_classes (
           id,
@@ -153,12 +156,37 @@ export async function GET(request: NextRequest) {
     const handover_date = activities[0].activity_date;
     const latestActivities = activities.filter(a => a.activity_date === handover_date);
 
+    // 引き継ぎ日以降（引き継ぎ日を含まない）に次の記録があるかチェック
+    // class_id指定時は同クラスの記録のみ対象
+    let nextRecordQuery = supabase
+      .from('r_activity')
+      .select('id', { count: 'exact', head: true })
+      .eq('facility_id', facility_id)
+      .is('deleted_at', null)
+      .gt('activity_date', handover_date)
+      .lt('activity_date', date);
+
+    if (class_id) {
+      nextRecordQuery = nextRecordQuery.eq('class_id', class_id);
+    }
+
+    const { count: nextRecordCount, error: nextRecordError } = await nextRecordQuery;
+    if (nextRecordError) {
+      console.error('Database error:', nextRecordError);
+      return NextResponse.json(
+        { success: false, error: 'Database error' },
+        { status: 500 }
+      );
+    }
+    const has_next_record = (nextRecordCount ?? 0) > 0;
+
     const items = latestActivities.map((activity) => {
       const classData = Array.isArray(activity.m_classes) ? activity.m_classes[0] : activity.m_classes;
       const userData = Array.isArray(activity.m_users) ? activity.m_users[0] : activity.m_users;
       return {
         activity_id: activity.id,
         handover: activity.handover,
+        handover_completed: activity.handover_completed ?? false,
         class_name: classData?.name || '',
         created_by_name: userData?.name || '',
       };
@@ -168,6 +196,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         handover_date,
+        has_next_record,
         items,
       },
     });
