@@ -1,40 +1,46 @@
 "use client"
-import { useEffect, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * useUnsavedChanges - フォームに未保存の変更がある場合にページ遷移を防止するフック
  *
  * @param isDirty - フォームに未保存の変更があるかどうか
- * @param message - 確認ダイアログに表示するメッセージ（beforeunload では無視される場合あり）
+ * @param message - 確認ダイアログに表示するメッセージ
  *
  * 対応する遷移:
- * 1. ブラウザの戻る/進む/リロード/タブ閉じ → beforeunload イベント
- * 2. <a> タグでの遷移 → beforeunload イベント（SPA内遷移でない場合）
- *
- * 注意: Next.js App Router では router.push() による SPA 遷移のインターセプトは
- * 公式サポートがないため、beforeunload のみで対応する。
- * window.location.href による遷移は beforeunload で捕捉される。
+ * 1. ブラウザのリロード/タブ閉じ → beforeunload イベント
+ * 2. Next.js <Link> / router.push() → history.pushState インターセプト
  */
 export function useUnsavedChanges(
   isDirty: boolean,
   message: string = '保存されていない変更があります。ページを離れますか？'
 ): void {
-  const handleBeforeUnload = useCallback(
-    (e: BeforeUnloadEvent) => {
-      if (!isDirty) return;
-      e.preventDefault();
-      // 一部ブラウザでは returnValue の設定が必要
-      e.returnValue = message;
-    },
-    [isDirty, message]
-  );
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   useEffect(() => {
-    if (isDirty) {
-      window.addEventListener('beforeunload', handleBeforeUnload);
-    }
+    // 1. beforeunload: ブラウザのリロード・タブ閉じ・外部リンク遷移
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // 2. history.pushState インターセプト: Next.js <Link> / router.push() による SPA 遷移
+    const originalPushState = history.pushState.bind(history);
+    history.pushState = function (
+      ...args: Parameters<typeof history.pushState>
+    ) {
+      if (isDirtyRef.current && !window.confirm(message)) {
+        return;
+      }
+      originalPushState(...args);
+    };
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      history.pushState = originalPushState;
     };
-  }, [isDirty, handleBeforeUnload]);
+  }, [message]); // isDirty は ref 経由で参照するため deps 不要
 }

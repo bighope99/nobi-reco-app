@@ -336,9 +336,10 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       }
       setActiveSection(current);
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    const scrollContainer = document.querySelector('main') ?? window;
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll(); // 初期状態を設定
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
 
   // 電話番号変更時に兄弟を自動検索（デバウンス500ms）
