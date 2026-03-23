@@ -154,11 +154,11 @@ describe('GET /api/children/export', () => {
           _child_class: [
             {
               is_current: true,
-              class: { class_name: 'ひまわり組' },
+              class: { name: 'ひまわり組' },
             },
             {
               is_current: false,
-              class: { class_name: '古いクラス' },
+              class: { name: '古いクラス' },
             },
           ],
           _child_guardian: [],
