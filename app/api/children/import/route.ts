@@ -273,7 +273,14 @@ export async function POST(request: NextRequest) {
         }
 
         // _child_guardian を復元（一旦全削除して再挿入）
-        await supabase.from('_child_guardian').delete().eq('child_id', snapshot.child.id as string);
+        const { error: guardianDeleteError } = await supabase
+          .from('_child_guardian')
+          .delete()
+          .eq('child_id', snapshot.child.id as string);
+        if (guardianDeleteError) {
+          console.error('Failed to clear _child_guardian during rollback:', guardianDeleteError);
+          throw guardianDeleteError;
+        }
         if (snapshot.guardianLinks.length > 0) {
           const { error: guardianRestoreError } = await supabase
             .from('_child_guardian')
@@ -285,7 +292,14 @@ export async function POST(request: NextRequest) {
         }
 
         // _child_class を復元（一旦全削除して再挿入）
-        await supabase.from('_child_class').delete().eq('child_id', snapshot.child.id as string);
+        const { error: classDeleteError } = await supabase
+          .from('_child_class')
+          .delete()
+          .eq('child_id', snapshot.child.id as string);
+        if (classDeleteError) {
+          console.error('Failed to clear _child_class during rollback:', classDeleteError);
+          throw classDeleteError;
+        }
         if (snapshot.classLinks.length > 0) {
           const { error: classRestoreError } = await supabase
             .from('_child_class')
@@ -379,6 +393,8 @@ export async function POST(request: NextRequest) {
 
     // CSV内重複検出用セット（key: 正規化姓名 + 生年月日）
     const seenInCsv = new Set<string>();
+    // CSV内child_id重複検出用セット
+    const seenIds = new Set<string>();
 
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
@@ -389,6 +405,15 @@ export async function POST(request: NextRequest) {
         let duplicates: DuplicateInfo[] = [];
         let csvDuplicate = false;
         if (errors.length === 0 && payload?.basic_info?.family_name && payload?.basic_info?.given_name && payload?.basic_info?.birth_date) {
+          // CSV内のchild_id重複チェック
+          if (payload.child_id) {
+            if (seenIds.has(payload.child_id)) {
+              errors.push('CSV内に同じIDが重複しています');
+            } else {
+              seenIds.add(payload.child_id);
+            }
+          }
+
           // CSV内の重複チェック
           const csvKey = `${payload.basic_info.family_name.trim()}_${payload.basic_info.given_name.trim()}_${payload.basic_info.birth_date}`;
           if (seenInCsv.has(csvKey)) {
@@ -442,6 +467,17 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `${rowNumber}行目にエラーがあるためインポートを中止しました: ${errors.join(', ')}`,
         }, { status: 400 });
+      }
+
+      // CSV内のchild_id重複チェック
+      if (payload.child_id) {
+        if (seenIds.has(payload.child_id)) {
+          return NextResponse.json({
+            success: false,
+            error: `${rowNumber}行目: CSV内に同じIDが重複しています`,
+          }, { status: 400 });
+        }
+        seenIds.add(payload.child_id);
       }
 
       if (payload.basic_info?.family_name && payload.basic_info?.given_name && payload.basic_info?.birth_date) {
