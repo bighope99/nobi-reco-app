@@ -79,7 +79,15 @@ export async function PATCH(
       .is('deleted_at', null)
       .single();
 
-    if (fetchError || !activity) {
+    if (fetchError) {
+      console.error('Failed to fetch activity:', fetchError);
+      return NextResponse.json(
+        { success: false, error: 'Database error' },
+        { status: 500 }
+      );
+    }
+
+    if (!activity) {
       return NextResponse.json(
         { success: false, error: 'Activity not found' },
         { status: 404 }
@@ -110,6 +118,10 @@ export async function PATCH(
       .from('r_activity')
       .update(updateData)
       .eq('id', id)
+      .eq('facility_id', facility_id)
+      .is('deleted_at', null)
+      .not('handover', 'is', null)
+      .neq('handover', '')
       .select('id, handover_completed, handover_completed_at, handover_completed_by')
       .single();
 

@@ -5,36 +5,18 @@ import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/activities/route';
 
 // モック
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { createClient } from '@/utils/supabase/server';
 
 describe('/api/activities GET - handover_completed機能', () => {
-  const mockSession = {
-    user_id: 'test-user-id',
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'staff' as const,
-    company_id: 'test-company-id',
-    company_name: 'Test Company',
-    facilities: [
-      {
-        facility_id: 'test-facility-id',
-        facility_name: 'Test Facility',
-        is_primary: true,
-      },
-    ],
-    current_facility_id: 'test-facility-id',
-    classes: [],
-  };
-
   const buildMockSupabase = (activities: unknown[]) => ({
     auth: {
       getSession: jest.fn().mockResolvedValue({
@@ -111,7 +93,11 @@ describe('/api/activities GET - handover_completed機能', () => {
   });
 
   it('handover_completed: true の活動記録がレスポンスに含まれること', async () => {
-    (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+    (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue({
+      user_id: 'test-user-id',
+      current_facility_id: 'test-facility-id',
+      company_id: 'test-company-id',
+    });
 
     const mockActivity = {
       ...baseActivity,
@@ -135,7 +121,11 @@ describe('/api/activities GET - handover_completed機能', () => {
   });
 
   it('handover_completed: false の活動記録がレスポンスに含まれること', async () => {
-    (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+    (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue({
+      user_id: 'test-user-id',
+      current_facility_id: 'test-facility-id',
+      company_id: 'test-company-id',
+    });
 
     const mockActivity = {
       ...baseActivity,
@@ -159,7 +149,11 @@ describe('/api/activities GET - handover_completed機能', () => {
   });
 
   it('handover が null の場合は handover_completed が false になること', async () => {
-    (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+    (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue({
+      user_id: 'test-user-id',
+      current_facility_id: 'test-facility-id',
+      company_id: 'test-company-id',
+    });
 
     const mockActivity = {
       ...baseActivity,

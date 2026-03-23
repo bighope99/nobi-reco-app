@@ -1769,21 +1769,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <p className="text-sm text-gray-500">読み込み中...</p>
                   ) : recentError ? (
                     <p className="text-sm text-red-600">{recentError}</p>
-                  ) : recentObservations.filter((item) => item.id !== observation?.id).length === 0 ? (
-                    <p className="text-sm text-gray-500">過去の記録はありません。</p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg border">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50">
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">内容</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">タグ</th>
-                            <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {recentObservations.map((item) => {
+                  ) : (() => {
+                    const visibleObservations = recentObservations.filter((o) => o.id !== observation?.id);
+                    return visibleObservations.length === 0 ? (
+                      <p className="text-sm text-gray-500">過去の記録はありません。</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">内容</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">タグ</th>
+                              <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                          {visibleObservations.map((item) => {
                             const tagBadges = getTagBadges(item.tag_ids);
                             const contentText = displayRecentContent(item.content);
                             const truncated = contentText.length > 60
@@ -1819,6 +1821,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                       variant="outline"
                                       size="sm"
                                       className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                      aria-label={`${item.observation_date ? formatDate(item.observation_date) : '日付不明'}の記録を削除`}
                                       onClick={() => handleDeleteClick(item.id)}
                                       disabled={deletingObservationId === item.id}
                                     >
@@ -1833,10 +1836,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                               </tr>
                             );
                           })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}
