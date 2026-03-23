@@ -249,16 +249,18 @@ export async function POST(request: NextRequest) {
 
     // commitモード: ロールバック用に登録済みchild_idを記録
     const insertedChildIds: string[] = [];
-    // commitモード: 更新済みchild_idも記録（ロールバック時に警告用）
-    const updatedChildIds: string[] = [];
+    // commitモード: 更新前のスナップショットを保持（ロールバック時に復元）
+    const updatedSnapshots: Array<Record<string, unknown>> = [];
 
     const rollbackInsertedChildren = async (): Promise<void> => {
-      // 更新済みレコードは元の状態に戻せないため警告のみ
-      if (updatedChildIds.length > 0) {
-        console.warn(
-          'Rollback warning: updated children cannot be automatically restored.',
-          { updatedChildIds }
-        );
+      // 更新済みレコードをスナップショットから復元
+      if (updatedSnapshots.length > 0) {
+        for (const snapshot of updatedSnapshots) {
+          await supabase
+            .from('m_children')
+            .update(snapshot)
+            .eq('id', snapshot.id as string);
+        }
       }
 
       if (insertedChildIds.length === 0) return;
@@ -436,6 +438,21 @@ export async function POST(request: NextRequest) {
       try {
         // IDがある場合は既存レコードの上書き更新、ない場合は新規作成
         const targetChildId = payload.child_id || undefined;
+
+        // saveChild を呼ぶ前に更新対象のスナップショットを保存
+        if (payload.child_id) {
+          const { data: snapshot } = await supabase
+            .from('m_children')
+            .select('*')
+            .eq('id', payload.child_id)
+            .eq('facility_id', targetFacilityId)
+            .is('deleted_at', null)
+            .single();
+          if (snapshot) {
+            updatedSnapshots.push(snapshot as Record<string, unknown>);
+          }
+        }
+
         response = await saveChild(payload, targetFacilityId, supabase, targetChildId, {
           skipParentLegacy: true,
         });
@@ -478,10 +495,8 @@ export async function POST(request: NextRequest) {
         if (!payload.child_id) {
           // 新規作成: ロールバック（soft delete）対象
           insertedChildIds.push(json.data.child_id);
-        } else {
-          // 更新: 元の状態への自動復元は不可のためリストのみ記録
-          updatedChildIds.push(json.data.child_id);
         }
+        // 更新: スナップショットは saveChild 呼び出し前に取得済み
       }
 
       successCount += 1;
