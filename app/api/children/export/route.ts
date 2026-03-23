@@ -16,8 +16,6 @@ const exportHeaders = [
   '入所種別',
   '入所日',
   '退所日',
-  '学校名',
-  'クラス名',
   '保護者氏名',
   '保護者電話',
   '保護者メール',
@@ -142,15 +140,6 @@ export async function GET(request: NextRequest) {
         parent_characteristics,
         photo_permission_public,
         photo_permission_share,
-        m_schools (
-          name
-        ),
-        _child_class (
-          is_current,
-          class:m_classes (
-            name
-          )
-        ),
         _child_guardian (
           relationship,
           is_primary,
@@ -216,13 +205,6 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 学校名を取得
-      const schoolName = (child as any).m_schools?.name || '';
-
-      // 現在のクラス名を取得
-      const currentClass = ((child as any)._child_class || []).find((cc: any) => cc.is_current);
-      const className = currentClass?.class?.name || '';
-
       const row = [
         child.id,
         decryptedFamilyName,
@@ -236,8 +218,6 @@ export async function GET(request: NextRequest) {
         formatEnrollmentType(child.enrollment_type),
         formatDate(child.enrolled_at),
         formatDate(child.withdrawn_at),
-        schoolName,
-        className,
         parentName,
         parentPhone,
         parentEmail,

@@ -418,7 +418,9 @@ export async function POST(request: NextRequest) {
         }
         previewRows.push(previewRow);
 
-        if (payload?.contact?.parent_phone && payload?.basic_info?.family_name && payload?.basic_info?.given_name) {
+        // 修正行（child_idあり）はすでにDBに存在するため、fetchExistingSiblingRowsで「既存」として取得される。
+        // 重複して「新規」としても追加すると同一人物が二重表示されるため、新規行のみ追加する。
+        if (!payload.child_id && payload?.contact?.parent_phone && payload?.basic_info?.family_name && payload?.basic_info?.given_name) {
           incomingSiblingRows.push({
             row: rowNumber,
             child_name: `${payload.basic_info.family_name} ${payload.basic_info.given_name}`.trim(),
