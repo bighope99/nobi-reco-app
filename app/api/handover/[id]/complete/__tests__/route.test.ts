@@ -82,7 +82,7 @@ describe('PATCH /api/handover/[id]/complete', () => {
       is: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({
         data: null,
-        error: { message: 'not found' },
+        error: { message: 'not found', code: 'PGRST116' },
       }),
     };
 
@@ -132,6 +132,9 @@ describe('PATCH /api/handover/[id]/complete', () => {
     const mockUpdateQuery = {
       update: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      not: jest.fn().mockReturnThis(),
+      neq: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({
         data: {
@@ -175,6 +178,9 @@ describe('PATCH /api/handover/[id]/complete', () => {
     const mockUpdateQuery = {
       update: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      not: jest.fn().mockReturnThis(),
+      neq: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({
         data: {

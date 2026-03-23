@@ -80,6 +80,12 @@ export async function PATCH(
       .single();
 
     if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json(
+          { success: false, error: 'Activity not found' },
+          { status: 404 }
+        );
+      }
       console.error('Failed to fetch activity:', fetchError);
       return NextResponse.json(
         { success: false, error: 'Database error' },
