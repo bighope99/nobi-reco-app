@@ -379,6 +379,25 @@ export default function StudentList() {
         }
     };
 
+    const handleExportChildren = async () => {
+        try {
+            const response = await fetch('/api/children/export');
+            if (!response.ok) {
+                let message = 'エクスポートに失敗しました';
+                try {
+                    const data = await response.json();
+                    message = data?.error || message;
+                } catch {
+                    // 非JSON応答は既定メッセージを使う
+                }
+                throw new Error(message);
+            }
+            await downloadResponseBlob(response, '児童データ.csv');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'エクスポートに失敗しました');
+        }
+    };
+
     // Helper: Contract Badge
     const getContractBadge = (type: ContractType) => {
         switch (type) {
@@ -484,14 +503,14 @@ export default function StudentList() {
 
                         {/* Right: Actions */}
                         <div className="flex items-center gap-3 w-full md:w-auto justify-end" >
-                            <a
-                                href="/api/children/export"
-                                download="children.csv"
+                            <button
+                                type="button"
                                 className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100"
+                                onClick={handleExportChildren}
                             >
                                 <Download size={16} />
                                 エクスポート
-                            </a>
+                            </button>
                             <button
                                 className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100"
                                 onClick={() => window.location.href = '/children/import'}

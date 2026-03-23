@@ -33,21 +33,24 @@ const exportHeaders = [
 ];
 
 function formatGender(gender: string | null): string {
+  if (!gender) return '';
   if (gender === 'female') return '女';
   if (gender === 'male') return '男';
-  return 'その他';
+  return gender === 'other' ? 'その他' : '';
 }
 
 function formatEnrollmentStatus(status: string | null): string {
+  if (!status) return '';
   if (status === 'withdrawn') return '退所';
   if (status === 'suspended') return '休所';
-  return '在籍';
+  return status === 'enrolled' ? '在籍' : '';
 }
 
 function formatEnrollmentType(type: string | null): string {
+  if (!type) return '';
   if (type === 'temporary') return '一時';
   if (type === 'spot') return 'スポット';
-  return '通年';
+  return type === 'regular' ? '通年' : '';
 }
 
 function formatDate(isoDate: string | null): string {
@@ -59,14 +62,16 @@ function formatDate(isoDate: string | null): string {
 }
 
 function formatBoolean(value: boolean | null | undefined): string {
+  if (value == null) return '';
   return value ? 'true' : 'false';
 }
 
 function escapeCsvField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const sanitized = /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
+  if (sanitized.includes(',') || sanitized.includes('"') || sanitized.includes('\n') || sanitized.includes('\r')) {
+    return `"${sanitized.replace(/"/g, '""')}"`;
   }
-  return value;
+  return sanitized;
 }
 
 export async function GET(request: NextRequest) {
@@ -243,6 +248,9 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent('児童データ.csv')}`,
+        'Cache-Control': 'private, no-store, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     });
   } catch (error) {
