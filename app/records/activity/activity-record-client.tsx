@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, Clipboard, Check } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, Clipboard, Check, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import DOMPurify from "dompurify"
 import {
@@ -81,6 +81,7 @@ interface Activity {
   special_notes?: string | null
   meal?: Meal | null
   handover?: string | null
+  handover_completed?: boolean | null
 }
 
 interface MentionSuggestion {
@@ -2019,10 +2020,17 @@ export default function ActivityRecordClient() {
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           {activity.handover ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title={activity.handover}>
-                              <Clipboard className="h-3 w-3" />
-                              あり
-                            </span>
+                            activity.handover_completed ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full" title={activity.handover}>
+                                <CheckCircle2 className="h-3 w-3" />
+                                完了
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title={activity.handover}>
+                                <Clipboard className="h-3 w-3" />
+                                あり
+                              </span>
+                            )
                           ) : (
                             <span className="text-xs text-muted-foreground">-</span>
                           )}
