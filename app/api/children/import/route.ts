@@ -5,7 +5,13 @@ import { saveChild, type ChildPayload } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText, type DuplicateInfo } from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
-import { deleteSearchIndex, searchByName, searchByPhone } from '@/utils/pii/searchIndex';
+import { deleteSearchIndex, searchByName, searchByPhone, updateSearchIndex } from '@/utils/pii/searchIndex';
+
+type ChildSnapshot = {
+  child: Record<string, unknown>;
+  guardianLinks: Array<{ guardian_id: string; relationship: string; is_primary: boolean; is_emergency_contact: boolean }>;
+  classLinks: Array<{ class_id: string; school_year: number; started_at: string; is_current: boolean }>;
+};
 
 async function checkDuplicateChildren(
   supabase: any,
@@ -250,16 +256,53 @@ export async function POST(request: NextRequest) {
     // commitモード: ロールバック用に登録済みchild_idを記録
     const insertedChildIds: string[] = [];
     // commitモード: 更新前のスナップショットを保持（ロールバック時に復元）
-    const updatedSnapshots: Array<Record<string, unknown>> = [];
+    const updatedSnapshots: ChildSnapshot[] = [];
 
     const rollbackInsertedChildren = async (): Promise<void> => {
-      // 更新済みレコードをスナップショットから復元
-      if (updatedSnapshots.length > 0) {
-        for (const snapshot of updatedSnapshots) {
-          await supabase
-            .from('m_children')
-            .update(snapshot)
-            .eq('id', snapshot.id as string);
+      // 更新済みレコードをスナップショットから完全復元
+      for (const snapshot of updatedSnapshots) {
+        // m_children を元の状態に上書き復元
+        const { error: restoreError } = await supabase
+          .from('m_children')
+          .update(snapshot.child)
+          .eq('id', snapshot.child.id as string)
+          .eq('facility_id', targetFacilityId);
+        if (restoreError) {
+          console.error('Failed to restore m_children snapshot:', restoreError);
+          throw restoreError;
+        }
+
+        // _child_guardian を復元（一旦全削除して再挿入）
+        await supabase.from('_child_guardian').delete().eq('child_id', snapshot.child.id as string);
+        if (snapshot.guardianLinks.length > 0) {
+          const { error: guardianRestoreError } = await supabase
+            .from('_child_guardian')
+            .insert(snapshot.guardianLinks.map(l => ({ child_id: snapshot.child.id, ...l })));
+          if (guardianRestoreError) {
+            console.error('Failed to restore _child_guardian snapshot:', guardianRestoreError);
+            throw guardianRestoreError;
+          }
+        }
+
+        // _child_class を復元（一旦全削除して再挿入）
+        await supabase.from('_child_class').delete().eq('child_id', snapshot.child.id as string);
+        if (snapshot.classLinks.length > 0) {
+          const { error: classRestoreError } = await supabase
+            .from('_child_class')
+            .insert(snapshot.classLinks.map(l => ({ child_id: snapshot.child.id, ...l })));
+          if (classRestoreError) {
+            console.error('Failed to restore _child_class snapshot:', classRestoreError);
+            throw classRestoreError;
+          }
+        }
+
+        // 検索インデックスを更新（復元した child の名前で再構築）
+        const familyName = snapshot.child.family_name as string | null;
+        const givenName = snapshot.child.given_name as string | null;
+        if (familyName && givenName) {
+          const decryptedFamily = decryptOrFallback(familyName) || '';
+          const decryptedGiven = decryptOrFallback(givenName) || '';
+          await updateSearchIndex(supabase, 'child', snapshot.child.id as string, 'name', `${decryptedFamily} ${decryptedGiven}`.trim() || null);
         }
       }
 
@@ -431,6 +474,52 @@ export async function POST(request: NextRequest) {
       validatedPayloads.push({ rowNumber, payload });
     }
 
+    // 更新対象の child_id を一括収集
+    const childIdsToUpdate = validatedPayloads
+      .filter(v => v.payload.child_id)
+      .map(v => v.payload.child_id as string);
+
+    // スナップショット（m_children）一括取得
+    const snapshotMap = new Map<string, ChildSnapshot>();
+    if (childIdsToUpdate.length > 0) {
+      const [{ data: childSnapshots, error: snapshotFetchError }, { data: guardianLinks, error: guardianLinkError }, { data: classLinks, error: classLinkError }] = await Promise.all([
+        supabase
+          .from('m_children')
+          .select('*')
+          .in('id', childIdsToUpdate)
+          .eq('facility_id', targetFacilityId)
+          .is('deleted_at', null),
+        supabase
+          .from('_child_guardian')
+          .select('child_id, guardian_id, relationship, is_primary, is_emergency_contact')
+          .in('child_id', childIdsToUpdate),
+        supabase
+          .from('_child_class')
+          .select('child_id, class_id, school_year, started_at, is_current')
+          .in('child_id', childIdsToUpdate),
+      ]);
+
+      if (snapshotFetchError || guardianLinkError || classLinkError) {
+        const err = snapshotFetchError || guardianLinkError || classLinkError;
+        return NextResponse.json(
+          { success: false, error: `スナップショット取得に失敗しました: ${err!.message}` },
+          { status: 500 }
+        );
+      }
+
+      for (const child of childSnapshots || []) {
+        snapshotMap.set(child.id as string, {
+          child: child as Record<string, unknown>,
+          guardianLinks: (guardianLinks || [])
+            .filter((l: { child_id: string }) => l.child_id === child.id)
+            .map((l: { guardian_id: string; relationship: string; is_primary: boolean; is_emergency_contact: boolean }) => ({ guardian_id: l.guardian_id, relationship: l.relationship, is_primary: l.is_primary, is_emergency_contact: l.is_emergency_contact })),
+          classLinks: (classLinks || [])
+            .filter((l: { child_id: string }) => l.child_id === child.id)
+            .map((l: { class_id: string; school_year: number; started_at: string; is_current: boolean }) => ({ class_id: l.class_id, school_year: l.school_year, started_at: l.started_at, is_current: l.is_current })),
+        });
+      }
+    }
+
     // commitモード パス2: 全行バリデーション通過後にDB書き込み
     for (const { rowNumber, payload } of validatedPayloads) {
       let response: Response;
@@ -439,17 +528,11 @@ export async function POST(request: NextRequest) {
         // IDがある場合は既存レコードの上書き更新、ない場合は新規作成
         const targetChildId = payload.child_id || undefined;
 
-        // saveChild を呼ぶ前に更新対象のスナップショットを保存
+        // saveChild を呼ぶ前に更新対象のスナップショットを保存（一括取得済み）
         if (payload.child_id) {
-          const { data: snapshot } = await supabase
-            .from('m_children')
-            .select('*')
-            .eq('id', payload.child_id)
-            .eq('facility_id', targetFacilityId)
-            .is('deleted_at', null)
-            .single();
+          const snapshot = snapshotMap.get(payload.child_id);
           if (snapshot) {
-            updatedSnapshots.push(snapshot as Record<string, unknown>);
+            updatedSnapshots.push(snapshot);
           }
         }
 
@@ -575,14 +658,27 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      let siblingLinkWarning = false;
       if (siblingInserts.length > 0) {
         const { error: siblingError } = await supabase
           .from('_child_sibling')
           .upsert(siblingInserts, { onConflict: 'child_id,sibling_id' });
         if (siblingError) {
           console.error('Failed to create sibling links:', siblingError);
+          siblingLinkWarning = true;
         }
       }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          total: rows.length,
+          success_count: successCount,
+          failure_count: failureCount,
+          results,
+          sibling_link_warning: siblingLinkWarning,
+        },
+      });
     }
 
     return NextResponse.json({
@@ -592,6 +688,7 @@ export async function POST(request: NextRequest) {
         success_count: successCount,
         failure_count: failureCount,
         results,
+        sibling_link_warning: false,
       },
     });
   } catch (error) {

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Upload, Download } from "lucide-react"
 import { useSession } from "@/hooks/useSession"
+import { useRole } from "@/hooks/useRole"
 
 type FacilityOption = { facility_id: string; name: string }
 type SchoolOption = { school_id: string; name: string }
@@ -48,6 +49,7 @@ type SiblingCandidate = {
 
 export default function ChildImportPage() {
   const session = useSession()
+  const { isFacilityAdmin, isStaff } = useRole()
   const [facilities, setFacilities] = useState<FacilityOption[]>([])
   const [schools, setSchools] = useState<SchoolOption[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
@@ -101,7 +103,7 @@ export default function ChildImportPage() {
   // sessionロード時: facility_admin/staffは自施設を自動選択
   useEffect(() => {
     if (!session) return
-    if (session.role === 'facility_admin' || session.role === 'staff') {
+    if (isFacilityAdmin || isStaff) {
       if (session.current_facility_id) {
         setSelectedFacilityId(session.current_facility_id)
       }
@@ -240,7 +242,7 @@ export default function ChildImportPage() {
       }
 
       setImportResult(json.data)
-      if (session?.role !== 'facility_admin' && session?.role !== 'staff') {
+      if (!isFacilityAdmin && !isStaff) {
         setSelectedFacilityId("")
       }
       setSelectedSchoolId("")
@@ -467,7 +469,7 @@ export default function ChildImportPage() {
                     <Select
                       value={selectedFacilityId}
                       onValueChange={setSelectedFacilityId}
-                      disabled={loading || previewLoading || session?.role === 'facility_admin' || session?.role === 'staff'}
+                      disabled={loading || previewLoading || isFacilityAdmin || isStaff}
                     >
                       <SelectTrigger className="bg-background/80 backdrop-blur">
                         <SelectValue placeholder="施設を選択" />
