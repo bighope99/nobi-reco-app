@@ -39,7 +39,12 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
   const facilityId = 'facility-123';
   const childId = 'child-456';
   const userId = 'user-789';
-  const attendanceDate = new Date().toISOString().split('T')[0];
+  const attendanceDate = new Date().toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-');
 
   beforeEach(() => {
     jest.resetAllMocks();
