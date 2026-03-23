@@ -15,6 +15,8 @@ export type DuplicateInfo = {
 
 export type ImportPreviewRow = {
   row: number;
+  child_id?: string;
+  is_update?: boolean;
   family_name: string;
   given_name: string;
   birth_date: string;
@@ -27,7 +29,7 @@ export type ImportPreviewRow = {
 };
 
 const headerLabels = {
-  id: 'ID',
+  child_id: 'ID',
   family_name: '姓',
   given_name: '名',
   family_name_kana: 'セイ',
@@ -83,7 +85,7 @@ export function buildChildPayload(
 ): { payload?: ChildPayload; errors: string[] } {
   const errors: string[] = [];
 
-  const childId = getValue(row, headerLabels.id) || undefined;
+  const childId = getValue(row, headerLabels.child_id) || undefined;
   const familyName = getValue(row, headerLabels.family_name);
   const givenName = getValue(row, headerLabels.given_name);
   const birthDate = getValue(row, headerLabels.birth_date);
@@ -171,6 +173,8 @@ export function buildPreviewRow(
 
   return {
     row: rowNumber,
+    child_id: payload?.child_id,
+    is_update: !!payload?.child_id,
     family_name: payload?.basic_info?.family_name || getValue(row, headerLabels.family_name),
     given_name: payload?.basic_info?.given_name || getValue(row, headerLabels.given_name),
     birth_date: payload?.basic_info?.birth_date || getValue(row, headerLabels.birth_date),
