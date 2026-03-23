@@ -4,18 +4,15 @@ import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 describe('useUnsavedChanges', () => {
   let addEventListenerSpy: jest.SpyInstance;
   let removeEventListenerSpy: jest.SpyInstance;
-  let originalPushState: typeof history.pushState;
 
   beforeEach(() => {
     addEventListenerSpy = jest.spyOn(window, 'addEventListener');
     removeEventListenerSpy = jest.spyOn(window, 'removeEventListener');
-    originalPushState = history.pushState;
   });
 
   afterEach(() => {
     addEventListenerSpy.mockRestore();
     removeEventListenerSpy.mockRestore();
-    history.pushState = originalPushState;
   });
 
   it('registers beforeunload listener when isDirty is true', () => {
@@ -78,68 +75,91 @@ describe('useUnsavedChanges', () => {
     );
   });
 
-  it('restores history.pushState on unmount (confirm no longer required)', () => {
-    jest.spyOn(window, 'confirm').mockReturnValue(false);
+  describe('click capture intercept', () => {
+    /**
+     * アンカー要素を生成してドキュメントに追加し、クリックイベントをディスパッチするヘルパー
+     */
+    function createAndClickAnchor(href: string): { event: MouseEvent; preventDefault: jest.Mock; stopPropagation: jest.Mock } {
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.textContent = 'link';
+      document.body.appendChild(anchor);
 
-    const { unmount } = renderHook(() => useUnsavedChanges(true));
-    // フックがオーバーライドした pushState は confirm=false でブロックする
-    history.pushState({}, '', '/blocked');
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      const preventDefault = jest.fn();
+      const stopPropagation = jest.fn();
+      Object.defineProperty(event, 'preventDefault', { value: preventDefault, writable: true });
+      Object.defineProperty(event, 'stopPropagation', { value: stopPropagation, writable: true });
 
-    unmount();
+      anchor.dispatchEvent(event);
 
-    // アンマウント後は元の pushState に戻るため confirm なしで通過する
-    (window.confirm as jest.Mock).mockClear();
-    history.pushState({}, '', '/allowed');
-    expect(window.confirm).not.toHaveBeenCalled();
+      document.body.removeChild(anchor);
+      return { event, preventDefault, stopPropagation };
+    }
 
-    (window.confirm as jest.Mock).mockRestore();
-  });
-
-  describe('history.pushState intercept', () => {
-    it('blocks pushState and shows confirm when isDirty=true and user cancels', () => {
+    it('prevents navigation when isDirty=true and user cancels confirm', () => {
       jest.spyOn(window, 'confirm').mockReturnValue(false);
-      const pushStateSpy = jest.spyOn(history, 'pushState');
 
       renderHook(() => useUnsavedChanges(true));
 
-      history.pushState({}, '', '/other-page');
+      const { preventDefault, stopPropagation } = createAndClickAnchor('http://localhost/other-page');
 
       expect(window.confirm).toHaveBeenCalled();
-      // originalPushState は上書きされているので pushStateSpy は呼ばれない
-      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(preventDefault).toHaveBeenCalled();
+      expect(stopPropagation).toHaveBeenCalled();
 
       (window.confirm as jest.Mock).mockRestore();
-      pushStateSpy.mockRestore();
     });
 
-    it('allows pushState when isDirty=true and user confirms', () => {
+    it('allows navigation when isDirty=true and user confirms', () => {
       jest.spyOn(window, 'confirm').mockReturnValue(true);
-      const pushStateCalled = jest.fn();
-      const origPush = originalPushState;
-      // originalPushState をモックに差し替えて呼び出しを検知する
-      history.pushState = origPush; // リセットしてからフックにオーバーライドさせる
-      jest.spyOn(history, 'pushState').mockImplementation(pushStateCalled);
 
       renderHook(() => useUnsavedChanges(true));
 
-      history.pushState({}, '', '/other-page');
+      const { preventDefault } = createAndClickAnchor('http://localhost/other-page');
 
       expect(window.confirm).toHaveBeenCalled();
-      expect(pushStateCalled).toHaveBeenCalledWith({}, '', '/other-page');
+      expect(preventDefault).not.toHaveBeenCalled();
 
       (window.confirm as jest.Mock).mockRestore();
     });
 
-    it('allows pushState without confirm when isDirty=false', () => {
+    it('allows navigation without confirm when isDirty=false', () => {
       jest.spyOn(window, 'confirm').mockReturnValue(false);
 
       renderHook(() => useUnsavedChanges(false));
 
-      // confirm が呼ばれないことを確認（pushState 自体の呼び出しはここでは検証省略）
-      history.pushState({}, '', '/other-page');
+      const { preventDefault } = createAndClickAnchor('http://localhost/other-page');
 
       expect(window.confirm).not.toHaveBeenCalled();
+      expect(preventDefault).not.toHaveBeenCalled();
+
+      (window.confirm as jest.Mock).mockRestore();
+    });
+
+    it('removes click listener on unmount so confirm is not shown after unmount', () => {
+      jest.spyOn(window, 'confirm').mockReturnValue(false);
+
+      const { unmount } = renderHook(() => useUnsavedChanges(true));
+      unmount();
+
+      createAndClickAnchor('http://localhost/other-page');
+
+      expect(window.confirm).not.toHaveBeenCalled();
+
+      (window.confirm as jest.Mock).mockRestore();
+    });
+
+    it('skips hash-only links on the same pathname', () => {
+      jest.spyOn(window, 'confirm').mockReturnValue(false);
+
+      renderHook(() => useUnsavedChanges(true));
+
+      // jsdom のデフォルト location は http://localhost/ なのでパスは "/"
+      const { preventDefault } = createAndClickAnchor('http://localhost/#section');
+
+      expect(window.confirm).not.toHaveBeenCalled();
+      expect(preventDefault).not.toHaveBeenCalled();
 
       (window.confirm as jest.Mock).mockRestore();
     });
