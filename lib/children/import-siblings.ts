@@ -25,9 +25,15 @@ export type SiblingCandidateGroup = {
   }>;
 };
 
+export type RegisteredSiblingPair = {
+  child_id: string;
+  sibling_id: string;
+};
+
 export function buildSiblingCandidateGroups(
   incoming: IncomingSiblingRow[],
-  existing: ExistingSiblingRow[]
+  existing: ExistingSiblingRow[],
+  registeredPairs: RegisteredSiblingPair[] = [],
 ): SiblingCandidateGroup[] {
   const groupMap = new Map<
     string,
@@ -75,11 +81,43 @@ export function buildSiblingCandidateGroups(
     });
   });
 
+  const registeredPairSet = new Set(
+    registeredPairs.flatMap(({ child_id, sibling_id }) => [
+      `${child_id}:${sibling_id}`,
+      `${sibling_id}:${child_id}`,
+    ]),
+  );
+
+  const isPairRegistered = (idA: string, idB: string): boolean =>
+    registeredPairSet.has(`${idA}:${idB}`);
+
   return Array.from(groupMap.entries())
     .map(([phone_key, group]) => ({
       phone_key,
       guardian_names: Array.from(group.guardians.keys()),
       children: Array.from(group.children.values()),
     }))
-    .filter((group) => group.children.length >= 2);
+    .filter((group) => group.children.length >= 2)
+    .filter((group) => {
+      // existing の child_id を持つ子のみ抽出
+      const existingChildren = group.children.filter(
+        (c) => c.source === 'existing' && c.child_id !== undefined,
+      );
+
+      // import の子が1人でもいれば必ず未登録ペアが存在する
+      const hasImportChild = group.children.some((c) => c.source === 'import');
+      if (hasImportChild) return true;
+
+      // existing 同士の全ペアを列挙し、1つでも未登録があればグループを表示
+      for (let i = 0; i < existingChildren.length; i++) {
+        for (let j = i + 1; j < existingChildren.length; j++) {
+          const idA = existingChildren[i].child_id!;
+          const idB = existingChildren[j].child_id!;
+          if (!isPairRegistered(idA, idB)) return true;
+        }
+      }
+
+      // 全ペアが登録済みのためグループを除外
+      return false;
+    });
 }

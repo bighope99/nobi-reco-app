@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { saveChild, type ChildPayload } from '@/app/api/children/save/route';
 import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText, type DuplicateInfo } from '@/lib/children/import-csv';
-import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow } from '@/lib/children/import-siblings';
+import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow, type RegisteredSiblingPair } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { deleteSearchIndex, searchByName, searchByPhone, updateSearchIndex } from '@/utils/pii/searchIndex';
 
@@ -420,7 +420,7 @@ export async function POST(request: NextRequest) {
 
         // 修正行（child_idあり）はすでにDBに存在するため、fetchExistingSiblingRowsで「既存」として取得される。
         // 重複して「新規」としても追加すると同一人物が二重表示されるため、新規行のみ追加する。
-        if (!payload.child_id && payload?.contact?.parent_phone && payload?.basic_info?.family_name && payload?.basic_info?.given_name) {
+        if (payload && !payload.child_id && payload.contact?.parent_phone && payload.basic_info?.family_name && payload.basic_info?.given_name) {
           incomingSiblingRows.push({
             row: rowNumber,
             child_name: `${payload.basic_info.family_name} ${payload.basic_info.given_name}`.trim(),
@@ -597,7 +597,16 @@ export async function POST(request: NextRequest) {
         targetFacilityId,
         normalizedPhoneSet,
       );
-      const siblingCandidates = buildSiblingCandidateGroups(incomingSiblingRows, existingSiblingRows);
+      const existingChildIds = [...new Set(existingSiblingRows.map((r) => r.child_id))];
+      let registeredPairs: RegisteredSiblingPair[] = [];
+      if (existingChildIds.length > 0) {
+        const { data: pairsData } = await supabase
+          .from('_child_sibling')
+          .select('child_id, sibling_id')
+          .in('child_id', existingChildIds);
+        registeredPairs = pairsData ?? [];
+      }
+      const siblingCandidates = buildSiblingCandidateGroups(incomingSiblingRows, existingSiblingRows, registeredPairs);
 
       return NextResponse.json({
         success: true,
