@@ -27,20 +27,28 @@ export function useUnsavedChanges(
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // 2. history.pushState インターセプト: Next.js <Link> / router.push() による SPA 遷移
-    const originalPushState = history.pushState.bind(history);
-    history.pushState = function (
-      ...args: Parameters<typeof history.pushState>
-    ) {
-      if (isDirtyRef.current && !window.confirm(message)) {
-        return;
+    // 2. クリックキャプチャ: Next.js <Link> より先にインターセプトして遷移をブロック
+    //    capture:true でイベントがターゲットに到達する前に捕捉し、
+    //    preventDefault + stopPropagation で Next.js のルーター処理を止める
+    const handleClick = (e: MouseEvent) => {
+      if (!isDirtyRef.current) return;
+      const anchor = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+      if (!anchor) return;
+      // 別オリジン・ページ内アンカー(#)は対象外
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.hash) return;
+
+      if (!window.confirm(message)) {
+        e.preventDefault();
+        e.stopPropagation();
       }
-      originalPushState(...args);
     };
+    document.addEventListener('click', handleClick, true); // capture phase
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      history.pushState = originalPushState;
+      document.removeEventListener('click', handleClick, true);
     };
   }, [message]); // isDirty は ref 経由で参照するため deps 不要
 }
