@@ -1,5 +1,4 @@
 const header = [
-  'ID',
   '姓',
   '名',
   'セイ',
@@ -28,7 +27,6 @@ const header = [
 ];
 
 const sample = [
-  '',
   '山田',
   '花子',
   'ヤマダ',

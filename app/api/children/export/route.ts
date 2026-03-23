@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
         ),
         _child_class (
           is_current,
-          m_classes (
+          class:m_classes (
             class_name
           )
         ),
@@ -221,7 +221,7 @@ export async function GET(request: NextRequest) {
 
       // 現在のクラス名を取得
       const currentClass = ((child as any)._child_class || []).find((cc: any) => cc.is_current);
-      const className = currentClass?.m_classes?.class_name || '';
+      const className = currentClass?.class?.class_name || '';
 
       const row = [
         child.id,
