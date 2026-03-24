@@ -25,6 +25,7 @@ type NavItem = {
   label: string
   href: string
   icon: React.ReactNode
+  roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
   children?: { label: string; href: string; hidden?: boolean }[]
 }
 
@@ -98,20 +99,22 @@ const adminNavItems: NavItem[] = [
     ],
   },
   { label: "ユーザー管理", href: "/admin/users", icon: <Users className="h-5 w-5" /> },
-  { label: "タグ管理", href: "/admin/tags", icon: <Tag className="h-5 w-5" /> },
+  { label: "タグ管理", href: "/admin/tags", icon: <Tag className="h-5 w-5" />, roles: ["site_admin"] },
   { label: "システムログ", href: "/admin/logs", icon: <Database className="h-5 w-5" /> },
 ]
 
 type SidebarProps = {
   type: "staff" | "admin"
+  role?: string
   userName?: string
   isOpen?: boolean
   onClose?: () => void
 }
 
-export function Sidebar({ type, userName, isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ type, role, userName, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const navItems = type === "admin" ? adminNavItems : staffNavItems
+  const allNavItems = type === "admin" ? adminNavItems : staffNavItems
+  const navItems = allNavItems.filter((item) => !item.roles || (role !== undefined && item.roles.includes(role)))
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
 
