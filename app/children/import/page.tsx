@@ -326,16 +326,24 @@ export default function ChildImportPage() {
     })
   }
 
-  // 全行に一括適用
+  // 全行に一括適用（未設定の項目は既存値を維持）
   const applyToAllRows = (schoolId: string, classId: string) => {
-    setRowSettings((prev) => prev.map(() => ({ school_id: schoolId, class_id: classId })))
+    setRowSettings((prev) => prev.map((setting) => ({
+      school_id: schoolId || setting.school_id,
+      class_id: classId || setting.class_id,
+    })))
   }
 
-  // 選択行に適用
+  // 選択行に適用（未設定の項目は既存値を維持）
   const applyToSelectedRows = (schoolId: string, classId: string) => {
     setRowSettings((prev) =>
       prev.map((setting, idx) =>
-        selectedRowIdxs.includes(idx) ? { school_id: schoolId, class_id: classId } : setting
+        selectedRowIdxs.includes(idx)
+          ? {
+              school_id: schoolId || setting.school_id,
+              class_id: classId || setting.class_id,
+            }
+          : setting
       )
     )
   }
