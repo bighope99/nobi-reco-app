@@ -146,6 +146,45 @@ export async function POST(request: NextRequest) {
     const classId = (formData.get('class_id') || '') as string;
     const mode = (formData.get('mode') || 'commit') as string;
 
+    // 行ごとの学校・クラス設定（フロントから送られる場合はこちらを優先）
+    let rowSettings: Array<{ school_id: string | null; class_id: string | null }> | null = null;
+    const rowSettingsRaw = formData.get('row_settings');
+    if (typeof rowSettingsRaw === 'string' && rowSettingsRaw.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(rowSettingsRaw);
+        const isValidRowSetting = (
+          value: unknown
+        ): value is { school_id?: string | null; class_id?: string | null } => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+          const entry = value as { school_id?: unknown; class_id?: unknown };
+          const schoolOk =
+            entry.school_id === undefined ||
+            typeof entry.school_id === 'string' ||
+            entry.school_id === null;
+          const classOk =
+            entry.class_id === undefined ||
+            typeof entry.class_id === 'string' ||
+            entry.class_id === null;
+          return schoolOk && classOk;
+        };
+        if (!Array.isArray(parsed) || !parsed.every(isValidRowSetting)) {
+          return NextResponse.json(
+            { success: false, error: 'row_settings の形式が正しくありません' },
+            { status: 400 }
+          );
+        }
+        rowSettings = parsed.map((entry: { school_id?: string | null; class_id?: string | null }) => ({
+          school_id: entry.school_id ?? null,
+          class_id: entry.class_id ?? null,
+        }));
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'row_settings の JSON 形式が無効です' },
+          { status: 400 }
+        );
+      }
+    }
+
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: 'CSVファイルが必要です' }, { status: 400 });
     }
@@ -238,7 +277,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'CSVにデータがありません' }, { status: 400 });
     }
 
-    const defaults = {
+    const globalDefaults = {
       school_id: schoolId || null,
       class_id: classId || null,
     };
@@ -407,6 +446,43 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    // rowSettingsのschool_id/class_idをfacilityスコープで検証
+    if (rowSettings && rowSettings.length > 0) {
+      const rowSchoolIds = [...new Set(rowSettings.map((r) => r.school_id).filter((id): id is string => !!id))];
+      const rowClassIds = [...new Set(rowSettings.map((r) => r.class_id).filter((id): id is string => !!id))];
+
+      const [schoolsResult, classesResult] = await Promise.all([
+        rowSchoolIds.length > 0
+          ? supabase
+              .from('m_schools')
+              .select('id')
+              .in('id', rowSchoolIds)
+              .eq('facility_id', targetFacilityId)
+              .is('deleted_at', null)
+          : Promise.resolve({ data: [] }),
+        rowClassIds.length > 0
+          ? supabase
+              .from('m_classes')
+              .select('id')
+              .in('id', rowClassIds)
+              .eq('facility_id', targetFacilityId)
+              .is('deleted_at', null)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const validSchoolIdSet = new Set((schoolsResult.data || []).map((s: { id: string }) => s.id));
+      const invalidSchoolId = rowSchoolIds.find((id) => !validSchoolIdSet.has(id));
+      if (invalidSchoolId) {
+        return NextResponse.json({ success: false, error: '指定された学校が施設に属していません' }, { status: 400 });
+      }
+
+      const validClassIdSet = new Set((classesResult.data || []).map((c: { id: string }) => c.id));
+      const invalidClassId = rowClassIds.find((id) => !validClassIdSet.has(id));
+      if (invalidClassId) {
+        return NextResponse.json({ success: false, error: '指定されたクラスが施設に属していません' }, { status: 400 });
+      }
+    }
+
     const validatedPayloads: Array<{ rowNumber: number; payload: ChildPayload }> = [];
 
     // CSV内重複検出用セット（key: 正規化姓名 + 生年月日）
@@ -416,6 +492,15 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
+      // 行ごとの設定があればそちらを優先、なければグローバルデフォルトを使用
+      const rowOverride = rowSettings?.[i];
+      const defaults = rowOverride
+        ? {
+            // null は「グローバルデフォルトを継承」、"" は「明示的に未設定」を表す
+            school_id: rowOverride.school_id === null ? globalDefaults.school_id : (rowOverride.school_id ?? globalDefaults.school_id),
+            class_id: rowOverride.class_id === null ? globalDefaults.class_id : (rowOverride.class_id ?? globalDefaults.class_id),
+          }
+        : globalDefaults;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
 
       if (mode === 'preview') {
