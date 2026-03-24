@@ -216,10 +216,20 @@ export async function POST(request: NextRequest) {
     const text = await file.text();
     const { headers, rows } = parseCsvText(text);
 
-    // 古いフォーマット検出（学校名・クラス名列は新フォーマットから削除済み）
-    if (headers.includes('学校名') || headers.includes('クラス名')) {
+    // フォーマット検証: 必須列の不足 または 廃止列の混入
+    const REQUIRED_HEADERS = ['姓', '名', '生年月日', '入所日', '保護者氏名', '保護者電話'];
+    const FORBIDDEN_HEADERS = ['学校名', 'クラス名'];
+    const missingHeaders = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
+    const foundForbidden = FORBIDDEN_HEADERS.filter((h) => headers.includes(h));
+    if (missingHeaders.length > 0 || foundForbidden.length > 0) {
+      const reasons: string[] = [];
+      if (missingHeaders.length > 0) reasons.push(`必須列が不足しています: ${missingHeaders.join(', ')}`);
+      if (foundForbidden.length > 0) reasons.push(`使用できない列が含まれています: ${foundForbidden.join(', ')}`);
       return NextResponse.json(
-        { success: false, error: '古いCSVフォーマットです。最新フォーマットでエクスポートし直してからインポートしてください。' },
+        {
+          success: false,
+          error: `CSVのフォーマットが正しくありません。${reasons.join('。')}。テンプレートをダウンロードして正しいフォーマットで作成してください。`,
+        },
         { status: 400 }
       );
     }
