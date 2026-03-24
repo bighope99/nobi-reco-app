@@ -248,6 +248,7 @@ export default function ScheduleSettingsPage() {
             saturday: null,
             sunday: null,
           },
+          late_threshold_minutes: schoolLateThresholds[schoolId] ?? 30,
         }),
       });
 

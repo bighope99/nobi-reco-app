@@ -73,7 +73,14 @@ export async function PUT(
       );
     }
 
+    let parsedThreshold: number | undefined;
     if (body.late_threshold_minutes !== undefined) {
+      if (body.late_threshold_minutes === null || body.late_threshold_minutes === '') {
+        return NextResponse.json(
+          { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
+          { status: 400 }
+        );
+      }
       const threshold = Number(body.late_threshold_minutes);
       if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
         return NextResponse.json(
@@ -81,6 +88,7 @@ export async function PUT(
           { status: 400 }
         );
       }
+      parsedThreshold = threshold;
     }
 
     // スケジュール更新
@@ -116,8 +124,8 @@ export async function PUT(
         : undefined;
     }
 
-    if (body.late_threshold_minutes !== undefined) {
-      updateData.late_threshold_minutes = body.late_threshold_minutes;
+    if (parsedThreshold !== undefined) {
+      updateData.late_threshold_minutes = parsedThreshold;
     }
 
     const { data: updatedSchedule, error: updateError } = await supabase

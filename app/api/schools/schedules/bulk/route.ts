@@ -53,33 +53,90 @@ export async function PUT(request: NextRequest) {
         ? [current_facility_id]
         : null;
 
-    // 同一学校内の学年重複チェック（gradesが指定されているものだけ対象）
+    // late_threshold_minutes のバリデーション
+    for (const update of body.updates) {
+      if (update.late_threshold_minutes !== undefined) {
+        if (update.late_threshold_minutes === null || update.late_threshold_minutes === '') {
+          return NextResponse.json(
+            { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
+            { status: 400 }
+          );
+        }
+        const threshold = Number(update.late_threshold_minutes);
+        if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
+          return NextResponse.json(
+            { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
+            { status: 400 }
+          );
+        }
+        update.late_threshold_minutes = threshold;
+      }
+    }
+
+    // 同一学校内の学年重複チェック（既存DBスケジュールを含めて検証）
     {
-      const schoolGradeMap: Record<string, Record<string, string>> = {};
-      for (const update of body.updates) {
-        if (!update.schedule_id || !Array.isArray(update.grades)) continue;
+      // gradesが指定されているupdateの対象schedule_idを収集
+      const updateIds = body.updates
+        .filter((u: { schedule_id?: string; grades?: string[] }) => u.schedule_id && Array.isArray(u.grades))
+        .map((u: { schedule_id: string }) => u.schedule_id);
 
-        // schedule から school_id を取得
-        const { data: scheduleInfo } = await supabase
+      if (updateIds.length > 0) {
+        // 対象スケジュールのschool_idを取得
+        const { data: scheduleInfos } = await supabase
           .from('s_school_schedules')
-          .select('school_id')
-          .eq('id', update.schedule_id)
-          .is('deleted_at', null)
-          .single();
+          .select('id, school_id, grades')
+          .in('id', updateIds)
+          .is('deleted_at', null);
 
-        if (!scheduleInfo) continue;
+        if (scheduleInfos && scheduleInfos.length > 0) {
+          // 影響を受けるschool_idを収集
+          const affectedSchoolIds = [...new Set(scheduleInfos.map((s: { school_id: string }) => s.school_id))];
 
-        const schoolId = scheduleInfo.school_id as string;
-        if (!schoolGradeMap[schoolId]) schoolGradeMap[schoolId] = {};
+          // 各school_idの全スケジュールをDBから取得
+          const { data: allSchedules } = await supabase
+            .from('s_school_schedules')
+            .select('id, school_id, grades')
+            .in('school_id', affectedSchoolIds)
+            .is('deleted_at', null);
 
-        for (const grade of update.grades) {
-          if (schoolGradeMap[schoolId][grade] && schoolGradeMap[schoolId][grade] !== update.schedule_id) {
-            return NextResponse.json(
-              { success: false, error: '同一学校内で学年が重複しています' },
-              { status: 400 }
+          if (allSchedules) {
+            // school_id → schedule_id → grades のマップ（DBの現状）
+            const schoolGradeMap: Record<string, Record<string, string>> = {};
+            for (const s of allSchedules) {
+              const schoolId = s.school_id as string;
+              if (!schoolGradeMap[schoolId]) schoolGradeMap[schoolId] = {};
+              for (const grade of (s.grades as string[])) {
+                schoolGradeMap[schoolId][grade] = s.id as string;
+              }
+            }
+
+            // リクエストの変更をオーバーレイ
+            const scheduleToSchool = Object.fromEntries(
+              scheduleInfos.map((s: { id: string; school_id: string }) => [s.id, s.school_id])
             );
+            for (const update of body.updates) {
+              if (!update.schedule_id || !Array.isArray(update.grades)) continue;
+              const schoolId = scheduleToSchool[update.schedule_id];
+              if (!schoolId) continue;
+              if (!schoolGradeMap[schoolId]) schoolGradeMap[schoolId] = {};
+
+              // このschedule_idが既に持っていた学年を一旦削除してからオーバーレイ
+              for (const [grade, sid] of Object.entries(schoolGradeMap[schoolId])) {
+                if (sid === update.schedule_id) {
+                  delete schoolGradeMap[schoolId][grade];
+                }
+              }
+              for (const grade of update.grades) {
+                if (schoolGradeMap[schoolId][grade]) {
+                  return NextResponse.json(
+                    { success: false, error: '同一学校内で学年が重複しています' },
+                    { status: 400 }
+                  );
+                }
+                schoolGradeMap[schoolId][grade] = update.schedule_id;
+              }
+            }
           }
-          schoolGradeMap[schoolId][grade] = update.schedule_id;
         }
       }
     }
