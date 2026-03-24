@@ -255,17 +255,27 @@ export default function StatusPage() {
     };
 
     // チケット3: 復号化済み名前に対してクライアント側でフィルタリング
+    // クラスフィルターもクライアント側で適用（APIのリレーションフィルターが機能しないため）
     const clientFilteredData = useMemo(() => {
         if (!recordsData) return []
-        if (!committedSearchTerm) return recordsData.children
+
+        let data = recordsData.children
+
+        if (selectedClass === 'no-class') {
+            data = data.filter(child => child.class_id === null)
+        } else if (selectedClass !== 'all') {
+            data = data.filter(child => child.class_id === selectedClass)
+        }
+
+        if (!committedSearchTerm) return data
 
         const normalize = (s: string) => normalizeSearch(s)
         const normalizedTerm = normalize(committedSearchTerm).trim()
-        return recordsData.children.filter(child => {
+        return data.filter(child => {
             return normalize(child.name).includes(normalizedTerm) ||
                 normalize(child.kana).includes(normalizedTerm)
         })
-    }, [recordsData, committedSearchTerm])
+    }, [recordsData, committedSearchTerm, selectedClass])
 
     const sortedData = useMemo(() => {
         const sorted = [...clientFilteredData]
@@ -429,19 +439,22 @@ export default function StatusPage() {
                 {/* Filter Bar */}
                 {/* チケット7: モバイルでの折り返し対応 */}
                 <div className="py-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
-                    <div className="relative min-w-[140px]">
-                        <select
-                            className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            value={selectedClass}
-                            onChange={(e) => setSelectedClass(e.target.value)}
-                        >
-                            <option value="all">全クラス</option>
-                            {recordsData.filters.classes.map(cls => (
-                                <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
-                    </div>
+                    {recordsData.filters.classes.length > 0 && (
+                        <div className="relative min-w-[140px]">
+                            <select
+                                className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                value={selectedClass}
+                                onChange={(e) => setSelectedClass(e.target.value)}
+                            >
+                                <option value="all">全クラス</option>
+                                {recordsData.filters.classes.map(cls => (
+                                    <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
+                                ))}
+                                <option value="no-class">クラスなし</option>
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    )}
 
                     {/* チケット1: 検索ボタンを追加 */}
                     <div className="flex gap-2 flex-1 max-w-md">
@@ -557,7 +570,11 @@ export default function StatusPage() {
                             <tbody className="bg-white divide-y divide-slate-200">
                                 {sortedData.length > 0 ? (
                                     sortedData.map((child) => (
-                                        <tr key={child.child_id} className="hover:bg-slate-50 transition-colors group">
+                                        <tr
+                                            key={child.child_id}
+                                            className="hover:bg-slate-50 transition-colors group cursor-pointer"
+                                            onClick={() => router.push(`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`)}
+                                        >
 
                                             <td className="sticky left-0 z-20 bg-white px-4 sm:px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
                                                 <div className="flex flex-col">
@@ -598,13 +615,14 @@ export default function StatusPage() {
                                                     <button
                                                         className="text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors"
                                                         title="履歴"
-                                                        onClick={() => handleOpenHistory(child)}
+                                                        onClick={(e) => { e.stopPropagation(); handleOpenHistory(child); }}
                                                     >
                                                         <History className="w-4 h-4" />
                                                     </button>
                                                     <Link
                                                         href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
                                                         className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all"
+                                                        onClick={(e) => e.stopPropagation()}
                                                     >
                                                         作成
                                                     </Link>
