@@ -1,6 +1,21 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { AdminLayout } from "@/components/layout/admin-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,7 +30,17 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, AlertCircle } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, AlertCircle, GripVertical } from "lucide-react"
+
+const COLOR_PALETTE = [
+  { value: "#EF4444", label: "赤" },
+  { value: "#F59E0B", label: "黄" },
+  { value: "#22C55E", label: "緑" },
+  { value: "#3B82F6", label: "青" },
+  { value: "#8B5CF6", label: "紫" },
+]
+
+const DEFAULT_COLOR = COLOR_PALETTE[3].value // 青
 
 interface Tag {
   id: string
@@ -32,7 +57,6 @@ interface TagFormState {
   name_en: string
   description: string
   color: string
-  sort_order: number
   is_active: boolean
 }
 
@@ -40,9 +64,90 @@ const defaultFormState: TagFormState = {
   name: "",
   name_en: "",
   description: "",
-  color: "#4CAF50",
-  sort_order: 0,
+  color: DEFAULT_COLOR,
   is_active: true,
+}
+
+function SortableRow({
+  tag,
+  onEdit,
+  onDelete,
+}: {
+  tag: Tag
+  onEdit: (tag: Tag) => void
+  onDelete: (tag: Tag) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tag.id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-muted/50"
+    >
+      <button
+        className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        aria-label="並び替え"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      <div
+        className="h-4 w-4 flex-shrink-0 rounded-full border border-border"
+        style={{ backgroundColor: tag.color ?? "#e5e7eb" }}
+      />
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground">{tag.name}</span>
+          {tag.name_en && (
+            <span className="text-sm text-muted-foreground">({tag.name_en})</span>
+          )}
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+              tag.is_active
+                ? "bg-green-100 text-green-700"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {tag.is_active ? "有効" : "無効"}
+          </span>
+        </div>
+        {tag.description && (
+          <p className="mt-0.5 text-sm text-muted-foreground truncate">{tag.description}</p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onEdit(tag)}
+          aria-label={`${tag.name}を編集`}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(tag)}
+          aria-label={`${tag.name}を削除`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export default function TagsPage() {
@@ -50,19 +155,19 @@ export default function TagsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // 追加/編集 Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [formState, setFormState] = useState<TagFormState>(defaultFormState)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // 削除確認 Dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingTag, setDeletingTag] = useState<Tag | null>(null)
   const [usageCount, setUsageCount] = useState<number | null>(null)
   const [isLoadingUsage, setIsLoadingUsage] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const sensors = useSensors(useSensor(PointerSensor))
 
   const fetchTags = useCallback(async () => {
     try {
@@ -86,6 +191,27 @@ export default function TagsPage() {
     fetchTags()
   }, [fetchTags])
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = tags.findIndex((t) => t.id === active.id)
+    const newIndex = tags.findIndex((t) => t.id === over.id)
+    const reordered = arrayMove(tags, oldIndex, newIndex)
+
+    setTags(reordered)
+
+    await Promise.all(
+      reordered.map((tag, index) =>
+        fetch(`/api/admin/tags/${tag.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sort_order: index + 1 }),
+        })
+      )
+    )
+  }
+
   const openAddDialog = () => {
     setEditingTag(null)
     setFormState(defaultFormState)
@@ -99,8 +225,7 @@ export default function TagsPage() {
       name: tag.name,
       name_en: tag.name_en ?? "",
       description: tag.description ?? "",
-      color: tag.color ?? "#4CAF50",
-      sort_order: tag.sort_order,
+      color: tag.color ?? DEFAULT_COLOR,
       is_active: tag.is_active,
     })
     setFormError(null)
@@ -122,7 +247,6 @@ export default function TagsPage() {
         name_en: formState.name_en.trim() || null,
         description: formState.description.trim() || null,
         color: formState.color || null,
-        sort_order: formState.sort_order,
         is_active: formState.is_active,
       }
 
@@ -214,7 +338,7 @@ export default function TagsPage() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -233,64 +357,25 @@ export default function TagsPage() {
                 登録されたタグがありません
               </div>
             ) : (
-              <div className="space-y-2">
-                {tags.map((tag) => (
-                  <div
-                    key={tag.id}
-                    className="flex flex-col gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div
-                        className="h-5 w-5 flex-shrink-0 rounded-full border border-border"
-                        style={{ backgroundColor: tag.color ?? "#e5e7eb" }}
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground">{tag.name}</span>
-                          {tag.name_en && (
-                            <span className="text-sm text-muted-foreground">({tag.name_en})</span>
-                          )}
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                              tag.is_active
-                                ? "bg-green-100 text-green-700"
-                                : "bg-gray-100 text-gray-500"
-                            }`}
-                          >
-                            {tag.is_active ? "有効" : "無効"}
-                          </span>
-                        </div>
-                        {tag.description && (
-                          <p className="mt-0.5 text-sm text-muted-foreground truncate">
-                            {tag.description}
-                          </p>
-                        )}
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          表示順: {tag.sort_order}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(tag)}
-                        aria-label={`${tag.name}を編集`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openDeleteDialog(tag)}
-                        aria-label={`${tag.name}を削除`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={tags.map((t) => t.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {tags.map((tag) => (
+                    <SortableRow
+                      key={tag.id}
+                      tag={tag}
+                      onEdit={openEditDialog}
+                      onDelete={openDeleteDialog}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             )}
           </CardContent>
         </Card>
@@ -344,30 +429,24 @@ export default function TagsPage() {
               />
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="tag-color">表示色</Label>
+            <div className="space-y-2">
+              <Label>表示色</Label>
               <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  id="tag-color"
-                  value={formState.color}
-                  onChange={(e) => setFormState((s) => ({ ...s, color: e.target.value }))}
-                  className="h-9 w-16 cursor-pointer rounded border border-input"
-                />
-                <span className="text-sm text-muted-foreground">{formState.color}</span>
+                {COLOR_PALETTE.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setFormState((s) => ({ ...s, color: c.value }))}
+                    aria-label={c.label}
+                    className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                      formState.color === c.value
+                        ? "border-foreground scale-110"
+                        : "border-transparent"
+                    }`}
+                    style={{ backgroundColor: c.value }}
+                  />
+                ))}
               </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="tag-sort-order">表示順</Label>
-              <Input
-                id="tag-sort-order"
-                type="number"
-                value={formState.sort_order}
-                onChange={(e) =>
-                  setFormState((s) => ({ ...s, sort_order: parseInt(e.target.value, 10) || 0 }))
-                }
-              />
             </div>
 
             <div className="flex items-center gap-3">
@@ -428,11 +507,7 @@ export default function TagsPage() {
             >
               キャンセル
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
               {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               削除する
             </Button>
