@@ -147,14 +147,18 @@ export async function POST(request: NextRequest) {
     const mode = (formData.get('mode') || 'commit') as string;
 
     // 行ごとの学校・クラス設定（フロントから送られる場合はこちらを優先）
-    let rowSettings: Array<{ school_id: string; class_id: string }> | null = null;
+    let rowSettings: Array<{ school_id: string | null; class_id: string | null }> | null = null;
     const rowSettingsRaw = formData.get('row_settings');
     if (typeof rowSettingsRaw === 'string' && rowSettingsRaw.trim().length > 0) {
       try {
         const parsed = JSON.parse(rowSettingsRaw);
-        if (Array.isArray(parsed)) {
-          rowSettings = parsed;
+        if (!Array.isArray(parsed)) {
+          return NextResponse.json(
+            { success: false, error: 'row_settings は JSON 配列である必要があります' },
+            { status: 400 }
+          );
         }
+        rowSettings = parsed;
       } catch {
         return NextResponse.json(
           { success: false, error: 'row_settings の JSON 形式が無効です' },
@@ -424,6 +428,40 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    // rowSettingsのschool_id/class_idをfacilityスコープで検証
+    if (rowSettings && rowSettings.length > 0) {
+      const rowSchoolIds = [...new Set(rowSettings.map((r) => r.school_id).filter((id): id is string => !!id))];
+      const rowClassIds = [...new Set(rowSettings.map((r) => r.class_id).filter((id): id is string => !!id))];
+
+      if (rowSchoolIds.length > 0) {
+        const { data: validSchools } = await supabase
+          .from('m_schools')
+          .select('id')
+          .in('id', rowSchoolIds)
+          .eq('facility_id', targetFacilityId)
+          .is('deleted_at', null);
+        const validSchoolIdSet = new Set((validSchools || []).map((s: { id: string }) => s.id));
+        const invalidSchoolId = rowSchoolIds.find((id) => !validSchoolIdSet.has(id));
+        if (invalidSchoolId) {
+          return NextResponse.json({ success: false, error: '指定された学校が施設に属していません' }, { status: 400 });
+        }
+      }
+
+      if (rowClassIds.length > 0) {
+        const { data: validClasses } = await supabase
+          .from('m_classes')
+          .select('id')
+          .in('id', rowClassIds)
+          .eq('facility_id', targetFacilityId)
+          .is('deleted_at', null);
+        const validClassIdSet = new Set((validClasses || []).map((c: { id: string }) => c.id));
+        const invalidClassId = rowClassIds.find((id) => !validClassIdSet.has(id));
+        if (invalidClassId) {
+          return NextResponse.json({ success: false, error: '指定されたクラスが施設に属していません' }, { status: 400 });
+        }
+      }
+    }
+
     const validatedPayloads: Array<{ rowNumber: number; payload: ChildPayload }> = [];
 
     // CSV内重複検出用セット（key: 正規化姓名 + 生年月日）
@@ -437,8 +475,9 @@ export async function POST(request: NextRequest) {
       const rowOverride = rowSettings?.[i];
       const defaults = rowOverride
         ? {
-            school_id: rowOverride.school_id || globalDefaults.school_id,
-            class_id: rowOverride.class_id || globalDefaults.class_id,
+            // null は「グローバルデフォルトを継承」、"" は「明示的に未設定」を表す
+            school_id: rowOverride.school_id === null ? globalDefaults.school_id : (rowOverride.school_id ?? globalDefaults.school_id),
+            class_id: rowOverride.class_id === null ? globalDefaults.class_id : (rowOverride.class_id ?? globalDefaults.class_id),
           }
         : globalDefaults;
       const { payload, errors } = buildChildPayload(rows[i], defaults);

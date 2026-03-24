@@ -329,19 +329,23 @@ export default function ChildImportPage() {
     })
   }
 
-  // 全行に一括適用（未設定の項目は既存値を維持）
-  const applyToAllRows = (schoolId: string, classId: string) => {
-    setRowSettings((prev) => prev.map((setting) => ({
-      school_id: schoolId || setting.school_id,
-      class_id: classId || setting.class_id,
-    })))
+  // 全行に一括適用（指定フィールドのみ更新）
+  const applyFieldToAllRows = (field: keyof RowSetting, value: string) => {
+    if (!value) return
+    setRowSettings((prev) =>
+      prev.map((setting) => ({
+        ...setting,
+        [field]: value,
+      }))
+    )
   }
 
   // 選択行に適用（未設定の項目は既存値を維持）、適用後にチェックを解除
   const applyToSelectedRows = (schoolId: string, classId: string) => {
+    const selectedSet = new Set(selectedRowIdxs)
     setRowSettings((prev) =>
       prev.map((setting, idx) =>
-        selectedRowIdxs.includes(idx)
+        selectedSet.has(idx)
           ? {
               school_id: schoolId || setting.school_id,
               class_id: classId || setting.class_id,
@@ -357,6 +361,8 @@ export default function ChildImportPage() {
       checked ? [...prev, idx] : prev.filter((i) => i !== idx)
     )
   }
+
+  const selectedRowIdxSet = new Set(selectedRowIdxs)
 
   return (
     <StaffLayout
@@ -590,7 +596,7 @@ export default function ChildImportPage() {
                           variant="outline"
                           size="sm"
                           className="shrink-0 text-xs"
-                          onClick={() => applyToAllRows(selectedSchoolId, selectedClassId)}
+                          onClick={() => applyFieldToAllRows("school_id", selectedSchoolId)}
                           disabled={previewLoading}
                         >
                           全行適用
@@ -624,7 +630,7 @@ export default function ChildImportPage() {
                           variant="outline"
                           size="sm"
                           className="shrink-0 text-xs"
-                          onClick={() => applyToAllRows(selectedSchoolId, selectedClassId)}
+                          onClick={() => applyFieldToAllRows("class_id", selectedClassId)}
                           disabled={previewLoading}
                         >
                           全行適用
@@ -719,7 +725,7 @@ export default function ChildImportPage() {
                           <tr
                             key={row.row}
                             className={`transition-colors hover:bg-muted/30 ${
-                              selectedRowIdxs.includes(idx)
+                              selectedRowIdxSet.has(idx)
                                 ? 'bg-primary/5 ring-1 ring-inset ring-primary/20'
                                 : row.errors.length > 0
                                 ? 'bg-red-50/40'
@@ -730,7 +736,7 @@ export default function ChildImportPage() {
                           >
                             <td className="px-3 py-2">
                               <Checkbox
-                                checked={selectedRowIdxs.includes(idx)}
+                                checked={selectedRowIdxSet.has(idx)}
                                 onCheckedChange={(checked) => toggleRowSelection(idx, Boolean(checked))}
                               />
                             </td>
