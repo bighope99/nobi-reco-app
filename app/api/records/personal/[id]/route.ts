@@ -110,6 +110,9 @@ export async function GET(
           id,
           observation_date,
           content,
+          objective,
+          subjective,
+          is_ai_analyzed,
           created_at,
           record_tags:_record_tag!observation_id (
             tag_id
@@ -174,6 +177,9 @@ export async function GET(
           id: obs.id,
           observation_date: obs.observation_date,
           content: obs.content,
+          objective: obs.objective ?? null,
+          subjective: obs.subjective ?? null,
+          is_ai_analyzed: obs.is_ai_analyzed ?? false,
           created_at: obs.created_at,
           tag_ids: (() => {
             const fromJoin = Array.isArray(obs.record_tags)

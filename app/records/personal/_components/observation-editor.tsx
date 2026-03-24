@@ -174,6 +174,9 @@ type RecentObservation = {
   id: string;
   observation_date: string;
   content: string;
+  objective?: string | null;
+  subjective?: string | null;
+  is_ai_analyzed?: boolean;
   created_at: string;
   tag_ids?: string[];
 };
@@ -1900,9 +1903,20 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                   {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
                                 </td>
                                 <td className="px-3 py-2 max-w-xs">
-                                  <p className="text-sm text-gray-800 truncate" title={contentText}>
-                                    {truncated}
-                                  </p>
+                                  {item.is_ai_analyzed && (item.objective || item.subjective) ? (
+                                    <div className="space-y-0.5">
+                                      {item.objective && (
+                                        <div><span className="text-xs font-semibold text-gray-500">事実：</span>{displayRecentContent(item.objective)}</div>
+                                      )}
+                                      {item.subjective && (
+                                        <div><span className="text-xs font-semibold text-gray-500">所感：</span>{displayRecentContent(item.subjective)}</div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-800 truncate" title={contentText}>
+                                      {truncated}
+                                    </p>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2">
                                   {tagBadges.length > 0 && (
