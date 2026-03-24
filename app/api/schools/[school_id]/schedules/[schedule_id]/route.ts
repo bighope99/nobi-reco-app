@@ -73,6 +73,16 @@ export async function PUT(
       );
     }
 
+    if (body.late_threshold_minutes !== undefined) {
+      const threshold = Number(body.late_threshold_minutes);
+      if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
+        return NextResponse.json(
+          { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
+          { status: 400 }
+        );
+      }
+    }
+
     // スケジュール更新
     const updateData: any = {
       updated_at: new Date().toISOString(),

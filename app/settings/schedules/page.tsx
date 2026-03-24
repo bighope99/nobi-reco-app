@@ -353,14 +353,15 @@ export default function ScheduleSettingsPage() {
 
     setDeletingScheduleId(scheduleId);
 
-    // 楽観的にUIから削除（ロールバック用にバックアップ保持）
-    let removedSchedule: Schedule | undefined;
-    let removedIndex = -1;
+    // ロールバック用にバックアップを先に取得
+    const targetSchool = schools.find((s) => s.id === schoolId);
+    const removedIndex = targetSchool?.schedules.findIndex((s) => s.scheduleId === scheduleId) ?? -1;
+    const removedSchedule = targetSchool?.schedules[removedIndex];
+
+    // 楽観的にUIから削除
     setSchools((prev) =>
       prev.map((school) => {
         if (school.id === schoolId) {
-          removedIndex = school.schedules.findIndex((s) => s.scheduleId === scheduleId);
-          removedSchedule = school.schedules[removedIndex];
           return {
             ...school,
             schedules: school.schedules.filter((s) => s.scheduleId !== scheduleId),
@@ -384,13 +385,11 @@ export default function ScheduleSettingsPage() {
       console.error('Error deleting schedule:', err);
       // ロールバック: 削除したスケジュールを元に戻す
       if (removedSchedule) {
-        const scheduleToRestore = removedSchedule;
-        const indexToRestore = removedIndex;
         setSchools((prev) =>
           prev.map((school) => {
             if (school.id === schoolId) {
               const newSchedules = [...school.schedules];
-              newSchedules.splice(indexToRestore, 0, scheduleToRestore);
+              newSchedules.splice(removedIndex, 0, removedSchedule);
               return { ...school, schedules: newSchedules };
             }
             return school;

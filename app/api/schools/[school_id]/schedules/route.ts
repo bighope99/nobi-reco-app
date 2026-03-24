@@ -78,6 +78,16 @@ export async function POST(
       );
     }
 
+    if (body.late_threshold_minutes !== undefined) {
+      const threshold = Number(body.late_threshold_minutes);
+      if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
+        return NextResponse.json(
+          { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
+          { status: 400 }
+        );
+      }
+    }
+
     // スケジュール作成
     const { data: newSchedule, error: createError } = await supabase
       .from('s_school_schedules')
