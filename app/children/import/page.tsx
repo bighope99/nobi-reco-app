@@ -710,15 +710,15 @@ export default function ChildImportPage() {
                             </td>
                             <td className="px-3 py-2">
                               <Select
-                                value={rowSettings[idx]?.school_id ?? ""}
-                                onValueChange={(value) => updateRowSetting(idx, "school_id", value)}
+                                value={rowSettings[idx]?.school_id || "__none__"}
+                                onValueChange={(value) => updateRowSetting(idx, "school_id", value === "__none__" ? "" : value)}
                                 disabled={previewLoading}
                               >
                                 <SelectTrigger className="h-8 text-xs min-w-[120px]">
                                   <SelectValue placeholder="学校を選択" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">未設定</SelectItem>
+                                  <SelectItem value="__none__">未設定</SelectItem>
                                   {schools.map((school) => (
                                     <SelectItem key={school.school_id} value={school.school_id}>
                                       {school.name}
@@ -729,15 +729,15 @@ export default function ChildImportPage() {
                             </td>
                             <td className="px-3 py-2">
                               <Select
-                                value={rowSettings[idx]?.class_id ?? ""}
-                                onValueChange={(value) => updateRowSetting(idx, "class_id", value)}
+                                value={rowSettings[idx]?.class_id || "__none__"}
+                                onValueChange={(value) => updateRowSetting(idx, "class_id", value === "__none__" ? "" : value)}
                                 disabled={previewLoading}
                               >
                                 <SelectTrigger className="h-8 text-xs min-w-[110px]">
                                   <SelectValue placeholder="クラスを選択" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">未設定</SelectItem>
+                                  <SelectItem value="__none__">未設定</SelectItem>
                                   {classes.map((cls) => (
                                     <SelectItem key={cls.class_id} value={cls.class_id}>
                                       {cls.class_name}
