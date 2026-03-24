@@ -1906,10 +1906,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                   {item.is_ai_analyzed && (item.objective || item.subjective) ? (
                                     <div className="space-y-0.5">
                                       {item.objective && (
-                                        <div><span className="text-xs font-semibold text-gray-500">事実：</span>{displayRecentContent(item.objective)}</div>
+                                        <div><span className="text-xs font-semibold text-gray-500">事実：</span><span className="text-sm text-gray-800 line-clamp-5">{displayRecentContent(item.objective)}</span></div>
                                       )}
                                       {item.subjective && (
-                                        <div><span className="text-xs font-semibold text-gray-500">所感：</span>{displayRecentContent(item.subjective)}</div>
+                                        <div><span className="text-xs font-semibold text-gray-500">所感：</span><span className="text-sm text-gray-800 line-clamp-5">{displayRecentContent(item.subjective)}</span></div>
                                       )}
                                     </div>
                                   ) : (

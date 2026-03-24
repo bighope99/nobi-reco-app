@@ -383,18 +383,18 @@ export default function PersonalHistoryClient() {
                               {item.objective && (
                                 <div>
                                   <span className="text-xs font-bold text-slate-500">事実：</span>
-                                  <span className="text-slate-700 text-sm whitespace-pre-wrap">{item.objective}</span>
+                                  <span className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.objective}</span>
                                 </div>
                               )}
                               {item.subjective && (
                                 <div>
                                   <span className="text-xs font-bold text-slate-500">所感：</span>
-                                  <span className="text-slate-700 text-sm whitespace-pre-wrap">{item.subjective}</span>
+                                  <span className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.subjective}</span>
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <div className="text-slate-700 text-sm whitespace-pre-wrap">{item.content}</div>
+                            <div className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.content}</div>
                           )}
                           {item.category && (
                             <div className="mt-2">
