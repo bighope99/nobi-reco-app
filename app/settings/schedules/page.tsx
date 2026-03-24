@@ -31,7 +31,6 @@ interface Schedule {
     sat?: string;
     sun?: string;
   };
-  lateThresholdMinutes: number;
 }
 
 interface School {
@@ -145,16 +144,15 @@ export default function ScheduleSettingsPage() {
           scheduleId: schedule.schedule_id,
           gradeIds: schedule.grades || [],
           weekdayTimes: apiToFrontend(schedule.weekday_times),
-          lateThresholdMinutes: schedule.late_threshold_minutes ?? 30,
         })),
       }));
 
       setSchools(transformedSchools);
 
-      // 学校ごとの遅刻閾値を初期化（最初のスケジュールの値を使用）
+      // 学校ごとの遅刻閾値を初期化（学校APIから取得）
       const thresholds: Record<string, number> = {};
-      transformedSchools.forEach((school: School) => {
-        thresholds[school.id] = school.schedules[0]?.lateThresholdMinutes ?? 30;
+      data.data.schools.forEach((school: any) => {
+        thresholds[school.school_id] = school.late_threshold_minutes ?? 30;
       });
       setSchoolLateThresholds(thresholds);
     } catch (err) {
@@ -217,16 +215,6 @@ export default function ScheduleSettingsPage() {
       fri: '13:00',
     };
 
-    const targetSchool = schools.find((s) => s.id === schoolId);
-    if (!targetSchool) return;
-    const usedGradeIds = new Set(targetSchool.schedules.flatMap((s) => s.gradeIds));
-    const initialGrade = grades.find((grade) => !usedGradeIds.has(grade.id))?.id;
-    if (!initialGrade) {
-      alert('追加できる学年がありません。すべての学年がすでにスケジュールに割り当てられています。');
-      setAddingScheduleForSchool(null);
-      return;
-    }
-
     // 楽観的にUIに仮スケジュールを追加
     setSchools((prev) =>
       prev.map((school) => {
@@ -235,7 +223,7 @@ export default function ScheduleSettingsPage() {
             ...school,
             schedules: [
               ...school.schedules,
-              { scheduleId: tempId, gradeIds: [initialGrade], weekdayTimes: defaultWeekdayTimes, lateThresholdMinutes: schoolLateThresholds[schoolId] ?? 30 },
+              { scheduleId: tempId, gradeIds: ['1'], weekdayTimes: defaultWeekdayTimes },
             ],
           };
         }
@@ -248,7 +236,7 @@ export default function ScheduleSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grades: [initialGrade],
+          grades: ['1'],
           weekday_times: {
             monday: '13:00',
             tuesday: '13:00',
@@ -280,7 +268,6 @@ export default function ScheduleSettingsPage() {
                       scheduleId: data.data.schedule_id,
                       gradeIds: data.data.grades,
                       weekdayTimes: apiToFrontend(data.data.weekday_times),
-                      lateThresholdMinutes: data.data.late_threshold_minutes ?? 30,
                     }
                   : s
               ),
@@ -485,7 +472,7 @@ export default function ScheduleSettingsPage() {
           schedule_id: schedule.scheduleId,
           grades: schedule.gradeIds,
           weekday_times: frontendToApi(schedule.weekdayTimes),
-          late_threshold_minutes: schoolLateThresholds[school.id] ?? schedule.lateThresholdMinutes,
+          late_threshold_minutes: schoolLateThresholds[school.id] ?? 30,
         }))
       );
 
@@ -647,25 +634,20 @@ export default function ScheduleSettingsPage() {
                     {/* Schedules List */}
                     <div className="p-6">
                       {editingSchool === school.id && (
-                        <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">遅刻判定の閾値（この学校全体）</label>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-600">登校予定時刻から</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={120}
-                              value={schoolLateThresholds[school.id] ?? 30}
-                              onChange={(e: any) =>
-                                handleUpdateSchoolLateThreshold(school.id, Math.max(0, Math.min(120, parseInt(e.target.value, 10) || 0)))
-                              }
-                              className="w-20 text-sm py-1.5 text-center"
-                            />
-                            <span className="text-sm text-slate-600">分超過で遅刻</span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">
-                            ※ この学校の全スケジュールに適用されます
-                          </p>
+                        <div className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+                          <span className="font-medium text-slate-700">遅刻判定:</span>
+                          <span>登校予定時刻から</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={120}
+                            value={schoolLateThresholds[school.id] ?? 30}
+                            onChange={(e: any) =>
+                              handleUpdateSchoolLateThreshold(school.id, Math.max(0, Math.min(120, parseInt(e.target.value, 10) || 0)))
+                            }
+                            className="w-16 text-sm py-1 text-center"
+                          />
+                          <span>分超過で遅刻</span>
                         </div>
                       )}
                       {editingSchool === school.id && (
