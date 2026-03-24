@@ -1040,7 +1040,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       const errorMessage = e instanceof Error ? e.message : '更新に失敗しました';
       setError(errorMessage);
     } finally {
-      setAiProcessing(false);
       setSavingEdit(false);
     }
   };
