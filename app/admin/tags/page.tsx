@@ -214,6 +214,8 @@ export default function TagsPage() {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sort_order: t.newSortOrder }),
+          }).then((res) => {
+            if (!res.ok) throw new Error(`Failed to update tag ${t.id}`)
           })
         )
       )
