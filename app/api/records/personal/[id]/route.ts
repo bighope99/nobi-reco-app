@@ -213,13 +213,9 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const content = typeof body?.content === 'string' ? body.content.trim() : '';
+    const content = typeof body?.content === 'string' ? body.content.trim() : undefined;
     const observationDate = typeof body?.observation_date === 'string' ? body.observation_date.trim() : null;
     const recorded_by = typeof body?.recorded_by === 'string' ? body.recorded_by.trim() : null;
-
-    if (!content) {
-      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
-    }
 
     // Validate observation_date format if provided (YYYY-MM-DD)
     if (observationDate) {
@@ -250,6 +246,7 @@ export async function PATCH(
         `
         id,
         child_id,
+        is_ai_analyzed,
         m_children!inner (
           facility_id
         )
@@ -271,12 +268,28 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    // AI解析済みの記録は本文の更新を拒否
+    if (content !== undefined && existing.is_ai_analyzed) {
+      return NextResponse.json(
+        { success: false, error: 'AI解析済みの記録は本文を編集できません' },
+        { status: 400 },
+      );
+    }
+
+    // AI解析済みでない場合は本文が必須
+    if (!existing.is_ai_analyzed && !content) {
+      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    }
+
     // Build update object dynamically
     const updateData: Record<string, unknown> = {
-      content,
       updated_at: new Date().toISOString(),
       updated_by: metadata.user_id,
     };
+
+    if (content !== undefined) {
+      updateData.content = content;
+    }
 
     if (observationDate) {
       updateData.observation_date = observationDate;
