@@ -2036,7 +2036,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             <DialogHeader>
               <DialogTitle>AI再解析の確認</DialogTitle>
               <DialogDescription>
-                現在の「抽出された事実」「この出来事について、あなたはどう思いましたか？」「非認知能力フラグ」の入力内容を上書きしますか？
+                現在の「抽出された事実」「所感」「非認知能力フラグ」の入力内容を上書きしますか？
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
