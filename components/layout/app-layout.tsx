@@ -31,6 +31,7 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         type={sidebarType}
+        role={session?.role ?? undefined}
         userName={userName}
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
