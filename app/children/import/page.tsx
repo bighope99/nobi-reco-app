@@ -554,14 +554,15 @@ export default function ChildImportPage() {
                     <Label className="text-sm font-semibold">学校</Label>
                     <div className="flex gap-2">
                       <Select
-                        value={selectedSchoolId}
-                        onValueChange={setSelectedSchoolId}
+                        value={selectedSchoolId || "__none__"}
+                        onValueChange={(v) => setSelectedSchoolId(v === "__none__" ? "" : v)}
                         disabled={loading || previewLoading}
                       >
                         <SelectTrigger className="bg-background/80 backdrop-blur flex-1">
                           <SelectValue placeholder="学校を選択" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">未設定</SelectItem>
                           {schools.map((school) => (
                             <SelectItem
                               key={school.school_id}
@@ -589,14 +590,15 @@ export default function ChildImportPage() {
                     <Label className="text-sm font-semibold">クラス</Label>
                     <div className="flex gap-2">
                       <Select
-                        value={selectedClassId}
-                        onValueChange={setSelectedClassId}
+                        value={selectedClassId || "__none__"}
+                        onValueChange={(v) => setSelectedClassId(v === "__none__" ? "" : v)}
                         disabled={loading || previewLoading}
                       >
                         <SelectTrigger className="bg-background/80 backdrop-blur flex-1">
                           <SelectValue placeholder="クラスを選択" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">未設定</SelectItem>
                           {classes.map((cls) => (
                             <SelectItem key={cls.class_id} value={cls.class_id}>
                               {cls.class_name}
