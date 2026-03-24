@@ -1702,12 +1702,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                             </Button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1">
-                            <span>{observation ? formatDate(observation.observed_at) : '未保存'}</span>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(true)}>
-                              <Pencil className="h-3 w-3 mr-1" /> 変更
-                            </Button>
-                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(true)}>
+                            <Pencil className="h-3 w-3 mr-1" /> 変更
+                          </Button>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -1738,12 +1735,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                             </Button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium">{recorderDisplayName}</span>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(true)}>
-                              <Pencil className="h-3 w-3 mr-1" /> 変更
-                            </Button>
-                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(true)}>
+                            <Pencil className="h-3 w-3 mr-1" /> 変更
+                          </Button>
                         )}
                       </div>
                       <div className="ml-auto flex items-center gap-2">
