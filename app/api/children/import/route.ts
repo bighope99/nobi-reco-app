@@ -173,7 +173,10 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        rowSettings = parsed;
+        rowSettings = parsed.map((entry: { school_id?: string | null; class_id?: string | null }) => ({
+          school_id: entry.school_id ?? null,
+          class_id: entry.class_id ?? null,
+        }));
       } catch {
         return NextResponse.json(
           { success: false, error: 'row_settings の JSON 形式が無効です' },
