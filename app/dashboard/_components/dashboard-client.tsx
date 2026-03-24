@@ -984,7 +984,7 @@ export default function DashboardClient() {
                   <div className="p-2 bg-emerald-50 text-emerald-600 rounded-full group-hover:scale-110 transition-transform">
                     <Activity size={20} />
                   </div>
-                  <span className="text-sm font-bold text-slate-700">出席生徒</span>
+                  <span className="text-sm font-bold text-slate-700">出席児童</span>
                 </Link>
               </div>
 

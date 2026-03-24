@@ -1681,7 +1681,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <div>
                       <div className="flex items-center justify-between">
                         <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
-                          解釈・所感
+                          この出来事について、あなたはどう思いましたか？
                         </Label>
                         <span className="text-sm text-gray-500">
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
@@ -2033,7 +2033,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             <DialogHeader>
               <DialogTitle>AI再解析の確認</DialogTitle>
               <DialogDescription>
-                現在の「抽出された事実」「解釈・所感」「非認知能力フラグ」の入力内容を上書きしますか？
+                現在の「抽出された事実」「この出来事について、あなたはどう思いましたか？」「非認知能力フラグ」の入力内容を上書きしますか？
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
