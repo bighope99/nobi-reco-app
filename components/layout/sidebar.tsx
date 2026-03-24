@@ -15,6 +15,7 @@ import {
   Database,
   Building2,
   Home,
+  Tag,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -97,6 +98,7 @@ const adminNavItems: NavItem[] = [
     ],
   },
   { label: "ユーザー管理", href: "/admin/users", icon: <Users className="h-5 w-5" /> },
+  { label: "タグ管理", href: "/admin/tags", icon: <Tag className="h-5 w-5" /> },
   { label: "システムログ", href: "/admin/logs", icon: <Database className="h-5 w-5" /> },
 ]
 
