@@ -644,7 +644,7 @@ export default function ScheduleSettingsPage() {
                     <div className="p-6">
                       {editingSchool === school.id && (
                         <div className="mb-3 flex flex-nowrap items-center gap-2 text-sm text-slate-600 w-fit">
-                          <span className="font-medium text-slate-700">遅刻判定:</span>
+                          <span className="font-medium text-slate-700 w-[120px]">遅刻判定:</span>
                           <span>登校予定時刻から</span>
                           <Input
                             type="number"
