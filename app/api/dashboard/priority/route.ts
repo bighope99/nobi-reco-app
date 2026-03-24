@@ -365,7 +365,7 @@ export async function GET(request: NextRequest) {
         }
       }
       if (s.status === 'absent' && s.is_scheduled_today && s.scheduled_start_time) {
-        const threshold = getLateThreshold(s.child.school_id, s.grade);
+        const threshold = getLateThreshold(s.child.school_id);
         if (getMinutesDiff(currentTime, s.scheduled_start_time) >= threshold) {
           alertType = 'late';
         }
