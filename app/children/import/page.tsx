@@ -50,7 +50,7 @@ type RowSetting = { school_id: string | null; class_id: string | null }
 
 export default function ChildImportPage() {
   const session = useSession()
-  const { isFacilityAdmin, isStaff } = useRole()
+  const { isFacilityAdmin, isStaff, hasRole } = useRole()
   const [facilities, setFacilities] = useState<FacilityOption[]>([])
   const [schools, setSchools] = useState<SchoolOption[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
@@ -106,13 +106,11 @@ export default function ChildImportPage() {
     fetchFacilities()
   }, [])
 
-  // sessionロード時: facility_admin/staffは自施設を自動選択
+  // sessionロード時: facility_admin/staff/company_adminは自施設を自動選択
   useEffect(() => {
     if (!session) return
-    if (isFacilityAdmin || isStaff) {
-      if (session.current_facility_id) {
-        setSelectedFacilityId(session.current_facility_id)
-      }
+    if ((isFacilityAdmin || isStaff || hasRole('company_admin')) && session.current_facility_id) {
+      setSelectedFacilityId(session.current_facility_id)
     }
   }, [session])
 
