@@ -207,14 +207,16 @@ Phase 5 でユーザーが「実装を進める」を選択した場合に実行
     model: sonnet
     prompt: [agents.md の Engineer プロンプトに 【PMの指示書】等を埋めて渡す]
 
-Engineer → 実装 → テスト → コミット → /create-pr でPR作成 → PR URL を返す
+Engineer → 実装 → テスト → コミット → /create-pr でPR作成 → PR URL を親Claudeに返す
 
-※ PR作成直後（CodeRabbitループ前）に Notion を更新する:
-親Claude → Notionステータス更新:
-  npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
-    --page-id <チケットID> \
-    --status "レビュー依頼" \
-    --pr-url <PR URL>
+※ PR作成直後（CodeRabbitループ前）に PM が Notion を更新する:
+親Claude → PM に指示（SendMessage）:
+  「PR URLが出ました: <PR URL>
+   チケット <チケットID> を「レビュー依頼」に更新してください:
+   npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
+     --page-id <チケットID> \
+     --status "レビュー依頼" \
+     --pr-url <PR URL>」
 
 親Claude → ユーザーに中間報告:
   「PR作成しました: [URL]
