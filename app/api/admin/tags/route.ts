@@ -73,14 +73,14 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    if (!body.name) {
+    const name = String(body.name ?? '').trim();
+    if (!name) {
       return NextResponse.json(
         { success: false, error: 'タグ名は必須です' },
         { status: 400 }
       );
     }
 
-    const name = String(body.name).trim();
     if (name.length > 50) {
       return NextResponse.json(
         { success: false, error: 'タグ名は50文字以内で入力してください' },

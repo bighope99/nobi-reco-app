@@ -160,7 +160,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const supabase = await createClient();
 
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from('m_observation_tags')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
@@ -168,6 +168,13 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
     if (error) {
       throw error;
+    }
+
+    if (count === 0) {
+      return NextResponse.json(
+        { success: false, error: 'タグが見つかりません' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true });
