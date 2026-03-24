@@ -34,6 +34,21 @@ export function getSchoolStartTime(
 }
 
 /**
+ * 学校の遅刻閾値を取得
+ *
+ * @param schoolId - 学校ID
+ * @param schoolLateThresholds - 学校IDをキーとした遅刻閾値のマップ
+ * @returns 遅刻閾値（分）、該当学校がない場合はデフォルト値30
+ */
+export function getSchoolLateThreshold(
+  schoolId: string | null,
+  schoolLateThresholds: Record<string, number>
+): number {
+  if (!schoolId) return 30;
+  return schoolLateThresholds[schoolId] ?? 30;
+}
+
+/**
  * 時刻を HH:MM 形式にフォーマット
  *
  * @param time - 時刻文字列

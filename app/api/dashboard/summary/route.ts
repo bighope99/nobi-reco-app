@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       schoolIds.length > 0
         ? supabase
             .from('m_schools')
-            .select('id, name')
+            .select('id, name, late_threshold_minutes')
             .in('id', schoolIds)
             .is('deleted_at', null)
         : Promise.resolve({ data: [], error: null }),
@@ -229,6 +229,12 @@ export async function GET(request: NextRequest) {
       (schoolsResult.data || []).map((s: any) => [s.id, s.name])
     );
 
+    // 学校別遅刻閾値マップ
+    const schoolLateThresholds: Record<string, number> = {};
+    for (const school of (schoolsResult.data || []) as Array<{ id: string; late_threshold_minutes: number }>) {
+      schoolLateThresholds[school.id] = school.late_threshold_minutes ?? 30;
+    }
+
     // データ整形
     type AttendanceListItem = {
       child_id: string;
@@ -262,6 +268,11 @@ export async function GET(request: NextRequest) {
       if (!matchedSchedule) return null;
       const weekdayKey = `${dayOfWeekKey}_time`;
       return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
+    };
+
+    const getLateThreshold = (schoolId: string | null): number => {
+      if (!schoolId) return LATE_ARRIVAL_THRESHOLD_MINUTES;
+      return schoolLateThresholds[schoolId] ?? LATE_ARRIVAL_THRESHOLD_MINUTES;
     };
 
     const formatTimeToMinutes = (time: string | null) => {
@@ -375,13 +386,13 @@ export async function GET(request: NextRequest) {
         guardian_phone: c.guardian_phone,
       }));
 
-    // 遅刻アラート（予定到着時刻から30分以上遅れ）
-    // 学校と学年情報を含めて、将来の外部通知機能に対応
+    // 遅刻アラート（予定到着時刻から閾値分以上遅れ）
+    // 学校スケジュールごとの遅刻閾値を使用
     const late: LateArrivalAlert[] = attendanceList
       .filter(c => {
         if (c.status !== 'absent' || !c.is_scheduled_today || !c.scheduled_start_time) return false;
-        // 30分閾値を使用
-        return getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES;
+        const threshold = getLateThreshold(c.school_id);
+        return getMinutesDiff(currentTime, c.scheduled_start_time) >= threshold;
       })
       .map(c => ({
         child_id: c.child_id,

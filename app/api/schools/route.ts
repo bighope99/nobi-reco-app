@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // 学校一覧取得
     const { data: schools, error: schoolsError } = await supabase
       .from('m_schools')
-      .select('id, name, address, phone, created_at, updated_at')
+      .select('id, name, address, phone, late_threshold_minutes, created_at, updated_at')
       .eq('facility_id', targetFacilityId)
       .is('deleted_at', null)
       .order('name', { ascending: true });
@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
           name: school.name,
           address: school.address,
           phone: school.phone,
+          late_threshold_minutes: school.late_threshold_minutes ?? 30,
           schedules: (schedules || []).map((s) => ({
             schedule_id: s.id,
             grades: s.grades || [],
@@ -191,6 +192,120 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating school:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/schools
+ * 学校の late_threshold_minutes を更新
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+
+    // JWTメタデータから認証情報を取得
+    const metadata = await getAuthenticatedUserMetadata();
+
+    if (!metadata) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { role, current_facility_id } = metadata;
+
+    // 権限チェック（staffは更新不可）
+    if (role === 'staff') {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+
+    // 必須パラメータチェック
+    if (!body.school_id) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required parameter: school_id' },
+        { status: 400 }
+      );
+    }
+
+    if (body.late_threshold_minutes === undefined) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required parameter: late_threshold_minutes' },
+        { status: 400 }
+      );
+    }
+
+    // バリデーション: 整数、0-120
+    const threshold = Number(body.late_threshold_minutes);
+    if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
+      return NextResponse.json(
+        { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
+        { status: 400 }
+      );
+    }
+
+    // 学校の存在確認と権限チェック
+    const { data: school, error: schoolError } = await supabase
+      .from('m_schools')
+      .select('id, facility_id')
+      .eq('id', body.school_id)
+      .is('deleted_at', null)
+      .single();
+
+    if (schoolError || !school) {
+      return NextResponse.json(
+        { success: false, error: 'School not found' },
+        { status: 404 }
+      );
+    }
+
+    // 施設アクセス権限チェック
+    if (role === 'facility_admin' && current_facility_id !== school.facility_id) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
+    // m_schools を更新
+    const { data: updatedSchool, error: updateError } = await supabase
+      .from('m_schools')
+      .update({
+        late_threshold_minutes: threshold,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', body.school_id)
+      .select('id, late_threshold_minutes, updated_at')
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        school_id: updatedSchool.id,
+        late_threshold_minutes: updatedSchool.late_threshold_minutes,
+        updated_at: updatedSchool.updated_at,
+      },
+      message: '遅刻閾値を更新しました',
+    });
+  } catch (error) {
+    console.error('Error updating school late threshold:', error);
     return NextResponse.json(
       {
         success: false,

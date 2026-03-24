@@ -11,6 +11,13 @@ import {
   Users,
   Check
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 interface Schedule {
   scheduleId: string;
@@ -59,7 +66,7 @@ const apiToFrontend = (apiTimes: any) => {
   weekdays.forEach((day) => {
     const apiValue = apiTimes[day.apiKey];
     if (apiValue) {
-      result[day.id] = apiValue;
+      result[day.id] = apiValue.slice(0, 5);
     }
   });
   return result;
@@ -105,6 +112,11 @@ export default function ScheduleSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [addingScheduleForSchool, setAddingScheduleForSchool] = useState<string | null>(null);
+  const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
+  const [deleteScheduleConfirm, setDeleteScheduleConfirm] = useState<{ schoolId: string; scheduleId: string } | null>(null);
+  const [deleteSchoolConfirm, setDeleteSchoolConfirm] = useState<string | null>(null);
+  const [schoolLateThresholds, setSchoolLateThresholds] = useState<Record<string, number>>({});
 
   // 初期ロード
   useEffect(() => {
@@ -136,6 +148,13 @@ export default function ScheduleSettingsPage() {
       }));
 
       setSchools(transformedSchools);
+
+      // 学校ごとの遅刻閾値を初期化（学校APIから取得）
+      const thresholds: Record<string, number> = {};
+      data.data.schools.forEach((school: any) => {
+        thresholds[school.school_id] = school.late_threshold_minutes ?? 30;
+      });
+      setSchoolLateThresholds(thresholds);
     } catch (err) {
       console.error('Error fetching schools:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -170,6 +189,7 @@ export default function ScheduleSettingsPage() {
       };
 
       setSchools([...schools, newSchool]);
+      setSchoolLateThresholds((prev) => ({ ...prev, [newSchool.id]: 30 }));
       setNewSchoolName('');
       setShowAddSchool(false);
       setEditingSchool(newSchool.id);
@@ -181,23 +201,61 @@ export default function ScheduleSettingsPage() {
     }
   };
 
-  // Add schedule to school
+  // Add schedule to school (楽観的更新 + ダブルクリック防止)
   const handleAddSchedule = async (schoolId: string) => {
+    if (addingScheduleForSchool) return;
+    setAddingScheduleForSchool(schoolId);
+
+    const tempId = `temp-${Date.now()}`;
+    const defaultWeekdayTimes = {
+      mon: '13:00',
+      tue: '13:00',
+      wed: '13:00',
+      thu: '13:00',
+      fri: '13:00',
+    };
+
+    // 既存スケジュールで使用済みの学年を収集し、最初の未使用学年を選ぶ
+    const targetSchool = schools.find((s) => s.id === schoolId);
+    const usedGrades = new Set(
+      (targetSchool?.schedules ?? []).flatMap((s) => s.gradeIds)
+    );
+    const allGrades = ['1', '2', '3', '4', '5', '6'];
+    const firstUnusedGrade = allGrades.find((g) => !usedGrades.has(g));
+    const defaultGrades = firstUnusedGrade ? [firstUnusedGrade] : [];
+
+    // 楽観的にUIに仮スケジュールを追加
+    setSchools((prev) =>
+      prev.map((school) => {
+        if (school.id === schoolId) {
+          return {
+            ...school,
+            schedules: [
+              ...school.schedules,
+              { scheduleId: tempId, gradeIds: defaultGrades, weekdayTimes: defaultWeekdayTimes },
+            ],
+          };
+        }
+        return school;
+      })
+    );
+
     try {
       const response = await fetch(`/api/schools/${schoolId}/schedules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grades: ['1'],  // デフォルトで1年生を選択
+          grades: defaultGrades,
           weekday_times: {
-            monday: '08:00',
-            tuesday: '08:00',
-            wednesday: '08:00',
-            thursday: '08:00',
-            friday: '08:00',
+            monday: '13:00',
+            tuesday: '13:00',
+            wednesday: '13:00',
+            thursday: '13:00',
+            friday: '13:00',
             saturday: null,
             sunday: null,
           },
+          late_threshold_minutes: schoolLateThresholds[schoolId] ?? 30,
         }),
       });
 
@@ -207,20 +265,21 @@ export default function ScheduleSettingsPage() {
         throw new Error(data.error || 'Failed to create schedule');
       }
 
-      // ローカル状態を更新
-      setSchools(
-        schools.map((school) => {
+      // 仮IDを実IDに置換
+      setSchools((prev) =>
+        prev.map((school) => {
           if (school.id === schoolId) {
             return {
               ...school,
-              schedules: [
-                ...school.schedules,
-                {
-                  scheduleId: data.data.schedule_id,
-                  gradeIds: data.data.grades,
-                  weekdayTimes: apiToFrontend(data.data.weekday_times),
-                },
-              ],
+              schedules: school.schedules.map((s) =>
+                s.scheduleId === tempId
+                  ? {
+                      scheduleId: data.data.schedule_id,
+                      gradeIds: data.data.grades,
+                      weekdayTimes: apiToFrontend(data.data.weekday_times),
+                    }
+                  : s
+              ),
             };
           }
           return school;
@@ -228,12 +287,38 @@ export default function ScheduleSettingsPage() {
       );
     } catch (err) {
       console.error('Error creating schedule:', err);
+      // ロールバック: 仮スケジュールを削除
+      setSchools((prev) =>
+        prev.map((school) => {
+          if (school.id === schoolId) {
+            return {
+              ...school,
+              schedules: school.schedules.filter((s) => s.scheduleId !== tempId),
+            };
+          }
+          return school;
+        })
+      );
       alert(err instanceof Error ? err.message : 'Failed to create schedule');
+    } finally {
+      setAddingScheduleForSchool(null);
     }
   };
 
   // Toggle grade selection
   const handleToggleGrade = (schoolId: string, scheduleId: string, gradeId: string) => {
+    const targetSchool = schools.find((s) => s.id === schoolId);
+    if (!targetSchool) return;
+
+    // 他のスケジュールで既に使用中のグレードは追加不可
+    const isUsedInOtherSchedule = targetSchool.schedules.some(
+      (s) => s.scheduleId !== scheduleId && s.gradeIds.includes(gradeId)
+    );
+    const currentSchedule = targetSchool.schedules.find((s) => s.scheduleId === scheduleId);
+    const isCurrentlySelected = currentSchedule?.gradeIds.includes(gradeId) ?? false;
+
+    if (isUsedInOtherSchedule && !isCurrentlySelected) return;
+
     setSchools(schools.map(school => {
       if (school.id === schoolId) {
         return {
@@ -279,9 +364,43 @@ export default function ScheduleSettingsPage() {
     setHasChanges(true);
   };
 
-  // Remove schedule
-  const handleRemoveSchedule = async (schoolId: string, scheduleId: string) => {
-    if (!confirm('このスケジュール設定を削除しますか？')) return;
+  // Update school-level late threshold
+  const handleUpdateSchoolLateThreshold = (schoolId: string, minutes: number) => {
+    setSchoolLateThresholds((prev) => ({ ...prev, [schoolId]: minutes }));
+    setHasChanges(true);
+  };
+
+  // Remove schedule: show confirmation dialog
+  const handleRemoveSchedule = (schoolId: string, scheduleId: string) => {
+    if (deletingScheduleId) return;
+    setDeleteScheduleConfirm({ schoolId, scheduleId });
+  };
+
+  // Execute schedule removal after confirmation
+  const executeRemoveSchedule = async () => {
+    if (!deleteScheduleConfirm) return;
+    const { schoolId, scheduleId } = deleteScheduleConfirm;
+    setDeleteScheduleConfirm(null);
+
+    setDeletingScheduleId(scheduleId);
+
+    // ロールバック用にバックアップを先に取得
+    const targetSchool = schools.find((s) => s.id === schoolId);
+    const removedIndex = targetSchool?.schedules.findIndex((s) => s.scheduleId === scheduleId) ?? -1;
+    const removedSchedule = targetSchool?.schedules[removedIndex];
+
+    // 楽観的にUIから削除
+    setSchools((prev) =>
+      prev.map((school) => {
+        if (school.id === schoolId) {
+          return {
+            ...school,
+            schedules: school.schedules.filter((s) => s.scheduleId !== scheduleId),
+          };
+        }
+        return school;
+      })
+    );
 
     try {
       const response = await fetch(`/api/schools/${schoolId}/schedules/${scheduleId}`, {
@@ -293,28 +412,37 @@ export default function ScheduleSettingsPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to delete schedule');
       }
-
-      // ローカル状態を更新
-      setSchools(
-        schools.map((school) => {
-          if (school.id === schoolId) {
-            return {
-              ...school,
-              schedules: school.schedules.filter((s) => s.scheduleId !== scheduleId),
-            };
-          }
-          return school;
-        })
-      );
     } catch (err) {
       console.error('Error deleting schedule:', err);
+      // ロールバック: 削除したスケジュールを元に戻す
+      if (removedSchedule) {
+        setSchools((prev) =>
+          prev.map((school) => {
+            if (school.id === schoolId) {
+              const newSchedules = [...school.schedules];
+              newSchedules.splice(removedIndex, 0, removedSchedule);
+              return { ...school, schedules: newSchedules };
+            }
+            return school;
+          })
+        );
+      }
       alert(err instanceof Error ? err.message : 'Failed to delete schedule');
+    } finally {
+      setDeletingScheduleId(null);
     }
   };
 
-  // Remove school
-  const handleRemoveSchool = async (schoolId: string) => {
-    if (!confirm('この学校を削除しますか？紐づくスケジュール設定もすべて削除されます。')) return;
+  // Remove school: show confirmation dialog
+  const handleRemoveSchool = (schoolId: string) => {
+    setDeleteSchoolConfirm(schoolId);
+  };
+
+  // Execute school removal after confirmation
+  const executeRemoveSchool = async () => {
+    if (!deleteSchoolConfirm) return;
+    const schoolId = deleteSchoolConfirm;
+    setDeleteSchoolConfirm(null);
 
     try {
       const response = await fetch(`/api/schools/${schoolId}`, {
@@ -328,7 +456,12 @@ export default function ScheduleSettingsPage() {
       }
 
       // ローカル状態を更新
-      setSchools(schools.filter((s) => s.id !== schoolId));
+      setSchools((prev) => prev.filter((s) => s.id !== schoolId));
+      setSchoolLateThresholds((prev) => {
+        const next = { ...prev };
+        delete next[schoolId];
+        return next;
+      });
     } catch (err) {
       console.error('Error deleting school:', err);
       alert(err instanceof Error ? err.message : 'Failed to delete school');
@@ -342,12 +475,13 @@ export default function ScheduleSettingsPage() {
     try {
       setSaving(true);
 
-      // すべてのスケジュールを集めて一括更新
+      // すべてのスケジュールを集めて一括更新（遅刻閾値は学校レベルの値を適用）
       const updates = schools.flatMap((school) =>
         school.schedules.map((schedule) => ({
           schedule_id: schedule.scheduleId,
           grades: schedule.gradeIds,
           weekday_times: frontendToApi(schedule.weekdayTimes),
+          late_threshold_minutes: schoolLateThresholds[school.id] ?? 30,
         }))
       );
 
@@ -509,12 +643,39 @@ export default function ScheduleSettingsPage() {
                     {/* Schedules List */}
                     <div className="p-6">
                       {editingSchool === school.id && (
+                        <div className="mb-3 flex flex-nowrap items-center gap-2 text-sm text-slate-600 w-fit">
+                          <span className="font-medium text-slate-700 w-[120px]">遅刻判定:</span>
+                          <span>登校予定時刻から</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={120}
+                            value={schoolLateThresholds[school.id] ?? 30}
+                            onChange={(e: any) =>
+                              handleUpdateSchoolLateThreshold(school.id, Math.max(0, Math.min(120, parseInt(e.target.value, 10) || 0)))
+                            }
+                            className="w-16 text-sm py-1 text-center"
+                          />
+                          <span>分超過で遅刻</span>
+                        </div>
+                      )}
+                      {editingSchool === school.id && (
                         <button
                           onClick={() => handleAddSchedule(school.id)}
-                          className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm"
+                          disabled={addingScheduleForSchool !== null}
+                          className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Plus size={18} />
-                          スケジュールを追加
+                          {addingScheduleForSchool === school.id ? (
+                            <>
+                              <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                              追加中...
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={18} />
+                              スケジュールを追加
+                            </>
+                          )}
                         </button>
                       )}
 
@@ -533,21 +694,36 @@ export default function ScheduleSettingsPage() {
                                 <div>
                                   <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">学年選択 (複数選択可)</label>
                                   <div className="flex flex-wrap gap-2">
-                                    {grades.map((grade) => (
-                                      <button
-                                        key={grade.id}
-                                        onClick={() => handleToggleGrade(school.id, schedule.scheduleId, grade.id)}
-                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${schedule.gradeIds.includes(grade.id)
-                                          ? 'bg-indigo-600 text-white border-indigo-600'
-                                          : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300 hover:bg-indigo-50'
-                                          }`}
-                                      >
-                                        {schedule.gradeIds.includes(grade.id) && (
-                                          <Check size={14} className="inline mr-1" />
-                                        )}
-                                        {grade.label}
-                                      </button>
-                                    ))}
+                                    {(() => {
+                                      const usedGradesInSchool = new Set(
+                                        school.schedules
+                                          .filter((s) => s.scheduleId !== schedule.scheduleId)
+                                          .flatMap((s) => s.gradeIds)
+                                      );
+                                      return grades.map((grade) => {
+                                        const isSelected = schedule.gradeIds.includes(grade.id);
+                                        const isDisabled = !isSelected && usedGradesInSchool.has(grade.id);
+                                        return (
+                                          <button
+                                            key={grade.id}
+                                            onClick={() => handleToggleGrade(school.id, schedule.scheduleId, grade.id)}
+                                            disabled={isDisabled}
+                                            title={isDisabled ? '他のスケジュールで使用中' : undefined}
+                                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${isSelected
+                                              ? 'bg-indigo-600 text-white border-indigo-600'
+                                              : isDisabled
+                                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                                : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300 hover:bg-indigo-50'
+                                              }`}
+                                          >
+                                            {isSelected && (
+                                              <Check size={14} className="inline mr-1" />
+                                            )}
+                                            {grade.label}
+                                          </button>
+                                        );
+                                      });
+                                    })()}
                                   </div>
                                 </div>
 
@@ -562,6 +738,7 @@ export default function ScheduleSettingsPage() {
                                           <Clock size={14} className="text-slate-400 shrink-0" />
                                           <Input
                                             type="time"
+                                            step={300}
                                             value={schedule.weekdayTimes[day.id as keyof typeof schedule.weekdayTimes] || ''}
                                             onChange={(e: any) =>
                                               handleUpdateWeekdayTime(school.id, schedule.scheduleId, day.id, e.target.value)
@@ -581,10 +758,20 @@ export default function ScheduleSettingsPage() {
                                 <div className="flex justify-end pt-2">
                                   <button
                                     onClick={() => handleRemoveSchedule(school.id, schedule.scheduleId)}
-                                    className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
+                                    disabled={deletingScheduleId !== null}
+                                    className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    <Trash2 size={16} />
-                                    このスケジュールを削除
+                                    {deletingScheduleId === schedule.scheduleId ? (
+                                      <>
+                                        <div className="animate-spin w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full"></div>
+                                        削除中...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Trash2 size={16} />
+                                        このスケジュールを削除
+                                      </>
+                                    )}
                                   </button>
                                 </div>
                               </div>
@@ -673,6 +860,61 @@ export default function ScheduleSettingsPage() {
         </div>
 
       </div>
+
+      {/* スケジュール削除確認ダイアログ */}
+      <Dialog open={deleteScheduleConfirm !== null} onOpenChange={(open) => { if (!open) setDeleteScheduleConfirm(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>スケジュールを削除しますか？</DialogTitle>
+            <DialogDescription>
+              このスケジュール設定を削除します。この操作は取り消せません。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              onClick={() => setDeleteScheduleConfirm(null)}
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+              autoFocus
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={executeRemoveSchedule}
+              className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors"
+            >
+              削除する
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 学校削除確認ダイアログ */}
+      <Dialog open={deleteSchoolConfirm !== null} onOpenChange={(open) => { if (!open) setDeleteSchoolConfirm(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>学校を削除しますか？</DialogTitle>
+            <DialogDescription>
+              この学校を削除します。紐づくスケジュール設定もすべて削除されます。この操作は取り消せません。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              onClick={() => setDeleteSchoolConfirm(null)}
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+              autoFocus
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={executeRemoveSchool}
+              className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors"
+            >
+              削除する
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </StaffLayout>
   );
 }

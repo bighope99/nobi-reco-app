@@ -853,6 +853,9 @@ CREATE TABLE IF NOT EXISTS m_schools (
   address VARCHAR(500),                            -- 住所
   phone VARCHAR(20),                               -- 電話番号
 
+  -- 遅刻設定
+  late_threshold_minutes INTEGER NOT NULL DEFAULT 30,  -- 遅刻とみなす閾値（分）。学校全体に適用。
+
   -- ステータス
   is_active BOOLEAN NOT NULL DEFAULT true,         -- 有効/無効
 
