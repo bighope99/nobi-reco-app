@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
       schoolIds.length > 0
         ? supabase
             .from('s_school_schedules')
-            .select('school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time, late_threshold_minutes')
+            .select('school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time')
             .in('school_id', schoolIds)
             .is('deleted_at', null)
         : Promise.resolve({ data: [], error: null }),
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       schoolIds.length > 0
         ? supabase
             .from('m_schools')
-            .select('id, name')
+            .select('id, name, late_threshold_minutes')
             .in('id', schoolIds)
             .is('deleted_at', null)
         : Promise.resolve({ data: [], error: null }),
@@ -229,6 +229,12 @@ export async function GET(request: NextRequest) {
       (schoolsResult.data || []).map((s: any) => [s.id, s.name])
     );
 
+    // 学校別遅刻閾値マップ
+    const schoolLateThresholds: Record<string, number> = {};
+    for (const school of (schoolsResult.data || []) as Array<{ id: string; late_threshold_minutes: number }>) {
+      schoolLateThresholds[school.id] = school.late_threshold_minutes ?? 30;
+    }
+
     // データ整形
     type AttendanceListItem = {
       child_id: string;
@@ -264,12 +270,9 @@ export async function GET(request: NextRequest) {
       return matchedSchedule[weekdayKey as keyof typeof matchedSchedule] || null;
     };
 
-    const getLateThreshold = (schoolId: string | null, grade: number | null): number => {
-      if (!schoolId || grade === null || grade === undefined) return LATE_ARRIVAL_THRESHOLD_MINUTES;
-      const schedules = schoolSchedules[schoolId] || [];
-      const gradeKey = String(grade);
-      const matchedSchedule = schedules.find((schedule: any) => (schedule.grades || []).includes(gradeKey));
-      return matchedSchedule?.late_threshold_minutes ?? LATE_ARRIVAL_THRESHOLD_MINUTES;
+    const getLateThreshold = (schoolId: string | null): number => {
+      if (!schoolId) return LATE_ARRIVAL_THRESHOLD_MINUTES;
+      return schoolLateThresholds[schoolId] ?? LATE_ARRIVAL_THRESHOLD_MINUTES;
     };
 
     const formatTimeToMinutes = (time: string | null) => {
@@ -388,7 +391,7 @@ export async function GET(request: NextRequest) {
     const late: LateArrivalAlert[] = attendanceList
       .filter(c => {
         if (c.status !== 'absent' || !c.is_scheduled_today || !c.scheduled_start_time) return false;
-        const threshold = getLateThreshold(c.school_id, c.grade);
+        const threshold = getLateThreshold(c.school_id);
         return getMinutesDiff(currentTime, c.scheduled_start_time) >= threshold;
       })
       .map(c => ({

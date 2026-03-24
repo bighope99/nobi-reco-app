@@ -853,6 +853,9 @@ CREATE TABLE IF NOT EXISTS m_schools (
   address VARCHAR(500),                            -- 住所
   phone VARCHAR(20),                               -- 電話番号
 
+  -- 遅刻設定
+  late_threshold_minutes INTEGER NOT NULL DEFAULT 30,  -- 遅刻とみなす閾値（分）。学校全体に適用。
+
   -- ステータス
   is_active BOOLEAN NOT NULL DEFAULT true,         -- 有効/無効
 
@@ -898,9 +901,6 @@ CREATE TABLE IF NOT EXISTS s_school_schedules (
   saturday_time TIME,                              -- 土曜日の登校時刻（通常NULL）
   sunday_time TIME,                                -- 日曜日の登校時刻（通常NULL）
 
-  -- 遅刻設定
-  late_threshold_minutes INTEGER NOT NULL DEFAULT 30,  -- 遅刻とみなす閾値（分）
-
   -- タイムスタンプ
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -922,7 +922,6 @@ CREATE INDEX idx_s_school_schedules_grades
 - 学校ごと・学年グループごとの登校時刻パターン
 - 例: 「1~2年生は月~金 08:00登校」「3~6年生は月~金 08:00登校」
 - 曜日ごとに異なる時刻を設定可能（短縮授業など）
-- `late_threshold_minutes`: 登校予定時刻からこの時間を超過しても到着しない場合に遅刻扱い（デフォルト30分）
 - 時刻がNULLの曜日は「登校なし」を意味する
 
 ---

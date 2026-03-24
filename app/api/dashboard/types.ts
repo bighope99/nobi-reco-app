@@ -70,7 +70,6 @@ export interface SchoolSchedule {
   friday_time: string | null;
   saturday_time: string | null;
   sunday_time: string | null;
-  late_threshold_minutes: number;
 }
 
 // 学校情報

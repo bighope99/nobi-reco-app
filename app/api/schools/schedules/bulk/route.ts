@@ -53,26 +53,6 @@ export async function PUT(request: NextRequest) {
         ? [current_facility_id]
         : null;
 
-    // late_threshold_minutes のバリデーション
-    for (const update of body.updates) {
-      if (update.late_threshold_minutes !== undefined) {
-        if (update.late_threshold_minutes === null || update.late_threshold_minutes === '') {
-          return NextResponse.json(
-            { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
-            { status: 400 }
-          );
-        }
-        const threshold = Number(update.late_threshold_minutes);
-        if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
-          return NextResponse.json(
-            { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
-            { status: 400 }
-          );
-        }
-        update.late_threshold_minutes = threshold;
-      }
-    }
-
     // 同一学校内の学年重複チェック（既存DBスケジュールを含めて検証）
     {
       // gradesが指定されているupdateの対象schedule_idを収集
@@ -231,10 +211,6 @@ export async function PUT(request: NextRequest) {
           updateData.sunday_time = update.weekday_times.sunday !== undefined
             ? update.weekday_times.sunday
             : undefined;
-        }
-
-        if (update.late_threshold_minutes !== undefined) {
-          updateData.late_threshold_minutes = update.late_threshold_minutes;
         }
 
         // 更新実行

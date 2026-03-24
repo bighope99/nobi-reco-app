@@ -34,27 +34,18 @@ export function getSchoolStartTime(
 }
 
 /**
- * 学校スケジュールの遅刻閾値を取得
+ * 学校の遅刻閾値を取得
  *
  * @param schoolId - 学校ID
- * @param grade - 学年
- * @param schoolSchedules - 学校スケジュールのマップ
- * @returns 遅刻閾値（分）、該当スケジュールがない場合はデフォルト値30
+ * @param schoolLateThresholds - 学校IDをキーとした遅刻閾値のマップ
+ * @returns 遅刻閾値（分）、該当学校がない場合はデフォルト値30
  */
 export function getSchoolLateThreshold(
   schoolId: string | null,
-  grade: number | null,
-  schoolSchedules: Record<string, SchoolSchedule[]>
+  schoolLateThresholds: Record<string, number>
 ): number {
-  if (!schoolId || grade === null || grade === undefined) return 30;
-
-  const schedules = schoolSchedules[schoolId] || [];
-  const gradeKey = String(grade);
-  const matchedSchedule = schedules.find((schedule) =>
-    (schedule.grades || []).includes(gradeKey)
-  );
-
-  return matchedSchedule?.late_threshold_minutes ?? 30;
+  if (!schoolId) return 30;
+  return schoolLateThresholds[schoolId] ?? 30;
 }
 
 /**

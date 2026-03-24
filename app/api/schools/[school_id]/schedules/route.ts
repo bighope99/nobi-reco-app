@@ -78,16 +78,6 @@ export async function POST(
       );
     }
 
-    if (body.late_threshold_minutes !== undefined) {
-      const threshold = Number(body.late_threshold_minutes);
-      if (!Number.isInteger(threshold) || threshold < 0 || threshold > 120) {
-        return NextResponse.json(
-          { success: false, error: 'late_threshold_minutes must be an integer between 0 and 120' },
-          { status: 400 }
-        );
-      }
-    }
-
     // 同一学校内の学年重複チェック
     const { data: existingSchedules } = await supabase
       .from('s_school_schedules')
@@ -119,7 +109,6 @@ export async function POST(
         friday_time: body.weekday_times.friday || null,
         saturday_time: body.weekday_times.saturday || null,
         sunday_time: body.weekday_times.sunday || null,
-        late_threshold_minutes: body.late_threshold_minutes ?? 30,
       })
       .select()
       .single();
@@ -143,7 +132,6 @@ export async function POST(
           saturday: newSchedule.saturday_time,
           sunday: newSchedule.sunday_time,
         },
-        late_threshold_minutes: newSchedule.late_threshold_minutes,
         created_at: newSchedule.created_at,
       },
       message: 'スケジュールを追加しました',
