@@ -213,9 +213,14 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const content = typeof body?.content === 'string' ? body.content.trim() : undefined;
+    const rawContent = typeof body?.content === 'string' ? body.content.trim() : undefined;
     const observationDate = typeof body?.observation_date === 'string' ? body.observation_date.trim() : null;
     const recorded_by = typeof body?.recorded_by === 'string' ? body.recorded_by.trim() : null;
+
+    // contentが送信されたが空の場合は早期に拒否（DB問い合わせ前）
+    if (rawContent !== undefined && !rawContent) {
+      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    }
 
     // Validate observation_date format if provided (YYYY-MM-DD)
     if (observationDate) {
@@ -269,7 +274,7 @@ export async function PATCH(
     }
 
     // AI解析済みの記録は本文の更新を拒否
-    if (content !== undefined && existing.is_ai_analyzed) {
+    if (rawContent !== undefined && existing.is_ai_analyzed) {
       return NextResponse.json(
         { success: false, error: 'AI解析済みの記録は本文を編集できません' },
         { status: 400 },
@@ -277,7 +282,7 @@ export async function PATCH(
     }
 
     // AI解析済みでない場合は本文が必須
-    if (!existing.is_ai_analyzed && !content) {
+    if (!existing.is_ai_analyzed && !rawContent) {
       return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
     }
 
@@ -287,8 +292,8 @@ export async function PATCH(
       updated_by: metadata.user_id,
     };
 
-    if (content !== undefined) {
-      updateData.content = content;
+    if (rawContent !== undefined) {
+      updateData.content = rawContent;
     }
 
     if (observationDate) {
