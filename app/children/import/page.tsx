@@ -337,7 +337,7 @@ export default function ChildImportPage() {
     })))
   }
 
-  // 選択行に適用（未設定の項目は既存値を維持）
+  // 選択行に適用（未設定の項目は既存値を維持）、適用後にチェックを解除
   const applyToSelectedRows = (schoolId: string, classId: string) => {
     setRowSettings((prev) =>
       prev.map((setting, idx) =>
@@ -349,6 +349,7 @@ export default function ChildImportPage() {
           : setting
       )
     )
+    setSelectedRowIdxs([])
   }
 
   const toggleRowSelection = (idx: number, checked: boolean) => {
