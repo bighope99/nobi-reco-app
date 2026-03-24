@@ -34,6 +34,17 @@ export function decryptOrFallback(encrypted: string | null | undefined): string 
 }
 
 /**
+ * エクスポート用の安全な復号関数。
+ * 復号に失敗した場合（暗号文が壊れている等）は暗号文をそのまま返さず空文字を返す。
+ * decryptOrFallback との違い: 復号失敗時に元の値を返さない（暗号文のCSV混入を防ぐ）。
+ */
+export function decryptOrEmpty(encrypted: string | null | undefined): string {
+  if (!encrypted) return '';
+  const decrypted = decryptPII(encrypted);
+  return decrypted ?? '';
+}
+
+/**
  * 名前パーツを整形する共通関数
  *
  * 複数の名前パーツ(姓、名など)を結合し、空白をトリミングして整形します。

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
-import { decryptOrFallback } from '@/utils/crypto/decryption-helper';
+import { decryptOrEmpty } from '@/utils/crypto/decryption-helper';
 
 const exportHeaders = [
   'ID',
@@ -58,7 +58,7 @@ function formatDate(isoDate: string | null): string {
   // Handle both ISO datetime and date-only formats
   const date = new Date(isoDate);
   if (isNaN(date.getTime())) return '';
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
 function formatBoolean(value: boolean | null | undefined): string {
@@ -177,10 +177,10 @@ export async function GET(request: NextRequest) {
         .filter((g: any) => g.is_emergency_contact && !g.is_primary)
         .slice(0, 2);
 
-      const decryptedFamilyName = decryptOrFallback(child.family_name) || '';
-      const decryptedGivenName = decryptOrFallback(child.given_name) || '';
-      const decryptedFamilyNameKana = decryptOrFallback(child.family_name_kana) || '';
-      const decryptedGivenNameKana = decryptOrFallback(child.given_name_kana) || '';
+      const decryptedFamilyName = decryptOrEmpty(child.family_name);
+      const decryptedGivenName = decryptOrEmpty(child.given_name);
+      const decryptedFamilyNameKana = decryptOrEmpty(child.family_name_kana);
+      const decryptedGivenNameKana = decryptOrEmpty(child.given_name_kana);
 
       // 保護者情報の復号化
       let parentName = '';
@@ -188,11 +188,11 @@ export async function GET(request: NextRequest) {
       let parentEmail = '';
       if (primaryGuardian?.m_guardians) {
         const g = primaryGuardian.m_guardians as any;
-        const gFamily = decryptOrFallback(g.family_name) || '';
-        const gGiven = decryptOrFallback(g.given_name) || '';
+        const gFamily = decryptOrEmpty(g.family_name);
+        const gGiven = decryptOrEmpty(g.given_name);
         parentName = `${gFamily} ${gGiven}`.trim() || gFamily;
-        parentPhone = decryptOrFallback(g.phone) || '';
-        parentEmail = decryptOrFallback(g.email) || '';
+        parentPhone = decryptOrEmpty(g.phone);
+        parentEmail = decryptOrEmpty(g.email);
       }
 
       // 緊急連絡先の復号化
@@ -200,12 +200,12 @@ export async function GET(request: NextRequest) {
       for (const ec of emergencyContacts) {
         if (ec.m_guardians) {
           const ecG = ec.m_guardians as any;
-          const ecFamily = decryptOrFallback(ecG.family_name) || '';
-          const ecGiven = decryptOrFallback(ecG.given_name) || '';
+          const ecFamily = decryptOrEmpty(ecG.family_name);
+          const ecGiven = decryptOrEmpty(ecG.given_name);
           ecData.push({
             name: `${ecFamily} ${ecGiven}`.trim() || ecFamily,
             relation: ec.relationship || '',
-            phone: decryptOrFallback(ecG.phone) || '',
+            phone: decryptOrEmpty(ecG.phone),
           });
         }
       }
@@ -226,9 +226,9 @@ export async function GET(request: NextRequest) {
         parentName,
         parentPhone,
         parentEmail,
-        decryptOrFallback(child.allergies) || '',
-        decryptOrFallback(child.child_characteristics) || '',
-        decryptOrFallback(child.parent_characteristics) || '',
+        decryptOrEmpty(child.allergies),
+        decryptOrEmpty(child.child_characteristics),
+        decryptOrEmpty(child.parent_characteristics),
         formatBoolean(child.photo_permission_public),
         formatBoolean(child.photo_permission_share),
         ecData[0]?.name || '',

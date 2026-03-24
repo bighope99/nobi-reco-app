@@ -16,6 +16,7 @@ jest.mock('@/lib/auth/jwt', () => ({
 
 jest.mock('@/utils/crypto/decryption-helper', () => ({
   decryptOrFallback: (value: string | null | undefined) => value || null,
+  decryptOrEmpty: (value: string | null | undefined) => value || '',
   formatName: (parts: Array<string | null | undefined>, emptyValue: string | null = null) => {
     const cleaned = parts
       .map(part => (typeof part === 'string' ? part.trim() : ''))
