@@ -1180,7 +1180,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleSaveEdit = async () => {
     if (savingEdit) return;
-    if (isNew) {
+    if (isNew && !observation) {
       await handleCreateObservation({ forceAi: true });
       return;
     }
@@ -1582,7 +1582,23 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         </div>
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" onClick={() => setIsEditing(false)}>
-                            <X className="h-4 w-4 mr-2" /> 閉じる
+                            <X className="h-4 w-4 mr-2" /> キャンセル
+                          </Button>
+                          <Button
+                            data-testid="observation-save"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit}
+                          >
+                            {savingEdit ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" /> 保存
+                              </>
+                            )}
                           </Button>
                         </div>
                       </>
