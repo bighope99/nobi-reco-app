@@ -178,7 +178,10 @@ export default function ChildImportPage() {
       }
 
       setPreviewResult(json.data)
-      setApprovedSiblingPhones([])
+      // 兄弟候補はデフォルト承認（拒否する場合のみ除外）
+      setApprovedSiblingPhones(
+        (json.data?.sibling_candidates ?? []).map((c: SiblingCandidate) => c.phone_key)
+      )
       setApprovedDuplicateRows([])
       // プレビュー取得後、rowSettings を空で初期化
       const rows: PreviewRow[] = json.data?.rows ?? []
@@ -630,24 +633,26 @@ export default function ChildImportPage() {
                   </div>
                   )}
                 </div>
-                {selectedRowIdxs.length > 0 && previewResult && (
+                {previewResult && (
                   <div className="flex items-center gap-3 pt-2 border-t border-amber-200/40">
-                    <span className="text-xs text-amber-700 font-medium">
-                      {selectedRowIdxs.length}行選択中:
+                    <span className="text-xs text-amber-700 font-medium min-w-[80px]">
+                      {selectedRowIdxs.length > 0 ? `${selectedRowIdxs.length}行選択中:` : '行を選択:'}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                      className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-40"
                       onClick={() => applyToSelectedRows(selectedSchoolId, selectedClassId)}
+                      disabled={selectedRowIdxs.length === 0}
                     >
                       選択行に学校・クラスを適用
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-xs text-muted-foreground"
+                      className="text-xs text-muted-foreground disabled:opacity-40"
                       onClick={() => setSelectedRowIdxs([])}
+                      disabled={selectedRowIdxs.length === 0}
                     >
                       選択解除
                     </Button>
@@ -832,7 +837,7 @@ export default function ChildImportPage() {
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-semibold text-foreground/80">兄弟候補の確認</h4>
                       <span className="text-xs text-muted-foreground">
-                        電話番号単位で承認（表示は保護者名）
+                        デフォルト承認。拒否する場合のみボタンを押してください
                       </span>
                     </div>
                     {(previewResult.sibling_candidates ?? []).length === 0 ? (
@@ -844,23 +849,29 @@ export default function ChildImportPage() {
                             key={candidate.phone_key}
                             className="rounded-lg border bg-background/80 p-4 space-y-2"
                           >
-                            <div className="flex items-center gap-3">
-                              <Checkbox
-                                id={`sibling-${candidate.phone_key}`}
-                                checked={approvedSiblingPhones.includes(candidate.phone_key)}
-                                onCheckedChange={(checked) =>
-                                  toggleSiblingApproval(candidate.phone_key, Boolean(checked))
-                                }
-                              />
-                              <label
-                                htmlFor={`sibling-${candidate.phone_key}`}
-                                className="text-sm font-semibold cursor-pointer"
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold">
+                                  保護者: {candidate.guardian_names.join(" / ")}
+                                </span>
+                                {approvedSiblingPhones.includes(candidate.phone_key) ? (
+                                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">承認</span>
+                                ) : (
+                                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">拒否</span>
+                                )}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={`text-xs shrink-0 ${
+                                  approvedSiblingPhones.includes(candidate.phone_key)
+                                    ? 'text-red-600 border-red-200 hover:bg-red-50'
+                                    : 'text-green-600 border-green-200 hover:bg-green-50'
+                                }`}
+                                onClick={() => toggleSiblingApproval(candidate.phone_key, !approvedSiblingPhones.includes(candidate.phone_key))}
                               >
-                                承認する
-                              </label>
-                              <span className="text-xs text-muted-foreground">
-                                保護者: {candidate.guardian_names.join(" / ")}
-                              </span>
+                                {approvedSiblingPhones.includes(candidate.phone_key) ? '拒否する' : '承認に戻す'}
+                              </Button>
                             </div>
                             <div className="text-xs text-muted-foreground">
                               兄弟候補:
