@@ -296,6 +296,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
+  const [isDateEditing, setIsDateEditing] = useState(false);
+  const [isRecorderEditing, setIsRecorderEditing] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -947,7 +949,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ...normalizedFlags,
       };
 
-      // TODO: API実装 - AI解析結果の更新処理
+      // TODO: API実装 - 観察内容分類の更新処理
       const response = await fetch(`/api/records/personal/${observation.id}/ai`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -957,7 +959,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'AI解析結果の保存に失敗しました');
+        throw new Error(result.error || '観察内容分類の保存に失敗しました');
       }
 
       setAiEditSuccess(true);
@@ -1204,6 +1206,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     Object.values(aiEditForm.flags).some(Boolean) ||
     aiEditForm.ai_action.trim().length > 0 ||
     aiEditForm.ai_opinion.trim().length > 0;
+
+  // AI解析済みの記録を編集中かどうか
+  const isAiEditMode = !isNew && isEditing && Boolean(observation?.ai_action?.trim() || observation?.ai_opinion?.trim());
 
   const displayRecentContent = useCallback(
     (text: string) => toDisplayText(text),
@@ -1483,6 +1488,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
+            {!isAiEditMode && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1659,13 +1665,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 )}
               </CardContent>
             </Card>
+            )}
 
             {hasAiOutput && (
               <Card>
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="flex items-center gap-2">
-                      <Brain className="h-5 w-5 text-purple-600" /> AI解析結果
+                      <Brain className="h-5 w-5 text-purple-600" /> 観察内容分類
                     </CardTitle>
                     {aiProcessing && (
                       <Badge className="bg-blue-100 text-blue-700">
@@ -1675,6 +1682,92 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {isAiEditMode && (
+                    <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-green-600" />
+                        <span className="text-gray-600">観察日</span>
+                        {isDateEditing ? (
+                          <div className="flex items-center gap-1">
+                            <div className="min-w-[180px]">
+                              <DatePicker
+                                date={observationDate ?? undefined}
+                                onSelect={(date) => date && setObservationDate(date)}
+                                placeholder="記録日を選択"
+                                disabled={savingEdit}
+                              />
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(false)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span>{observation ? formatDate(observation.observed_at) : '未保存'}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(true)}>
+                              <Pencil className="h-3 w-3 mr-1" /> 変更
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-orange-600" />
+                        <span className="text-gray-600">記録者</span>
+                        {isRecorderEditing ? (
+                          <div className="flex items-center gap-1">
+                            {staffLoadError ? (
+                              <span className="text-sm text-destructive">記録者情報の取得に失敗しました</span>
+                            ) : staffList.length > 0 ? (
+                              <Select value={selectedRecorder} onValueChange={setSelectedRecorder}>
+                                <SelectTrigger className="h-8 w-[160px]">
+                                  <SelectValue placeholder="記録者を選択" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {staffList.map((staff) => (
+                                    <SelectItem key={staff.user_id} value={staff.user_id}>
+                                      {staff.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-sm text-gray-500">読み込み中...</span>
+                            )}
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(false)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">{recorderDisplayName}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(true)}>
+                              <Pencil className="h-3 w-3 mr-1" /> 変更
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-auto flex items-center gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditing(false); setIsDateEditing(false); setIsRecorderEditing(false); }}>
+                          <X className="h-3 w-3 mr-1" /> 編集終了
+                        </Button>
+                        {(isDateEditing || isRecorderEditing) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit}
+                          >
+                            {savingEdit ? (
+                              <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> 保存中...</>
+                            ) : (
+                              <><Save className="h-3 w-3 mr-1" /> 保存</>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <form className="space-y-4" onSubmit={handleAiEditSubmit}>
                     <div>
                       <div className="flex items-center justify-between">
@@ -1756,7 +1849,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <div className="rounded-md border border-green-200 bg-green-50 p-4 text-green-800">
                         <div className="flex items-center gap-2">
                           <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>AI解析結果を保存しました</span>
+                          <span>観察内容分類を保存しました</span>
                         </div>
                       </div>
                     )}
