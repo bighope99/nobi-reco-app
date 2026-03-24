@@ -496,9 +496,9 @@ export async function POST(request: NextRequest) {
       const rowOverride = rowSettings?.[i];
       const defaults = rowOverride
         ? {
-            // null は「グローバルデフォルトを継承」、"" は「明示的に未設定」を表す
-            school_id: rowOverride.school_id === null ? globalDefaults.school_id : (rowOverride.school_id ?? globalDefaults.school_id),
-            class_id: rowOverride.class_id === null ? globalDefaults.class_id : (rowOverride.class_id ?? globalDefaults.class_id),
+            // undefined は「グローバルデフォルトを継承」（上書きしない）
+            school_id: rowOverride.school_id ?? globalDefaults.school_id,
+            class_id: rowOverride.class_id ?? globalDefaults.class_id,
           }
         : globalDefaults;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
