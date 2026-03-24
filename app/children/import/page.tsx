@@ -527,7 +527,7 @@ export default function ChildImportPage() {
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   CSVの取り込み対象として、所属施設・学校・クラスを指定してください。学校・クラスは以下のプレビュー表で行ごとに変更することもできます。
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`grid grid-cols-1 gap-4 ${classes.length > 0 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">子どもの所属施設</Label>
                     <Select
@@ -586,6 +586,7 @@ export default function ChildImportPage() {
                       )}
                     </div>
                   </div>
+                  {classes.length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">クラス</Label>
                     <div className="flex gap-2">
@@ -619,6 +620,7 @@ export default function ChildImportPage() {
                       )}
                     </div>
                   </div>
+                  )}
                 </div>
                 {selectedRowIdxs.length > 0 && previewResult && (
                   <div className="flex items-center gap-3 pt-2 border-t border-amber-200/40">
@@ -687,7 +689,7 @@ export default function ChildImportPage() {
                             />
                           </th>
                           <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">学校</th>
-                          <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">クラス</th>
+                          {classes.length > 0 && <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">クラス</th>}
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 w-16">行</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">氏名</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">生年月日</th>
@@ -737,6 +739,7 @@ export default function ChildImportPage() {
                                 </SelectContent>
                               </Select>
                             </td>
+                            {classes.length > 0 && (
                             <td className="px-3 py-2">
                               <Select
                                 value={rowSettings[idx]?.class_id || "__none__"}
@@ -756,6 +759,7 @@ export default function ChildImportPage() {
                                 </SelectContent>
                               </Select>
                             </td>
+                            )}
                             <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.row}</td>
                             <td className="px-4 py-3 font-medium">
                               {row.family_name} {row.given_name}
