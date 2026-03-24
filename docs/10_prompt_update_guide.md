@@ -8,6 +8,8 @@ GeminiなどのAI解析プロンプトを変更する際は、以下のファイ
 - `app/records/activity/page.tsx`: AI解析の呼び出しUI・結果反映
 - `docs/04_api.md`: AI解析APIの仕様（`/ai/extract`）
 
+> **注意**: AI解析は新規記録作成時のみ実行されます。編集時はAI再解析を行わず、事実・所感を直接編集する仕様です（`docs/api/10_activity_record_api.md` 参照）。
+
 ## 2. 活動記録から児童別抽出（Gemini）
 - `lib/ai/prompts.ts`: 抽出用プロンプト（`buildActivityExtractionMessages`）
 - `lib/ai/contentExtractor.ts`: 抽出の呼び出し経路

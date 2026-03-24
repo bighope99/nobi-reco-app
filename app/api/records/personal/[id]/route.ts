@@ -110,6 +110,9 @@ export async function GET(
           id,
           observation_date,
           content,
+          objective,
+          subjective,
+          is_ai_analyzed,
           created_at,
           record_tags:_record_tag!observation_id (
             tag_id
@@ -174,6 +177,9 @@ export async function GET(
           id: obs.id,
           observation_date: obs.observation_date,
           content: obs.content,
+          objective: obs.objective ?? null,
+          subjective: obs.subjective ?? null,
+          is_ai_analyzed: obs.is_ai_analyzed ?? false,
           created_at: obs.created_at,
           tag_ids: (() => {
             const fromJoin = Array.isArray(obs.record_tags)
@@ -213,11 +219,12 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const content = typeof body?.content === 'string' ? body.content.trim() : '';
+    const rawContent = typeof body?.content === 'string' ? body.content.trim() : undefined;
     const observationDate = typeof body?.observation_date === 'string' ? body.observation_date.trim() : null;
     const recorded_by = typeof body?.recorded_by === 'string' ? body.recorded_by.trim() : null;
 
-    if (!content) {
+    // contentが送信されたが空の場合は早期に拒否（DB問い合わせ前）
+    if (rawContent !== undefined && !rawContent) {
       return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
     }
 
@@ -250,6 +257,7 @@ export async function PATCH(
         `
         id,
         child_id,
+        is_ai_analyzed,
         m_children!inner (
           facility_id
         )
@@ -271,12 +279,28 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
+    // AI解析済みの記録は本文の更新を拒否
+    if (rawContent !== undefined && existing.is_ai_analyzed) {
+      return NextResponse.json(
+        { success: false, error: 'AI解析済みの記録は本文を編集できません' },
+        { status: 400 },
+      );
+    }
+
+    // AI解析済みでない場合は本文が必須
+    if (!existing.is_ai_analyzed && !rawContent) {
+      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    }
+
     // Build update object dynamically
     const updateData: Record<string, unknown> = {
-      content,
       updated_at: new Date().toISOString(),
       updated_by: metadata.user_id,
     };
+
+    if (rawContent !== undefined) {
+      updateData.content = rawContent;
+    }
 
     if (observationDate) {
       updateData.observation_date = observationDate;

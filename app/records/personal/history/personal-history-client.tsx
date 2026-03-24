@@ -29,6 +29,9 @@ interface PersonalItem {
   category: string | null
   categoryColor: string | null
   content: string
+  objective: string | null
+  subjective: string | null
+  isAiAnalyzed: boolean
   staffName: string
 }
 
@@ -130,6 +133,9 @@ export default function PersonalHistoryClient() {
         category?: string
         category_color?: string
         content: string
+        objective?: string | null
+        subjective?: string | null
+        is_ai_analyzed?: boolean
         staff_name?: string
         recorded_by_name?: string | null
       }) => ({
@@ -142,6 +148,9 @@ export default function PersonalHistoryClient() {
         category: o.category || null,
         categoryColor: o.category_color || null,
         content: o.content,
+        objective: o.objective ?? null,
+        subjective: o.subjective ?? null,
+        isAiAnalyzed: o.is_ai_analyzed ?? false,
         staffName: o.recorded_by_name || o.staff_name || '',
       }))
 
@@ -369,7 +378,24 @@ export default function PersonalHistoryClient() {
                           </Link>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-slate-700 text-sm whitespace-pre-wrap">{item.content}</div>
+                          {item.isAiAnalyzed && (item.objective || item.subjective) ? (
+                            <div className="space-y-1">
+                              {item.objective && (
+                                <div>
+                                  <span className="text-xs font-bold text-slate-500">事実：</span>
+                                  <span className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.objective}</span>
+                                </div>
+                              )}
+                              {item.subjective && (
+                                <div>
+                                  <span className="text-xs font-bold text-slate-500">所感：</span>
+                                  <span className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.subjective}</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.content}</div>
+                          )}
                           {item.category && (
                             <div className="mt-2">
                               <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-bold border border-amber-100">
