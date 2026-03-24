@@ -1697,7 +1697,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
                         disabled={aiEditSaving}
                         maxLength={AI_RESULT_MAX}
-                        placeholder="今日この子の行動を見て感じたこと・発見したことは？"
                       />
                     </div>
                     <div className="space-y-3">
