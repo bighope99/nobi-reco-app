@@ -1207,9 +1207,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     aiEditForm.ai_action.trim().length > 0 ||
     aiEditForm.ai_opinion.trim().length > 0;
 
-  // AI解析済みの記録を編集中かどうか
-  const isAiEditMode = !isNew && isEditing && Boolean(observation?.ai_action?.trim() || observation?.ai_opinion?.trim());
-
   const displayRecentContent = useCallback(
     (text: string) => toDisplayText(text),
     [toDisplayText],
@@ -1488,7 +1485,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            {!isAiEditMode && (
+            {!(mode === 'edit' && hasAiOutput) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1682,7 +1679,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {isAiEditMode && (
+                  {mode === 'edit' && hasAiOutput && (
                     <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-green-600" />
