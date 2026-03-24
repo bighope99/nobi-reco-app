@@ -214,7 +214,15 @@ export async function POST(request: NextRequest) {
     }
 
     const text = await file.text();
-    const { rows } = parseCsvText(text);
+    const { headers, rows } = parseCsvText(text);
+
+    // 古いフォーマット検出（学校名・クラス名列は新フォーマットから削除済み）
+    if (headers.includes('学校名') || headers.includes('クラス名')) {
+      return NextResponse.json(
+        { success: false, error: '古いCSVフォーマットです。最新フォーマットでエクスポートし直してからインポートしてください。' },
+        { status: 400 }
+      );
+    }
 
     if (rows.length === 0) {
       return NextResponse.json({ success: false, error: 'CSVにデータがありません' }, { status: 400 });

@@ -115,6 +115,17 @@ export function buildChildPayload(
 
   const emergencyContacts = buildEmergencyContacts(row);
 
+  // 緊急連絡先の電話番号バリデーション
+  for (let ecIdx = 0; ecIdx < emergencyContacts.length; ecIdx++) {
+    const ec = emergencyContacts[ecIdx];
+    if (ec.name?.trim() && ec.phone?.trim()) {
+      const normalizedEcPhone = normalizePhone(ec.phone);
+      if (normalizedEcPhone.length < 10 || normalizedEcPhone.length > 15) {
+        errors.push(`緊急連絡先${ecIdx + 1}の電話番号が不正です（10〜15桁で入力してください）`);
+      }
+    }
+  }
+
   const payload: ChildPayload = {
     child_id: childId,
     basic_info: {
