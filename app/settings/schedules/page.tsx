@@ -217,6 +217,16 @@ export default function ScheduleSettingsPage() {
       fri: '13:00',
     };
 
+    const targetSchool = schools.find((s) => s.id === schoolId);
+    if (!targetSchool) return;
+    const usedGradeIds = new Set(targetSchool.schedules.flatMap((s) => s.gradeIds));
+    const initialGrade = grades.find((grade) => !usedGradeIds.has(grade.id))?.id;
+    if (!initialGrade) {
+      alert('追加できる学年がありません。すべての学年がすでにスケジュールに割り当てられています。');
+      setAddingScheduleForSchool(null);
+      return;
+    }
+
     // 楽観的にUIに仮スケジュールを追加
     setSchools((prev) =>
       prev.map((school) => {
@@ -225,7 +235,7 @@ export default function ScheduleSettingsPage() {
             ...school,
             schedules: [
               ...school.schedules,
-              { scheduleId: tempId, gradeIds: ['1'], weekdayTimes: defaultWeekdayTimes, lateThresholdMinutes: 30 },
+              { scheduleId: tempId, gradeIds: [initialGrade], weekdayTimes: defaultWeekdayTimes, lateThresholdMinutes: schoolLateThresholds[schoolId] ?? 30 },
             ],
           };
         }
@@ -238,7 +248,7 @@ export default function ScheduleSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grades: ['1'],
+          grades: [initialGrade],
           weekday_times: {
             monday: '13:00',
             tuesday: '13:00',
@@ -450,7 +460,7 @@ export default function ScheduleSettingsPage() {
       }
 
       // ローカル状態を更新
-      setSchools(schools.filter((s) => s.id !== schoolId));
+      setSchools((prev) => prev.filter((s) => s.id !== schoolId));
       setSchoolLateThresholds((prev) => {
         const next = { ...prev };
         delete next[schoolId];
@@ -647,7 +657,7 @@ export default function ScheduleSettingsPage() {
                               max={120}
                               value={schoolLateThresholds[school.id] ?? 30}
                               onChange={(e: any) =>
-                                handleUpdateSchoolLateThreshold(school.id, parseInt(e.target.value, 10) || 0)
+                                handleUpdateSchoolLateThreshold(school.id, Math.max(0, Math.min(120, parseInt(e.target.value, 10) || 0)))
                               }
                               className="w-20 text-sm py-1.5 text-center"
                             />
