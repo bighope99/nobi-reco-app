@@ -215,6 +215,15 @@ export default function ScheduleSettingsPage() {
       fri: '13:00',
     };
 
+    // 既存スケジュールで使用済みの学年を収集し、最初の未使用学年を選ぶ
+    const targetSchool = schools.find((s) => s.id === schoolId);
+    const usedGrades = new Set(
+      (targetSchool?.schedules ?? []).flatMap((s) => s.gradeIds)
+    );
+    const allGrades = ['1', '2', '3', '4', '5', '6'];
+    const firstUnusedGrade = allGrades.find((g) => !usedGrades.has(g));
+    const defaultGrades = firstUnusedGrade ? [firstUnusedGrade] : [];
+
     // 楽観的にUIに仮スケジュールを追加
     setSchools((prev) =>
       prev.map((school) => {
@@ -223,7 +232,7 @@ export default function ScheduleSettingsPage() {
             ...school,
             schedules: [
               ...school.schedules,
-              { scheduleId: tempId, gradeIds: ['1'], weekdayTimes: defaultWeekdayTimes },
+              { scheduleId: tempId, gradeIds: defaultGrades, weekdayTimes: defaultWeekdayTimes },
             ],
           };
         }
@@ -236,7 +245,7 @@ export default function ScheduleSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grades: ['1'],
+          grades: defaultGrades,
           weekday_times: {
             monday: '13:00',
             tuesday: '13:00',
