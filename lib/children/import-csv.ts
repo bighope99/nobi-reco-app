@@ -136,14 +136,14 @@ export function buildChildPayload(
       nickname: getValue(row, headerLabels.nickname) || null,
       gender,
       birth_date: birthDate,
-      school_id: defaults.school_id || null,
+      school_id: defaults.school_id ?? undefined,
     },
     affiliation: {
       enrollment_status: enrollmentStatus,
       enrollment_type: enrollmentType,
       enrolled_at: enrolledAt,
       withdrawn_at: getValue(row, headerLabels.withdrawn_at) || null,
-      class_id: defaults.class_id || null,
+      class_id: defaults.class_id ?? undefined,
     },
     contact: {
       parent_name: parentName || undefined,

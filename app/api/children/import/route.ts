@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     const mode = (formData.get('mode') || 'commit') as string;
 
     // 行ごとの学校・クラス設定（フロントから送られる場合はこちらを優先）
-    let rowSettings: Array<{ school_id: string | null; class_id: string | null }> | null = null;
+    let rowSettings: Array<{ school_id: string | undefined; class_id: string | undefined }> | null = null;
     const rowSettingsRaw = formData.get('row_settings');
     if (typeof rowSettingsRaw === 'string' && rowSettingsRaw.trim().length > 0) {
       try {
@@ -174,8 +174,8 @@ export async function POST(request: NextRequest) {
           );
         }
         rowSettings = parsed.map((entry: { school_id?: string | null; class_id?: string | null }) => ({
-          school_id: entry.school_id ?? null,
-          class_id: entry.class_id ?? null,
+          school_id: entry.school_id || undefined,
+          class_id: entry.class_id || undefined,
         }));
       } catch {
         return NextResponse.json(
@@ -278,8 +278,8 @@ export async function POST(request: NextRequest) {
     }
 
     const globalDefaults = {
-      school_id: schoolId || null,
-      class_id: classId || null,
+      school_id: schoolId || undefined,
+      class_id: classId || undefined,
     };
 
     // 承認済み重複行の取得（commitモード用）
