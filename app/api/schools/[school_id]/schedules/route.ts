@@ -88,6 +88,24 @@ export async function POST(
       }
     }
 
+    // 同一学校内の学年重複チェック
+    const { data: existingSchedules } = await supabase
+      .from('s_school_schedules')
+      .select('id, grades')
+      .eq('school_id', school_id)
+      .is('deleted_at', null);
+
+    if (existingSchedules && existingSchedules.length > 0) {
+      const usedGrades = new Set(existingSchedules.flatMap((s: { id: string; grades: string[] }) => s.grades));
+      const duplicates = (body.grades as string[]).filter((g: string) => usedGrades.has(g));
+      if (duplicates.length > 0) {
+        return NextResponse.json(
+          { success: false, error: '同一学校内で学年が重複しています' },
+          { status: 400 }
+        );
+      }
+    }
+
     // スケジュール作成
     const { data: newSchedule, error: createError } = await supabase
       .from('s_school_schedules')

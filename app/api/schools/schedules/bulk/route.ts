@@ -53,6 +53,37 @@ export async function PUT(request: NextRequest) {
         ? [current_facility_id]
         : null;
 
+    // 同一学校内の学年重複チェック（gradesが指定されているものだけ対象）
+    {
+      const schoolGradeMap: Record<string, Record<string, string>> = {};
+      for (const update of body.updates) {
+        if (!update.schedule_id || !Array.isArray(update.grades)) continue;
+
+        // schedule から school_id を取得
+        const { data: scheduleInfo } = await supabase
+          .from('s_school_schedules')
+          .select('school_id')
+          .eq('id', update.schedule_id)
+          .is('deleted_at', null)
+          .single();
+
+        if (!scheduleInfo) continue;
+
+        const schoolId = scheduleInfo.school_id as string;
+        if (!schoolGradeMap[schoolId]) schoolGradeMap[schoolId] = {};
+
+        for (const grade of update.grades) {
+          if (schoolGradeMap[schoolId][grade] && schoolGradeMap[schoolId][grade] !== update.schedule_id) {
+            return NextResponse.json(
+              { success: false, error: '同一学校内で学年が重複しています' },
+              { status: 400 }
+            );
+          }
+          schoolGradeMap[schoolId][grade] = update.schedule_id;
+        }
+      }
+    }
+
     const results = [];
     let updatedCount = 0;
     let failedCount = 0;
