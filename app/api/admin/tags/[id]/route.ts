@@ -164,7 +164,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       .from('m_observation_tags')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .select('id', { count: 'exact', head: true });
 
     if (error) {
       throw error;

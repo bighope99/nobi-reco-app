@@ -197,19 +197,30 @@ export default function TagsPage() {
 
     const oldIndex = tags.findIndex((t) => t.id === active.id)
     const newIndex = tags.findIndex((t) => t.id === over.id)
+    const prevTags = tags
     const reordered = arrayMove(tags, oldIndex, newIndex)
 
     setTags(reordered)
 
-    await Promise.all(
-      reordered.map((tag, index) =>
-        fetch(`/api/admin/tags/${tag.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sort_order: index + 1 }),
-        })
+    // sort_orderが変化したタグのみ更新
+    const updates = reordered
+      .map((tag, index) => ({ ...tag, newSortOrder: index + 1 }))
+      .filter((t) => t.sort_order !== t.newSortOrder)
+
+    try {
+      await Promise.all(
+        updates.map((t) =>
+          fetch(`/api/admin/tags/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sort_order: t.newSortOrder }),
+          })
+        )
       )
-    )
+    } catch {
+      setError("並び替えの保存に失敗しました")
+      setTags(prevTags)
+    }
   }
 
   const openAddDialog = () => {
