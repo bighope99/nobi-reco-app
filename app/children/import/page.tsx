@@ -15,10 +15,16 @@ import {
 } from "@/components/ui/select"
 import { Upload, Download } from "lucide-react"
 import { useSession } from "@/hooks/useSession"
+import { useRole } from "@/hooks/useRole"
 
 type FacilityOption = { facility_id: string; name: string }
 type SchoolOption = { school_id: string; name: string }
 type ClassOption = { class_id: string; class_name: string }
+type DuplicateInfo = {
+  child_id: string
+  name: string
+  birth_date: string
+}
 type PreviewRow = {
   row: number
   family_name: string
@@ -29,6 +35,7 @@ type PreviewRow = {
   enrolled_at: string
   parent_name: string
   errors: string[]
+  duplicates?: DuplicateInfo[]
 }
 type SiblingCandidate = {
   phone_key: string
@@ -42,6 +49,7 @@ type SiblingCandidate = {
 
 export default function ChildImportPage() {
   const session = useSession()
+  const { isFacilityAdmin, isStaff } = useRole()
   const [facilities, setFacilities] = useState<FacilityOption[]>([])
   const [schools, setSchools] = useState<SchoolOption[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
@@ -63,6 +71,7 @@ export default function ChildImportPage() {
     sibling_candidates: SiblingCandidate[]
   } | null>(null)
   const [approvedSiblingPhones, setApprovedSiblingPhones] = useState<string[]>([])
+  const [approvedDuplicateRows, setApprovedDuplicateRows] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -94,7 +103,7 @@ export default function ChildImportPage() {
   // sessionロード時: facility_admin/staffは自施設を自動選択
   useEffect(() => {
     if (!session) return
-    if (session.role === 'facility_admin' || session.role === 'staff') {
+    if (isFacilityAdmin || isStaff) {
       if (session.current_facility_id) {
         setSelectedFacilityId(session.current_facility_id)
       }
@@ -166,6 +175,7 @@ export default function ChildImportPage() {
 
       setPreviewResult(json.data)
       setApprovedSiblingPhones([])
+      setApprovedDuplicateRows([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "プレビューの取得に失敗しました")
     } finally {
@@ -216,6 +226,7 @@ export default function ChildImportPage() {
       const formData = new FormData()
       formData.append("file", selectedFile)
       formData.append("approved_phone_keys", JSON.stringify(approvedSiblingPhones))
+      formData.append("approved_duplicate_rows", JSON.stringify(approvedDuplicateRows))
       if (selectedFacilityId) formData.append("facility_id", selectedFacilityId)
       if (selectedSchoolId) formData.append("school_id", selectedSchoolId)
       if (selectedClassId) formData.append("class_id", selectedClassId)
@@ -231,7 +242,7 @@ export default function ChildImportPage() {
       }
 
       setImportResult(json.data)
-      if (session?.role !== 'facility_admin' && session?.role !== 'staff') {
+      if (!isFacilityAdmin && !isStaff) {
         setSelectedFacilityId("")
       }
       setSelectedSchoolId("")
@@ -255,6 +266,7 @@ export default function ChildImportPage() {
     setPreviewResult(null)
     setImportResult(null)
     setApprovedSiblingPhones([])
+    setApprovedDuplicateRows([])
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -387,7 +399,18 @@ export default function ChildImportPage() {
                     importing ||
                     previewLoading ||
                     !previewResult ||
-                    previewResult.failure_count > 0
+                    (() => {
+                      // 重複以外のエラーがある行はブロック
+                      const hasNonDuplicateErrors = previewResult.rows.some(
+                        (r) => r.errors.length > 0 && (!r.duplicates || r.duplicates.length === 0)
+                      )
+                      if (hasNonDuplicateErrors) return true
+                      // 重複エラーの行で未承認のものがあればブロック
+                      const unapprovedDuplicates = previewResult.rows.filter(
+                        (r) => r.duplicates && r.duplicates.length > 0 && !approvedDuplicateRows.includes(r.row)
+                      )
+                      return unapprovedDuplicates.length > 0
+                    })()
                   }
                 >
                   {importing ? "取り込み中..." : "保存する"}
@@ -446,7 +469,7 @@ export default function ChildImportPage() {
                     <Select
                       value={selectedFacilityId}
                       onValueChange={setSelectedFacilityId}
-                      disabled={loading || previewLoading || session?.role === 'facility_admin' || session?.role === 'staff'}
+                      disabled={loading || previewLoading || isFacilityAdmin || isStaff}
                     >
                       <SelectTrigger className="bg-background/80 backdrop-blur">
                         <SelectValue placeholder="施設を選択" />
@@ -577,9 +600,32 @@ export default function ChildImportPage() {
                             <td className="px-4 py-3">{row.parent_name}</td>
                             <td className="px-4 py-3">
                               {row.errors.length > 0 && (
-                                <span className="text-xs text-red-600 font-medium leading-relaxed">
-                                  {row.errors.join(", ")}
-                                </span>
+                                <div className="space-y-1">
+                                  <span className="text-xs text-red-600 font-medium leading-relaxed">
+                                    {row.errors.filter(e => !e.startsWith('重複:')).join(", ")}
+                                  </span>
+                                  {row.duplicates && row.duplicates.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-amber-600 font-medium">
+                                        重複: {row.duplicates.map(d => d.name).join(", ")}
+                                      </span>
+                                      {approvedDuplicateRows.includes(row.row) ? (
+                                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                                          承認済み
+                                        </span>
+                                      ) : (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs font-medium text-amber-700 border-amber-300 hover:bg-amber-50"
+                                          onClick={() => setApprovedDuplicateRows(prev => [...prev, row.row])}
+                                        >
+                                          別人として登録する
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
