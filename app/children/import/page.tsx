@@ -82,8 +82,8 @@ export default function ChildImportPage() {
 
   // 行ごとの学校・クラス設定
   const [rowSettings, setRowSettings] = useState<RowSetting[]>([])
-  // 範囲選択のアンカー行インデックス（ここから下に一括適用）
-  const [anchorRowIdx, setAnchorRowIdx] = useState<number | null>(null)
+  // 行選択（複数選択可）
+  const [selectedRowIdxs, setSelectedRowIdxs] = useState<number[]>([])
 
   // 初期ロード: 施設一覧のみ取得
   useEffect(() => {
@@ -166,8 +166,6 @@ export default function ChildImportPage() {
       formData.append("file", file)
       formData.append("mode", "preview")
       if (selectedFacilityId) formData.append("facility_id", selectedFacilityId)
-      if (selectedSchoolId) formData.append("school_id", selectedSchoolId)
-      if (selectedClassId) formData.append("class_id", selectedClassId)
 
       const response = await fetch("/api/children/import", {
         method: "POST",
@@ -182,16 +180,16 @@ export default function ChildImportPage() {
       setPreviewResult(json.data)
       setApprovedSiblingPhones([])
       setApprovedDuplicateRows([])
-      setAnchorRowIdx(null)
-      // プレビュー取得後、rowSettings を一括設定値で初期化
+      // プレビュー取得後、rowSettings を空で初期化
       const rows: PreviewRow[] = json.data?.rows ?? []
-      setRowSettings(rows.map(() => ({ school_id: selectedSchoolId, class_id: selectedClassId })))
+      setRowSettings(rows.map(() => ({ school_id: "", class_id: "" })))
+      setSelectedRowIdxs([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "プレビューの取得に失敗しました")
     } finally {
       setPreviewLoading(false)
     }
-  }, [selectedFacilityId, selectedSchoolId, selectedClassId])
+  }, [selectedFacilityId])
 
   const validateFileType = (file: File): string | null => {
     const name = file.name.toLowerCase()
@@ -220,7 +218,7 @@ export default function ChildImportPage() {
     if (selectedFile) {
       requestPreview(selectedFile)
     }
-  }, [selectedFile, selectedFacilityId, selectedSchoolId, selectedClassId, requestPreview])
+  }, [selectedFile, selectedFacilityId, requestPreview])
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -303,7 +301,7 @@ export default function ChildImportPage() {
     setApprovedSiblingPhones([])
     setApprovedDuplicateRows([])
     setRowSettings([])
-    setAnchorRowIdx(null)
+    setSelectedRowIdxs([])
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -333,13 +331,18 @@ export default function ChildImportPage() {
     setRowSettings((prev) => prev.map(() => ({ school_id: schoolId, class_id: classId })))
   }
 
-  // アンカー行以降に一括適用
-  const applyFromAnchor = (schoolId: string, classId: string) => {
-    if (anchorRowIdx === null) return
+  // 選択行に適用
+  const applyToSelectedRows = (schoolId: string, classId: string) => {
     setRowSettings((prev) =>
       prev.map((setting, idx) =>
-        idx >= anchorRowIdx ? { school_id: schoolId, class_id: classId } : setting
+        selectedRowIdxs.includes(idx) ? { school_id: schoolId, class_id: classId } : setting
       )
+    )
+  }
+
+  const toggleRowSelection = (idx: number, checked: boolean) => {
+    setSelectedRowIdxs((prev) =>
+      checked ? [...prev, idx] : prev.filter((i) => i !== idx)
     )
   }
 
@@ -548,7 +551,7 @@ export default function ChildImportPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-semibold">学校（全行に適用）</Label>
+                    <Label className="text-sm font-semibold">学校</Label>
                     <div className="flex gap-2">
                       <Select
                         value={selectedSchoolId}
@@ -583,7 +586,7 @@ export default function ChildImportPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-semibold">クラス（全行に適用）</Label>
+                    <Label className="text-sm font-semibold">クラス</Label>
                     <div className="flex gap-2">
                       <Select
                         value={selectedClassId}
@@ -615,26 +618,26 @@ export default function ChildImportPage() {
                     </div>
                   </div>
                 </div>
-                {anchorRowIdx !== null && previewResult && (
+                {selectedRowIdxs.length > 0 && previewResult && (
                   <div className="flex items-center gap-3 pt-2 border-t border-amber-200/40">
                     <span className="text-xs text-amber-700 font-medium">
-                      {anchorRowIdx + 1}行目以降に適用:
+                      {selectedRowIdxs.length}行選択中:
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
                       className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
-                      onClick={() => applyFromAnchor(selectedSchoolId, selectedClassId)}
+                      onClick={() => applyToSelectedRows(selectedSchoolId, selectedClassId)}
                     >
-                      選択行以降に現在の学校・クラスを適用
+                      選択行に学校・クラスを適用
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="text-xs text-muted-foreground"
-                      onClick={() => setAnchorRowIdx(null)}
+                      onClick={() => setSelectedRowIdxs([])}
                     >
-                      解除
+                      選択解除
                     </Button>
                   </div>
                 )}
@@ -666,7 +669,20 @@ export default function ChildImportPage() {
                       <thead className="bg-gradient-to-r from-muted/60 to-muted/40 border-b-2 border-border sticky top-0">
                         <tr>
                           <th className="px-3 py-3 text-left font-semibold text-foreground/80 w-10">
-                            <span className="text-xs text-muted-foreground">選択</span>
+                            <Checkbox
+                              checked={
+                                previewResult != null &&
+                                previewResult.rows.length > 0 &&
+                                selectedRowIdxs.length === previewResult.rows.length
+                              }
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedRowIdxs(previewResult?.rows.map((_, i) => i) ?? [])
+                                } else {
+                                  setSelectedRowIdxs([])
+                                }
+                              }}
+                            />
                           </th>
                           <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">学校</th>
                           <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">クラス</th>
@@ -685,8 +701,8 @@ export default function ChildImportPage() {
                           <tr
                             key={row.row}
                             className={`transition-colors hover:bg-muted/30 ${
-                              anchorRowIdx !== null && idx === anchorRowIdx
-                                ? 'bg-amber-50/60 ring-1 ring-amber-300'
+                              selectedRowIdxs.includes(idx)
+                                ? 'bg-primary/5 ring-1 ring-inset ring-primary/20'
                                 : row.errors.length > 0
                                 ? 'bg-red-50/40'
                                 : idx % 2 === 0
@@ -695,18 +711,10 @@ export default function ChildImportPage() {
                             }`}
                           >
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                title="この行以降に一括適用するアンカーを設定"
-                                className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${
-                                  anchorRowIdx === idx
-                                    ? 'bg-amber-400 border-amber-500 text-white'
-                                    : 'border-border hover:border-amber-400 hover:bg-amber-50'
-                                }`}
-                                onClick={() => setAnchorRowIdx(anchorRowIdx === idx ? null : idx)}
-                              >
-                                {anchorRowIdx === idx ? '▼' : ''}
-                              </button>
+                              <Checkbox
+                                checked={selectedRowIdxs.includes(idx)}
+                                onCheckedChange={(checked) => toggleRowSelection(idx, Boolean(checked))}
+                              />
                             </td>
                             <td className="px-3 py-2">
                               <Select
