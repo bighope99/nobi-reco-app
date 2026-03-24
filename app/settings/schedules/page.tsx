@@ -24,6 +24,7 @@ interface Schedule {
     sat?: string;
     sun?: string;
   };
+  lateThresholdMinutes: number;
 }
 
 interface School {
@@ -105,6 +106,8 @@ export default function ScheduleSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [addingScheduleForSchool, setAddingScheduleForSchool] = useState<string | null>(null);
+  const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
 
   // 初期ロード
   useEffect(() => {
@@ -132,6 +135,7 @@ export default function ScheduleSettingsPage() {
           scheduleId: schedule.schedule_id,
           gradeIds: schedule.grades || [],
           weekdayTimes: apiToFrontend(schedule.weekday_times),
+          lateThresholdMinutes: schedule.late_threshold_minutes ?? 30,
         })),
       }));
 
@@ -181,20 +185,48 @@ export default function ScheduleSettingsPage() {
     }
   };
 
-  // Add schedule to school
+  // Add schedule to school (楽観的更新 + ダブルクリック防止)
   const handleAddSchedule = async (schoolId: string) => {
+    if (addingScheduleForSchool) return;
+    setAddingScheduleForSchool(schoolId);
+
+    const tempId = `temp-${Date.now()}`;
+    const defaultWeekdayTimes = {
+      mon: '13:00',
+      tue: '13:00',
+      wed: '13:00',
+      thu: '13:00',
+      fri: '13:00',
+    };
+
+    // 楽観的にUIに仮スケジュールを追加
+    setSchools((prev) =>
+      prev.map((school) => {
+        if (school.id === schoolId) {
+          return {
+            ...school,
+            schedules: [
+              ...school.schedules,
+              { scheduleId: tempId, gradeIds: ['1'], weekdayTimes: defaultWeekdayTimes, lateThresholdMinutes: 30 },
+            ],
+          };
+        }
+        return school;
+      })
+    );
+
     try {
       const response = await fetch(`/api/schools/${schoolId}/schedules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grades: ['1'],  // デフォルトで1年生を選択
+          grades: ['1'],
           weekday_times: {
-            monday: '08:00',
-            tuesday: '08:00',
-            wednesday: '08:00',
-            thursday: '08:00',
-            friday: '08:00',
+            monday: '13:00',
+            tuesday: '13:00',
+            wednesday: '13:00',
+            thursday: '13:00',
+            friday: '13:00',
             saturday: null,
             sunday: null,
           },
@@ -207,20 +239,22 @@ export default function ScheduleSettingsPage() {
         throw new Error(data.error || 'Failed to create schedule');
       }
 
-      // ローカル状態を更新
-      setSchools(
-        schools.map((school) => {
+      // 仮IDを実IDに置換
+      setSchools((prev) =>
+        prev.map((school) => {
           if (school.id === schoolId) {
             return {
               ...school,
-              schedules: [
-                ...school.schedules,
-                {
-                  scheduleId: data.data.schedule_id,
-                  gradeIds: data.data.grades,
-                  weekdayTimes: apiToFrontend(data.data.weekday_times),
-                },
-              ],
+              schedules: school.schedules.map((s) =>
+                s.scheduleId === tempId
+                  ? {
+                      scheduleId: data.data.schedule_id,
+                      gradeIds: data.data.grades,
+                      weekdayTimes: apiToFrontend(data.data.weekday_times),
+                      lateThresholdMinutes: data.data.late_threshold_minutes ?? 30,
+                    }
+                  : s
+              ),
             };
           }
           return school;
@@ -228,7 +262,21 @@ export default function ScheduleSettingsPage() {
       );
     } catch (err) {
       console.error('Error creating schedule:', err);
+      // ロールバック: 仮スケジュールを削除
+      setSchools((prev) =>
+        prev.map((school) => {
+          if (school.id === schoolId) {
+            return {
+              ...school,
+              schedules: school.schedules.filter((s) => s.scheduleId !== tempId),
+            };
+          }
+          return school;
+        })
+      );
       alert(err instanceof Error ? err.message : 'Failed to create schedule');
+    } finally {
+      setAddingScheduleForSchool(null);
     }
   };
 
@@ -279,9 +327,48 @@ export default function ScheduleSettingsPage() {
     setHasChanges(true);
   };
 
-  // Remove schedule
+  // Update late threshold minutes
+  const handleUpdateLateThreshold = (schoolId: string, scheduleId: string, minutes: number) => {
+    setSchools(schools.map(school => {
+      if (school.id === schoolId) {
+        return {
+          ...school,
+          schedules: school.schedules.map(schedule => {
+            if (schedule.scheduleId === scheduleId) {
+              return { ...schedule, lateThresholdMinutes: minutes };
+            }
+            return schedule;
+          })
+        };
+      }
+      return school;
+    }));
+    setHasChanges(true);
+  };
+
+  // Remove schedule (楽観的更新 + ダブルクリック防止)
   const handleRemoveSchedule = async (schoolId: string, scheduleId: string) => {
+    if (deletingScheduleId) return;
     if (!confirm('このスケジュール設定を削除しますか？')) return;
+
+    setDeletingScheduleId(scheduleId);
+
+    // 楽観的にUIから削除（ロールバック用にバックアップ保持）
+    let removedSchedule: Schedule | undefined;
+    let removedIndex = -1;
+    setSchools((prev) =>
+      prev.map((school) => {
+        if (school.id === schoolId) {
+          removedIndex = school.schedules.findIndex((s) => s.scheduleId === scheduleId);
+          removedSchedule = school.schedules[removedIndex];
+          return {
+            ...school,
+            schedules: school.schedules.filter((s) => s.scheduleId !== scheduleId),
+          };
+        }
+        return school;
+      })
+    );
 
     try {
       const response = await fetch(`/api/schools/${schoolId}/schedules/${scheduleId}`, {
@@ -293,22 +380,26 @@ export default function ScheduleSettingsPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to delete schedule');
       }
-
-      // ローカル状態を更新
-      setSchools(
-        schools.map((school) => {
-          if (school.id === schoolId) {
-            return {
-              ...school,
-              schedules: school.schedules.filter((s) => s.scheduleId !== scheduleId),
-            };
-          }
-          return school;
-        })
-      );
     } catch (err) {
       console.error('Error deleting schedule:', err);
+      // ロールバック: 削除したスケジュールを元に戻す
+      if (removedSchedule) {
+        const scheduleToRestore = removedSchedule;
+        const indexToRestore = removedIndex;
+        setSchools((prev) =>
+          prev.map((school) => {
+            if (school.id === schoolId) {
+              const newSchedules = [...school.schedules];
+              newSchedules.splice(indexToRestore, 0, scheduleToRestore);
+              return { ...school, schedules: newSchedules };
+            }
+            return school;
+          })
+        );
+      }
       alert(err instanceof Error ? err.message : 'Failed to delete schedule');
+    } finally {
+      setDeletingScheduleId(null);
     }
   };
 
@@ -348,6 +439,7 @@ export default function ScheduleSettingsPage() {
           schedule_id: schedule.scheduleId,
           grades: schedule.gradeIds,
           weekday_times: frontendToApi(schedule.weekdayTimes),
+          late_threshold_minutes: schedule.lateThresholdMinutes,
         }))
       );
 
@@ -511,10 +603,20 @@ export default function ScheduleSettingsPage() {
                       {editingSchool === school.id && (
                         <button
                           onClick={() => handleAddSchedule(school.id)}
-                          className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm"
+                          disabled={addingScheduleForSchool !== null}
+                          className="w-full mb-4 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-3 rounded-lg border-2 border-dashed border-indigo-200 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Plus size={18} />
-                          スケジュールを追加
+                          {addingScheduleForSchool === school.id ? (
+                            <>
+                              <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                              追加中...
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={18} />
+                              スケジュールを追加
+                            </>
+                          )}
                         </button>
                       )}
 
@@ -577,14 +679,46 @@ export default function ScheduleSettingsPage() {
                                   </p>
                                 </div>
 
+                                {/* Late Threshold */}
+                                <div>
+                                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">遅刻判定の閾値</label>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm text-slate-600">登校予定時刻から</span>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={120}
+                                      value={schedule.lateThresholdMinutes}
+                                      onChange={(e: any) =>
+                                        handleUpdateLateThreshold(school.id, schedule.scheduleId, parseInt(e.target.value, 10) || 0)
+                                      }
+                                      className="w-20 text-sm py-1.5 text-center"
+                                    />
+                                    <span className="text-sm text-slate-600">分超過で遅刻</span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    ※ 設定時間を超えても到着しない場合、ダッシュボードに遅刻として表示されます
+                                  </p>
+                                </div>
+
                                 {/* Delete Button */}
                                 <div className="flex justify-end pt-2">
                                   <button
                                     onClick={() => handleRemoveSchedule(school.id, schedule.scheduleId)}
-                                    className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
+                                    disabled={deletingScheduleId !== null}
+                                    className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    <Trash2 size={16} />
-                                    このスケジュールを削除
+                                    {deletingScheduleId === schedule.scheduleId ? (
+                                      <>
+                                        <div className="animate-spin w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full"></div>
+                                        削除中...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Trash2 size={16} />
+                                        このスケジュールを削除
+                                      </>
+                                    )}
                                   </button>
                                 </div>
                               </div>

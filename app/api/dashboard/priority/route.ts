@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
           ? supabase
               .from('s_school_schedules')
               .select(
-                'school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time'
+                'school_id, grades, monday_time, tuesday_time, wednesday_time, thursday_time, friday_time, saturday_time, sunday_time, late_threshold_minutes'
               )
               .in('school_id', schoolIds)
               .is('deleted_at', null)
@@ -218,6 +218,16 @@ export async function GET(request: NextRequest) {
       return (matchedSchedule[weekdayKey] as string | null) || null;
     };
 
+    const getLateThreshold = (schoolId: string | null, grade: number | null): number => {
+      if (!schoolId || grade === null || grade === undefined) return LATE_ARRIVAL_THRESHOLD_MINUTES;
+      const schedules = schoolSchedules[schoolId] || [];
+      const gradeKey = String(grade);
+      const matchedSchedule = schedules.find((schedule) =>
+        (schedule.grades || []).includes(gradeKey)
+      );
+      return matchedSchedule?.late_threshold_minutes ?? LATE_ARRIVAL_THRESHOLD_MINUTES;
+    };
+
     const formatTimeToMinutes = (time: string | null) => {
       if (!time) return null;
       const [hours, minutes] = time.split(':');
@@ -296,7 +306,8 @@ export async function GET(request: NextRequest) {
       }
       // 遅刻（未登所で予定開始時刻超過）
       if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time) {
-        if (getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES) {
+        const threshold = getLateThreshold(c.child.school_id, c.grade);
+        if (getMinutesDiff(currentTime, c.scheduled_start_time) >= threshold) {
           return true;
         }
       }
@@ -353,7 +364,8 @@ export async function GET(request: NextRequest) {
         }
       }
       if (s.status === 'absent' && s.is_scheduled_today && s.scheduled_start_time) {
-        if (getMinutesDiff(currentTime, s.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES) {
+        const threshold = getLateThreshold(s.child.school_id, s.grade);
+        if (getMinutesDiff(currentTime, s.scheduled_start_time) >= threshold) {
           alertType = 'late';
         }
       }

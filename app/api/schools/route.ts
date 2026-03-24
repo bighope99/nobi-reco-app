@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
               saturday: s.saturday_time,
               sunday: s.sunday_time,
             },
+            late_threshold_minutes: s.late_threshold_minutes ?? 30,
             created_at: s.created_at,
             updated_at: s.updated_at,
           })),

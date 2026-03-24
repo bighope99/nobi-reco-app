@@ -91,6 +91,7 @@ export async function POST(
         friday_time: body.weekday_times.friday || null,
         saturday_time: body.weekday_times.saturday || null,
         sunday_time: body.weekday_times.sunday || null,
+        late_threshold_minutes: body.late_threshold_minutes ?? 30,
       })
       .select()
       .single();
@@ -114,6 +115,7 @@ export async function POST(
           saturday: newSchedule.saturday_time,
           sunday: newSchedule.sunday_time,
         },
+        late_threshold_minutes: newSchedule.late_threshold_minutes,
         created_at: newSchedule.created_at,
       },
       message: 'スケジュールを追加しました',

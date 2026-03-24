@@ -145,6 +145,10 @@ export async function PUT(request: NextRequest) {
             : undefined;
         }
 
+        if (update.late_threshold_minutes !== undefined) {
+          updateData.late_threshold_minutes = update.late_threshold_minutes;
+        }
+
         // 更新実行
         const { error: updateError } = await supabase
           .from('s_school_schedules')
