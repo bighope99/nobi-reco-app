@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
       .select('id, name')
       .eq('id', body.company_id)
       .is('deleted_at', null)
-      .single();
+      .maybeSingle();
 
-    if (companyCheckError && companyCheckError.code !== 'PGRST116') {
+    if (companyCheckError) {
       console.error('Database error checking company existence:', companyCheckError);
       return NextResponse.json(
         { success: false, error: 'Internal Server Error' },
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!existingCompany || companyCheckError?.code === 'PGRST116') {
+    if (!existingCompany) {
       return NextResponse.json(
         { success: false, error: 'Company not found' },
         { status: 404 }
@@ -92,9 +92,9 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('email', adminEmail)
       .is('deleted_at', null)
-      .single();
+      .maybeSingle();
 
-    if (emailCheckError && emailCheckError.code !== 'PGRST116') {
+    if (emailCheckError) {
       console.error('Database error checking email uniqueness:', emailCheckError);
       return NextResponse.json(
         { success: false, error: 'Internal Server Error' },

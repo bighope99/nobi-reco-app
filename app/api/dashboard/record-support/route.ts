@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch children' }, { status: 500 });
     }
 
-    const childrenData = (childrenDataRaw ?? []) as RecordSupportChildData[];
+    const childrenData = (childrenDataRaw ?? []) as unknown as RecordSupportChildData[];
     const childIds = childrenData.map((c) => c.id);
 
     if (childIds.length === 0) {

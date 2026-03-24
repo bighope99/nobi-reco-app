@@ -1,28 +1,41 @@
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/users/route';
-import { createClient } from '@/utils/supabase/server';
+import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
+  createAdminClient: jest.fn(),
 }));
 
 jest.mock('@/lib/auth/jwt', () => ({
   getAuthenticatedUserMetadata: jest.fn(),
 }));
 
+const mockAdminClient = {
+  auth: {
+    admin: {
+      listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+    },
+  },
+};
+
 describe('GET /api/users', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
   const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
     typeof getAuthenticatedUserMetadata
   >;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   it('maps class_role into assigned_classes.is_main', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -38,6 +51,7 @@ describe('GET /api/users', () => {
 
     const classQuery: any = {
       select: jest.fn(() => classQuery),
+      in: jest.fn(() => classQuery),
       eq: jest.fn(),
     };
 
@@ -60,21 +74,21 @@ describe('GET /api/users', () => {
       order: jest.fn().mockResolvedValue({ data: usersData, error: null }),
     }));
 
-    classQuery.eq
-      .mockImplementationOnce(() => classQuery)
-      .mockResolvedValue({
-        data: [
-          {
-            class_role: 'main',
-            m_classes: { id: 'class-1', name: 'ひまわり組' },
-          },
-          {
-            class_role: 'sub',
-            m_classes: { id: 'class-2', name: 'さくら組' },
-          },
-        ],
-        error: null,
-      });
+    classQuery.eq.mockResolvedValue({
+      data: [
+        {
+          user_id: 'user-1',
+          class_role: 'main',
+          m_classes: { id: 'class-1', name: 'ひまわり組' },
+        },
+        {
+          user_id: 'user-1',
+          class_role: 'sub',
+          m_classes: { id: 'class-2', name: 'さくら組' },
+        },
+      ],
+      error: null,
+    });
 
     const mockSupabase = {
       from: jest.fn((table: string) => {

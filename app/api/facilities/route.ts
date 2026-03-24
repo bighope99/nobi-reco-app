@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { normalizeSearch } from '@/lib/utils/kana';
 
 /**
  * GET /api/facilities
@@ -45,11 +46,6 @@ export async function GET(request: NextRequest) {
 
     // 自分が所属している会社の全施設を取得（設定ページでは権限によるフィルタリングは後ほど実装）
     query = query.eq('company_id', company_id);
-
-    // 検索フィルタ
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%`);
-    }
 
     const { data: facilities, error: facilitiesError } = await query.order(
       'name',
@@ -100,11 +96,22 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // 検索フィルタ（ひらがな/カタカナ表記ゆれ・全角半角スペース対応）
+    let filteredFacilities = facilitiesWithStats;
+    if (search) {
+      const normalizedSearch = normalizeSearch(search);
+      filteredFacilities = facilitiesWithStats.filter(
+        (f) =>
+          normalizeSearch(f.name).includes(normalizedSearch) ||
+          normalizeSearch(f.address || '').includes(normalizedSearch)
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        facilities: facilitiesWithStats,
-        total: facilitiesWithStats.length,
+        facilities: filteredFacilities,
+        total: filteredFacilities.length,
       },
     });
   } catch (error) {

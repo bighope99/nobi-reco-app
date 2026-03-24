@@ -32,6 +32,7 @@ describe('POST /api/users (email invite flow)', () => {
 
   it('sends an invitation email instead of generating a password', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -42,6 +43,7 @@ describe('POST /api/users (email invite flow)', () => {
       eq: jest.fn(() => mUsersQuery),
       is: jest.fn(() => mUsersQuery),
       single: jest.fn(),
+      maybeSingle: jest.fn(),
       insert: jest.fn(() => mUsersQuery),
     };
 
@@ -53,27 +55,42 @@ describe('POST /api/users (email invite flow)', () => {
       insert: jest.fn(),
     };
 
-    mUsersQuery.single
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: {
-          id: 'auth-user-id',
-          email: 'newuser@example.com',
-          name: 'New User',
-          role: 'staff',
-          created_at: '2024-01-01T00:00:00.000Z',
-        },
-        error: null,
-      });
+    // メールアドレス重複チェック: 既存ユーザーなし
+    mUsersQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    mUsersQuery.single.mockResolvedValue({
+      data: {
+        id: 'auth-user-id',
+        email: 'newuser@example.com',
+        name: 'New User',
+        role: 'staff',
+        hire_date: '2024-01-01',
+        created_at: '2024-01-01T00:00:00.000Z',
+      },
+      error: null,
+    });
 
     userFacilityQuery.insert.mockResolvedValue({ data: null, error: null });
     userClassQuery.insert.mockResolvedValue({ data: null, error: null });
+
+    const mockCompaniesQuery: any = {
+      select: jest.fn(() => mockCompaniesQuery),
+      eq: jest.fn(() => mockCompaniesQuery),
+      single: jest.fn().mockResolvedValue({ data: { name: 'テスト会社' }, error: null }),
+    };
+    const mockFacilitiesQuery: any = {
+      select: jest.fn(() => mockFacilitiesQuery),
+      eq: jest.fn(() => mockFacilitiesQuery),
+      single: jest.fn().mockResolvedValue({ data: { name: 'テスト施設' }, error: null }),
+    };
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_users') return mUsersQuery;
         if (table === '_user_facility') return userFacilityQuery;
         if (table === '_user_class') return userClassQuery;
+        if (table === 'm_companies') return mockCompaniesQuery;
+        if (table === 'm_facilities') return mockFacilitiesQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };

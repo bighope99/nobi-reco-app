@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { normalizeKana } from '@/lib/utils/kana'
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -93,6 +94,12 @@ export default function AttendanceSchedulePage() {
     fetchSchedules()
   }, [])
 
+  // O(1) child lookup map
+  const childrenMap = useMemo(() => {
+    if (!scheduleData) return new Map<string, ChildSchedule>()
+    return new Map(scheduleData.children.map(c => [c.child_id, c]))
+  }, [scheduleData])
+
   // Get unique class options
   const classOptions = useMemo(() => {
     if (!scheduleData) return []
@@ -111,11 +118,13 @@ export default function AttendanceSchedulePage() {
 
     let result = [...scheduleData.children]
 
-    // Filter by search term
-    if (searchTerm) {
+    // Filter by search term (全角スペース・ひらがな/カタカナ表記ゆれを正規化して検索)
+    const normalize = (s: string) => normalizeKana(s.replace(/　/g, ' '))
+    const normalizedSearch = normalize(searchTerm).trim()
+    if (normalizedSearch) {
       result = result.filter(child =>
-        child.name.includes(searchTerm) ||
-        child.kana.includes(searchTerm)
+        normalize(child.name).includes(normalizedSearch) ||
+        normalize(child.kana).includes(normalizedSearch)
       )
     }
 
@@ -171,7 +180,7 @@ export default function AttendanceSchedulePage() {
   const handleCheckboxChange = (childId: string, dayKey: keyof ChildSchedule['schedule'], currentValue: boolean) => {
     if (!editMode) return
 
-    const child = scheduleData?.children.find(c => c.child_id === childId)
+    const child = childrenMap.get(childId)
     if (!child) return
 
     const currentModified = modifiedSchedules.get(childId) || { ...child.schedule }
@@ -184,7 +193,7 @@ export default function AttendanceSchedulePage() {
     const modified = modifiedSchedules.get(childId)
     if (modified) return modified
 
-    const child = scheduleData?.children.find(c => c.child_id === childId)
+    const child = childrenMap.get(childId)
     return child?.schedule || {
       monday: false,
       tuesday: false,
@@ -276,7 +285,7 @@ export default function AttendanceSchedulePage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {editMode ? (
                 <>
                   <button
@@ -318,9 +327,9 @@ export default function AttendanceSchedulePage() {
           </div>
 
           {/* Filter Bar */}
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative w-full md:flex-1 md:max-w-md">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -331,24 +340,26 @@ export default function AttendanceSchedulePage() {
               />
             </div>
 
-            {/* Class Filter */}
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full md:w-auto">
-              <Filter size={16} className="text-slate-400" />
-              <select
-                className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 min-w-[120px]"
-                value={filterClass}
-                onChange={(e) => setFilterClass(e.target.value)}
-              >
-                <option value="all">全クラス</option>
-                {classOptions.map(cls => (
-                  <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
-                ))}
-              </select>
-            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Class Filter */}
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 md:flex-none">
+                <Filter size={16} className="text-slate-400" />
+                <select
+                  className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 min-w-[120px] w-full"
+                  value={filterClass}
+                  onChange={(e) => setFilterClass(e.target.value)}
+                >
+                  <option value="all">全クラス</option>
+                  {classOptions.map(cls => (
+                    <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Stats */}
-            <div className="text-sm text-slate-500">
-              表示中: <span className="font-bold text-slate-900">{processedData.length}</span> 名
+              {/* Stats */}
+              <div className="text-sm text-slate-500 whitespace-nowrap">
+                表示中: <span className="font-bold text-slate-900">{processedData.length}</span> 名
+              </div>
             </div>
           </div>
 

@@ -2,8 +2,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
 beforeEach(() => {
-  global.fetch = jest.fn(async (input) => {
-    const url = typeof input === 'string' ? input : input.url;
+  global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString();
     if (url === '/api/children/classes') {
       return { ok: true, json: async () => ({ success: true, data: { classes: [] } }) } as Response;
     }

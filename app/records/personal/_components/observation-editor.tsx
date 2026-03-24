@@ -150,6 +150,7 @@ type AiAnalysisResult = {
 type ChildOption = {
   id: string;
   name: string;
+  kana: string;
   className: string;
   grade?: number | null;
 };
@@ -157,6 +158,7 @@ type ChildOption = {
 type ChildApi = {
   child_id: string;
   name: string;
+  kana?: string | null;
   class_name?: string | null;
   grade?: number | null;
 };
@@ -528,17 +530,18 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         const children = (result.data?.children || []).map((child) => ({
           id: child.child_id,
           name: child.name,
+          kana: child.kana || '',
           className: child.class_name || '未設定',
           grade: child.grade ?? null,
         }));
-        // 学年昇順、同学年内は名前順にソート
+        // 学年降順（6年→1年）、同学年内はあいうえお順にソート
         children.sort((a, b) => {
-          const gradeA = a.grade ?? 999;
-          const gradeB = b.grade ?? 999;
+          const gradeA = a.grade ?? 0;
+          const gradeB = b.grade ?? 0;
           if (gradeA !== gradeB) {
-            return gradeA - gradeB;
+            return gradeB - gradeA;
           }
-          return a.name.localeCompare(b.name, 'ja');
+          return a.kana.localeCompare(b.kana, 'ja');
         });
         if (isMounted) {
           setChildOptions(children);

@@ -54,6 +54,15 @@ jest.mock('@supabase/ssr', () => ({
   })),
 }));
 
+const createMockNextURL = (pathname: string, baseUrl: string = 'http://localhost:3000'): any => ({
+  pathname,
+  href: `${baseUrl}${pathname}`,
+  origin: baseUrl,
+  search: '',
+  searchParams: new URLSearchParams(),
+  clone: function() { return createMockNextURL(pathname, baseUrl); },
+});
+
 describe('middleware', () => {
   let mockRequest: Partial<NextRequest>;
 
@@ -62,9 +71,7 @@ describe('middleware', () => {
 
     // Setup mock request
     mockRequest = {
-      nextUrl: {
-        pathname: '/login',
-      } as URL,
+      nextUrl: createMockNextURL('/login'),
       url: 'http://localhost:3000/login',
       cookies: {
         get: jest.fn(),
@@ -87,7 +94,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -108,7 +115,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -129,7 +136,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -150,7 +157,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -171,7 +178,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -191,7 +198,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/dashboard';
+      (mockRequest as any).nextUrl = createMockNextURL('/dashboard');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -209,7 +216,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -226,7 +233,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/password/setup';
+      (mockRequest as any).nextUrl = createMockNextURL('/password/setup');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -245,7 +252,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/admin';
+      (mockRequest as any).nextUrl = createMockNextURL('/admin');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -266,7 +273,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/admin';
+      (mockRequest as any).nextUrl = createMockNextURL('/admin');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -286,7 +293,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/admin';
+      (mockRequest as any).nextUrl = createMockNextURL('/admin');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -306,7 +313,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/admin';
+      (mockRequest as any).nextUrl = createMockNextURL('/admin');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -327,7 +334,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/admin';
+      (mockRequest as any).nextUrl = createMockNextURL('/admin');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -348,7 +355,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/admin';
+      (mockRequest as any).nextUrl = createMockNextURL('/admin');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -371,7 +378,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -393,7 +400,7 @@ describe('middleware', () => {
         } as any,
       });
 
-      mockRequest.nextUrl!.pathname = '/dashboard';
+      (mockRequest as any).nextUrl = createMockNextURL('/dashboard');
 
       const response = await middleware(mockRequest as NextRequest);
 
@@ -434,7 +441,7 @@ describe('middleware', () => {
         error: null,
       });
 
-      mockRequest.nextUrl!.pathname = '/login';
+      (mockRequest as any).nextUrl = createMockNextURL('/login');
 
       const response = await middleware(mockRequest as NextRequest);
 

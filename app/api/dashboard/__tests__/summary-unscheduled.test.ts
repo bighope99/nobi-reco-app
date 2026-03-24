@@ -279,6 +279,19 @@ function createMockSupabase(
         data: { session: { user: { id: 'user-789' } } },
         error: null,
       }),
+      getClaims: jest.fn().mockResolvedValue({
+        data: {
+          claims: {
+            sub: 'user-789',
+            app_metadata: {
+              role: 'staff',
+              company_id: 'company-1',
+              current_facility_id: 'facility-123',
+            },
+          },
+        },
+        error: null,
+      }),
     },
     from: jest.fn().mockImplementation((table: string) => {
       if (table === 'm_children') {

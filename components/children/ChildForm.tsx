@@ -9,14 +9,11 @@ import {
   Heart,
   Shield,
   Camera,
-  Search,
   Plus,
   Trash2,
-  Check,
   ChevronRight,
   Save,
   Building2,
-  School,
 } from 'lucide-react';
 
 /**
@@ -140,6 +137,9 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
   const [siblingResult, setSiblingResult] = useState<any>(null);
+  const [siblingSearchDismissed, setSiblingSearchDismissed] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [siblings, setSiblings] = useState<Array<{child_id: string; name: string; relationship: string}>>([]);
   const [loading, setLoading] = useState(isEditMode);
   const [saving, setSaving] = useState(false);
@@ -323,13 +323,20 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // 電話番号変更時に兄弟を自動検索（デバウンス500ms）
+  useEffect(() => {
+    if (!formData.parent_phone || siblingSearchDismissed) return;
+    const timer = setTimeout(() => {
+      handleSiblingSearch();
+    }, 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.parent_phone]);
+
   // 兄弟検索ロジック
   const handleSiblingSearch = async () => {
     // 電話番号が入力されていない場合はスキップ
-    if (!formData.parent_phone) {
-      setError('電話番号を入力してください');
-      return;
-    }
+    if (!formData.parent_phone) return;
 
     setIsSearchingSibling(true);
     setSiblingResult(null);
@@ -363,7 +370,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
           image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
         });
       } else {
-        setError('同じ電話番号の児童が見つかりませんでした');
+        setSiblingResult(null);
       }
     } catch (err) {
       console.error('Failed to search siblings:', err);
@@ -400,6 +407,16 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     } catch (err) {
       setError('兄弟紐づけに失敗しました');
     }
+  };
+
+  // 写真ファイル選択ハンドラ
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(objectUrl);
   };
 
   const addEmergencyContact = () => {
@@ -529,6 +546,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
               <a
                 key={item.id}
                 href={`#${item.id}`}
+                onClick={() => setActiveSection(item.id)}
                 className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${activeSection === item.id
                   ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -573,9 +591,20 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                   {/* Photo Upload Area */}
                   <div className="shrink-0 flex flex-col items-center gap-3">
                     <div className="w-32 h-32 rounded-full bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-100 hover:border-indigo-400 hover:text-indigo-500 transition-all cursor-pointer group relative overflow-hidden">
-                      <Camera size={24} className="mb-1" />
-                      <span className="text-xs font-medium">写真を追加</span>
-                      <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" />
+                      {photoPreviewUrl ? (
+                        <img src={photoPreviewUrl} alt="プレビュー" className="absolute inset-0 w-full h-full object-cover" />
+                      ) : (
+                        <>
+                          <Camera size={24} className="mb-1" />
+                          <span className="text-xs font-medium">写真を追加</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        onChange={handlePhotoChange}
+                      />
                     </div>
                     <span className="text-xs text-slate-400">推奨: 400x400px</span>
                   </div>
@@ -833,26 +862,28 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       </div>
                     )}
 
-                    {/* 兄弟紐づけトリガー */}
+                    {/* 兄弟紐づけトリガー（電話番号入力で自動検索） */}
                     <FieldGroup label="携帯電話番号" required className="relative sm:col-span-2">
-                      <div className="flex gap-2">
-                        <Input
-                          icon={Phone}
-                          type="tel"
-                          placeholder="090-0000-0000"
-                          value={formData.parent_phone}
-                          onChange={(e: any) => setFormData({ ...formData, parent_phone: e.target.value })}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSiblingSearch}
-                          className="shrink-0 bg-white border border-indigo-200 text-indigo-600 px-4 rounded-lg text-sm font-medium hover:bg-indigo-50 hover:border-indigo-300 transition-colors flex items-center gap-2 shadow-sm"
-                        >
-                          {isSearchingSibling ? <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div> : <Search size={16} />}
-                          兄弟検索
-                        </button>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">※この番号で既存児童を検索し、紐付け候補を表示します。</p>
+                      <Input
+                        icon={Phone}
+                        type="tel"
+                        placeholder="090-0000-0000"
+                        value={formData.parent_phone}
+                        onChange={(e: any) => {
+                          setSiblingSearchDismissed(false);
+                          setSiblingResult(null);
+                          setFormData({ ...formData, parent_phone: e.target.value });
+                        }}
+                      />
+                      {isSearchingSibling && (
+                        <p className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
+                          <span className="animate-spin w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full inline-block"></span>
+                          兄弟を検索中...
+                        </p>
+                      )}
+                      {!isSearchingSibling && (
+                        <p className="text-xs text-slate-400 mt-1">※この番号で既存児童を自動検索し、兄弟候補を表示します。</p>
+                      )}
                     </FieldGroup>
                   </div>
 
@@ -863,7 +894,9 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         <div>
                           <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1 block">兄弟候補が見つかりました</span>
                           <div className="flex items-center gap-3">
-                            <img src={siblingResult.image} alt="" className="w-10 h-10 rounded-full bg-slate-200 border border-white shadow-sm" />
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                              <Users size={18} className="text-indigo-500" />
+                            </div>
                             <div>
                               <p className="text-sm font-bold text-slate-900">{siblingResult.name} <span className="text-xs font-normal text-slate-500">（{siblingResult.kana}）</span></p>
                               <p className="text-xs text-slate-500">{siblingResult.class} | {siblingResult.status}</p>
@@ -872,10 +905,13 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleSiblingLink(siblingResult.id, siblingResult.name)}
-                          className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium flex items-center gap-1 shadow-sm"
+                          onClick={() => {
+                            setSiblingResult(null);
+                            setSiblingSearchDismissed(true);
+                          }}
+                          className="text-xs bg-white border border-slate-200 text-slate-500 px-3 py-1.5 rounded-md hover:bg-slate-50 font-medium shadow-sm"
                         >
-                          <Check size={12} /> 紐付ける
+                          兄弟として登録しない
                         </button>
                       </div>
                     </div>

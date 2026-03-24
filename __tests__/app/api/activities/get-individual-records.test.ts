@@ -109,10 +109,23 @@ describe('/api/activities GET - individual_records機能', () => {
     it('活動記録に紐づく個別記録をindividual_recordsとして返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -189,10 +202,23 @@ describe('/api/activities GET - individual_records機能', () => {
     it('個別記録がない活動記録は空配列を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -249,10 +275,23 @@ describe('/api/activities GET - individual_records機能', () => {
     it('individual_record_countとindividual_recordsの件数が一致すること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -309,10 +348,23 @@ describe('/api/activities GET - individual_records機能', () => {
     it('nicknameがある場合はnicknameを使用すること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -364,10 +416,23 @@ describe('/api/activities GET - individual_records機能', () => {
     it('nicknameがない場合は姓名を使用すること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: 'test-user-id' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'test-user-id',
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'test-company-id',
+                  current_facility_id: 'test-facility-id',
+                },
+              },
+            },
             error: null,
           }),
         },

@@ -63,6 +63,7 @@ describe('GET /api/schools', () => {
         getClaims: jest.fn().mockResolvedValue({
           data: {
             claims: {
+              sub: 'user-123',
               app_metadata: {
                 role: 'facility_admin',
                 company_id: 'company-1',

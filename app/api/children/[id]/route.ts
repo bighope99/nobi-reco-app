@@ -168,14 +168,14 @@ export async function GET(
           parent_name: decryptedPrimaryGuardian
             ? formatName(
                 [
-                  decryptedPrimaryGuardian.m_guardians.family_name,
-                  decryptedPrimaryGuardian.m_guardians.given_name,
+                  decryptedPrimaryGuardian.m_guardians?.family_name,
+                  decryptedPrimaryGuardian.m_guardians?.given_name,
                 ],
                 null
               )
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
-          parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(childData.parent_phone) || null,
-          parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(childData.parent_email) || null,
+          parent_phone: decryptedPrimaryGuardian?.m_guardians?.phone || decryptOrFallback(childData.parent_phone) || null,
+          parent_email: decryptedPrimaryGuardian?.m_guardians?.email || decryptOrFallback(childData.parent_email) || null,
           emergency_contacts: (() => {
             const formattedContacts = decryptedEmergencyContacts
               .filter((ec) => ec.m_guardians !== null)
@@ -200,10 +200,11 @@ export async function GET(
           photo_permission_share: childData.photo_permission_share,
         },
         siblings: (siblingsData || []).map((s) => {
-          const decryptedFamilyName = decryptOrFallback(s.m_children.family_name);
-          const decryptedGivenName = decryptOrFallback(s.m_children.given_name);
+          const sibling = Array.isArray(s.m_children) ? s.m_children[0] : s.m_children;
+          const decryptedFamilyName = decryptOrFallback(sibling?.family_name);
+          const decryptedGivenName = decryptOrFallback(sibling?.given_name);
           return {
-            child_id: s.m_children.id,
+            child_id: sibling?.id,
             name: formatName([decryptedFamilyName, decryptedGivenName], ''),
             relationship: s.relationship,
           };
@@ -255,7 +256,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid enrollment_status' }, { status: 400 });
     }
 
-    const { error: updateError, count } = await supabase
+    const { data: updatedRows, error: updateError } = await supabase
       .from('m_children')
       .update({
         enrollment_status,
@@ -264,14 +265,14 @@ export async function PATCH(
       .eq('id', child_id)
       .eq('facility_id', current_facility_id)
       .is('deleted_at', null)
-      .select('id', { count: 'exact', head: true });
+      .select('id');
 
     if (updateError) {
       console.error('Child status update error:', updateError.message);
       return NextResponse.json({ error: 'Failed to update status' }, { status: 500 });
     }
 
-    if (count === 0) {
+    if (!updatedRows || updatedRows.length === 0) {
       return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
 
