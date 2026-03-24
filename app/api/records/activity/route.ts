@@ -7,10 +7,10 @@ import { validateActivityExtendedFields } from '@/lib/validation/activityValidat
 import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 
 /**
- * 活動記録を保存し、メンションされた子供の個別記録を自動生成
+ * 保育日誌を保存し、メンションされた子供の個別記録を自動生成
  *
  * 処理フロー：
- * 1. 活動記録をr_activityテーブルに保存
+ * 1. 保育日誌をr_activityテーブルに保存
  * 2. mentioned_children配列内の各暗号化トークンを復号化
  * 3. AIで各子供に関連する内容を抽出
  * 4. r_observationテーブルに個別記録を保存
@@ -132,11 +132,11 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (fetchError || !existingActivity) {
-          return { error: '活動記録が見つかりませんでした', status: 404 };
+          return { error: '保育日誌が見つかりませんでした', status: 404 };
         }
 
         if (existingActivity.facility_id !== session.current_facility_id) {
-          return { error: 'この活動記録にアクセスする権限がありません', status: 403 };
+          return { error: 'この保育日誌にアクセスする権限がありません', status: 403 };
         }
 
         const updatePayload: Record<string, unknown> = {
@@ -270,7 +270,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 1. 活動記録を保存
+    // 1. 保育日誌を保存
     const ensured = await ensureActivityRecord();
     if ('error' in ensured) {
       return NextResponse.json({ error: ensured.error }, { status: ensured.status });
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
             child_id: childId,
             observation_date: activity_date,
             content: childContent,
-            activity_id: activity.id, // 元の活動記録IDを保存
+            activity_id: activity.id, // 元の保育日誌IDを保存
             created_by: session.user_id,
           })
           .select()
@@ -343,7 +343,7 @@ export async function POST(request: NextRequest) {
       success: true,
       activity,
       observations,
-      message: `活動記録を保存し、${observations.length}件の個別記録を生成しました`,
+      message: `保育日誌を保存し、${observations.length}件の個別記録を生成しました`,
       ...(errors.length > 0 && { errors }),
     });
   } catch (error) {
@@ -356,11 +356,11 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 活動記録を更新
+ * 保育日誌を更新
  *
  * 処理フロー：
- * 1. 既存の活動記録を取得して権限チェック
- * 2. 活動記録を更新（mentioned_childrenも含む）
+ * 1. 既存の保育日誌を取得して権限チェック
+ * 2. 保育日誌を更新（mentioned_childrenも含む）
  *
  * 注意：個別記録の再生成は行いません。
  * 個別記録を再生成する場合は、POST /api/records/activityを使用してください。
@@ -448,7 +448,7 @@ export async function PUT(request: NextRequest) {
 
     const validatedFields = extendedFieldsResult.data;
 
-    // 1. 既存の活動記録を取得して権限チェック
+    // 1. 既存の保育日誌を取得して権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
       .from('r_activity')
       .select('id, facility_id, created_by')
@@ -458,7 +458,7 @@ export async function PUT(request: NextRequest) {
 
     if (fetchError || !existingActivity) {
       return NextResponse.json(
-        { error: '活動記録が見つかりませんでした' },
+        { error: '保育日誌が見つかりませんでした' },
         { status: 404 }
       );
     }
@@ -466,12 +466,12 @@ export async function PUT(request: NextRequest) {
     // 施設IDチェック
     if (existingActivity.facility_id !== session.current_facility_id) {
       return NextResponse.json(
-        { error: 'この活動記録を更新する権限がありません' },
+        { error: 'この保育日誌を更新する権限がありません' },
         { status: 403 }
       );
     }
 
-    // 2. 活動記録を更新
+    // 2. 保育日誌を更新
     const { data: updatedActivity, error: updateError } = await supabase
       .from('r_activity')
       .update({
@@ -503,7 +503,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       activity: updatedActivity,
-      message: '活動記録を更新しました',
+      message: '保育日誌を更新しました',
     });
   } catch (error) {
     console.error('Activity PUT API error:', error);
@@ -515,7 +515,7 @@ export async function PUT(request: NextRequest) {
 }
 
 /**
- * 活動記録を削除（ソフトデリート）
+ * 保育日誌を削除（ソフトデリート）
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -553,14 +553,14 @@ export async function DELETE(request: NextRequest) {
 
     if (fetchError || !existingActivity) {
       return NextResponse.json(
-        { error: '活動記録が見つかりませんでした' },
+        { error: '保育日誌が見つかりませんでした' },
         { status: 404 }
       );
     }
 
     if (existingActivity.facility_id !== session.current_facility_id) {
       return NextResponse.json(
-        { error: 'この活動記録を削除する権限がありません' },
+        { error: 'この保育日誌を削除する権限がありません' },
         { status: 403 }
       );
     }
@@ -585,7 +585,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       activity_id,
-      message: '活動記録を削除しました',
+      message: '保育日誌を削除しました',
     });
   } catch (error) {
     console.error('Activity DELETE API error:', error);

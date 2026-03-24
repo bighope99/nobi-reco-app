@@ -34,7 +34,7 @@ describe("Sidebar", () => {
       mockPathname.mockReturnValue("/records/activity")
       render(<Sidebar type="staff" />)
 
-      const activityLink = screen.getByRole("link", { name: "活動記録" })
+      const activityLink = screen.getByRole("link", { name: "保育日誌" })
       expect(activityLink).toHaveClass("bg-sidebar-accent")
     })
 

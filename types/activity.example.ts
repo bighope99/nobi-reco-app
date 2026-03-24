@@ -1,5 +1,5 @@
 /**
- * 活動記録型の使用例
+ * 保育日誌型の使用例
  *
  * このファイルは types/activity.ts で定義された型の使用方法を示します。
  */
@@ -65,7 +65,7 @@ const exampleMeal: Meal = {
   notes: 'アレルギー対応済み',
 };
 
-// 完全な活動記録の例
+// 完全な保育日誌の例
 const exampleActivity: ActivityRecord = {
   activity_id: '550e8400-e29b-41d4-a716-446655440003',
   facility_id: '550e8400-e29b-41d4-a716-446655440004',

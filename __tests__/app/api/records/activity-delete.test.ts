@@ -72,7 +72,7 @@ describe('/api/records/activity DELETE', () => {
     });
   });
 
-  describe('活動記録削除', () => {
+  describe('保育日誌削除', () => {
     it('activity_idが必須であること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
@@ -99,7 +99,7 @@ describe('/api/records/activity DELETE', () => {
     });
   });
 
-  describe('活動記録が見つからない場合', () => {
+  describe('保育日誌が見つからない場合', () => {
     it('404を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
@@ -136,7 +136,7 @@ describe('/api/records/activity DELETE', () => {
       const data = await response.json();
 
       expect(response.status).toBe(404);
-      expect(data.error).toContain('活動記録が見つかりませんでした');
+      expect(data.error).toContain('保育日誌が見つかりませんでした');
     });
 
     it('403を返すこと', async () => {
@@ -178,7 +178,7 @@ describe('/api/records/activity DELETE', () => {
       const data = await response.json();
 
       expect(response.status).toBe(403);
-      expect(data.error).toContain('この活動記録を削除する権限がありません');
+      expect(data.error).toContain('この保育日誌を削除する権限がありません');
     });
 
     it('200を返すこと', async () => {

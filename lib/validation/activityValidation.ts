@@ -1,5 +1,5 @@
 /**
- * 活動記録フィールドのバリデーションユーティリティ
+ * 保育日誌フィールドのバリデーションユーティリティ
  */
 
 import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
@@ -328,7 +328,7 @@ export const validateHandover = (
 };
 
 /**
- * 活動記録フォーム送信時のバリデーション
+ * 保育日誌フォーム送信時のバリデーション
  *
  * - 記録者は必須
  * - 記録者以外に少なくとも1つのフィールドに値が必要

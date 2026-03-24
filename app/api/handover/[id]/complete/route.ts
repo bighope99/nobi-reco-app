@@ -8,7 +8,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
  * 引き継ぎの完了/未完了をトグルする
  *
  * Path Parameters:
- * - id: 活動記録のID（r_activity.id）
+ * - id: 保育日誌のID（r_activity.id）
  *
  * Request Body:
  * - completed: boolean（true: 完了, false: 未完了）
@@ -70,7 +70,7 @@ export async function PATCH(
       );
     }
 
-    // 対象の活動記録が存在し、引き継ぎがあり、同じ施設であることを確認
+    // 対象の保育日誌が存在し、引き継ぎがあり、同じ施設であることを確認
     const { data: activity, error: fetchError } = await supabase
       .from('r_activity')
       .select('id, facility_id, handover')

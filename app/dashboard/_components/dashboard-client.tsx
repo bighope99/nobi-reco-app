@@ -975,7 +975,7 @@ export default function DashboardClient() {
                   <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform">
                     <FileText size={20} />
                   </div>
-                  <span className="text-sm font-bold text-slate-700">日誌記録</span>
+                  <span className="text-sm font-bold text-slate-700">保育日誌</span>
                 </Link>
                 <Link
                   href="/attendance/list"

@@ -106,7 +106,7 @@ describe('extractChildContent', () => {
       expect(result).toBeDefined();
     });
 
-    it('長文の活動記録から抽出できること', async () => {
+    it('長文の保育日誌から抽出できること', async () => {
       const fullContent = `
         今日の活動では、子供たちが様々な遊びを楽しみました。
         <mention data-child-id="${sampleEncryptedToken1}">@田中太郎</mention>くんは積み木コーナーで創造的な作品を作っていました。

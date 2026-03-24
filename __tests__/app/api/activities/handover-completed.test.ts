@@ -92,7 +92,7 @@ describe('/api/activities GET - handover_completed機能', () => {
     jest.clearAllMocks();
   });
 
-  it('handover_completed: true の活動記録がレスポンスに含まれること', async () => {
+  it('handover_completed: true の保育日誌がレスポンスに含まれること', async () => {
     (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue({
       user_id: 'test-user-id',
       current_facility_id: 'test-facility-id',
@@ -120,7 +120,7 @@ describe('/api/activities GET - handover_completed機能', () => {
     expect(activity.handover_completed).toBe(true);
   });
 
-  it('handover_completed: false の活動記録がレスポンスに含まれること', async () => {
+  it('handover_completed: false の保育日誌がレスポンスに含まれること', async () => {
     (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue({
       user_id: 'test-user-id',
       current_facility_id: 'test-facility-id',

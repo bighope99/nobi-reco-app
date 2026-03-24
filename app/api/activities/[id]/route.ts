@@ -318,7 +318,7 @@ export async function PATCH(
       );
     }
 
-    // 活動記録の存在確認と権限チェック
+    // 保育日誌の存在確認と権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
       .from('r_activity')
       .select('id, facility_id, created_by')
@@ -451,7 +451,7 @@ export async function PATCH(
     if (meal !== undefined) updateData.meal = validatedFields.meal;
     if (recorded_by !== undefined) updateData.recorded_by = sanitizeUuid(recorded_by);
 
-    // 活動記録を更新
+    // 保育日誌を更新
     const { data: updatedActivity, error: updateError } = await supabase
       .from('r_activity')
       .update(updateData)
@@ -513,7 +513,7 @@ export async function DELETE(
     const facility_id = metadata.current_facility_id;
     const user_id = metadata.user_id;
 
-    // 活動記録の存在確認と権限チェック
+    // 保育日誌の存在確認と権限チェック
     const { data: existingActivity, error: fetchError } = await supabase
       .from('r_activity')
       .select('id, facility_id')

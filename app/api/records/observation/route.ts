@@ -59,14 +59,14 @@ export async function POST(request: NextRequest) {
 
     if (activityError || !activity) {
       return NextResponse.json(
-        { error: '活動記録が見つかりませんでした' },
+        { error: '保育日誌が見つかりませんでした' },
         { status: 404 },
       );
     }
 
     if (activity.facility_id !== session.current_facility_id) {
       return NextResponse.json(
-        { error: 'この活動記録に個別記録を追加する権限がありません' },
+        { error: 'この保育日誌に個別記録を追加する権限がありません' },
         { status: 403 },
       );
     }

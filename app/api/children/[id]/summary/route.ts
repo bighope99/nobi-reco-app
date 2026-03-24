@@ -230,7 +230,7 @@ export async function GET(
           total_score: overallScore,
           level: overallScore >= 85 ? '優秀' : overallScore >= 75 ? '良好' : '標準',
           total_observations: totalObservations,
-          total_activities: 0, // 活動記録数（未実装）
+          total_activities: 0, // 保育日誌数（未実装）
           attendance_rate: attendanceRate,
         },
         recent_observations: recentObservations,

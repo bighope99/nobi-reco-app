@@ -99,8 +99,8 @@ describe('/api/records/activity', () => {
     });
   });
 
-  describe('活動記録保存', () => {
-    it('活動記録を正しく保存できること', async () => {
+  describe('保育日誌保存', () => {
+    it('保育日誌を正しく保存できること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
@@ -164,7 +164,7 @@ describe('/api/records/activity', () => {
       expect(insertedActivity.mentioned_children).toEqual(['token1', 'token2']);
     });
 
-    it('保存された活動記録のIDを返すこと', async () => {
+    it('保存された保育日誌のIDを返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
@@ -341,7 +341,7 @@ describe('/api/records/activity', () => {
       expect(extractChildContent).toHaveBeenCalledTimes(2);
     });
 
-    it('個別記録に元の活動記録IDを保存すること', async () => {
+    it('個別記録に元の保育日誌IDを保存すること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
@@ -494,7 +494,7 @@ describe('/api/records/activity', () => {
   });
 
   describe('エラーハンドリング', () => {
-    it('活動記録保存エラーの場合は500を返すこと', async () => {
+    it('保育日誌保存エラーの場合は500を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       const mockSupabase: Record<string, unknown> = {
@@ -657,8 +657,8 @@ describe('/api/records/activity', () => {
       },
     };
 
-    describe('POST - 新規フィールドを含む活動記録の保存', () => {
-      it('すべての新規フィールドを含む活動記録を正しく保存できること', async () => {
+    describe('POST - 新規フィールドを含む保育日誌の保存', () => {
+      it('すべての新規フィールドを含む保育日誌を正しく保存できること', async () => {
         (getUserSession as jest.Mock).mockResolvedValue(mockSession);
         (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
