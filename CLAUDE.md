@@ -59,6 +59,12 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
   2. `create-pr` スキル — PR作成 → CodeRabbitレビューループ（最大3回）
   3. PR URLをユーザーに報告
 
+## ログルール
+サブエージェントを起動する前に必ず以下をターミナルに出力すること：
+🤖 [サブエージェント起動] 目的: {目的} / タイプ: {general-purpose|Explore|Plan}
+完了後：
+✅ [サブエージェント完了] 結果: {一行サマリー}
+
 # Agent Guidelines
 
 **原則**: サブエージェントに委譲し、並列処理を活用する

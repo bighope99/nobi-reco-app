@@ -53,9 +53,8 @@ Phase 2: 実装（Coder担当、最大3並列）
   ※ エスカレーション → Planner判断 → 無理ならLeaderへ
 
 Phase 3: レビュー & PR（Coder + Planner担当、大規模時はReviewer追加）
-  通常: Coder → /pr-review実行 → 指摘修正 → PR作成 → CodeRabbitループ(最大3回) → PR URLをPlannerに報告
-  大規模: Reviewer → /pr-review（複数視点） → 指摘をCoderに返す → Coder修正 → PR作成 → CodeRabbitループ → PR URLをPlannerに報告
-  Planner → 全チケットのNotionステータスを一括更新（スクリプト使用）
+  通常: Coder → /pr-review実行 → 指摘修正 → PR作成 → PR URLをPlannerに報告 → Plannerがチケットを「レビュー依頼」に更新 → CodeRabbitループ(最大3回)
+  大規模: Reviewer → /pr-review（複数視点） → 指摘をCoderに返す → Coder修正 → PR作成 → PR URLをPlannerに報告 → Plannerがチケットを「レビュー依頼」に更新 → CodeRabbitループ
 ```
 
 ## Phase 0: ユーザー特定（Leader担当）
@@ -226,15 +225,33 @@ Plannerで判断できない場合 → Leaderにエスカレーション
 
 **大規模変更**: 専任Reviewerが `/pr-review` を実行し、複数視点（アーキテクチャ・セキュリティ・パフォーマンス）で指摘リストを作成。Coderに返して修正させる。
 
-### Step 2: PR作成（Coder担当）
+### Step 2: PR作成 & Notionステータス更新（Coder → Planner）
 
 ```
-/create-pr を実行
-→ PRタイトル: "fix: [グループの概要]"
-→ PR本文に対応チケット一覧を含める
+Coder:
+  1. /create-pr を実行
+     → PRタイトル: "fix: [グループの概要]"
+     → PR本文に対応チケット一覧を含める
+  2. PR URLを SendMessage(to: "Planner") で報告
+
+Planner:
+  PR URLを受け取り次第、対象チケットを即座に「レビュー依頼」に更新する（CodeRabbitループを待たない）:
 ```
+
+```bash
+# チケットごとにスクリプトを実行（PR作成直後）
+npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
+  --page-id <チケットID> \
+  --status "レビュー依頼" \
+  --pr-url <PR URL>
+```
+
+（「進行中」→「レビュー依頼」の遷移）
+担当者の変更は不要（Phase 2で設定済み）。
 
 ### Step 3: CodeRabbitループ（Coder担当、最大3回転）
+
+Notionステータス更新後、CoderがそのままCodeRabbitループを実行する。
 
 ```
 Loop (max 3):
@@ -245,23 +262,6 @@ Loop (max 3):
   5. 修正をコミット＆プッシュ
   6. 未対応コメントが0件 → ループ終了
 ```
-
-### Step 4: Notionステータス更新（Planner担当）
-
-各CoderがPR作成を完了したらPR URLをPlannerに報告する。
-Plannerが全チケットのステータスを一括更新する:
-
-```bash
-# チケットごとにスクリプトを実行（PR作成後・CodeRabbitループ終了後）
-npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
-  --page-id <チケットID> \
-  --status "レビュー依頼" \
-  --pr-url <PR URL>
-```
-
-PR作成 → CodeRabbitループ完了のタイミングで「レビュー依頼」に更新する。
-（「進行中」→「レビュー依頼」の遷移）
-担当者の変更は不要（Phase 2で設定済み）。
 
 ## 起動方法（エージェントチーム）
 
@@ -362,7 +362,8 @@ Phase 2:
 
 Phase 3:
   各Coderが /pr-review → /create-pr → PR URL を SendMessage(to: "Planner") で報告
-  Planner → 全チケットのNotionステータスを一括更新
+  Planner → PR URL受信直後に全チケットのNotionステータスを「レビュー依頼」に更新（CodeRabbitループを待たない）
+  Coder → CodeRabbitループ実行
   Planner → SendMessage(to: "Leader") で全完了を報告
   Leader → 各メンバーに SendMessage({type: "shutdown_request"}) でチームを解散
 ```
