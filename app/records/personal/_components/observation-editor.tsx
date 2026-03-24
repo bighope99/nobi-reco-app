@@ -1036,24 +1036,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ),
       );
       setIsEditing(false);
-      setAiProcessing(true);
-      const aiResult = await runAiAnalysis(text);
-      const aiAction = toIdText(aiResult.ai_action);
-      const aiOpinion = toIdText(aiResult.ai_opinion);
-      const aiSaveResponse = await fetch(`/api/records/personal/${observation.id}/ai`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ai_action: aiAction,
-          ai_opinion: aiOpinion,
-          ...aiResult.flags,
-        }),
-      });
-      const aiSaveResult = await aiSaveResponse.json();
-      if (!aiSaveResponse.ok || !aiSaveResult.success) {
-        throw new Error(aiSaveResult.error || 'AI解析結果の保存に失敗しました');
-      }
-      applyAiResult({ ...aiResult, ai_action: aiAction, ai_opinion: aiOpinion });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '更新に失敗しました';
       setError(errorMessage);
@@ -1590,55 +1572,74 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="observation_body">本文</Label>
-                      <span className="text-sm text-gray-500">
-                        {editText.length}/{OBSERVATION_BODY_MAX}文字
-                      </span>
-                    </div>
-                    <div className="flex justify-end mb-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isRecording ? 'destructive' : 'outline'}
-                        onClick={isRecording ? stopRecording : startRecording}
-                        disabled={isTranscribing}
-                      >
-                        <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
-                        {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
-                      </Button>
-                    </div>
-                    <MentionTextarea
-                      id="observation_body"
-                      autoFocus
-                      className="min-h-[200px]"
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      maxLength={OBSERVATION_BODY_MAX}
-                    />
-                    <div className="flex justify-end gap-2">
-                      {!isNew && (
-                        <Button variant="outline" onClick={() => setIsEditing(false)}>
-                          <X className="h-4 w-4 mr-2" /> キャンセル
-                        </Button>
-                      )}
-                      <Button
-                        data-testid="observation-save"
-                        className="bg-blue-600 hover:bg-blue-700"
-                        onClick={handleSaveEdit}
-                        disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
-                      >
-                        {savingEdit ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4 mr-2" /> 保存
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    {/* AI解析済みの編集時は本文を非表示にし、事実・所感のみ編集可能にする */}
+                    {!isNew && Boolean(observation?.ai_action?.trim() || observation?.ai_opinion?.trim()) ? (
+                      <>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-sm text-gray-500 mb-1">本文（読み取り専用）</p>
+                          <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
+                            {toDisplayText(observation?.body_text || '')}
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setIsEditing(false)}>
+                            <X className="h-4 w-4 mr-2" /> 閉じる
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="observation_body">本文</Label>
+                          <span className="text-sm text-gray-500">
+                            {editText.length}/{OBSERVATION_BODY_MAX}文字
+                          </span>
+                        </div>
+                        <div className="flex justify-end mb-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isRecording ? 'destructive' : 'outline'}
+                            onClick={isRecording ? stopRecording : startRecording}
+                            disabled={isTranscribing}
+                          >
+                            <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                            {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                          </Button>
+                        </div>
+                        <MentionTextarea
+                          id="observation_body"
+                          autoFocus
+                          className="min-h-[200px]"
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          maxLength={OBSERVATION_BODY_MAX}
+                        />
+                        <div className="flex justify-end gap-2">
+                          {!isNew && (
+                            <Button variant="outline" onClick={() => setIsEditing(false)}>
+                              <X className="h-4 w-4 mr-2" /> キャンセル
+                            </Button>
+                          )}
+                          <Button
+                            data-testid="observation-save"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
+                          >
+                            {savingEdit ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" /> 保存
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </CardContent>
