@@ -75,7 +75,7 @@ describe('PATCH /api/handover/[id]/complete', () => {
     expect(body.error).toContain('boolean');
   });
 
-  it('活動記録が見つからない場合は404を返す', async () => {
+  it('保育日誌が見つからない場合は404を返す', async () => {
     const mockFetchQuery = {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
@@ -96,7 +96,7 @@ describe('PATCH /api/handover/[id]/complete', () => {
     expect(body.success).toBe(false);
   });
 
-  it('引き継ぎが無い活動記録の場合は400を返す', async () => {
+  it('引き継ぎが無い保育日誌の場合は400を返す', async () => {
     const mockFetchQuery = {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),

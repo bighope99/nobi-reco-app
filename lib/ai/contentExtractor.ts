@@ -3,12 +3,12 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { buildActivityExtractionMessages } from '@/lib/ai/prompts';
 
 /**
- * 活動記録から特定の子供に関する内容を抽出
+ * 保育日誌から特定の子供に関する内容を抽出
  *
- * Gemini AIを使用して、活動記録の全文から特定の子供に関連する
+ * Gemini AIを使用して、保育日誌の全文から特定の子供に関連する
  * 内容を抽出し、個別記録として適切な形式に整形します。
  *
- * @param fullContent - 活動記録の全文（メンション含む）
+ * @param fullContent - 保育日誌の全文（メンション含む）
  * @param childId - 対象の子供ID（UUID）
  * @param mentionToken - その子供のメンショントークン（暗号化済み）
  * @returns その子供に関連する抽出された内容（200文字程度）
@@ -84,7 +84,7 @@ export async function extractChildContent(
 /**
  * 複数の子供の内容を一括で抽出
  *
- * @param fullContent - 活動記録の全文
+ * @param fullContent - 保育日誌の全文
  * @param children - 抽出対象の子供情報の配列
  * @returns 各子供の抽出内容の配列
  *

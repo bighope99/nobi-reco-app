@@ -614,7 +614,7 @@ export default function ActivityRecordClient() {
         throw new Error('メンションされた児童がありません')
       }
 
-      // 1. 先に活動記録を保存（編集モードの場合は更新）
+      // 1. 先に保育日誌を保存（編集モードの場合は更新）
       let savedActivityId: string | null = editingActivityId
 
       const sanitizedFields = getSanitizedExtendedFields()
@@ -647,10 +647,10 @@ export default function ActivityRecordClient() {
         const updateResult = await updateResponse.json()
 
         if (!updateResponse.ok || !updateResult.success) {
-          throw new Error(updateResult.error || '活動記録の更新に失敗しました')
+          throw new Error(updateResult.error || '保育日誌の更新に失敗しました')
         }
 
-        setSaveMessage('活動記録を更新しました')
+        setSaveMessage('保育日誌を更新しました')
       } else {
         // 新規保存
         const saveResponse = await fetch('/api/activities', {
@@ -678,11 +678,11 @@ export default function ActivityRecordClient() {
         const saveResult = await saveResponse.json()
 
         if (!saveResponse.ok || !saveResult.success) {
-          throw new Error(saveResult.error || '活動記録の保存に失敗しました')
+          throw new Error(saveResult.error || '保育日誌の保存に失敗しました')
         }
 
         savedActivityId = saveResult.data?.activity_id
-        setSaveMessage('活動記録を保存しました')
+        setSaveMessage('保育日誌を保存しました')
 
         // 新規保存後は編集モードに切り替え
         setEditingActivityId(savedActivityId)
@@ -700,7 +700,7 @@ export default function ActivityRecordClient() {
           content: activityContent,
           activity_date: activityDate,
           mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
-          activity_id: savedActivityId, // 保存した活動記録IDを紐付け
+          activity_id: savedActivityId, // 保存した保育日誌IDを紐付け
         }),
       })
 
@@ -715,7 +715,7 @@ export default function ActivityRecordClient() {
       setShowAnalysisModal(true)
       persistAiDraftsToCookie(analysisResults)
 
-      // 活動記録一覧を更新
+      // 保育日誌一覧を更新
       fetchActivities()
     } catch (err) {
       console.error('Failed to analyze:', err)
@@ -1035,7 +1035,7 @@ export default function ActivityRecordClient() {
   }
 
   const handleDelete = async (activityId: string) => {
-    const confirmed = window.confirm("この活動記録を削除しますか？")
+    const confirmed = window.confirm("この保育日誌を削除しますか？")
     if (!confirmed) return
 
     setIsDeletingId(activityId)
@@ -1391,12 +1391,12 @@ export default function ActivityRecordClient() {
   }
 
   return (
-    <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
+    <StaffLayout title="保育日誌" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
         <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
-            <CardTitle>活動記録の入力</CardTitle>
+            <CardTitle>保育日誌の入力</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1961,7 +1961,7 @@ export default function ActivityRecordClient() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">活動記録一覧</h2>
+            <h2 className="text-xl font-semibold">保育日誌一覧</h2>
           </div>
 
           {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
@@ -2046,7 +2046,7 @@ export default function ActivityRecordClient() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
-                              aria-label="活動記録を編集"
+                              aria-label="保育日誌を編集"
                               onClick={() => handleEdit(activity)}
                             >
                               <Edit2 className="h-3.5 w-3.5" />
@@ -2055,7 +2055,7 @@ export default function ActivityRecordClient() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                              aria-label="活動記録を削除"
+                              aria-label="保育日誌を削除"
                               onClick={() => handleDelete(activity.activity_id)}
                               disabled={isDeletingId === activity.activity_id}
                             >
@@ -2072,7 +2072,7 @@ export default function ActivityRecordClient() {
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">活動記録はまだありません。</p>
+                <p className="text-muted-foreground">保育日誌はまだありません。</p>
                 <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
               </CardContent>
             </Card>

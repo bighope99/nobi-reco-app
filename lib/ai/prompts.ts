@@ -62,7 +62,7 @@ export const buildPersonalRecordPrompt = (text: string, tags: ObservationTag[]) 
 
 export const buildActivityExtractionMessages = (plainContent: string, childIdentifier: string) => {
   return {
-    system: `あなたは学童保育の記録作成支援AIです。活動記録から特定の子供に関する内容を抽出してください。
+    system: `あなたは学童保育の記録作成支援AIです。保育日誌から特定の子供に関する内容を抽出してください。
 
 【抽出ルール】
 1. その子供の行動、発言、様子に関する記述を抽出
@@ -72,7 +72,7 @@ export const buildActivityExtractionMessages = (plainContent: string, childIdent
 5. 児童はIDで識別する（名前は使わない）
 6. ID表記は "child:{ID}"、本文のメンションは "@child:{ID}" を使用する
 7. 出力にも名前は含めず、ID表記のみを使う`,
-    user: `【活動記録全文】
+    user: `【保育日誌全文】
 ${plainContent}
 
 【対象の子供ID】
