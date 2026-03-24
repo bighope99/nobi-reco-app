@@ -146,6 +146,23 @@ export async function POST(request: NextRequest) {
     const classId = (formData.get('class_id') || '') as string;
     const mode = (formData.get('mode') || 'commit') as string;
 
+    // 行ごとの学校・クラス設定（フロントから送られる場合はこちらを優先）
+    let rowSettings: Array<{ school_id: string; class_id: string }> | null = null;
+    const rowSettingsRaw = formData.get('row_settings');
+    if (typeof rowSettingsRaw === 'string' && rowSettingsRaw.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(rowSettingsRaw);
+        if (Array.isArray(parsed)) {
+          rowSettings = parsed;
+        }
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'row_settings の JSON 形式が無効です' },
+          { status: 400 }
+        );
+      }
+    }
+
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: 'CSVファイルが必要です' }, { status: 400 });
     }
@@ -238,7 +255,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'CSVにデータがありません' }, { status: 400 });
     }
 
-    const defaults = {
+    const globalDefaults = {
       school_id: schoolId || null,
       class_id: classId || null,
     };
@@ -416,6 +433,14 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < rows.length; i += 1) {
       const rowNumber = i + 2;
+      // 行ごとの設定があればそちらを優先、なければグローバルデフォルトを使用
+      const rowOverride = rowSettings?.[i];
+      const defaults = rowOverride
+        ? {
+            school_id: rowOverride.school_id || globalDefaults.school_id,
+            class_id: rowOverride.class_id || globalDefaults.class_id,
+          }
+        : globalDefaults;
       const { payload, errors } = buildChildPayload(rows[i], defaults);
 
       if (mode === 'preview') {

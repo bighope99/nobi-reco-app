@@ -46,6 +46,7 @@ type SiblingCandidate = {
     row?: number
   }>
 }
+type RowSetting = { school_id: string; class_id: string }
 
 export default function ChildImportPage() {
   const session = useSession()
@@ -78,6 +79,11 @@ export default function ChildImportPage() {
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // 行ごとの学校・クラス設定
+  const [rowSettings, setRowSettings] = useState<RowSetting[]>([])
+  // 範囲選択のアンカー行インデックス（ここから下に一括適用）
+  const [anchorRowIdx, setAnchorRowIdx] = useState<number | null>(null)
 
   // 初期ロード: 施設一覧のみ取得
   useEffect(() => {
@@ -176,6 +182,10 @@ export default function ChildImportPage() {
       setPreviewResult(json.data)
       setApprovedSiblingPhones([])
       setApprovedDuplicateRows([])
+      setAnchorRowIdx(null)
+      // プレビュー取得後、rowSettings を一括設定値で初期化
+      const rows: PreviewRow[] = json.data?.rows ?? []
+      setRowSettings(rows.map(() => ({ school_id: selectedSchoolId, class_id: selectedClassId })))
     } catch (err) {
       setError(err instanceof Error ? err.message : "プレビューの取得に失敗しました")
     } finally {
@@ -183,8 +193,26 @@ export default function ChildImportPage() {
     }
   }, [selectedFacilityId, selectedSchoolId, selectedClassId])
 
+  const validateFileType = (file: File): string | null => {
+    const name = file.name.toLowerCase()
+    if (!name.endsWith('.csv')) {
+      const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '（拡張子なし）'
+      return `ファイル形式が違います（.csvファイルを選択してください。選択されたファイル: ${ext}）`
+    }
+    return null
+  }
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null
+    if (file) {
+      const typeError = validateFileType(file)
+      if (typeError) {
+        setError(typeError)
+        if (fileInputRef.current) fileInputRef.current.value = ""
+        return
+      }
+    }
+    setError(null)
     setSelectedFile(file)
   }
 
@@ -207,9 +235,14 @@ export default function ChildImportPage() {
     event.preventDefault()
     setIsDragging(false)
     const file = event.dataTransfer.files?.[0]
-    if (file && file.name.endsWith('.csv')) {
-      setSelectedFile(file)
+    if (!file) return
+    const typeError = validateFileType(file)
+    if (typeError) {
+      setError(typeError)
+      return
     }
+    setError(null)
+    setSelectedFile(file)
   }
 
   const handleImport = async () => {
@@ -230,6 +263,7 @@ export default function ChildImportPage() {
       if (selectedFacilityId) formData.append("facility_id", selectedFacilityId)
       if (selectedSchoolId) formData.append("school_id", selectedSchoolId)
       if (selectedClassId) formData.append("class_id", selectedClassId)
+      if (rowSettings.length > 0) formData.append("row_settings", JSON.stringify(rowSettings))
 
       const response = await fetch("/api/children/import", {
         method: "POST",
@@ -249,6 +283,7 @@ export default function ChildImportPage() {
       setSelectedClassId("")
       setSelectedFile(null)
       setPreviewResult(null)
+      setRowSettings([])
       setApprovedSiblingPhones([])
       setError(null)
       if (fileInputRef.current) {
@@ -267,6 +302,8 @@ export default function ChildImportPage() {
     setImportResult(null)
     setApprovedSiblingPhones([])
     setApprovedDuplicateRows([])
+    setRowSettings([])
+    setAnchorRowIdx(null)
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -280,6 +317,30 @@ export default function ChildImportPage() {
       }
       return prev.filter((key) => key !== phoneKey)
     })
+  }
+
+  // 行設定を個別更新
+  const updateRowSetting = (idx: number, field: keyof RowSetting, value: string) => {
+    setRowSettings((prev) => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [field]: value }
+      return next
+    })
+  }
+
+  // 全行に一括適用
+  const applyToAllRows = (schoolId: string, classId: string) => {
+    setRowSettings((prev) => prev.map(() => ({ school_id: schoolId, class_id: classId })))
+  }
+
+  // アンカー行以降に一括適用
+  const applyFromAnchor = (schoolId: string, classId: string) => {
+    if (anchorRowIdx === null) return
+    setRowSettings((prev) =>
+      prev.map((setting, idx) =>
+        idx >= anchorRowIdx ? { school_id: schoolId, class_id: classId } : setting
+      )
+    )
   }
 
   return (
@@ -461,7 +522,7 @@ export default function ChildImportPage() {
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  CSVの取り込み対象として、所属施設・学校・クラスを指定してください。
+                  CSVの取り込み対象として、所属施設・学校・クラスを指定してください。学校・クラスは以下のプレビュー表で行ごとに変更することもできます。
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
@@ -487,49 +548,98 @@ export default function ChildImportPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-semibold">子どもの所属学校</Label>
-                    <Select
-                      value={selectedSchoolId}
-                      onValueChange={setSelectedSchoolId}
-                      disabled={loading || previewLoading}
-                    >
-                      <SelectTrigger className="bg-background/80 backdrop-blur">
-                        <SelectValue placeholder="学校を選択" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {schools.map((school) => (
-                          <SelectItem
-                            key={school.school_id}
-                            value={school.school_id}
-                          >
-                            {school.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-sm font-semibold">学校（全行に適用）</Label>
+                    <div className="flex gap-2">
+                      <Select
+                        value={selectedSchoolId}
+                        onValueChange={setSelectedSchoolId}
+                        disabled={loading || previewLoading}
+                      >
+                        <SelectTrigger className="bg-background/80 backdrop-blur flex-1">
+                          <SelectValue placeholder="学校を選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {schools.map((school) => (
+                            <SelectItem
+                              key={school.school_id}
+                              value={school.school_id}
+                            >
+                              {school.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {previewResult && rowSettings.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 text-xs"
+                          onClick={() => applyToAllRows(selectedSchoolId, selectedClassId)}
+                          disabled={previewLoading}
+                        >
+                          全行適用
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-semibold">子どもの所属クラス</Label>
-                    <Select
-                      value={selectedClassId}
-                      onValueChange={setSelectedClassId}
-                      disabled={loading || previewLoading}
-                    >
-                      <SelectTrigger className="bg-background/80 backdrop-blur">
-                        <SelectValue placeholder="クラスを選択" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.map((cls) => (
-                          <SelectItem key={cls.class_id} value={cls.class_id}>
-                            {cls.class_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-sm font-semibold">クラス（全行に適用）</Label>
+                    <div className="flex gap-2">
+                      <Select
+                        value={selectedClassId}
+                        onValueChange={setSelectedClassId}
+                        disabled={loading || previewLoading}
+                      >
+                        <SelectTrigger className="bg-background/80 backdrop-blur flex-1">
+                          <SelectValue placeholder="クラスを選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {classes.map((cls) => (
+                            <SelectItem key={cls.class_id} value={cls.class_id}>
+                              {cls.class_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {previewResult && rowSettings.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 text-xs"
+                          onClick={() => applyToAllRows(selectedSchoolId, selectedClassId)}
+                          disabled={previewLoading}
+                        >
+                          全行適用
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
+                {anchorRowIdx !== null && previewResult && (
+                  <div className="flex items-center gap-3 pt-2 border-t border-amber-200/40">
+                    <span className="text-xs text-amber-700 font-medium">
+                      {anchorRowIdx + 1}行目以降に適用:
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                      onClick={() => applyFromAnchor(selectedSchoolId, selectedClassId)}
+                    >
+                      選択行以降に現在の学校・クラスを適用
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => setAnchorRowIdx(null)}
+                    >
+                      解除
+                    </Button>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground leading-relaxed pt-2 border-t border-amber-200/40">
-                  選択内容はプレビューと保存時の両方に反映されます。
+                  施設の選択はプレビューと保存時の両方に反映されます。学校・クラスは行ごとに上書きできます。
                 </p>
               </div>
 
@@ -555,6 +665,11 @@ export default function ChildImportPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gradient-to-r from-muted/60 to-muted/40 border-b-2 border-border sticky top-0">
                         <tr>
+                          <th className="px-3 py-3 text-left font-semibold text-foreground/80 w-10">
+                            <span className="text-xs text-muted-foreground">選択</span>
+                          </th>
+                          <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">学校</th>
+                          <th className="px-3 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">クラス</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 w-16">行</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">氏名</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">生年月日</th>
@@ -570,9 +685,67 @@ export default function ChildImportPage() {
                           <tr
                             key={row.row}
                             className={`transition-colors hover:bg-muted/30 ${
-                              row.errors.length > 0 ? 'bg-red-50/40' : idx % 2 === 0 ? 'bg-background' : 'bg-muted/10'
+                              anchorRowIdx !== null && idx === anchorRowIdx
+                                ? 'bg-amber-50/60 ring-1 ring-amber-300'
+                                : row.errors.length > 0
+                                ? 'bg-red-50/40'
+                                : idx % 2 === 0
+                                ? 'bg-background'
+                                : 'bg-muted/10'
                             }`}
                           >
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                title="この行以降に一括適用するアンカーを設定"
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs transition-colors ${
+                                  anchorRowIdx === idx
+                                    ? 'bg-amber-400 border-amber-500 text-white'
+                                    : 'border-border hover:border-amber-400 hover:bg-amber-50'
+                                }`}
+                                onClick={() => setAnchorRowIdx(anchorRowIdx === idx ? null : idx)}
+                              >
+                                {anchorRowIdx === idx ? '▼' : ''}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2">
+                              <Select
+                                value={rowSettings[idx]?.school_id ?? ""}
+                                onValueChange={(value) => updateRowSetting(idx, "school_id", value)}
+                                disabled={previewLoading}
+                              >
+                                <SelectTrigger className="h-8 text-xs min-w-[120px]">
+                                  <SelectValue placeholder="学校を選択" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">未設定</SelectItem>
+                                  {schools.map((school) => (
+                                    <SelectItem key={school.school_id} value={school.school_id}>
+                                      {school.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-3 py-2">
+                              <Select
+                                value={rowSettings[idx]?.class_id ?? ""}
+                                onValueChange={(value) => updateRowSetting(idx, "class_id", value)}
+                                disabled={previewLoading}
+                              >
+                                <SelectTrigger className="h-8 text-xs min-w-[110px]">
+                                  <SelectValue placeholder="クラスを選択" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">未設定</SelectItem>
+                                  {classes.map((cls) => (
+                                    <SelectItem key={cls.class_id} value={cls.class_id}>
+                                      {cls.class_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
                             <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.row}</td>
                             <td className="px-4 py-3 font-medium">
                               {row.family_name} {row.given_name}
