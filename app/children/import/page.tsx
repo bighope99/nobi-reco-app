@@ -46,7 +46,7 @@ type SiblingCandidate = {
     row?: number
   }>
 }
-type RowSetting = { school_id: string; class_id: string }
+type RowSetting = { school_id: string | null; class_id: string | null }
 
 export default function ChildImportPage() {
   const session = useSession()
@@ -185,7 +185,7 @@ export default function ChildImportPage() {
       setApprovedDuplicateRows([])
       // プレビュー取得後、rowSettings を空で初期化
       const rows: PreviewRow[] = json.data?.rows ?? []
-      setRowSettings(rows.map(() => ({ school_id: "", class_id: "" })))
+      setRowSettings(rows.map(() => ({ school_id: null, class_id: null })))
       setSelectedRowIdxs([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "プレビューの取得に失敗しました")

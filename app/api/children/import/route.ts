@@ -152,9 +152,24 @@ export async function POST(request: NextRequest) {
     if (typeof rowSettingsRaw === 'string' && rowSettingsRaw.trim().length > 0) {
       try {
         const parsed = JSON.parse(rowSettingsRaw);
-        if (!Array.isArray(parsed)) {
+        const isValidRowSetting = (
+          value: unknown
+        ): value is { school_id?: string | null; class_id?: string | null } => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+          const entry = value as { school_id?: unknown; class_id?: unknown };
+          const schoolOk =
+            entry.school_id === undefined ||
+            typeof entry.school_id === 'string' ||
+            entry.school_id === null;
+          const classOk =
+            entry.class_id === undefined ||
+            typeof entry.class_id === 'string' ||
+            entry.class_id === null;
+          return schoolOk && classOk;
+        };
+        if (!Array.isArray(parsed) || !parsed.every(isValidRowSetting)) {
           return NextResponse.json(
-            { success: false, error: 'row_settings は JSON 配列である必要があります' },
+            { success: false, error: 'row_settings の形式が正しくありません' },
             { status: 400 }
           );
         }
@@ -433,32 +448,35 @@ export async function POST(request: NextRequest) {
       const rowSchoolIds = [...new Set(rowSettings.map((r) => r.school_id).filter((id): id is string => !!id))];
       const rowClassIds = [...new Set(rowSettings.map((r) => r.class_id).filter((id): id is string => !!id))];
 
-      if (rowSchoolIds.length > 0) {
-        const { data: validSchools } = await supabase
-          .from('m_schools')
-          .select('id')
-          .in('id', rowSchoolIds)
-          .eq('facility_id', targetFacilityId)
-          .is('deleted_at', null);
-        const validSchoolIdSet = new Set((validSchools || []).map((s: { id: string }) => s.id));
-        const invalidSchoolId = rowSchoolIds.find((id) => !validSchoolIdSet.has(id));
-        if (invalidSchoolId) {
-          return NextResponse.json({ success: false, error: '指定された学校が施設に属していません' }, { status: 400 });
-        }
+      const [schoolsResult, classesResult] = await Promise.all([
+        rowSchoolIds.length > 0
+          ? supabase
+              .from('m_schools')
+              .select('id')
+              .in('id', rowSchoolIds)
+              .eq('facility_id', targetFacilityId)
+              .is('deleted_at', null)
+          : Promise.resolve({ data: [] }),
+        rowClassIds.length > 0
+          ? supabase
+              .from('m_classes')
+              .select('id')
+              .in('id', rowClassIds)
+              .eq('facility_id', targetFacilityId)
+              .is('deleted_at', null)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const validSchoolIdSet = new Set((schoolsResult.data || []).map((s: { id: string }) => s.id));
+      const invalidSchoolId = rowSchoolIds.find((id) => !validSchoolIdSet.has(id));
+      if (invalidSchoolId) {
+        return NextResponse.json({ success: false, error: '指定された学校が施設に属していません' }, { status: 400 });
       }
 
-      if (rowClassIds.length > 0) {
-        const { data: validClasses } = await supabase
-          .from('m_classes')
-          .select('id')
-          .in('id', rowClassIds)
-          .eq('facility_id', targetFacilityId)
-          .is('deleted_at', null);
-        const validClassIdSet = new Set((validClasses || []).map((c: { id: string }) => c.id));
-        const invalidClassId = rowClassIds.find((id) => !validClassIdSet.has(id));
-        if (invalidClassId) {
-          return NextResponse.json({ success: false, error: '指定されたクラスが施設に属していません' }, { status: 400 });
-        }
+      const validClassIdSet = new Set((classesResult.data || []).map((c: { id: string }) => c.id));
+      const invalidClassId = rowClassIds.find((id) => !validClassIdSet.has(id));
+      if (invalidClassId) {
+        return NextResponse.json({ success: false, error: '指定されたクラスが施設に属していません' }, { status: 400 });
       }
     }
 
