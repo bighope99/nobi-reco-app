@@ -54,6 +54,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 - **Use a worktree for code changes**: Create a NEW worktree before starting any task that will modify code, docs, or other tracked files, or when parallel implementation may be useful. Notion確認・調査・チケット操作だけのような非コード作業では worktree は不要。
 - **Worktree cleanup**: Delete the worktree when the user says the session/task is done (e.g., "終了"). Discard uncommitted `package-lock.json` and `settings.json` without committing them.
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
+- **PR fix workflow**: PR番号 (`/pull/123`) またはブランチ指定で修正する場合は `fix-pr` スキルを使う。原則、同じPRにプッシュ。新PRは「分けて」と明示された場合のみ。
 - **Code change workflow**: 実装完了後は以下の順で実行する
   1. （任意）`pr-review` スキル — セキュリティ・品質・パフォーマンスを網羅的に確認したい場合のみ実行。軽微な変更や CodeRabbit で十分な場合は不要。
   2. `create-pr` スキル — PR作成 → CodeRabbitレビューループ（最大3回）
