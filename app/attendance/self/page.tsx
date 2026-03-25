@@ -327,7 +327,7 @@ export default function SelfCheckInPage() {
               <div className="flex flex-col items-center gap-2 px-6 text-center">
                 <Hand className="h-24 w-24" />
                 <p className="text-5xl font-bold mt-4">
-                  {checkinAction === 'check_in' ? 'しゅっせき かんりょう！' : 'またね！'}
+                  {checkinAction === 'check_in' ? 'おかえり！' : 'またね！'}
                 </p>
                 <p className="text-4xl mt-2">{selectedChild?.kanaName}</p>
                 <p className="text-3xl mt-1">{checkinTime}</p>
@@ -392,17 +392,16 @@ function ChildButton({
   }
 
   return (
-    <Button
-      variant="outline"
+    <button
       onClick={() => onSelect(child)}
       className={[
-        'flex min-h-24 h-auto w-full flex-col items-center justify-center text-center rounded-2xl bg-white px-4 py-3 shadow-md',
+        'flex min-h-24 w-full flex-col items-center justify-center text-center rounded-2xl border bg-white px-4 py-3 shadow-md',
         'active:scale-95 transition-transform hover:bg-blue-50',
       ].join(' ')}
     >
       <p className="text-3xl font-bold text-gray-800">{child.kanaName}</p>
       <p className="text-base text-gray-500">{child.kanjiName}</p>
       {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
-    </Button>
+    </button>
   )
 }
