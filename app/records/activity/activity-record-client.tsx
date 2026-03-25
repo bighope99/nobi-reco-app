@@ -1596,6 +1596,7 @@ export default function ActivityRecordClient() {
                     <div key={index} className="flex items-center gap-2">
                       <Input
                         type="time"
+                        step={300}
                         value={item.time || '10:00'}
                         onChange={(e) => {
                           const newSchedule = [...dailySchedule]
@@ -2321,6 +2322,7 @@ export default function ActivityRecordClient() {
                     <div key={index} className="flex items-center gap-2">
                       <Input
                         type="time"
+                        step={300}
                         value={item.time || '10:00'}
                         onChange={(e) => setEditingTemplate((prev) => {
                           if (!prev) return prev
