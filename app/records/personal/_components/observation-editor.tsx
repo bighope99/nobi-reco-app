@@ -1133,22 +1133,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         updated_at: new Date().toISOString(),
         addenda: [],
       };
+      if (!draftId) {
+        // 保存成功後は画面をリセットしてトップへ遷移
+        if (selectedChildId) {
+          router.push(`/records/personal/new?childId=${selectedChildId}`);
+        } else {
+          router.push('/records/personal/new');
+        }
+        return;
+      }
       setObservation(newObservation);
       setIsEditing(false);
-      if (!draftId) {
-        setShowContinueButton(true);
-        // 過去記録リストに新規保存した記録を追加（リロード不要で反映）
-        const newRecentItem: RecentObservation = {
-          id: result.data.id,
-          observation_date: result.data.observation_date,
-          content: result.data.content ?? text,
-          created_at: new Date().toISOString(),
-          tag_ids: Object.entries(aiResult.flags)
-            .filter(([, v]) => v)
-            .map(([k]) => k),
-        };
-        setRecentObservations((prev) => [newRecentItem, ...prev.slice(0, 9)]);
-      }
 
       // draftIdがある場合、ステータスを'saved'に更新
       if (draftId) {
