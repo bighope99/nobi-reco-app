@@ -310,7 +310,8 @@ CREATE TYPE attendance_status_type AS ENUM (
 ```sql
 CREATE TYPE check_method_type AS ENUM (
   'qr',      -- QRコード
-  'manual'   -- 手動
+  'manual',  -- 手動
+  'self'     -- タッチ自己登録
 );
 ```
 
