@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TimePicker } from "@/components/ui/time-picker"
 import DOMPurify from "dompurify"
@@ -199,6 +199,7 @@ export default function ActivityRecordClient() {
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
+  const [isMealOpen, setIsMealOpen] = useState(false)
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -1716,9 +1717,18 @@ export default function ActivityRecordClient() {
               />
             </div>
 
-            {/* ごはん */}
+            {/* ごはん（長期休み期間のみ使用・デフォルト折りたたみ） */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">ごはん</Label>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMealOpen((prev) => !prev)}
+                aria-expanded={isMealOpen}
+              >
+                {isMealOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                ごはん（長期休み期間）
+              </button>
+              {isMealOpen && (
               <div className="grid grid-cols-1 gap-3 p-4 border rounded-lg bg-muted/30">
                 <div className="space-y-2">
                   <Label htmlFor="mealMenu" className="text-xs text-muted-foreground">メニュー</Label>
@@ -1766,6 +1776,7 @@ export default function ActivityRecordClient() {
                   />
                 </div>
               </div>
+              )}
             </div>
 
             {/* 観察記録（旧: 活動内容） */}
