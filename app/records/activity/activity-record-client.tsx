@@ -2162,6 +2162,17 @@ export default function ActivityRecordClient() {
               </CardContent>
             </Card>
           )}
+          {activitiesData && activitiesData.activities.length > 0 && (
+            <div className="mt-4 text-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/records/activity/history')}
+              >
+                さらに見る
+              </Button>
+            </div>
+          )}
         </div>
 
         <Dialog open={showAnalysisModal} onOpenChange={(open) => !open && closeModal()}>

@@ -1945,6 +1945,18 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </div>
                     );
                   })()}
+                  {selectedChildId && (
+                    <div className="mt-3 text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => router.push(`/records/personal/history?childId=${selectedChildId}`)}
+                      >
+                        さらに見る
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
