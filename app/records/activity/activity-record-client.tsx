@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
+import { useState, useEffect, useRef, useCallback, type ChangeEvent, type DragEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { getCurrentDateJST } from "@/lib/utils/timezone"
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, Clipboard, Check, CheckCircle2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, GripVertical, Clipboard, Check, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import DOMPurify from "dompurify"
 import {
@@ -109,6 +109,12 @@ interface StaffMember {
 
 // AiObservationResult型は共通ファイルからimport済み
 
+const createScheduleItem = (): DailyScheduleItem => ({ time: "10:00", content: "" })
+const cloneSchedule = (items: DailyScheduleItem[]): DailyScheduleItem[] =>
+  items.map((item) => ({ ...item }))
+const createDefaultSchedule = (): DailyScheduleItem[] =>
+  Array.from({ length: 5 }, () => createScheduleItem())
+
 export default function ActivityRecordClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -167,13 +173,7 @@ export default function ActivityRecordClient() {
   // 新規フィールドの状態
   const [eventName, setEventName] = useState("")
   // デフォルト5行、初期値10:00
-  const DEFAULT_SCHEDULE: DailyScheduleItem[] = [
-    { time: "10:00", content: "" },
-    { time: "10:00", content: "" },
-    { time: "10:00", content: "" },
-    { time: "10:00", content: "" },
-    { time: "10:00", content: "" },
-  ]
+  const DEFAULT_SCHEDULE: DailyScheduleItem[] = createDefaultSchedule()
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
   // デフォルト2行
   const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
@@ -188,6 +188,8 @@ export default function ActivityRecordClient() {
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
+  const [draggingScheduleIndex, setDraggingScheduleIndex] = useState<number | null>(null)
+  const [dragOverScheduleIndex, setDragOverScheduleIndex] = useState<number | null>(null)
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -197,6 +199,77 @@ export default function ActivityRecordClient() {
     ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'br', 'strong', 'em', 'span'],
     ALLOWED_ATTR: ['class'],
     KEEP_CONTENT: true,
+  }
+
+  const appendScheduleItem = () => {
+    setDailySchedule((prev) => [...prev, createScheduleItem()])
+  }
+
+  const insertScheduleItemAt = (index: number) => {
+    setDailySchedule((prev) => {
+      const next = [...prev]
+      next.splice(index, 0, createScheduleItem())
+      return next
+    })
+  }
+
+  const updateScheduleItem = (index: number, patch: Partial<DailyScheduleItem>) => {
+    setDailySchedule((prev) =>
+      prev.map((item, currentIndex) =>
+        currentIndex === index ? { ...item, ...patch } : item
+      )
+    )
+  }
+
+  const removeScheduleItem = (index: number) => {
+    setDailySchedule((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
+  }
+
+  const reorderScheduleItem = (fromIndex: number, toIndex: number) => {
+    setDailySchedule((prev) => {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= prev.length ||
+        toIndex >= prev.length
+      ) {
+        return prev
+      }
+
+      const next = [...prev]
+      const [movedItem] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, movedItem)
+      return next
+    })
+  }
+
+  const handleScheduleDragStart = (index: number) => {
+    setDraggingScheduleIndex(index)
+    setDragOverScheduleIndex(index)
+  }
+
+  const handleScheduleDragEnter = (index: number) => {
+    if (draggingScheduleIndex === null || draggingScheduleIndex === index) {
+      return
+    }
+    setDragOverScheduleIndex(index)
+  }
+
+  const handleScheduleDragEnd = () => {
+    setDraggingScheduleIndex(null)
+    setDragOverScheduleIndex(null)
+  }
+
+  const handleScheduleDrop = (event: DragEvent<HTMLDivElement>, dropIndex: number) => {
+    event.preventDefault()
+    if (draggingScheduleIndex === null) {
+      return
+    }
+
+    reorderScheduleItem(draggingScheduleIndex, dropIndex)
+    setDraggingScheduleIndex(null)
+    setDragOverScheduleIndex(null)
   }
 
   useEffect(() => {
@@ -954,9 +1027,11 @@ export default function ActivityRecordClient() {
 
     // 新規フィールドを復元（デフォルト値と一貫性を保つ）
     setEventName(activity.event_name || "")
-    setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
-      ? activity.daily_schedule
-      : DEFAULT_SCHEDULE)
+    setDailySchedule(
+      activity.daily_schedule && activity.daily_schedule.length > 0
+        ? cloneSchedule(activity.daily_schedule)
+        : createDefaultSchedule()
+    )
     setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
       : DEFAULT_ROLE_ASSIGNMENTS)
@@ -1138,6 +1213,8 @@ export default function ActivityRecordClient() {
   const handleCancelEdit = () => {
     setIsEditMode(false)
     setEditingActivityId(null)
+    setDraggingScheduleIndex(null)
+    setDragOverScheduleIndex(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1146,7 +1223,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule([...DEFAULT_SCHEDULE])
+    setDailySchedule(createDefaultSchedule())
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
@@ -1155,6 +1232,10 @@ export default function ActivityRecordClient() {
   }
 
   const handleRestart = () => {
+    setDraggingScheduleIndex(null)
+    setDragOverScheduleIndex(null)
+    setIsEditMode(false)
+    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1162,7 +1243,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule([...DEFAULT_SCHEDULE])
+    setDailySchedule(createDefaultSchedule())
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
@@ -1471,7 +1552,7 @@ export default function ActivityRecordClient() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])}
+                  onClick={appendScheduleItem}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   追加
@@ -1483,73 +1564,120 @@ export default function ActivityRecordClient() {
                   const timeParts = (item.time || '10:00').split(':')
                   const hours = timeParts[0] || '10'
                   const minutes = timeParts[1] || '00'
+                  const isDragging = draggingScheduleIndex === index
+                  const isDropTarget =
+                    dragOverScheduleIndex === index && draggingScheduleIndex !== null && !isDragging
                   return (
-                    <div key={index} className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
-                        <Select
-                          value={hours}
-                          onValueChange={(value) => {
-                            const newSchedule = [...dailySchedule]
-                            newSchedule[index] = { ...item, time: `${value}:${minutes}` }
-                            setDailySchedule(newSchedule)
+                    <div
+                      key={`${item.time}-${index}`}
+                      onDragEnter={() => handleScheduleDragEnter(index)}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                      }}
+                      onDrop={(event) => handleScheduleDrop(event, index)}
+                      className={cn(
+                        "p-1 transition-colors",
+                        isDragging && "opacity-60",
+                        isDropTarget && "rounded-md bg-primary/5"
+                      )}
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                        <div
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', '')
+                            handleScheduleDragStart(index)
                           }}
-                        >
-                          <SelectTrigger className="w-16">
-                            <SelectValue placeholder="時" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
-                              <SelectItem key={h} value={h}>
-                                {h}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <span className="text-sm text-muted-foreground">時</span>
-                        <Select
-                          value={minutes}
-                          onValueChange={(value) => {
-                            const newSchedule = [...dailySchedule]
-                            newSchedule[index] = { ...item, time: `${hours}:${value}` }
-                            setDailySchedule(newSchedule)
+                          onDragEnd={handleScheduleDragEnd}
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === 'ArrowUp' && index > 0) {
+                              event.preventDefault()
+                              reorderScheduleItem(index, index - 1)
+                            } else if (event.key === 'ArrowDown' && index < dailySchedule.length - 1) {
+                              event.preventDefault()
+                              reorderScheduleItem(index, index + 1)
+                            }
                           }}
+                          className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 rounded"
+                          aria-label={`${index + 1}行目をドラッグまたは矢印キーで並び替え`}
                         >
-                          <SelectTrigger className="w-16">
-                            <SelectValue placeholder="分" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
-                              <SelectItem key={m} value={m}>
-                                {m}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <span className="text-sm text-muted-foreground">分</span>
+                          <GripVertical className="h-4 w-4" />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Select
+                            value={hours}
+                            onValueChange={(value) => {
+                              updateScheduleItem(index, { time: `${value}:${minutes}` })
+                            }}
+                          >
+                            <SelectTrigger className="w-16">
+                              <SelectValue placeholder="時" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                                <SelectItem key={h} value={h}>
+                                  {h}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-sm text-muted-foreground">時</span>
+                          <Select
+                            value={minutes}
+                            onValueChange={(value) => {
+                              updateScheduleItem(index, { time: `${hours}:${value}` })
+                            }}
+                          >
+                            <SelectTrigger className="w-16">
+                              <SelectValue placeholder="分" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                                <SelectItem key={m} value={m}>
+                                  {m}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-sm text-muted-foreground">分</span>
+                        </div>
+                        <Input
+                          type="text"
+                          value={item.content}
+                          onChange={(e) => {
+                            updateScheduleItem(index, { content: e.target.value })
+                          }}
+                          placeholder="活動内容"
+                          className="flex-1"
+                          maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
+                        />
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => insertScheduleItemAt(index + 1)}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            下に追加
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              removeScheduleItem(index)
+                            }}
+                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`${index + 1}行目を削除`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <Input
-                        type="text"
-                        value={item.content}
-                        onChange={(e) => {
-                          const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, content: e.target.value }
-                          setDailySchedule(newSchedule)
-                        }}
-                        placeholder="活動内容"
-                        className="flex-1"
-                        maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setDailySchedule((prev) => prev.filter((_, i) => i !== index))
-                        }}
-                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
                     </div>
                   )
                 })}
