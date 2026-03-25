@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Camera, Check, Loader2, SwitchCamera, TriangleAlert, VideoOff } from "lucide-react"
 import { BrowserQRCodeReader } from "@zxing/browser"
 
-import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
 
 interface AttendanceQrPayload {
@@ -230,7 +229,7 @@ export default function QRAttendanceScannerPage() {
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
   return (
-    <StaffLayout title="QR出席" subtitle="QRコードをかざして出席をとろう">
+    <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
       <div className="space-y-6">
         {/* QRコード読み取りエリア */}
         <div className="relative overflow-hidden rounded-2xl border-4 border-primary/20 bg-black">
@@ -370,6 +369,6 @@ export default function QRAttendanceScannerPage() {
           </div>
         )}
       </div>
-    </StaffLayout>
+    </div>
   )
 }

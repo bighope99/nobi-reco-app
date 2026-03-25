@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Hand, Loader2 } from "lucide-react"
-import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { toKatakana } from "@/lib/utils/kana"
@@ -228,7 +227,7 @@ export default function SelfCheckInPage() {
     : `「${selectedRow}」のおともだち`
 
   return (
-    <StaffLayout title="タッチ出席" subtitle="なまえをえらんで しゅっせきをとろう">
+    <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
       {loading && (
         <div className="flex justify-center py-16">
           <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
@@ -347,7 +346,7 @@ export default function SelfCheckInPage() {
           )}
         </>
       )}
-    </StaffLayout>
+    </div>
   )
 }
 

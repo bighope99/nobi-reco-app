@@ -27,7 +27,7 @@ type NavItem = {
   href: string
   icon: React.ReactNode
   roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
-  children?: { label: string; href: string; hidden?: boolean }[]
+  children?: { label: string; href: string; hidden?: boolean; target?: string }[]
 }
 
 const staffNavItems: NavItem[] = [
@@ -49,8 +49,8 @@ const staffNavItems: NavItem[] = [
     icon: <UserCheck className="h-5 w-5" />,
     children: [
       { label: "出席予定登録", href: "/attendance/schedule" },
-      { label: "QR出欠", href: "/attendance/qr" },
-      { label: "タッチ出欠", href: "/attendance/self" },
+      { label: "QR出欠", href: "/attendance/qr", target: "_blank" },
+      { label: "タッチ出欠", href: "/attendance/self", target: "_blank" },
       { label: "出席児童一覧", href: "/attendance/list" },
     ],
   },
@@ -203,6 +203,7 @@ export function Sidebar({ type, role, userName, isOpen = false, onClose }: Sideb
                         <Link
                           href={child.href}
                           onClick={handleNavClick}
+                          target={child.target}
                           className={cn(
                             "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                             "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
