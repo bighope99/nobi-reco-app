@@ -18,24 +18,28 @@ interface ChildRecord {
   checkedOutAt?: string
 }
 
-type View = 'row-select' | 'vowel-select' | 'child-select' | 'feedback'
+type View = 'kana-select' | 'child-select' | 'feedback'
 
-const VOWEL_THRESHOLD = 6
-
-const ROW_VOWELS: Record<string, string[]> = {
-  'あ': ['あ', 'い', 'う', 'え', 'お'],
-  'か': ['か', 'き', 'く', 'け', 'こ'],
-  'さ': ['さ', 'し', 'す', 'せ', 'そ'],
-  'た': ['た', 'ち', 'つ', 'て', 'と'],
-  'な': ['な', 'に', 'ぬ', 'ね', 'の'],
-  'は': ['は', 'ひ', 'ふ', 'へ', 'ほ'],
-  'ま': ['ま', 'み', 'む', 'め', 'も'],
-  'や': ['や', 'ゆ', 'よ'],
-  'ら': ['ら', 'り', 'る', 'れ', 'ろ'],
-  'わ': ['わ', 'を', 'ん'],
+const KANA_ROW_MAP: Record<string, string> = {}
+const ROW_KANA: [string, string[]][] = [
+  ['あ', ['あ', 'い', 'う', 'え', 'お']],
+  ['か', ['か', 'き', 'く', 'け', 'こ']],
+  ['さ', ['さ', 'し', 'す', 'せ', 'そ']],
+  ['た', ['た', 'ち', 'つ', 'て', 'と']],
+  ['な', ['な', 'に', 'ぬ', 'ね', 'の']],
+  ['は', ['は', 'ひ', 'ふ', 'へ', 'ほ']],
+  ['ま', ['ま', 'み', 'む', 'め', 'も']],
+  ['や', ['や', 'ゆ', 'よ']],
+  ['ら', ['ら', 'り', 'る', 'れ', 'ろ']],
+  ['わ', ['わ', 'を', 'ん']],
+]
+const ALL_KANA: string[] = []
+for (const [row, kanas] of ROW_KANA) {
+  for (const k of kanas) {
+    ALL_KANA.push(k)
+    KANA_ROW_MAP[k] = row
+  }
 }
-
-const KANA_ROWS = ['あ', 'か', 'さ', 'た', 'な', 'は', 'ま', 'や', 'ら', 'わ']
 
 function formatTime(isoString?: string): string {
   if (!isoString) return ''
@@ -62,9 +66,8 @@ export default function SelfCheckInPage() {
   const [loading, setLoading] = useState(true)
   const optimisticIdsRef = useRef<Set<string>>(new Set())
 
-  const [view, setView] = useState<View>('row-select')
-  const [selectedRow, setSelectedRow] = useState<string>('')
-  const [selectedVowel, setSelectedVowel] = useState<string>('')
+  const [view, setView] = useState<View>('kana-select')
+  const [selectedKana, setSelectedKana] = useState<string>('')
   const [selectedChild, setSelectedChild] = useState<ChildRecord | null>(null)
   const [checkinTime, setCheckinTime] = useState<string>('')
   const [checkinAction, setCheckinAction] = useState<'check_in' | 'check_out'>('check_in')
@@ -105,22 +108,17 @@ export default function SelfCheckInPage() {
     return () => clearInterval(interval)
   }, [fetchChildren])
 
-  const rowCounts = Object.fromEntries(
-    KANA_ROWS.map((row) => [row, groups[row]?.length ?? 0])
+  // 各かな文字ごとの児童数
+  const kanaCounts = Object.fromEntries(
+    ALL_KANA.map((kana) => {
+      const row = KANA_ROW_MAP[kana]
+      const children = groups[row] ?? []
+      return [kana, children.filter(c => toKatakana(c.kanaName).startsWith(toKatakana(kana))).length]
+    })
   )
 
-  const handleRowSelect = (row: string, count: number) => {
-    setSelectedRow(row)
-    setSelectedVowel('')
-    if (count >= VOWEL_THRESHOLD) {
-      setView('vowel-select')
-    } else {
-      setView('child-select')
-    }
-  }
-
-  const handleVowelSelect = (vowel: string) => {
-    setSelectedVowel(vowel)
+  const handleKanaSelect = (kana: string) => {
+    setSelectedKana(kana)
     setView('child-select')
   }
 
@@ -201,30 +199,19 @@ export default function SelfCheckInPage() {
   useEffect(() => {
     if (view !== 'feedback') return
     if (countdown <= 0) {
-      setView('row-select')
+      setView('kana-select')
       return
     }
     const timer = setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => clearTimeout(timer)
   }, [view, countdown])
 
-  // 表示する児童（母音フィルタ含む）
+  // 選択されたかなに該当する児童
+  const selectedRow = KANA_ROW_MAP[selectedKana] ?? ''
   const rowChildren = groups[selectedRow] ?? []
-  const visibleChildren = selectedVowel
-    ? rowChildren.filter((c) => toKatakana(c.kanaName).startsWith(toKatakana(selectedVowel)))
-    : rowChildren
-
-  // 修正2: 母音ごとの人数（disabled判定に使用）
-  const vowelCounts = Object.fromEntries(
-    (ROW_VOWELS[selectedRow] ?? []).map((vowel) => [
-      vowel,
-      rowChildren.filter((c) => toKatakana(c.kanaName).startsWith(toKatakana(vowel))).length,
-    ])
-  )
-
-  const childSelectTitle = selectedVowel
-    ? `「${selectedRow}行・${selectedVowel}」のおともだち`
-    : `「${selectedRow}」のおともだち`
+  const visibleChildren = selectedKana
+    ? rowChildren.filter((c) => toKatakana(c.kanaName).startsWith(toKatakana(selectedKana)))
+    : []
 
   return (
     <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
@@ -236,63 +223,29 @@ export default function SelfCheckInPage() {
 
       {!loading && (
         <>
-          {/* 画面1: 50音行選択 */}
-          {view === 'row-select' && (
-            <div className="grid grid-cols-2 gap-4">
-              {KANA_ROWS.map((row) => {
-                const count = rowCounts[row] ?? 0
+          {/* 画面1: 50音選択 */}
+          {view === 'kana-select' && (
+            <div className="grid grid-cols-5 gap-2">
+              {ALL_KANA.map((kana) => {
+                const count = kanaCounts[kana] ?? 0
                 return (
-                  <Button
-                    key={row}
-                    variant="outline"
-                    onClick={() => count > 0 && handleRowSelect(row, count)}
+                  <button
+                    key={kana}
+                    onClick={() => count > 0 && handleKanaSelect(kana)}
                     disabled={count === 0}
                     className={[
-                      'flex min-h-24 h-auto flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md',
+                      'flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white p-2 min-h-16 shadow-md',
                       'active:scale-95 transition-transform',
                       count > 0
                         ? 'hover:bg-blue-50 cursor-pointer'
-                        : 'opacity-40 cursor-not-allowed',
+                        : 'opacity-30 cursor-not-allowed',
                     ].join(' ')}
                   >
-                    <span className="text-6xl font-bold">{row}</span>
-                    <span className="text-sm text-gray-500">{count}にん</span>
-                  </Button>
+                    <span className="text-3xl font-bold">{kana}</span>
+                    {count > 0 && <span className="text-xs text-gray-500">{count}</span>}
+                  </button>
                 )
               })}
-            </div>
-          )}
-
-          {/* 画面1.5: 母音選択（6人以上の行） */}
-          {view === 'vowel-select' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-4">
-                <Button variant="outline" size="sm" onClick={() => setView('row-select')}>
-                  ← もどる
-                </Button>
-                <span className="text-xl font-bold">「{selectedRow}行」— どれ？</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                {(ROW_VOWELS[selectedRow] ?? []).map((vowel) => {
-                  const count = vowelCounts[vowel] ?? 0
-                  return (
-                    <Button
-                      key={vowel}
-                      variant="ghost"
-                      onClick={() => count > 0 && handleVowelSelect(vowel)}
-                      disabled={count === 0}
-                      className={[
-                        'flex min-h-24 h-auto flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md',
-                        'active:scale-95 transition-transform',
-                        count > 0 ? 'hover:bg-blue-50' : 'opacity-40 cursor-not-allowed',
-                      ].join(' ')}
-                    >
-                      <span className="text-6xl font-bold">{vowel}</span>
-                      <span className="text-sm text-gray-500">{count}にん</span>
-                    </Button>
-                  )
-                })}
-              </div>
             </div>
           )}
 
@@ -303,11 +256,11 @@ export default function SelfCheckInPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => selectedVowel ? setView('vowel-select') : setView('row-select')}
+                  onClick={() => setView('kana-select')}
                 >
                   ← もどる
                 </Button>
-                <span className="text-xl font-bold">{childSelectTitle}</span>
+                <span className="text-xl font-bold">「{selectedKana}」のおともだち</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {visibleChildren.map((child) => (
