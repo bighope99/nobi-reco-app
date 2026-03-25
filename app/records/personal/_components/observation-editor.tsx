@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
@@ -46,6 +47,7 @@ import {
   loadAiDraftsFromCookie,
   markDraftAsSaved,
 } from '@/lib/drafts/aiDraftCookie';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { replaceChildIdsWithNames, replaceChildNamesWithIds } from '@/lib/ai/childIdFormatter';
 
 // TODO: UIコンポーネントライブラリからインポートに置き換え（今後開発）
@@ -178,6 +180,7 @@ type RecentObservation = {
   subjective?: string | null;
   is_ai_analyzed?: boolean;
   created_at: string;
+  recorded_by_name?: string | null;
   tag_ids?: string[];
 };
 
@@ -305,6 +308,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
   const previousSelectedChildIdRef = useRef('');
+  // 保存済み本文のスナップショット（edit時のdirty判定に使用）
+  const savedBodyRef = useRef<string>('');
   // 記録日選択用の状態
   const [observationDate, setObservationDate] = useState<Date | null>(null);
   // 音声入力用の状態
@@ -318,6 +323,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiParam = searchParams?.get('autoAi');
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
+
+  // 入力途中に離脱した場合の警告（beforeunload + サイドメニュークリック）
+  // 新規: テキスト入力済みかつ未保存 / 編集: 保存済み本文から変更があるか
+  const isFormDirty = (isNew && !showContinueButton && editText.trim().length > 0) ||
+    (!isNew && isEditing && editText !== savedBodyRef.current);
+  useUnsavedChanges(isFormDirty, '変更内容が失われます。ページを移動しますか？');
 
   // 日付の初期化（クライアント側でのみ実行）
   useEffect(() => {
@@ -539,10 +550,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           className: child.class_name || '未設定',
           grade: child.grade ?? null,
         }));
-        // 学年降順（6年→1年）、同学年内はあいうえお順にソート
+        // 学年降順（6年→1年）、学年不明は最後尾、同学年内はあいうえお順にソート
         children.sort((a, b) => {
-          const gradeA = a.grade ?? 0;
-          const gradeB = b.grade ?? 0;
+          const gradeA = a.grade ?? -1;
+          const gradeB = b.grade ?? -1;
           if (gradeA !== gradeB) {
             return gradeB - gradeA;
           }
@@ -809,6 +820,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       };
 
       setObservation(observationRecord);
+      savedBodyRef.current = displayContent;
 
       // 既存の記録者を復元
       if (data.recorded_by) {
@@ -1135,45 +1147,47 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       };
       setObservation(newObservation);
       setIsEditing(false);
+      setEditText('');
+
       if (!draftId) {
+        // 保存成功後はAI解析結果を表示し「続けて入力」ボタンを表示する
         setShowContinueButton(true);
-        // 過去記録リストに新規保存した記録を追加（リロード不要で反映）
+        // 過去記録リストに追加
         const newRecentItem: RecentObservation = {
           id: result.data.id,
           observation_date: result.data.observation_date,
           content: result.data.content ?? text,
           created_at: new Date().toISOString(),
+          recorded_by_name: staffList.find(s => s.user_id === selectedRecorder)?.name ?? null,
           tag_ids: Object.entries(aiResult.flags)
             .filter(([, v]) => v)
             .map(([k]) => k),
         };
         setRecentObservations((prev) => [newRecentItem, ...prev.slice(0, 9)]);
+        return;
       }
 
-      // draftIdがある場合、ステータスを'saved'に更新
-      if (draftId) {
-        markDraftAsSaved(
-          draftId,
-          result.data.id,
-          result.data.observation_date,
-          result.data.content ?? text,
-        );
-        if (typeof window !== 'undefined') {
-          const lastSaved = {
-            draft_id: draftId,
-            activity_id: activityId,
-            child_id: selectedChildId,
-            child_display_name: resolvedChildName,
-            observation_date: result.data.observation_date ?? getCurrentDateJST(),
-            content: result.data.content ?? text,
-            status: 'saved' as const,
-            observation_id: result.data.id,
-          };
-          window.sessionStorage.setItem('nobiRecoAiLastSavedDraft', JSON.stringify(lastSaved));
-        }
-        // 一覧画面に戻る（activityページに戻る）
-        router.push('/records/activity?aiModal=1');
+      // draftIdがある場合、ステータスを'saved'に更新して一覧画面へ戻る
+      markDraftAsSaved(
+        draftId,
+        result.data.id,
+        result.data.observation_date,
+        result.data.content ?? text,
+      );
+      if (typeof window !== 'undefined') {
+        const lastSaved = {
+          draft_id: draftId,
+          activity_id: activityId,
+          child_id: selectedChildId,
+          child_display_name: resolvedChildName,
+          observation_date: result.data.observation_date ?? getCurrentDateJST(),
+          content: result.data.content ?? text,
+          status: 'saved' as const,
+          observation_id: result.data.id,
+        };
+        window.sessionStorage.setItem('nobiRecoAiLastSavedDraft', JSON.stringify(lastSaved));
       }
+      router.push('/records/activity?aiModal=1');
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '新規保存に失敗しました';
       setError(errorMessage);
@@ -1423,15 +1437,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 
               </div>
               <div className="flex gap-2">
-                {!isNew && (
-                  <Button
-                    variant="outline"
-                    className="border-green-200 text-green-600 hover:bg-green-50"
-                    onClick={handleCreateNew}
-                  >
-                    <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
-                  </Button>
-                )}
                 <Button
                   variant="outline"
                   disabled={savingEdit || aiEditSaving || aiProcessing}
@@ -1488,7 +1493,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            {!(mode === 'edit' && hasAiOutput) && (
+            {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1682,6 +1687,25 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {isNew && showContinueButton && observation && (
+                    <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-blue-600" />
+                        <span className="text-gray-600">児童名</span>
+                        <span className="font-medium">{childDisplayName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-orange-600" />
+                        <span className="text-gray-600">記録者</span>
+                        <span className="font-medium">{observation.recorded_by_name || user?.display_name || user?.email || '不明'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-green-600" />
+                        <span className="text-gray-600">日付</span>
+                        <span className="font-medium">{observation.observed_at ? formatDate(observation.observed_at) : '不明'}</span>
+                      </div>
+                    </div>
+                  )}
                   {mode === 'edit' && hasAiOutput && (
                     <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
                       <div className="flex items-center gap-2">
@@ -1787,7 +1811,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
                             解釈・所感
                           </Label>
-                          <span className="ml-2 text-xs text-gray-400">今日この子の行動を見て感じたこと・発見したことは？</span>
                         </div>
                         <span className="text-sm text-gray-500">
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
@@ -1848,6 +1871,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </div>
                     )}
                     <div className="flex justify-end gap-2">
+                      {isNew && showContinueButton && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-green-200 text-green-600 hover:bg-green-50"
+                          onClick={handleCreateNew}
+                        >
+                          <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
+                        </Button>
+                      )}
                       <Button type="submit" data-testid="ai-save" className="bg-purple-600 hover:bg-purple-700" disabled={aiEditSaving}>
                         {aiEditSaving ? (
                           <>
@@ -1880,84 +1913,73 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     return visibleObservations.length === 0 ? (
                       <p className="text-sm text-gray-500">過去の記録はありません。</p>
                     ) : (
-                      <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">内容</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">タグ</th>
-                              <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                          {visibleObservations.map((item) => {
-                            const tagBadges = getTagBadges(item.tag_ids);
-                            const contentText = displayRecentContent(item.content);
-                            const truncated = contentText.length > 60
-                              ? contentText.slice(0, 60) + '...'
-                              : contentText;
-                            return (
-                              <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                                <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                                  {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
-                                </td>
-                                <td className="px-3 py-2 max-w-xs">
+                      <div className="divide-y divide-[#d3d3d3]">
+                        {visibleObservations.map((item) => {
+                          const tagBadges = getTagBadges(item.tag_ids);
+                          const contentText = displayRecentContent(item.content);
+                          return (
+                            <div key={item.id} className="px-[5px] py-3 hover:bg-gray-50 transition-colors">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                                    <span className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                                      {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
+                                    </span>
+                                    {item.recorded_by_name && (
+                                      <span className="text-xs text-gray-500 whitespace-nowrap">{item.recorded_by_name}</span>
+                                    )}
+                                    {tagBadges.map((tag) => (
+                                      <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
+                                        {tag.name}
+                                      </Badge>
+                                    ))}
+                                  </div>
                                   {item.is_ai_analyzed && (item.objective || item.subjective) ? (
                                     <div className="space-y-0.5">
                                       {item.objective && (
-                                        <div><span className="text-xs font-semibold text-gray-500">事実：</span><span className="text-sm text-gray-800 line-clamp-5">{displayRecentContent(item.objective)}</span></div>
+                                        <div><span className="text-xs font-semibold text-gray-500">事実：</span><span className="text-sm text-gray-800 line-clamp-3">{displayRecentContent(item.objective)}</span></div>
                                       )}
                                       {item.subjective && (
-                                        <div><span className="text-xs font-semibold text-gray-500">所感：</span><span className="text-sm text-gray-800 line-clamp-5">{displayRecentContent(item.subjective)}</span></div>
+                                        <div><span className="text-xs font-semibold text-gray-500">所感：</span><span className="text-sm text-gray-800 line-clamp-3">{displayRecentContent(item.subjective)}</span></div>
                                       )}
                                     </div>
                                   ) : (
-                                    <p className="text-sm text-gray-800 truncate" title={contentText}>
-                                      {truncated}
-                                    </p>
+                                    <p className="text-sm text-gray-800 line-clamp-3">{contentText}</p>
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {tagBadges.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {tagBadges.map((tag) => (
-                                        <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
-                                          {tag.name}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex justify-end gap-1">
-                                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleEditRecent(item.id)}>
-                                      編集
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                      aria-label={`${item.observation_date ? formatDate(item.observation_date) : '日付不明'}の記録を削除`}
-                                      onClick={() => handleDeleteClick(item.id)}
-                                      disabled={deletingObservationId === item.id}
-                                    >
-                                      {deletingObservationId === item.id ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="h-3 w-3" />
-                                      )}
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          </tbody>
-                        </table>
+                                </div>
+                                <div className="flex gap-1 shrink-0">
+                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleEditRecent(item.id)}>
+                                    編集
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                    aria-label={`${item.observation_date ? formatDate(item.observation_date) : '日付不明'}の記録を削除`}
+                                    onClick={() => handleDeleteClick(item.id)}
+                                    disabled={deletingObservationId === item.id}
+                                  >
+                                    {deletingObservationId === item.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })()}
+                  {selectedChildId && (
+                    <div className="mt-3 text-center">
+                      <Button variant="outline" size="sm" className="text-xs" asChild>
+                        <Link href={`/records/personal/history?childId=${selectedChildId}`}>さらに見る</Link>
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

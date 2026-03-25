@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useActivityTemplates } from "@/hooks/useActivityTemplates"
@@ -2386,6 +2387,13 @@ export default function ActivityRecordClient() {
                 <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
               </CardContent>
             </Card>
+          )}
+          {(activitiesData?.activities.length ?? 0) > 0 && (
+            <div className="mt-4 text-center">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/records/activity/history">さらに見る</Link>
+              </Button>
+            </div>
           )}
         </div>
 

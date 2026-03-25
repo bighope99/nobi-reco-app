@@ -114,6 +114,9 @@ export async function GET(
           subjective,
           is_ai_analyzed,
           created_at,
+          recorded_by_user:m_users!recorded_by (
+            name
+          ),
           record_tags:_record_tag!observation_id (
             tag_id
           )
@@ -181,6 +184,7 @@ export async function GET(
           subjective: obs.subjective ?? null,
           is_ai_analyzed: obs.is_ai_analyzed ?? false,
           created_at: obs.created_at,
+          recorded_by_name: (obs.recorded_by_user as { name?: string } | null)?.name ?? null,
           tag_ids: (() => {
             const fromJoin = Array.isArray(obs.record_tags)
               ? obs.record_tags
