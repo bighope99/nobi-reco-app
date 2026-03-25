@@ -19,13 +19,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id: facility_id } = metadata;
+    const { role, current_facility_id, company_id } = metadata;
+
+    // クエリパラメータ取得
+    const { searchParams } = new URL(request.url);
+
+    // company_admin / site_admin はクエリパラメータで施設IDを指定可能
+    const facilityIdQuery = searchParams.get('facility_id') || '';
+    let facility_id: string;
+    if (role === 'company_admin' || role === 'site_admin') {
+      facility_id = facilityIdQuery || current_facility_id || '';
+    } else {
+      facility_id = current_facility_id || '';
+    }
+
     if (!facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
-    // クエリパラメータ取得
-    const { searchParams } = new URL(request.url);
+    // company_adminのスコープチェック: 自社施設のみ閲覧可能
+    if (role === 'company_admin') {
+      const { data: scopedFacility } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', facility_id)
+        .eq('company_id', company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (!scopedFacility) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const status = searchParams.get('status') || 'enrolled'; // enrolled / withdrawn
     const class_id = searchParams.get('class_id') || null;
     const search = searchParams.get('search') || null;

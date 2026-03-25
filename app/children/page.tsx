@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import { Badge } from "@/components/ui/badge";
+import { useRole } from "@/hooks/useRole";
 
 import {
     Search,
@@ -16,7 +17,8 @@ import {
     Download,
     Upload,
     Loader2,
-    CameraOff
+    CameraOff,
+    Building2
 } from 'lucide-react';
 
 // --- Types ---
@@ -130,6 +132,9 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
 // --- Components ---
 
 export default function StudentList() {
+    const { hasRole } = useRole();
+    const isCompanyAdmin = hasRole('company_admin');
+
     // State
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
@@ -141,6 +146,10 @@ export default function StudentList() {
     const [totalCount, setTotalCount] = useState(0);
     const [qrGeneratingId, setQrGeneratingId] = useState<string | null>(null);
     const [batchGenerating, setBatchGenerating] = useState(false);
+
+    // company_admin向け施設選択
+    const [facilityOptions, setFacilityOptions] = useState<Array<{ facility_id: string; name: string }>>([]);
+    const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
 
     // Sort State
     const [sortKey, setSortKey] = useState<SortKey>('grade');
@@ -161,8 +170,32 @@ export default function StudentList() {
         };
     }, [searchTerm]);
 
+    // company_admin向け施設一覧取得
+    useEffect(() => {
+        if (!isCompanyAdmin) return;
+        const fetchFacilities = async () => {
+            try {
+                const response = await fetch('/api/facilities');
+                const result = await response.json();
+                if (result.success && result.data?.facilities) {
+                    setFacilityOptions(result.data.facilities);
+                    if (result.data.facilities.length > 0 && !selectedFacilityId) {
+                        setSelectedFacilityId(result.data.facilities[0].facility_id);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch facilities:', err);
+            }
+        };
+        fetchFacilities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isCompanyAdmin]);
+
     // Fetch children data from API
     useEffect(() => {
+        // company_adminは施設が選択されるまで待機
+        if (isCompanyAdmin && !selectedFacilityId) return;
+
         const abortController = new AbortController();
 
         const fetchChildren = async () => {
@@ -185,6 +218,11 @@ export default function StudentList() {
 
                 if (debouncedSearch) {
                     params.append('search', debouncedSearch);
+                }
+
+                // company_adminは選択中施設IDを送信
+                if (isCompanyAdmin && selectedFacilityId) {
+                    params.append('facility_id', selectedFacilityId);
                 }
 
                 const response = await fetch(`/api/children?${params.toString()}`, {
@@ -220,7 +258,7 @@ export default function StudentList() {
         return () => {
             abortController.abort();
         };
-    }, [activeTab, filterClass, debouncedSearch]);
+    }, [activeTab, filterClass, debouncedSearch, isCompanyAdmin, selectedFacilityId]);
 
     // Toggle Status Function (Now updates via API)
     const toggleStatus = async (id: string, currentStatus: StatusType) => {
@@ -381,7 +419,12 @@ export default function StudentList() {
 
     const handleExportChildren = async () => {
         try {
-            const response = await fetch('/api/children/export');
+            const params = new URLSearchParams();
+            if (isCompanyAdmin && selectedFacilityId) {
+                params.append('facility_id', selectedFacilityId);
+            }
+            const url = `/api/children/export${params.toString() ? `?${params.toString()}` : ''}`;
+            const response = await fetch(url);
             if (!response.ok) {
                 let message = 'エクスポートに失敗しました';
                 try {
@@ -427,6 +470,26 @@ export default function StudentList() {
                 </style>
 
                 <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+
+                    {/* company_admin向け施設選択 */}
+                    {isCompanyAdmin && facilityOptions.length > 0 && (
+                        <div className="flex items-center gap-3 mb-4 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+                            <Building2 size={16} className="text-blue-500 shrink-0" />
+                            <span className="text-sm font-bold text-blue-700 shrink-0">施設を選択:</span>
+                            <select
+                                className="bg-white border border-blue-200 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-1.5"
+                                value={selectedFacilityId}
+                                onChange={(e) => {
+                                    setSelectedFacilityId(e.target.value);
+                                    setFilterClass('all');
+                                }}
+                            >
+                                {facilityOptions.map(f => (
+                                    <option key={f.facility_id} value={f.facility_id}>{f.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     {/* Header Area */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6" >

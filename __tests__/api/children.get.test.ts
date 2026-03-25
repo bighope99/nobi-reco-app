@@ -998,4 +998,130 @@ describe('GET /api/children', () => {
       expect(typeof child.class_name === 'string' || child.class_name === null).toBe(true);
     });
   });
+
+  describe('company_admin', () => {
+    const buildCompanyAdminSupabase = (childrenData: any[] = []) => {
+      const childrenQuery: any = {
+        select: jest.fn(() => childrenQuery),
+        eq: jest.fn(() => childrenQuery),
+        is: jest.fn(() => childrenQuery),
+        order: jest.fn(() => childrenQuery),
+        range: jest.fn().mockResolvedValue({
+          data: childrenData,
+          error: null,
+          count: childrenData.length,
+        }),
+      };
+
+      const facilityScopeQuery: any = {
+        select: jest.fn(() => facilityScopeQuery),
+        eq: jest.fn(() => facilityScopeQuery),
+        is: jest.fn(() => facilityScopeQuery),
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: { id: 'facility-2' },
+          error: null,
+        }),
+      };
+
+      const summaryQuery: any = {
+        select: jest.fn(() => summaryQuery),
+        eq: jest.fn(() => summaryQuery),
+        is: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
+      const classesQuery: any = {
+        select: jest.fn(() => classesQuery),
+        eq: jest.fn(() => classesQuery),
+        is: jest.fn(() => classesQuery),
+        order: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
+      const classChildrenQuery: any = {
+        select: jest.fn(() => classChildrenQuery),
+        eq: jest.fn(() => classChildrenQuery),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
+      const siblingsQuery: any = {
+        select: jest.fn(() => siblingsQuery),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
+      return {
+        auth: {
+          getSession: jest.fn().mockResolvedValue({
+            data: { session: { user: { id: 'user-1' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'company_admin',
+                  company_id: 'company-1',
+                  current_facility_id: null,
+                },
+              },
+            },
+            error: null,
+          }),
+        },
+        from: jest.fn((table: string) => {
+          if (table === 'm_facilities') return facilityScopeQuery;
+          if (table === 'm_children') return childrenQuery;
+          if (table === '_child_sibling') return siblingsQuery;
+          if (table === 'm_classes') return classesQuery;
+          if (table === '_child_class') return classChildrenQuery;
+          throw new Error(`Unexpected table: ${table}`);
+        }),
+      };
+    };
+
+    it('should accept facility_id query param and return children for company_admin', async () => {
+      const mockSupabase = buildCompanyAdminSupabase([]);
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      const request = buildRequest({ facility_id: 'facility-2' });
+      const response = await GET(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+    });
+
+    it('should return 404 when company_admin provides no facility_id and has no current_facility_id', async () => {
+      const supabaseWithNoClaims = {
+        auth: {
+          getSession: jest.fn().mockResolvedValue({
+            data: { session: { user: { id: 'user-1' } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: 'user-1',
+                app_metadata: {
+                  role: 'company_admin',
+                  company_id: 'company-1',
+                  current_facility_id: null,
+                },
+              },
+            },
+            error: null,
+          }),
+        },
+        from: jest.fn(),
+      };
+
+      mockedCreateClient.mockResolvedValue(supabaseWithNoClaims as any);
+
+      const request = buildRequest(); // facility_id なし
+      const response = await GET(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(json.error).toBe('Facility not found');
+    });
+  });
 });
