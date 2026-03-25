@@ -252,15 +252,16 @@ describe('/api/attendance/checkin POST', () => {
     });
   });
 
-  describe('重複チェックイン検証', () => {
+  describe('2回目QR読取り（帰宅）検証', () => {
     beforeEach(() => {
       (getUserSession as jest.Mock).mockResolvedValue({
         user_id: 'user-123',
         current_facility_id: 'facility-123',
       });
+      mockSupabase.update = jest.fn().mockReturnThis();
     });
 
-    it('既にチェックイン済みの場合は200を返す', async () => {
+    it('チェックイン済み・未帰宅の場合はチェックアウトを実行する', async () => {
       mockSupabase.maybeSingle
         .mockResolvedValueOnce({
           data: {
@@ -280,12 +281,19 @@ describe('/api/attendance/checkin POST', () => {
           error: null,
         });
 
-      mockSupabase.maybeSingle.mockResolvedValue({
+      // existing attendance: checked in, not checked out
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
         data: {
           id: 'attendance-123',
           checked_in_at: new Date().toISOString(),
+          checked_out_at: null,
         },
         error: null,
+      });
+
+      // update for checkout: from().update().eq() chain
+      mockSupabase.update = jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
       });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
@@ -306,7 +314,55 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.data).toHaveProperty('child_id', 'child-123');
       expect(data.data).toHaveProperty('child_name', '田中 太郎');
       expect(data.data).toHaveProperty('class_name', 'ひまわり組');
-      expect(data.data).toHaveProperty('already_checked_in', true);
+      expect(data.data).toHaveProperty('action_type', 'check_out');
+      expect(data.data).toHaveProperty('checked_out_at');
+    });
+
+    it('既にチェックアウト済みの場合は409を返す', async () => {
+      mockSupabase.maybeSingle
+        .mockResolvedValueOnce({
+          data: {
+            id: 'child-123',
+            facility_id: 'facility-123',
+            family_name: '田中',
+            given_name: '太郎',
+            _child_class: [
+              {
+                class: {
+                  id: 'class-123',
+                  name: 'ひまわり組',
+                },
+              },
+            ],
+          },
+          error: null,
+        });
+
+      // existing attendance: already checked out
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
+        data: {
+          id: 'attendance-123',
+          checked_in_at: new Date().toISOString(),
+          checked_out_at: new Date().toISOString(),
+        },
+        error: null,
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
+        method: 'POST',
+        body: JSON.stringify({
+          token: createHmac('sha256', qrSecret)
+            .update(`child-123facility-123${qrSecret}`)
+            .digest('hex'),
+          child_id: 'child-123',
+        }),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.success).toBe(false);
     });
   });
 

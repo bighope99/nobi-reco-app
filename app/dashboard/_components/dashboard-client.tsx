@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   ChevronRight,
   Loader2,
+  Undo2,
 } from 'lucide-react';
 import type { Child, PriorityData, RecordSupport, SortKey, SortOrder } from './types';
 import {
@@ -31,6 +32,15 @@ import {
   RecordSupportSkeleton,
 } from './skeletons';
 import { updateAlertsAndKpi } from '@/lib/dashboard/optimistic-updates';
+
+interface UndoInfo {
+  action: 'undo_check_in' | 'undo_check_out';
+  childId: string;
+  childName: string;
+  label: string;
+}
+
+const UNDO_TIMEOUT_MS = 30_000;
 
 export default function DashboardClient() {
   // Phase 1: Priority data (KPI + Alerts + Action Required)
@@ -53,6 +63,10 @@ export default function DashboardClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+
+  // UNDO機能
+  const [undoInfo, setUndoInfo] = useState<UndoInfo | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 二次データ取得済みフラグ（無限ループ防止）
   const hasFetchedSecondaryData = useRef(false);
@@ -203,6 +217,10 @@ export default function DashboardClient() {
                   return { ...child, is_scheduled_today: true };
                 case 'confirm_unexpected':
                   return { ...child, is_scheduled_today: true, alert_type: null };
+                case 'undo_check_in':
+                  return { ...child, status: 'absent' as const, actual_in_time: null };
+                case 'undo_check_out':
+                  return { ...child, status: 'checked_in' as const, actual_out_time: null };
                 default:
                   return child;
               }
@@ -231,6 +249,10 @@ export default function DashboardClient() {
                 return { ...child, is_scheduled_today: true };
               case 'confirm_unexpected':
                 return { ...child, is_scheduled_today: true };
+              case 'undo_check_in':
+                return { ...child, status: 'absent' as const, actual_in_time: null };
+              case 'undo_check_out':
+                return { ...child, status: 'checked_in' as const, actual_out_time: null };
               default:
                 return child;
             }
@@ -273,14 +295,75 @@ export default function DashboardClient() {
     }
   };
 
+  // UNDO: find child name from all known children
+  const findChildName = useCallback((childId: string): string => {
+    const allChildren = [
+      ...(priorityData?.action_required ?? []),
+      ...otherChildren,
+    ];
+    return allChildren.find((c) => c.child_id === childId)?.name ?? '';
+  }, [priorityData, otherChildren]);
+
+  // UNDO: show toast with timer
+  const showUndoToast = useCallback((info: UndoInfo) => {
+    // Clear any existing undo timer
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+    }
+    setUndoInfo(info);
+    undoTimerRef.current = setTimeout(() => {
+      setUndoInfo(null);
+      undoTimerRef.current = null;
+    }, UNDO_TIMEOUT_MS);
+  }, []);
+
+  // UNDO: dismiss toast
+  const dismissUndo = useCallback(() => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    setUndoInfo(null);
+  }, []);
+
+  // UNDO: execute undo action
+  const handleUndo = useCallback(async () => {
+    if (!undoInfo) return;
+    dismissUndo();
+    await postAttendanceAction(undoInfo.action, undoInfo.childId);
+  }, [undoInfo, dismissUndo]);
+
+  // Cleanup undo timer on unmount / page navigation
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) {
+        clearTimeout(undoTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleCheckIn = async (childId: string) => {
     const clickedAt = new Date().toISOString();
+    const childName = findChildName(childId);
     await postAttendanceAction('check_in', childId, clickedAt);
+    showUndoToast({
+      action: 'undo_check_in',
+      childId,
+      childName,
+      label: `${childName} の登所を取り消しますか？`,
+    });
   };
 
   const handleCheckOut = async (childId: string) => {
     const clickedAt = new Date().toISOString();
+    const childName = findChildName(childId);
     await postAttendanceAction('check_out', childId, clickedAt);
+    showUndoToast({
+      action: 'undo_check_out',
+      childId,
+      childName,
+      label: `${childName} の帰宅を取り消しますか？`,
+    });
   };
 
   const handleMarkAbsent = async (childId: string) => {
@@ -608,6 +691,26 @@ export default function DashboardClient() {
             onClick={() => setActionError(null)}
             className="ml-2 text-red-500 hover:text-red-700 transition-colors"
             aria-label="Close error notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {undoInfo && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white pl-4 pr-2 py-3 rounded-lg shadow-xl flex items-center gap-3 max-w-md animate-in slide-in-from-bottom-4">
+          <span className="flex-1 text-sm">{undoInfo.label}</span>
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-bold text-amber-300 hover:text-amber-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+          >
+            <Undo2 size={14} />
+            取り消し
+          </button>
+          <button
+            onClick={dismissUndo}
+            className="text-slate-400 hover:text-white px-1 transition-colors"
+            aria-label="閉じる"
           >
             ✕
           </button>

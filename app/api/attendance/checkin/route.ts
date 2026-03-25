@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     // Check if already checked in today
     const { data: existing } = await supabase
       .from('h_attendance')
-      .select('id, checked_in_at')
+      .select('id, checked_in_at, checked_out_at')
       .eq('child_id', child_id)
       .eq('facility_id', facility_id)
       .gte('checked_in_at', startOfDayUTC)
@@ -155,8 +155,33 @@ export async function POST(request: NextRequest) {
       .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
-    // If already checked in today, return success without saving (idempotent behavior)
+    // If already checked in today: 2nd QR scan = check out, 3rd+ = error
     if (existing) {
+      // Already checked out — no more actions available today
+      if (existing.checked_out_at) {
+        return NextResponse.json({
+          success: false,
+          error: 'きょうは もう おわっているよ',
+        }, { status: 409 });
+      }
+
+      // Not yet checked out — perform check out (2nd QR scan)
+      const { error: checkoutError } = await supabase
+        .from('h_attendance')
+        .update({
+          checked_out_at: now.toISOString(),
+          check_out_method: 'qr',
+        })
+        .eq('id', existing.id);
+
+      if (checkoutError) {
+        console.error('QR checkout update error:', checkoutError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to record check-out' },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         data: {
@@ -164,8 +189,9 @@ export async function POST(request: NextRequest) {
           child_name: `${child.family_name} ${child.given_name}`,
           class_name: className,
           checked_in_at: existing.checked_in_at,
+          checked_out_at: now.toISOString(),
           attendance_date: today,
-          already_checked_in: true, // Flag to indicate this was already checked in
+          action_type: 'check_out',
         },
       });
     }
@@ -211,7 +237,8 @@ export async function POST(request: NextRequest) {
               class_name: className,
               checked_in_at: existingAttendance.checked_in_at,
               attendance_date: today,
-              already_checked_in: true, // Flag to indicate this was already checked in
+              action_type: 'check_in',
+              already_checked_in: true,
             },
           });
         }
@@ -232,6 +259,7 @@ export async function POST(request: NextRequest) {
         class_name: className,
         checked_in_at: attendance.checked_in_at,
         attendance_date: today,
+        action_type: 'check_in',
       },
     });
   } catch (error) {
