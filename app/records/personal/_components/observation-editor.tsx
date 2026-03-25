@@ -1888,60 +1888,73 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     return visibleObservations.length === 0 ? (
                       <p className="text-sm text-gray-500">過去の記録はありません。</p>
                     ) : (
-                      <div className="divide-y divide-gray-100 bg-white rounded-lg border">
-                        {visibleObservations.map((item) => {
-                          const tagBadges = getTagBadges(item.tag_ids);
-                          const contentText = displayRecentContent(item.content);
-                          return (
-                            <div key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs font-medium text-gray-600">
+                      <div className="rounded-lg border bg-white">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap w-24">日付</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">観察内容・タグ</th>
+                              <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap w-20">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {visibleObservations.map((item) => {
+                              const tagBadges = getTagBadges(item.tag_ids);
+                              const contentText = displayRecentContent(item.content);
+                              return (
+                                <tr key={item.id} className="hover:bg-muted/30 transition-colors align-top">
+                                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
                                     {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
-                                  </span>
-                                  {tagBadges.map((tag) => (
-                                    <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
-                                      {tag.name}
-                                    </Badge>
-                                  ))}
-                                </div>
-                                <div className="flex gap-1 shrink-0">
-                                  <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => handleEditRecent(item.id)}>
-                                    編集
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 text-xs px-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                    aria-label={`${item.observation_date ? formatDate(item.observation_date) : '日付不明'}の記録を削除`}
-                                    onClick={() => handleDeleteClick(item.id)}
-                                    disabled={deletingObservationId === item.id}
-                                  >
-                                    {deletingObservationId === item.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {tagBadges.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mb-1">
+                                        {tagBadges.map((tag) => (
+                                          <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
+                                            {tag.name}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {item.is_ai_analyzed && (item.objective || item.subjective) ? (
+                                      <div className="space-y-0.5">
+                                        {item.objective && (
+                                          <div><span className="text-xs font-semibold text-gray-500">事実：</span><span className="text-sm text-gray-800 line-clamp-3">{displayRecentContent(item.objective)}</span></div>
+                                        )}
+                                        {item.subjective && (
+                                          <div><span className="text-xs font-semibold text-gray-500">所感：</span><span className="text-sm text-gray-800 line-clamp-3">{displayRecentContent(item.subjective)}</span></div>
+                                        )}
+                                      </div>
                                     ) : (
-                                      <Trash2 className="h-3 w-3" />
+                                      <p className="text-sm text-gray-800 line-clamp-3">{contentText}</p>
                                     )}
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="text-sm text-gray-800">
-                                {item.is_ai_analyzed && (item.objective || item.subjective) ? (
-                                  <div className="space-y-0.5">
-                                    {item.objective && (
-                                      <div><span className="text-xs font-semibold text-gray-500">事実：</span><span className="line-clamp-3">{displayRecentContent(item.objective)}</span></div>
-                                    )}
-                                    {item.subjective && (
-                                      <div><span className="text-xs font-semibold text-gray-500">所感：</span><span className="line-clamp-3">{displayRecentContent(item.subjective)}</span></div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <p className="line-clamp-3 text-gray-700">{contentText}</p>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex justify-end gap-1">
+                                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleEditRecent(item.id)}>
+                                        編集
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                        aria-label={`${item.observation_date ? formatDate(item.observation_date) : '日付不明'}の記録を削除`}
+                                        onClick={() => handleDeleteClick(item.id)}
+                                        disabled={deletingObservationId === item.id}
+                                      >
+                                        {deletingObservationId === item.id ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     );
                   })()}
