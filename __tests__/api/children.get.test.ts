@@ -94,7 +94,14 @@ describe('GET /api/children', () => {
   });
 
   describe('Facility Validation', () => {
-    it('should return 404 when user has no current_facility_id', async () => {
+    it('should return 404 when company_admin has no facilities in company', async () => {
+      // company_adminで自社施設が存在しない場合は404
+      const facilitiesQuery: any = {
+        select: jest.fn(() => facilitiesQuery),
+        eq: jest.fn(() => facilitiesQuery),
+        is: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
       const mockSupabase = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
@@ -119,20 +126,13 @@ describe('GET /api/children', () => {
             error: null,
           }),
         },
+        from: jest.fn((table: string) => {
+          if (table === 'm_facilities') return facilitiesQuery;
+          throw new Error(`Unexpected table: ${table}`);
+        }),
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [],
-        current_facility_id: null,
-        classes: [],
-      });
 
       const request = buildRequest();
       const response = await GET(request);
@@ -142,7 +142,8 @@ describe('GET /api/children', () => {
       expect(json.error).toBe('Facility not found');
     });
 
-    it('should return 404 when userSession is null', async () => {
+    it('should return 401 when staff has no current_facility_id (JWT returns null)', async () => {
+      // staffでcurrent_facility_idがない場合、JWTメタデータがnullになり401になる
       const mockSupabase = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
@@ -158,7 +159,7 @@ describe('GET /api/children', () => {
               claims: {
                 sub: 'user-1',
                 app_metadata: {
-                  role: 'company_admin',
+                  role: 'staff',
                   company_id: 'company-1',
                   current_facility_id: null,
                 },
@@ -170,14 +171,41 @@ describe('GET /api/children', () => {
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue(null);
 
       const request = buildRequest();
       const response = await GET(request);
       const json = await response.json();
 
-      expect(response.status).toBe(404);
-      expect(json.error).toBe('Facility not found');
+      expect(response.status).toBe(401);
+      expect(json.error).toBe('Unauthorized');
+    });
+
+    it('should return 401 when getClaims returns error', async () => {
+      const mockSupabase = {
+        auth: {
+          getSession: jest.fn().mockResolvedValue({
+            data: {
+              session: {
+                user: { id: 'user-1' },
+              },
+            },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'JWT error' },
+          }),
+        },
+      };
+
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      const request = buildRequest();
+      const response = await GET(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(json.error).toBe('Unauthorized');
     });
   });
 
@@ -223,6 +251,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -235,20 +264,24 @@ describe('GET /api/children', () => {
       const summaryQuery: any = {
         select: jest.fn(() => summaryQuery),
         eq: jest.fn(() => summaryQuery),
-        is: jest.fn().mockResolvedValue({
+        in: jest.fn(() => summaryQuery),
+        is: jest.fn(() => summaryQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
           data: [{ enrollment_status: 'enrolled', allergies: null }],
           error: null,
-        }),
+        })),
       };
 
       const classesQuery: any = {
         select: jest.fn(() => classesQuery),
         eq: jest.fn(() => classesQuery),
+        in: jest.fn(() => classesQuery),
         is: jest.fn(() => classesQuery),
-        order: jest.fn().mockResolvedValue({
+        order: jest.fn(() => classesQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
           data: [{ id: 'class-1', name: 'ひまわり組' }],
           error: null,
-        }),
+        })),
       };
 
       const classChildrenQuery: any = {
@@ -438,6 +471,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -450,20 +484,24 @@ describe('GET /api/children', () => {
       const summaryQuery: any = {
         select: jest.fn(() => summaryQuery),
         eq: jest.fn(() => summaryQuery),
-        is: jest.fn().mockResolvedValue({
+        in: jest.fn(() => summaryQuery),
+        is: jest.fn(() => summaryQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
           data: [{ enrollment_status: 'enrolled', allergies: null }],
           error: null,
-        }),
+        })),
       };
 
       const classesQuery: any = {
         select: jest.fn(() => classesQuery),
         eq: jest.fn(() => classesQuery),
+        in: jest.fn(() => classesQuery),
         is: jest.fn(() => classesQuery),
-        order: jest.fn().mockResolvedValue({
+        order: jest.fn(() => classesQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
           data: [],
           error: null,
-        }),
+        })),
       };
 
       const classChildrenQuery: any = {
@@ -555,6 +593,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -620,6 +659,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -685,6 +725,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -753,6 +794,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -876,6 +918,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -888,20 +931,24 @@ describe('GET /api/children', () => {
       const summaryQuery: any = {
         select: jest.fn(() => summaryQuery),
         eq: jest.fn(() => summaryQuery),
-        is: jest.fn().mockResolvedValue({
+        in: jest.fn(() => summaryQuery),
+        is: jest.fn(() => summaryQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
           data: [{ enrollment_status: 'enrolled', allergies: null }],
           error: null,
-        }),
+        })),
       };
 
       const classesQuery: any = {
         select: jest.fn(() => classesQuery),
         eq: jest.fn(() => classesQuery),
+        in: jest.fn(() => classesQuery),
         is: jest.fn(() => classesQuery),
-        order: jest.fn().mockResolvedValue({
+        order: jest.fn(() => classesQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
           data: [{ id: 'class-1', name: 'さくら組' }],
           error: null,
-        }),
+        })),
       };
 
       const classChildrenQuery: any = {
@@ -1004,6 +1051,7 @@ describe('GET /api/children', () => {
       const childrenQuery: any = {
         select: jest.fn(() => childrenQuery),
         eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
         is: jest.fn(() => childrenQuery),
         order: jest.fn(() => childrenQuery),
         range: jest.fn().mockResolvedValue({
@@ -1026,14 +1074,17 @@ describe('GET /api/children', () => {
       const summaryQuery: any = {
         select: jest.fn(() => summaryQuery),
         eq: jest.fn(() => summaryQuery),
+        in: jest.fn(() => summaryQuery),
         is: jest.fn().mockResolvedValue({ data: [], error: null }),
       };
 
       const classesQuery: any = {
         select: jest.fn(() => classesQuery),
         eq: jest.fn(() => classesQuery),
+        in: jest.fn(() => classesQuery),
         is: jest.fn(() => classesQuery),
-        order: jest.fn().mockResolvedValue({ data: [], error: null }),
+        order: jest.fn(() => classesQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({ data: [], error: null })),
       };
 
       const classChildrenQuery: any = {
@@ -1090,7 +1141,14 @@ describe('GET /api/children', () => {
       expect(json.success).toBe(true);
     });
 
-    it('should return 404 when company_admin provides no facility_id and has no current_facility_id', async () => {
+    it('should return 404 when company_admin provides no facility_id and company has no facilities', async () => {
+      // 自社に施設がない場合（全施設クエリで空配列）→ 404
+      const emptyFacilitiesQuery: any = {
+        select: jest.fn(() => emptyFacilitiesQuery),
+        eq: jest.fn(() => emptyFacilitiesQuery),
+        is: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
       const supabaseWithNoClaims = {
         auth: {
           getSession: jest.fn().mockResolvedValue({
@@ -1111,7 +1169,10 @@ describe('GET /api/children', () => {
             error: null,
           }),
         },
-        from: jest.fn(),
+        from: jest.fn((table: string) => {
+          if (table === 'm_facilities') return emptyFacilitiesQuery;
+          throw new Error(`Unexpected table: ${table}`);
+        }),
       };
 
       mockedCreateClient.mockResolvedValue(supabaseWithNoClaims as any);

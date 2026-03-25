@@ -38,6 +38,7 @@ interface APIChild {
     age_group: string;
     class_id: string | null;
     class_name: string;
+    facility_name: string;
     enrollment_status: EnrollmentStatus;
     enrollment_type: ContractType;
     has_allergy: boolean;
@@ -78,6 +79,7 @@ interface Student {
     gender: 'male' | 'female';
     birthDate: string;
     grade: number | null;
+    facilityName: string;
     gradeLabel: string;
     gradeOrder: number;
     className: string;
@@ -117,6 +119,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         gradeLabel: apiChild.grade_label || '',
         gradeOrder,
         className: apiChild.class_name,
+        facilityName: apiChild.facility_name || '',
         parentName: apiChild.parent_name || '',
         parentPhone: apiChild.parent_phone || '',
         siblings,
@@ -179,9 +182,7 @@ export default function StudentList() {
                 const result = await response.json();
                 if (result.success && result.data?.facilities) {
                     setFacilityOptions(result.data.facilities);
-                    if (result.data.facilities.length > 0 && !selectedFacilityId) {
-                        setSelectedFacilityId(result.data.facilities[0].facility_id);
-                    }
+                    // 初期値は「全施設」（空文字）
                 }
             } catch (err) {
                 console.error('Failed to fetch facilities:', err);
@@ -193,8 +194,9 @@ export default function StudentList() {
 
     // Fetch children data from API
     useEffect(() => {
-        // company_adminは施設が選択されるまで待機
-        if (isCompanyAdmin && !selectedFacilityId) return;
+        // company_adminは施設一覧取得後（facilityOptionsが設定後）に取得開始
+        // 全施設モード（selectedFacilityId = ''）も許可する
+        if (isCompanyAdmin && facilityOptions.length === 0) return;
 
         const abortController = new AbortController();
 
@@ -220,10 +222,11 @@ export default function StudentList() {
                     params.append('search', debouncedSearch);
                 }
 
-                // company_adminは選択中施設IDを送信
+                // company_adminは施設IDを送信（空=全施設モード）
                 if (isCompanyAdmin && selectedFacilityId) {
                     params.append('facility_id', selectedFacilityId);
                 }
+                // selectedFacilityId=''の場合はfacility_idを送らず、APIが全施設モードで動作
 
                 const response = await fetch(`/api/children?${params.toString()}`, {
                     signal: abortController.signal,
@@ -258,7 +261,7 @@ export default function StudentList() {
         return () => {
             abortController.abort();
         };
-    }, [activeTab, filterClass, debouncedSearch, isCompanyAdmin, selectedFacilityId]);
+    }, [activeTab, filterClass, debouncedSearch, isCompanyAdmin, selectedFacilityId, facilityOptions]);
 
     // Toggle Status Function (Now updates via API)
     const toggleStatus = async (id: string, currentStatus: StatusType) => {
@@ -484,6 +487,7 @@ export default function StudentList() {
                                     setFilterClass('all');
                                 }}
                             >
+                                <option value="">全施設</option>
                                 {facilityOptions.map(f => (
                                     <option key={f.facility_id} value={f.facility_id}>{f.name}</option>
                                 ))}
@@ -634,6 +638,11 @@ export default function StudentList() {
                                                     <SortIcon columnKey="grade" />
                                                 </div>
                                             </th>
+                                            {isCompanyAdmin && (
+                                                <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-36">
+                                                    施設
+                                                </th>
+                                            )}
                                             <th
                                                 className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-36 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
                                                 onClick={() => handleSort('className')}
@@ -734,6 +743,17 @@ export default function StudentList() {
                                                     <td className="px-2 py-4" >
                                                         <span className="text-sm font-medium text-slate-700" > {student.gradeLabel || '-'} </span>
                                                     </td>
+
+                                                    {/* Facility (company_admin only) */}
+                                                    {isCompanyAdmin && (
+                                                        <td className="px-3 py-4">
+                                                            {student.facilityName ? (
+                                                                <span className="text-sm text-slate-600">{student.facilityName}</span>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-sm">-</span>
+                                                            )}
+                                                        </td>
+                                                    )}
 
                                                     {/* Class */}
                                                     <td className="px-3 py-4" >

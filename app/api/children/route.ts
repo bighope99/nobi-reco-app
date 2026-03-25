@@ -27,27 +27,48 @@ export async function GET(request: NextRequest) {
     // company_admin / site_admin はクエリパラメータで施設IDを指定可能
     const facilityIdQuery = searchParams.get('facility_id') || '';
     let facility_id: string;
+    // company_adminは全施設モード（facility_id未指定）を許可
+    let allFacilityIds: string[] | null = null; // null=単一施設モード、配列=全施設モード
+    let facilityNameMap: Map<string, string> = new Map();
+
     if (role === 'company_admin' || role === 'site_admin') {
       facility_id = facilityIdQuery || current_facility_id || '';
     } else {
       facility_id = current_facility_id || '';
     }
 
-    if (!facility_id) {
-      return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
-    }
-
-    // company_adminのスコープチェック: 自社施設のみ閲覧可能
-    if (role === 'company_admin') {
-      const { data: scopedFacility } = await supabase
+    // company_adminで施設IDが未指定の場合、自社全施設を横断表示
+    if (role === 'company_admin' && !facilityIdQuery) {
+      const { data: companyFacilities } = await supabase
         .from('m_facilities')
-        .select('id')
-        .eq('id', facility_id)
+        .select('id, name')
         .eq('company_id', company_id)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (!scopedFacility) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        .is('deleted_at', null);
+      if (!companyFacilities || companyFacilities.length === 0) {
+        return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+      }
+      allFacilityIds = companyFacilities.map((f: { id: string; name: string }) => f.id);
+      companyFacilities.forEach((f: { id: string; name: string }) => facilityNameMap.set(f.id, f.name));
+      // facility_idは使用しないが型の都合でセット
+      facility_id = allFacilityIds[0];
+    } else {
+      if (!facility_id) {
+        return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+      }
+
+      // company_adminのスコープチェック: 自社施設のみ閲覧可能
+      if (role === 'company_admin') {
+        const { data: scopedFacility } = await supabase
+          .from('m_facilities')
+          .select('id, name')
+          .eq('id', facility_id)
+          .eq('company_id', company_id)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (!scopedFacility) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        facilityNameMap.set(scopedFacility.id, scopedFacility.name);
       }
     }
 
@@ -62,20 +83,27 @@ export async function GET(request: NextRequest) {
 
     // 施設全体のサマリーとフィルター情報を取得するヘルパー
     const fetchSummaryAndFilters = async () => {
-      // サマリーとクラス一覧を並列取得
+      // サマリーとクラス一覧を並列取得（全施設モードではin()を使用）
+      let summaryQuery = supabase
+        .from('m_children')
+        .select('enrollment_status, allergies')
+        .is('deleted_at', null);
+      let classesQuery = supabase
+        .from('m_classes')
+        .select('id, name')
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('name');
+      if (allFacilityIds) {
+        summaryQuery = summaryQuery.in('facility_id', allFacilityIds);
+        classesQuery = classesQuery.in('facility_id', allFacilityIds);
+      } else {
+        summaryQuery = summaryQuery.eq('facility_id', facility_id);
+        classesQuery = classesQuery.eq('facility_id', facility_id);
+      }
       const [{ data: summaryData }, { data: classesData }] = await Promise.all([
-        supabase
-          .from('m_children')
-          .select('enrollment_status, allergies')
-          .eq('facility_id', facility_id)
-          .is('deleted_at', null),
-        supabase
-          .from('m_classes')
-          .select('id, name')
-          .eq('facility_id', facility_id)
-          .eq('is_active', true)
-          .is('deleted_at', null)
-          .order('name'),
+        summaryQuery,
+        classesQuery,
       ]);
 
       const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
@@ -142,6 +170,7 @@ export async function GET(request: NextRequest) {
       .from('m_children')
       .select(`
         id,
+        facility_id,
         family_name,
         given_name,
         family_name_kana,
@@ -173,9 +202,15 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq('facility_id', facility_id)
       .eq('enrollment_status', status)
       .is('deleted_at', null);
+
+    // 全施設モードか単一施設モードかでfilterを切り替え
+    if (allFacilityIds) {
+      childrenQuery = childrenQuery.in('facility_id', allFacilityIds);
+    } else {
+      childrenQuery = childrenQuery.eq('facility_id', facility_id);
+    }
 
     if (class_id && class_id !== 'none') {
       childrenQuery = childrenQuery
@@ -197,12 +232,17 @@ export async function GET(request: NextRequest) {
         .replace(/\\/g, '\\\\')
         .replace(/%/g, '\\%')
         .replace(/_/g, '\\_');
-      const { data: kanaMatches, error: kanaError } = await supabase
+      let kanaSearchQuery = supabase
         .from('m_children')
         .select('id')
-        .eq('facility_id', facility_id)
         .is('deleted_at', null)
         .or(`family_name_kana.ilike.%${escapedSearch}%,given_name_kana.ilike.%${escapedSearch}%`);
+      if (allFacilityIds) {
+        kanaSearchQuery = kanaSearchQuery.in('facility_id', allFacilityIds);
+      } else {
+        kanaSearchQuery = kanaSearchQuery.eq('facility_id', facility_id);
+      }
+      const { data: kanaMatches, error: kanaError } = await kanaSearchQuery;
 
       if (kanaError) {
         console.error('Kana search error:', kanaError);
@@ -360,6 +400,7 @@ export async function GET(request: NextRequest) {
         age_group: classInfo?.age_group || '',
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
+        facility_name: facilityNameMap.get(child.facility_id) || '',
         photo_url: child.photo_url,
         enrollment_status: child.enrollment_status,
         enrollment_type: child.enrollment_type,
