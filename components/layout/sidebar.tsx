@@ -98,6 +98,15 @@ const adminNavItems: NavItem[] = [
       { label: "施設登録", href: "/settings/facility/new" },
     ],
   },
+  {
+    label: "子ども一覧",
+    href: "/children",
+    icon: <Users className="h-5 w-5" />,
+    roles: ["company_admin"],
+    children: [
+      { label: "子ども一覧", href: "/children" },
+    ],
+  },
   { label: "タグ管理", href: "/admin/tags", icon: <Tag className="h-5 w-5" />, roles: ["site_admin"] },
   { label: "システムログ", href: "/admin/logs", icon: <Database className="h-5 w-5" /> },
 ]
