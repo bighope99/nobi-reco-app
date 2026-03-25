@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
@@ -307,6 +308,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
   const previousSelectedChildIdRef = useRef('');
+  // 保存済み本文のスナップショット（edit時のdirty判定に使用）
+  const savedBodyRef = useRef<string>('');
   // 記録日選択用の状態
   const [observationDate, setObservationDate] = useState<Date | null>(null);
   // 音声入力用の状態
@@ -322,8 +325,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const isChildLocked = !isNew && Boolean(lockedChildId);
 
   // 入力途中に離脱した場合の警告（beforeunload + サイドメニュークリック）
+  // 新規: テキスト入力済みかつ未保存 / 編集: 保存済み本文から変更があるか
   const isFormDirty = (isNew && !showContinueButton && editText.trim().length > 0) ||
-    (!isNew && isEditing && editText.trim().length > 0);
+    (!isNew && isEditing && editText !== savedBodyRef.current);
   useUnsavedChanges(isFormDirty, '変更内容が失われます。ページを移動しますか？');
 
   // 日付の初期化（クライアント側でのみ実行）
@@ -816,6 +820,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       };
 
       setObservation(observationRecord);
+      savedBodyRef.current = displayContent;
 
       // 既存の記録者を復元
       if (data.recorded_by) {
@@ -1970,13 +1975,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   })()}
                   {selectedChildId && (
                     <div className="mt-3 text-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => router.push(`/records/personal/history?childId=${selectedChildId}`)}
-                      >
-                        さらに見る
+                      <Button variant="outline" size="sm" className="text-xs" asChild>
+                        <Link href={`/records/personal/history?childId=${selectedChildId}`}>さらに見る</Link>
                       </Button>
                     </div>
                   )}

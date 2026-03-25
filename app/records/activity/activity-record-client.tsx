@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useActivityTemplates } from "@/hooks/useActivityTemplates"
 import { useRole } from "@/hooks/useRole"
@@ -2164,12 +2165,8 @@ export default function ActivityRecordClient() {
           )}
           {(activitiesData?.activities.length ?? 0) > 0 && (
             <div className="mt-4 text-center">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push('/records/activity/history')}
-              >
-                さらに見る
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/records/activity/history">さらに見る</Link>
               </Button>
             </div>
           )}
