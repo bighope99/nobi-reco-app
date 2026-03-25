@@ -179,6 +179,7 @@ type RecentObservation = {
   subjective?: string | null;
   is_ai_analyzed?: boolean;
   created_at: string;
+  recorded_by_name?: string | null;
   tag_ids?: string[];
 };
 
@@ -1152,6 +1153,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           observation_date: result.data.observation_date,
           content: result.data.content ?? text,
           created_at: new Date().toISOString(),
+          recorded_by_name: staffList.find(s => s.user_id === selectedRecorder)?.name ?? null,
           tag_ids: Object.entries(aiResult.flags)
             .filter(([, v]) => v)
             .map(([k]) => k),
@@ -1918,6 +1920,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                     <span className="text-xs font-medium text-gray-600 whitespace-nowrap">
                                       {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
                                     </span>
+                                    {item.recorded_by_name && (
+                                      <span className="text-xs text-gray-500 whitespace-nowrap">{item.recorded_by_name}</span>
+                                    )}
                                     {tagBadges.map((tag) => (
                                       <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
                                         {tag.name}
