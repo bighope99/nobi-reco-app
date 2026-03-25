@@ -1690,7 +1690,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-orange-600" />
                         <span className="text-gray-600">記録者</span>
-                        <span className="font-medium">{recorderDisplayName}</span>
+                        <span className="font-medium">{observation.recorded_by_name || user?.display_name || user?.email || '不明'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-green-600" />
@@ -1906,12 +1906,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     return visibleObservations.length === 0 ? (
                       <p className="text-sm text-gray-500">過去の記録はありません。</p>
                     ) : (
-                      <div className="divide-y divide-gray-400">
+                      <div className="divide-y divide-[#d3d3d3]">
                         {visibleObservations.map((item) => {
                           const tagBadges = getTagBadges(item.tag_ids);
                           const contentText = displayRecentContent(item.content);
                           return (
-                            <div key={item.id} className="py-3 hover:bg-gray-50 transition-colors">
+                            <div key={item.id} className="px-[5px] py-3 hover:bg-gray-50 transition-colors">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap mb-1">
