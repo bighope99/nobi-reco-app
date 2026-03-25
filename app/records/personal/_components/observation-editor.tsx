@@ -1148,7 +1148,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         addenda: [],
       };
       if (!draftId) {
-        // 保存成功後は画面をリセットしてトップへ遷移
+        // 保存成功後は editText をクリアして離脱警告を抑制してからトップへ遷移
+        setEditText('');
         if (selectedChildId) {
           router.push(`/records/personal/new?childId=${selectedChildId}`);
         } else {
@@ -1159,30 +1160,27 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setObservation(newObservation);
       setIsEditing(false);
 
-      // draftIdがある場合、ステータスを'saved'に更新
-      if (draftId) {
-        markDraftAsSaved(
-          draftId,
-          result.data.id,
-          result.data.observation_date,
-          result.data.content ?? text,
-        );
-        if (typeof window !== 'undefined') {
-          const lastSaved = {
-            draft_id: draftId,
-            activity_id: activityId,
-            child_id: selectedChildId,
-            child_display_name: resolvedChildName,
-            observation_date: result.data.observation_date ?? getCurrentDateJST(),
-            content: result.data.content ?? text,
-            status: 'saved' as const,
-            observation_id: result.data.id,
-          };
-          window.sessionStorage.setItem('nobiRecoAiLastSavedDraft', JSON.stringify(lastSaved));
-        }
-        // 一覧画面に戻る（activityページに戻る）
-        router.push('/records/activity?aiModal=1');
+      // draftIdがある場合、ステータスを'saved'に更新して一覧画面へ戻る
+      markDraftAsSaved(
+        draftId,
+        result.data.id,
+        result.data.observation_date,
+        result.data.content ?? text,
+      );
+      if (typeof window !== 'undefined') {
+        const lastSaved = {
+          draft_id: draftId,
+          activity_id: activityId,
+          child_id: selectedChildId,
+          child_display_name: resolvedChildName,
+          observation_date: result.data.observation_date ?? getCurrentDateJST(),
+          content: result.data.content ?? text,
+          status: 'saved' as const,
+          observation_id: result.data.id,
+        };
+        window.sessionStorage.setItem('nobiRecoAiLastSavedDraft', JSON.stringify(lastSaved));
       }
+      router.push('/records/activity?aiModal=1');
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '新規保存に失敗しました';
       setError(errorMessage);

@@ -2162,7 +2162,7 @@ export default function ActivityRecordClient() {
               </CardContent>
             </Card>
           )}
-          {activitiesData && activitiesData.activities.length > 0 && (
+          {(activitiesData?.activities.length ?? 0) > 0 && (
             <div className="mt-4 text-center">
               <Button
                 variant="outline"
