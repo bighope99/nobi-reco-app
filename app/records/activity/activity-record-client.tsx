@@ -131,7 +131,6 @@ interface StaffMember {
 interface SortableScheduleRowProps {
   id: string
   item: { time: string; content: string }
-  index: number
   onTimeChange: (val: string) => void
   onContentChange: (val: string) => void
   onRemove: () => void
@@ -544,24 +543,8 @@ export default function ActivityRecordClient() {
     }
     window.addEventListener("beforeunload", handleBeforeUnload)
 
-    // SPA遷移（Next.js App Router）
-    const originalPushState = window.history.pushState.bind(window.history)
-    const originalReplaceState = window.history.replaceState.bind(window.history)
-    window.history.pushState = (...args: Parameters<typeof window.history.pushState>) => {
-      if (window.confirm("変更内容が失われます。ページを移動しますか？")) {
-        originalPushState(...args)
-      }
-    }
-    window.history.replaceState = (...args: Parameters<typeof window.history.replaceState>) => {
-      if (window.confirm("変更内容が失われます。ページを移動しますか？")) {
-        originalReplaceState(...args)
-      }
-    }
-
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
-      window.history.pushState = originalPushState
-      window.history.replaceState = originalReplaceState
     }
   }, [activityContent, eventName, specialNotes, handover, snack])
 
@@ -1601,6 +1584,8 @@ export default function ActivityRecordClient() {
     return query ? `/records/personal/new?${query}` : "/records/personal/new"
   }
 
+  const scheduleIds = getScheduleIds()
+
   return (
     <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
@@ -1776,18 +1761,17 @@ export default function ActivityRecordClient() {
                 onDragEnd={handleScheduleDragEnd}
               >
                 <SortableContext
-                  items={getScheduleIds()}
+                  items={scheduleIds}
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="space-y-2">
                     {dailySchedule.map((item, index) => {
-                      const rowId = getScheduleIds()[index]
+                      const rowId = scheduleIds[index]
                       return (
                         <SortableScheduleRow
                           key={rowId}
                           id={rowId}
                           item={item}
-                          index={index}
                           onTimeChange={(val) => {
                             const newSchedule = [...dailySchedule]
                             newSchedule[index] = { ...item, time: val }
