@@ -79,6 +79,15 @@ export async function PUT(
       );
     }
 
+    // staff 以上のみ編集可能（RLSとの二重防御）
+    const allowedRoles = ['staff', 'facility_admin', 'company_admin', 'site_admin'];
+    if (!allowedRoles.includes(session.role)) {
+      return NextResponse.json(
+        { error: 'テンプレートの編集には staff 以上の権限が必要です' },
+        { status: 403 }
+      );
+    }
+
     const { data: updated, error: updateError } = await supabase
       .from('s_activity_templates')
       .update({
