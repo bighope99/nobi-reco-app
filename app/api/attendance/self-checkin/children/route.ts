@@ -45,13 +45,17 @@ export async function GET() {
 
   // 当日の出席レコード取得
   const childIds = children.map((c) => c.id)
-  const { data: attendances } = await supabase
+  const { data: attendances, error: attendanceError } = await supabase
     .from('h_attendance')
     .select('child_id, checked_in_at, checked_out_at')
     .eq('facility_id', facilityId)
     .gte('checked_in_at', startOfDayUTC)
     .lte('checked_in_at', endOfDayUTC)
     .in('child_id', childIds)
+
+  if (attendanceError) {
+    return NextResponse.json({ error: 'Failed to fetch attendance' }, { status: 500 })
+  }
 
   const attendanceMap = new Map(attendances?.map((a) => [a.child_id, a]) ?? [])
 

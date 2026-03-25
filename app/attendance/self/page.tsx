@@ -211,14 +211,14 @@ export default function SelfCheckInPage() {
   // 表示する児童（母音フィルタ含む）
   const rowChildren = groups[selectedRow] ?? []
   const visibleChildren = selectedVowel
-    ? rowChildren.filter((c) => c.kanaName.startsWith(toKatakana(selectedVowel)))
+    ? rowChildren.filter((c) => toKatakana(c.kanaName).startsWith(toKatakana(selectedVowel)))
     : rowChildren
 
   // 修正2: 母音ごとの人数（disabled判定に使用）
   const vowelCounts = Object.fromEntries(
     (ROW_VOWELS[selectedRow] ?? []).map((vowel) => [
       vowel,
-      rowChildren.filter((c) => c.kanaName.startsWith(toKatakana(vowel))).length,
+      rowChildren.filter((c) => toKatakana(c.kanaName).startsWith(toKatakana(vowel))).length,
     ])
   )
 

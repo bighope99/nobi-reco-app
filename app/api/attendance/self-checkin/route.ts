@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
 
   // 施設所属チェック
-  const { data: child } = await supabase
+  const { data: child, error: childError } = await supabase
     .from('m_children')
     .select('id')
     .eq('id', child_id)
@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
     .is('deleted_at', null)
     .maybeSingle()
 
+  if (childError) {
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
   if (!child) {
     return NextResponse.json({ error: 'Child not found' }, { status: 404 })
   }
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString()
 
   // 当日レコードを検索
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('h_attendance')
     .select('id, checked_in_at, checked_out_at')
     .eq('child_id', child_id)
@@ -48,6 +51,10 @@ export async function POST(req: NextRequest) {
     .gte('checked_in_at', startOfDayUTC)
     .lte('checked_in_at', endOfDayUTC)
     .maybeSingle()
+
+  if (existingError) {
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
 
   if (!existing) {
     // 1回目: チェックイン
@@ -63,10 +70,28 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single()
     if (error) {
+      // Handle unique constraint violation (race condition)
+      if (error.code === '23505') {
+        const { data: existing2 } = await supabase
+          .from('h_attendance')
+          .select('id, checked_in_at')
+          .eq('child_id', child_id)
+          .eq('facility_id', facilityId)
+          .gte('checked_in_at', startOfDayUTC)
+          .lte('checked_in_at', endOfDayUTC)
+          .maybeSingle()
+        if (existing2) {
+          return NextResponse.json({ action: 'check_in', time: existing2.checked_in_at, attendance_id: existing2.id })
+        }
+      }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     return NextResponse.json({ action: 'check_in', time: now, attendance_id: insertData.id })
   } else {
+    // Fix 4: 既にチェックアウト済みの場合は 409
+    if (existing.checked_out_at) {
+      return NextResponse.json({ error: 'Already checked out' }, { status: 409 })
+    }
     // 2回目以降: チェックアウト（上書き含む）
     const { error } = await supabase
       .from('h_attendance')
@@ -101,18 +126,29 @@ export async function DELETE(req: NextRequest) {
   const supabase = await createClient()
 
   // 施設所属チェック
-  const { data: record } = await supabase
+  const { data: record, error: recordError } = await supabase
     .from('h_attendance')
-    .select('id')
+    .select('id, checked_out_at')
     .eq('id', attendance_id)
     .eq('facility_id', facilityId)
     .maybeSingle()
 
+  if (recordError) {
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
   if (!record) {
     return NextResponse.json({ error: 'Record not found' }, { status: 404 })
   }
 
-  if (action === 'check_in') {
+  // Fix 5: actionとDBの実際の状態を照合してバリデーション
+  if (action === 'check_in' && record.checked_out_at !== null) {
+    return NextResponse.json({ error: 'Record has checkout, cannot undo check-in' }, { status: 400 })
+  }
+  if (action === 'check_out' && record.checked_out_at === null) {
+    return NextResponse.json({ error: 'No checkout to undo' }, { status: 400 })
+  }
+
+  if (record.checked_out_at === null) {
     // チェックインのundo → レコードを削除
     const { error } = await supabase
       .from('h_attendance')
