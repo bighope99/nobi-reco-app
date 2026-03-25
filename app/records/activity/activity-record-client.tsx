@@ -170,6 +170,9 @@ export default function ActivityRecordClient() {
   // テンプレート保存ダイアログの状態
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false)
   const [templateNameInput, setTemplateNameInput] = useState("")
+  // テンプレート編集ダイアログの状態
+  const [showEditTemplateDialog, setShowEditTemplateDialog] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<{ id: string; name: string; event_name: string; daily_schedule: DailyScheduleItem[] } | null>(null)
 
   // 新規フィールドの状態
   const [eventName, setEventName] = useState("")
@@ -213,8 +216,10 @@ export default function ActivityRecordClient() {
     applyTemplate,
     deleteTemplate,
     saveTemplate,
+    updateTemplate,
     isDeleting: isDeletingTemplate,
     isSavingTemplate,
+    isUpdatingTemplate,
     templateError,
   } = useActivityTemplates({
     onApply: (appliedEventName, appliedDailySchedule) => {
@@ -1482,10 +1487,10 @@ export default function ActivityRecordClient() {
               </div>
             </div>
 
-            {/* テンプレート選択 */}
+            {/* イベントテンプレート選択 */}
             {templates.length > 0 && (
               <div className="inline-flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-3 py-2">
-                <span className="text-xs text-gray-500">テンプレート</span>
+                <span className="text-xs text-gray-500">イベントテンプレート</span>
                 <div className="flex items-center gap-2">
                   <Select
                     value={selectedTemplateId}
@@ -1516,6 +1521,28 @@ export default function ActivityRecordClient() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {selectedTemplateId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-gray-500 hover:text-blue-500"
+                      onClick={() => {
+                        const t = templates.find((t) => t.id === selectedTemplateId)
+                        if (!t) return
+                        setEditingTemplate({
+                          id: t.id,
+                          name: t.name,
+                          event_name: t.event_name ?? "",
+                          daily_schedule: t.daily_schedule ?? [],
+                        })
+                        setShowEditTemplateDialog(true)
+                      }}
+                    >
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      編集
+                    </Button>
+                  )}
                   {canDeleteTemplate && selectedTemplateId && (
                     <Button
                       type="button"
@@ -2283,6 +2310,100 @@ export default function ActivityRecordClient() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* テンプレート編集ダイアログ */}
+      <Dialog open={showEditTemplateDialog} onOpenChange={setShowEditTemplateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>イベントテンプレートを編集</DialogTitle>
+          </DialogHeader>
+          {editingTemplate && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="editTemplateName">テンプレート名 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="editTemplateName"
+                  value={editingTemplate.name}
+                  onChange={(e) => setEditingTemplate((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                  placeholder="例: 通常日程（平日）"
+                  maxLength={100}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editTemplateEventName">行事名</Label>
+                <Input
+                  id="editTemplateEventName"
+                  value={editingTemplate.event_name}
+                  onChange={(e) => setEditingTemplate((prev) => prev ? { ...prev, event_name: e.target.value } : prev)}
+                  placeholder="例: 運動会、遠足"
+                  maxLength={200}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>1日の流れ</Label>
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {editingTemplate.daily_schedule.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        type="time"
+                        value={item.time}
+                        onChange={(e) => setEditingTemplate((prev) => {
+                          if (!prev) return prev
+                          const updated = [...prev.daily_schedule]
+                          updated[index] = { ...updated[index], time: e.target.value }
+                          return { ...prev, daily_schedule: updated }
+                        })}
+                        className="w-28 text-sm"
+                      />
+                      <Input
+                        value={item.content}
+                        onChange={(e) => setEditingTemplate((prev) => {
+                          if (!prev) return prev
+                          const updated = [...prev.daily_schedule]
+                          updated[index] = { ...updated[index], content: e.target.value }
+                          return { ...prev, daily_schedule: updated }
+                        })}
+                        placeholder="内容"
+                        className="flex-1 text-sm"
+                        maxLength={200}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {templateError && <p className="text-sm text-red-500">{templateError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowEditTemplateDialog(false)}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isUpdatingTemplate || !editingTemplate.name.trim()}
+                  onClick={async () => {
+                    try {
+                      await updateTemplate(
+                        editingTemplate.id,
+                        editingTemplate.name,
+                        editingTemplate.event_name,
+                        editingTemplate.daily_schedule
+                      )
+                      setShowEditTemplateDialog(false)
+                    } catch {
+                      // templateError に表示済み
+                    }
+                  }}
+                >
+                  {isUpdatingTemplate ? '保存中...' : '保存'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

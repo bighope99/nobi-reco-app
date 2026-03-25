@@ -20,8 +20,10 @@ interface UseActivityTemplatesReturn {
   applyTemplate: (template: ActivityTemplate) => void
   deleteTemplate: (id: string) => Promise<void>
   saveTemplate: (name: string, event_name: string, daily_schedule: DailyScheduleItem[]) => Promise<void>
+  updateTemplate: (id: string, name: string, event_name: string, daily_schedule: DailyScheduleItem[]) => Promise<void>
   isDeleting: boolean
   isSavingTemplate: boolean
+  isUpdatingTemplate: boolean
   templateError: string | null
 }
 
@@ -35,6 +37,7 @@ export function useActivityTemplates({ onApply }: UseActivityTemplatesOptions): 
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+  const [isUpdatingTemplate, setIsUpdatingTemplate] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -105,6 +108,33 @@ export function useActivityTemplates({ onApply }: UseActivityTemplatesOptions): 
     }
   }, [])
 
+  const updateTemplate = useCallback(async (
+    id: string,
+    name: string,
+    event_name: string,
+    daily_schedule: DailyScheduleItem[]
+  ) => {
+    setIsUpdatingTemplate(true)
+    setTemplateError(null)
+    try {
+      const response = await fetch(`/api/activity-templates/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, event_name: event_name || null, daily_schedule }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'テンプレートの更新に失敗しました')
+      }
+      setTemplates((prev) => prev.map((t) => t.id === id ? result.template : t))
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : 'テンプレートの更新に失敗しました')
+      throw err
+    } finally {
+      setIsUpdatingTemplate(false)
+    }
+  }, [])
+
   return {
     templates,
     isLoading,
@@ -113,8 +143,10 @@ export function useActivityTemplates({ onApply }: UseActivityTemplatesOptions): 
     applyTemplate,
     deleteTemplate,
     saveTemplate,
+    updateTemplate,
     isDeleting,
     isSavingTemplate,
+    isUpdatingTemplate,
     templateError,
   }
 }
