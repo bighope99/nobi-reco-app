@@ -1582,7 +1582,7 @@ export default function ActivityRecordClient() {
 
             {/* 1日の流れ */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium">1日の流れ</Label>
                 <Button
                   type="button"
@@ -1635,7 +1635,7 @@ export default function ActivityRecordClient() {
 
             {/* 役割分担 */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium">役割分担</Label>
                 <Button
                   type="button"
