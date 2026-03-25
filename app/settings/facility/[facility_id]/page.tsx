@@ -8,7 +8,6 @@ import {
   Building2,
   MapPin,
   Phone,
-  Mail,
   Save,
   Plus,
   X,
@@ -320,7 +319,6 @@ export default function FacilityDetailPage() {
           name_kana: facility.name_kana || null,
           address: facility.address,
           phone: facility.phone,
-          email: facility.email || null,
           postal_code: facility.postal_code || null,
           capacity: facility.capacity != null ? facility.capacity : null,
         }),
@@ -484,27 +482,15 @@ export default function FacilityDetailPage() {
                 />
               </FieldGroup>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <FieldGroup label="電話番号" required>
-                  <Input
-                    icon={Phone}
-                    type="tel"
-                    value={facility.phone}
-                    onChange={(e: any) => setFacility({ ...facility, phone: e.target.value })}
-                    placeholder="03-1234-5678"
-                  />
-                </FieldGroup>
-
-                <FieldGroup label="メールアドレス">
-                  <Input
-                    icon={Mail}
-                    type="email"
-                    value={facility.email || ''}
-                    onChange={(e: any) => setFacility({ ...facility, email: e.target.value })}
-                    placeholder="info@example.com"
-                  />
-                </FieldGroup>
-              </div>
+              <FieldGroup label="電話番号" required>
+                <Input
+                  icon={Phone}
+                  type="tel"
+                  value={facility.phone}
+                  onChange={(e: any) => setFacility({ ...facility, phone: e.target.value })}
+                  placeholder="03-1234-5678"
+                />
+              </FieldGroup>
             </div>
           </section>
 
