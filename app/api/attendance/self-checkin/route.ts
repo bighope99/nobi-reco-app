@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (!metadata) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const { current_facility_id: facilityId, sub: userId } = metadata
+  const { current_facility_id: facilityId, user_id: userId } = metadata
   if (!facilityId) {
     return NextResponse.json({ error: 'No facility' }, { status: 404 })
   }
