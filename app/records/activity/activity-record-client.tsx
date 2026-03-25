@@ -1592,19 +1592,46 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {dailySchedule.map((item, index) => (
+                {dailySchedule.map((item, index) => {
+                    const timeParts = (item.time || '10:00').split(':')
+                    const itemHour = timeParts[0] || '10'
+                    const itemMinute = timeParts[1] || '00'
+                    return (
                     <div key={index} className="flex items-center gap-2">
-                      <Input
-                        type="time"
-                        step={300}
-                        value={item.time || '10:00'}
-                        onChange={(e) => {
+                      <Select
+                        value={itemHour}
+                        onValueChange={(val) => {
                           const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, time: e.target.value }
+                          newSchedule[index] = { ...item, time: `${val}:${itemMinute}` }
                           setDailySchedule(newSchedule)
                         }}
-                        className="w-28"
-                      />
+                      >
+                        <SelectTrigger className="w-16">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                            <SelectItem key={h} value={h}>{h}時</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={itemMinute}
+                        onValueChange={(val) => {
+                          const newSchedule = [...dailySchedule]
+                          newSchedule[index] = { ...item, time: `${itemHour}:${val}` }
+                          setDailySchedule(newSchedule)
+                        }}
+                      >
+                        <SelectTrigger className="w-16">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                            <SelectItem key={m} value={m}>{m}分</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Input
                         type="text"
                         value={item.content}
@@ -1629,7 +1656,8 @@ export default function ActivityRecordClient() {
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                ))}
+                    )
+                })}
               </div>
             </div>
 
@@ -2318,20 +2346,48 @@ export default function ActivityRecordClient() {
                   </Button>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {editingTemplate.daily_schedule.map((item, index) => (
+                  {editingTemplate.daily_schedule.map((item, index) => {
+                    const timeParts = (item.time || '10:00').split(':')
+                    const itemHour = timeParts[0] || '10'
+                    const itemMinute = timeParts[1] || '00'
+                    return (
                     <div key={index} className="flex items-center gap-2">
-                      <Input
-                        type="time"
-                        step={300}
-                        value={item.time || '10:00'}
-                        onChange={(e) => setEditingTemplate((prev) => {
+                      <Select
+                        value={itemHour}
+                        onValueChange={(val) => setEditingTemplate((prev) => {
                           if (!prev) return prev
                           const updated = [...prev.daily_schedule]
-                          updated[index] = { ...updated[index], time: e.target.value }
+                          updated[index] = { ...updated[index], time: `${val}:${itemMinute}` }
                           return { ...prev, daily_schedule: updated }
                         })}
-                        className="w-28 text-sm"
-                      />
+                      >
+                        <SelectTrigger className="w-16 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                            <SelectItem key={h} value={h}>{h}時</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={itemMinute}
+                        onValueChange={(val) => setEditingTemplate((prev) => {
+                          if (!prev) return prev
+                          const updated = [...prev.daily_schedule]
+                          updated[index] = { ...updated[index], time: `${itemHour}:${val}` }
+                          return { ...prev, daily_schedule: updated }
+                        })}
+                      >
+                        <SelectTrigger className="w-16 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                            <SelectItem key={m} value={m}>{m}分</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Input
                         value={item.content}
                         onChange={(e) => setEditingTemplate((prev) => {
@@ -2354,7 +2410,8 @@ export default function ActivityRecordClient() {
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
               {templateError && <p className="text-sm text-red-500">{templateError}</p>}
