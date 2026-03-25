@@ -1785,9 +1785,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <div className="flex items-center justify-between">
                         <div>
                           <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
-                            解釈・所感
+                            この出来事について、あなたはどう思いましたか？
                           </Label>
-                          <span className="ml-2 text-xs text-gray-400">今日この子の行動を見て感じたこと・発見したことは？</span>
                         </div>
                         <span className="text-sm text-gray-500">
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
