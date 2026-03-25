@@ -34,10 +34,12 @@ export async function GET(
         id,
         company_id,
         name,
+        name_kana,
         address,
         postal_code,
         phone,
         email,
+        capacity,
         created_at,
         updated_at,
         m_companies (
@@ -90,10 +92,12 @@ export async function GET(
       data: {
         facility_id: facility.id,
         name: facility.name,
+        name_kana: facility.name_kana,
         address: facility.address,
         postal_code: facility.postal_code,
         phone: facility.phone,
         email: facility.email,
+        capacity: facility.capacity,
         company_id: facility.company_id,
         company_name: (Array.isArray(facility.m_companies) ? (facility.m_companies as Array<{ id: unknown; name: unknown }>)[0]?.name : (facility.m_companies as { id: unknown; name: unknown } | null)?.name) as string | null | undefined,
         current_children_count: childrenCount || 0,
@@ -196,10 +200,11 @@ export async function PUT(
       .from('m_facilities')
       .update({
         name: body.name,
+        name_kana: body.name_kana || null,
         address: body.address,
         postal_code: body.postal_code,
         phone: body.phone,
-        email: body.email,
+        capacity: body.capacity != null ? Number(body.capacity) || null : null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', facilityId)
