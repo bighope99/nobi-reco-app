@@ -2224,7 +2224,7 @@ export default function ActivityRecordClient() {
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>
+                    {classOptions.length > 0 && <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>}
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">内容</th>
                     <th className="px-3 py-2.5 text-center font-medium text-muted-foreground whitespace-nowrap">引継ぎ</th>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">記録者</th>
@@ -2244,11 +2244,13 @@ export default function ActivityRecordClient() {
                             {activity.activity_date}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="text-sm text-muted-foreground">
-                            {activity.class_name}
-                          </span>
-                        </td>
+                        {classOptions.length > 0 && (
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className="text-sm text-muted-foreground">
+                              {activity.class_name}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-3 py-2.5 max-w-xs">
                           <p className="text-sm text-foreground truncate" title={displayContent}>
                             {truncatedContent}
