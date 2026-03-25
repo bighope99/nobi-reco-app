@@ -2344,19 +2344,52 @@ export default function ActivityRecordClient() {
               <div className="space-y-2">
                 <Label>1日の流れ</Label>
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {editingTemplate.daily_schedule.map((item, index) => (
+                  {editingTemplate.daily_schedule.map((item, index) => {
+                    const editTimeParts = (item.time || '10:00').split(':')
+                    const editHours = editTimeParts[0] || '10'
+                    const editMinutes = editTimeParts[1] || '00'
+                    return (
                     <div key={index} className="flex items-center gap-2">
-                      <Input
-                        type="time"
-                        value={item.time}
-                        onChange={(e) => setEditingTemplate((prev) => {
-                          if (!prev) return prev
-                          const updated = [...prev.daily_schedule]
-                          updated[index] = { ...updated[index], time: e.target.value }
-                          return { ...prev, daily_schedule: updated }
-                        })}
-                        className="w-28 text-sm"
-                      />
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={editHours}
+                          onValueChange={(value) => setEditingTemplate((prev) => {
+                            if (!prev) return prev
+                            const updated = [...prev.daily_schedule]
+                            updated[index] = { ...updated[index], time: `${value}:${editMinutes}` }
+                            return { ...prev, daily_schedule: updated }
+                          })}
+                        >
+                          <SelectTrigger className="w-16 text-sm">
+                            <SelectValue placeholder="時" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                              <SelectItem key={h} value={h} className="text-sm">{h}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">時</span>
+                        <Select
+                          value={editMinutes}
+                          onValueChange={(value) => setEditingTemplate((prev) => {
+                            if (!prev) return prev
+                            const updated = [...prev.daily_schedule]
+                            updated[index] = { ...updated[index], time: `${editHours}:${value}` }
+                            return { ...prev, daily_schedule: updated }
+                          })}
+                        >
+                          <SelectTrigger className="w-16 text-sm">
+                            <SelectValue placeholder="分" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                              <SelectItem key={m} value={m} className="text-sm">{m}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">分</span>
+                      </div>
                       <Input
                         value={item.content}
                         onChange={(e) => setEditingTemplate((prev) => {
@@ -2370,7 +2403,7 @@ export default function ActivityRecordClient() {
                         maxLength={200}
                       />
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
               {templateError && <p className="text-sm text-red-500">{templateError}</p>}
