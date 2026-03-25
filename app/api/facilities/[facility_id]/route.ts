@@ -204,7 +204,6 @@ export async function PUT(
         address: body.address,
         postal_code: body.postal_code,
         phone: body.phone,
-        email: body.email,
         capacity: body.capacity != null ? Number(body.capacity) || null : null,
         updated_at: new Date().toISOString(),
       })
