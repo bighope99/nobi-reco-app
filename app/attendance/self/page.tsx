@@ -12,7 +12,7 @@ interface ChildRecord {
   id: string
   kanaName: string
   kanjiName: string
-  grade?: number
+  gradeLabel?: string
   status: ChildStatus
   checkedInAt?: string
   checkedOutAt?: string
@@ -21,7 +21,19 @@ interface ChildRecord {
 type View = 'row-select' | 'vowel-select' | 'child-select' | 'feedback'
 
 const VOWEL_THRESHOLD = 6
-const VOWELS = ['あ', 'い', 'う', 'え', 'お']
+
+const ROW_VOWELS: Record<string, string[]> = {
+  'あ': ['あ', 'い', 'う', 'え', 'お'],
+  'か': ['か', 'き', 'く', 'け', 'こ'],
+  'さ': ['さ', 'し', 'す', 'せ', 'そ'],
+  'た': ['た', 'ち', 'つ', 'て', 'と'],
+  'な': ['な', 'に', 'ぬ', 'ね', 'の'],
+  'は': ['は', 'ひ', 'ふ', 'へ', 'ほ'],
+  'ま': ['ま', 'み', 'む', 'め', 'も'],
+  'や': ['や', 'ゆ', 'よ'],
+  'ら': ['ら', 'り', 'る', 'れ', 'ろ'],
+  'わ': ['わ', 'を', 'ん'],
+}
 
 const KANA_ROWS = ['あ', 'か', 'さ', 'た', 'な', 'は', 'ま', 'や', 'ら', 'わ']
 
@@ -197,7 +209,7 @@ export default function SelfCheckInPage() {
                 <span className="text-xl font-bold">「{selectedRow}行」— どれ？</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {VOWELS.map((vowel) => (
+                {(ROW_VOWELS[selectedRow] ?? []).map((vowel) => (
                   <Button
                     key={vowel}
                     variant="outline"
@@ -284,7 +296,7 @@ function ChildButton({
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
-        {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
+        {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
       </div>
     )
   }
@@ -298,7 +310,7 @@ function ChildButton({
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
-        {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
+        {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
       </div>
     )
   }
@@ -322,7 +334,7 @@ function ChildButton({
         <>
           <p className="text-3xl font-bold text-gray-800">{child.kanaName}</p>
           <p className="text-base text-gray-500">{child.kanjiName}</p>
-          {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
+          {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
         </>
       )}
     </Button>
