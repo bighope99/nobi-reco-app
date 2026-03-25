@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Hand, Loader2 } from "lucide-react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
@@ -46,9 +46,22 @@ function formatTime(isoString?: string): string {
   return `${hh}:${mm}`
 }
 
+function updateChildInGroups(
+  groups: Record<string, ChildRecord[]>,
+  childId: string,
+  updater: (child: ChildRecord) => ChildRecord
+): Record<string, ChildRecord[]> {
+  const next: Record<string, ChildRecord[]> = {}
+  for (const [row, children] of Object.entries(groups)) {
+    next[row] = children.map(c => c.id === childId ? updater(c) : c)
+  }
+  return next
+}
+
 export default function SelfCheckInPage() {
   const [groups, setGroups] = useState<Record<string, ChildRecord[]>>({})
   const [loading, setLoading] = useState(true)
+  const optimisticIdsRef = useRef<Set<string>>(new Set())
 
   const [view, setView] = useState<View>('row-select')
   const [selectedRow, setSelectedRow] = useState<string>('')
@@ -57,7 +70,6 @@ export default function SelfCheckInPage() {
   const [checkinTime, setCheckinTime] = useState<string>('')
   const [checkinAction, setCheckinAction] = useState<'check_in' | 'check_out'>('check_in')
   const [attendanceId, setAttendanceId] = useState<string | null>(null)
-  const [loadingChildId, setLoadingChildId] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(3)
 
   const fetchChildren = useCallback(async () => {
@@ -65,7 +77,21 @@ export default function SelfCheckInPage() {
       const res = await fetch('/api/attendance/self-checkin/children')
       if (!res.ok) return
       const data = await res.json()
-      setGroups(data.groups ?? {})
+      const serverGroups: Record<string, ChildRecord[]> = data.groups ?? {}
+      setGroups(prev => {
+        if (optimisticIdsRef.current.size === 0) return serverGroups
+        const merged: Record<string, ChildRecord[]> = {}
+        for (const [row, children] of Object.entries(serverGroups)) {
+          merged[row] = children.map(sc => {
+            if (optimisticIdsRef.current.has(sc.id)) {
+              const prevChild = prev[row]?.find(pc => pc.id === sc.id)
+              return prevChild ?? sc
+            }
+            return sc
+          })
+        }
+        return merged
+      })
     } catch {
       // fetch失敗時は無視（ポーリングで再試行）
     } finally {
@@ -99,54 +125,84 @@ export default function SelfCheckInPage() {
     setView('child-select')
   }
 
-  const goToFeedback = async (child: ChildRecord) => {
-    setLoadingChildId(child.id)
-    try {
-      const res = await fetch('/api/attendance/self-checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ child_id: child.id }),
-      })
-      const data = await res.json()
-      const time = data.time ? formatTime(data.time) : formatTime(new Date().toISOString())
-      setCheckinTime(time)
-      setCheckinAction(data.action ?? 'check_in')
-      setAttendanceId(data.attendance_id ?? null)
-    } catch {
-      const now = new Date()
-      setCheckinTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
-      setCheckinAction('check_in')
-      setAttendanceId(null)
-    } finally {
-      setLoadingChildId(null)
-    }
+  const goToFeedback = (child: ChildRecord) => {
+    const action: 'check_in' | 'check_out' = child.status !== 'checked_in' ? 'check_in' : 'check_out'
+
+    // Optimistic update
+    setGroups(prev => updateChildInGroups(prev, child.id, c => ({
+      ...c,
+      status: action === 'check_in' ? 'checked_in' : 'checked_out',
+      checkedInAt: action === 'check_in' ? new Date().toISOString() : c.checkedInAt,
+      checkedOutAt: action === 'check_out' ? new Date().toISOString() : c.checkedOutAt,
+    })))
+    optimisticIdsRef.current.add(child.id)
+
+    const now = new Date()
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     setSelectedChild(child)
+    setCheckinTime(timeStr)
+    setCheckinAction(action)
     setCountdown(3)
     setView('feedback')
-    fetchChildren()
+
+    // Fire-and-forget API call
+    fetch('/api/attendance/self-checkin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ child_id: child.id }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        setAttendanceId(data.attendance_id ?? null)
+        optimisticIdsRef.current.delete(child.id)
+      })
+      .catch(() => {
+        console.error('出席登録に失敗しました')
+        optimisticIdsRef.current.delete(child.id)
+      })
   }
 
-  const handleUndo = async () => {
-    if (attendanceId) {
-      try {
-        await fetch('/api/attendance/self-checkin', {
+  const handleUndo = () => {
+    if (selectedChild) {
+      // Optimistic revert
+      const childId = selectedChild.id
+      setGroups(prev => updateChildInGroups(prev, childId, c => ({
+        ...c,
+        status: checkinAction === 'check_in' ? 'not_checked_in' : 'checked_in',
+        checkedInAt: checkinAction === 'check_in' ? undefined : c.checkedInAt,
+        checkedOutAt: checkinAction === 'check_out' ? undefined : c.checkedOutAt,
+      })))
+      optimisticIdsRef.current.add(childId)
+
+      setView('child-select')
+
+      // Fire-and-forget DELETE
+      if (attendanceId) {
+        fetch('/api/attendance/self-checkin', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ attendance_id: attendanceId, action: checkinAction }),
         })
-      } catch {
-        // エラーは無視して画面を戻す
+          .then(() => {
+            optimisticIdsRef.current.delete(childId)
+          })
+          .catch(() => {
+            optimisticIdsRef.current.delete(childId)
+          })
+      } else {
+        optimisticIdsRef.current.delete(childId)
       }
-      fetchChildren()
+    } else {
+      setView('child-select')
     }
+
     setAttendanceId(null)
-    setView('child-select')
   }
 
   useEffect(() => {
     if (view !== 'feedback') return
     if (countdown <= 0) {
-      setView('child-select')
+      setView('row-select')
       return
     }
     const timer = setTimeout(() => setCountdown((c) => c - 1), 1000)
@@ -260,7 +316,6 @@ export default function SelfCheckInPage() {
                     key={child.id}
                     child={child}
                     onSelect={goToFeedback}
-                    isLoading={loadingChildId === child.id}
                   />
                 ))}
               </div>
@@ -299,46 +354,34 @@ export default function SelfCheckInPage() {
 function ChildButton({
   child,
   onSelect,
-  isLoading,
 }: {
   child: ChildRecord
   onSelect: (child: ChildRecord) => void
-  isLoading: boolean
 }) {
   if (child.status === 'checked_in') {
     return (
       <button
-        onClick={() => !isLoading && onSelect(child)}
-        disabled={isLoading}
+        onClick={() => onSelect(child)}
         className={[
-          'flex min-h-24 w-full flex-col justify-center rounded-2xl border-2 border-green-400 bg-green-50 px-4 py-3 shadow-md text-left',
-          'active:scale-95 transition-transform',
-          isLoading ? 'opacity-60 cursor-wait' : 'hover:bg-green-100',
+          'flex min-h-24 w-full flex-col items-center justify-center text-center rounded-2xl border-2 border-green-400 bg-green-50 px-4 py-3 shadow-md',
+          'active:scale-95 transition-transform hover:bg-green-100',
         ].join(' ')}
       >
-        {isLoading ? (
-          <div className="flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-green-400" />
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <Badge className="h-3 w-3 rounded-full bg-green-500 p-0 shrink-0" />
-              <span className="text-sm font-bold text-green-600">きたよ！ {formatTime(child.checkedInAt)}　タップでかえる</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
-            <p className="text-base text-gray-500">{child.kanjiName}</p>
-            {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
-          </>
-        )}
+        <div className="flex items-center justify-center gap-2">
+          <Badge className="h-3 w-3 rounded-full bg-green-500 p-0 shrink-0" />
+          <span className="text-sm font-bold text-green-600">きたよ！ {formatTime(child.checkedInAt)}　タップでかえる</span>
+        </div>
+        <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
+        <p className="text-base text-gray-500">{child.kanjiName}</p>
+        {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
       </button>
     )
   }
 
   if (child.status === 'checked_out') {
     return (
-      <div className="flex min-h-24 w-full flex-col justify-center rounded-2xl border-2 border-blue-400 bg-blue-50 px-4 py-3 shadow-md">
-        <div className="flex items-center gap-2">
+      <div className="flex min-h-24 w-full flex-col items-center justify-center text-center rounded-2xl border-2 border-blue-400 bg-blue-50 px-4 py-3 shadow-md">
+        <div className="flex items-center justify-center gap-2">
           <Badge className="h-3 w-3 rounded-full bg-blue-500 p-0 shrink-0" />
           <span className="text-sm font-bold text-blue-600">かえったよ {formatTime(child.checkedOutAt)}</span>
         </div>
@@ -352,25 +395,15 @@ function ChildButton({
   return (
     <Button
       variant="outline"
-      onClick={() => !isLoading && onSelect(child)}
-      disabled={isLoading}
+      onClick={() => onSelect(child)}
       className={[
-        'flex min-h-24 h-auto w-full flex-col justify-center rounded-2xl bg-white px-4 py-3 shadow-md text-left',
-        'active:scale-95 transition-transform',
-        isLoading ? 'opacity-60 cursor-wait' : 'hover:bg-blue-50',
+        'flex min-h-24 h-auto w-full flex-col items-center justify-center text-center rounded-2xl bg-white px-4 py-3 shadow-md',
+        'active:scale-95 transition-transform hover:bg-blue-50',
       ].join(' ')}
     >
-      {isLoading ? (
-        <div className="flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        </div>
-      ) : (
-        <>
-          <p className="text-3xl font-bold text-gray-800">{child.kanaName}</p>
-          <p className="text-base text-gray-500">{child.kanjiName}</p>
-          {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
-        </>
-      )}
+      <p className="text-3xl font-bold text-gray-800">{child.kanaName}</p>
+      <p className="text-base text-gray-500">{child.kanjiName}</p>
+      {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
     </Button>
   )
 }
