@@ -378,15 +378,21 @@ function ChildButton({
 
   if (child.status === 'checked_out') {
     return (
-      <div className="flex min-h-24 w-full flex-col items-center justify-center text-center rounded-2xl border-2 border-blue-400 bg-blue-50 px-4 py-3 shadow-md">
+      <button
+        onClick={() => onSelect(child)}
+        className={[
+          'flex min-h-24 w-full flex-col items-center justify-center text-center rounded-2xl border-2 border-blue-400 bg-blue-50 px-4 py-3 shadow-md',
+          'active:scale-95 transition-transform hover:bg-blue-100',
+        ].join(' ')}
+      >
         <div className="flex items-center justify-center gap-2">
           <Badge className="h-3 w-3 rounded-full bg-blue-500 p-0 shrink-0" />
-          <span className="text-sm font-bold text-blue-600">かえったよ {formatTime(child.checkedOutAt)}</span>
+          <span className="text-sm font-bold text-blue-600">かえったよ {formatTime(child.checkedOutAt)}　タップでもどる</span>
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
         {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
-      </div>
+      </button>
     )
   }
 
