@@ -8,7 +8,6 @@ import {
   Building2,
   MapPin,
   Phone,
-  Mail,
   Save,
   Plus,
   X,
@@ -40,10 +39,12 @@ import {
 interface Facility {
   facility_id: string;
   name: string;
+  name_kana?: string;
   address: string;
   phone: string;
   email?: string;
   postal_code?: string;
+  capacity?: number | null;
   company_name?: string;
   current_children_count?: number;
   current_staff_count?: number;
@@ -315,10 +316,11 @@ export default function FacilityDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: facility.name,
+          name_kana: facility.name_kana || null,
           address: facility.address,
           phone: facility.phone,
-          email: facility.email || null,
           postal_code: facility.postal_code || null,
+          capacity: facility.capacity != null ? facility.capacity : null,
         }),
       });
 
@@ -443,11 +445,30 @@ export default function FacilityDetailPage() {
                   />
                 </FieldGroup>
 
+                <FieldGroup label="施設名カナ">
+                  <Input
+                    value={facility.name_kana || ''}
+                    onChange={(e: any) => setFacility({ ...facility, name_kana: e.target.value })}
+                    placeholder="例: ヒマワリホイクエン ホンエン"
+                  />
+                </FieldGroup>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <FieldGroup label="郵便番号">
                   <Input
                     value={facility.postal_code || ''}
                     onChange={(e: any) => setFacility({ ...facility, postal_code: e.target.value })}
                     placeholder="150-0001"
+                  />
+                </FieldGroup>
+
+                <FieldGroup label="定員">
+                  <Input
+                    type="number"
+                    value={facility.capacity != null ? String(facility.capacity) : ''}
+                    onChange={(e: any) => setFacility({ ...facility, capacity: e.target.value ? Number(e.target.value) : null })}
+                    placeholder="例: 40"
                   />
                 </FieldGroup>
               </div>
@@ -461,27 +482,15 @@ export default function FacilityDetailPage() {
                 />
               </FieldGroup>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <FieldGroup label="電話番号" required>
-                  <Input
-                    icon={Phone}
-                    type="tel"
-                    value={facility.phone}
-                    onChange={(e: any) => setFacility({ ...facility, phone: e.target.value })}
-                    placeholder="03-1234-5678"
-                  />
-                </FieldGroup>
-
-                <FieldGroup label="メールアドレス">
-                  <Input
-                    icon={Mail}
-                    type="email"
-                    value={facility.email || ''}
-                    onChange={(e: any) => setFacility({ ...facility, email: e.target.value })}
-                    placeholder="info@example.com"
-                  />
-                </FieldGroup>
-              </div>
+              <FieldGroup label="電話番号" required>
+                <Input
+                  icon={Phone}
+                  type="tel"
+                  value={facility.phone}
+                  onChange={(e: any) => setFacility({ ...facility, phone: e.target.value })}
+                  placeholder="03-1234-5678"
+                />
+              </FieldGroup>
             </div>
           </section>
 

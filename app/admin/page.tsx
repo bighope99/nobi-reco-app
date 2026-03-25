@@ -6,7 +6,7 @@ import Link from "next/link"
 const stats = [
   { label: "登録会社数", value: "12", icon: Building2, href: "/admin/companies" },
   { label: "登録施設数", value: "35", icon: Home, href: "/settings/facility" },
-  { label: "総ユーザー数", value: "156", icon: Users, href: "/admin/users" },
+  { label: "総ユーザー数", value: "156", icon: Users, href: "/settings/users" },
   { label: "今月のログイン", value: "1,234", icon: Activity, href: "/admin/logs" },
 ]
 
