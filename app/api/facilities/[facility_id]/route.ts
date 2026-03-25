@@ -95,7 +95,7 @@ export async function GET(
         phone: facility.phone,
         email: facility.email,
         company_id: facility.company_id,
-        company_name: facility.m_companies?.name,
+        company_name: (Array.isArray(facility.m_companies) ? (facility.m_companies as Array<{ id: unknown; name: unknown }>)[0]?.name : (facility.m_companies as { id: unknown; name: unknown } | null)?.name) as string | null | undefined,
         current_children_count: childrenCount || 0,
         current_staff_count: staffCount || 0,
         current_classes_count: classesCount || 0,

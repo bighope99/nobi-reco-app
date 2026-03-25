@@ -217,7 +217,7 @@ describe('GET /api/records/personal?staff_id=UUID (記入者フィルター)', (
     });
 
     it('staff_id フィルターは .or() ではなく直接 .eq() で適用されること', async () => {
-      // 活動記録は .or() を使うが、個別記録は .eq() を直接使う
+      // 保育日誌は .or() を使うが、個別記録は .eq() を直接使う
       const { mockSupabase, observationQuery, eqCalls } = buildObservationMock({
         observationsData: [],
         count: 0,

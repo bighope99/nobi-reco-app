@@ -16,7 +16,7 @@ const staffData = [
 beforeEach(() => {
   tagData = [];
   global.fetch = jest.fn(async (input) => {
-    const url = typeof input === 'string' ? input : input.url;
+    const url = typeof input === 'string' ? input : (input as Request).url;
     if (url === '/api/records/personal/tags') {
       return {
         ok: true,
@@ -167,7 +167,7 @@ describe('ObservationEditor edit', () => {
   it('「データを元に戻す」ボタンが表示されない', async () => {
     // 編集モード用のfetchモックを追加
     global.fetch = jest.fn(async (input) => {
-      const url = typeof input === 'string' ? input : input.url;
+      const url = typeof input === 'string' ? input : (input as Request).url;
       if (url === '/api/records/personal/tags') {
         return {
           ok: true,

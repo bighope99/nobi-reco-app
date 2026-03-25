@@ -36,6 +36,19 @@ describe('/api/attendance/checkin POST', () => {
           },
           error: null,
         }),
+        getClaims: jest.fn().mockResolvedValue({
+          data: {
+            claims: {
+              sub: 'user-123',
+              app_metadata: {
+                role: 'staff',
+                company_id: 'company-1',
+                current_facility_id: 'facility-123',
+              },
+            },
+          },
+          error: null,
+        }),
       },
     };
 
@@ -47,6 +60,10 @@ describe('/api/attendance/checkin POST', () => {
       mockSupabase.auth.getSession.mockResolvedValue({
         data: { session: null },
         error: null,
+      });
+      mockSupabase.auth.getClaims.mockResolvedValue({
+        data: null,
+        error: { message: 'No session' },
       });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
@@ -62,8 +79,12 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.error).toBe('Unauthorized');
     });
 
-                                                                                                                                                                it('current_facility_idがない場合は401を返す', async () => {
+    it('current_facility_idがない場合は401を返す', async () => {
       (getUserSession as jest.Mock).mockResolvedValue({ user_id: 'user-123' });
+      mockSupabase.auth.getClaims.mockResolvedValue({
+        data: null,
+        error: { message: 'No facility' },
+      });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
@@ -299,7 +320,12 @@ describe('/api/attendance/checkin POST', () => {
 
     it('正常にチェックインできる', async () => {
       const now = new Date();
-      const today = now.toISOString().split('T')[0];
+      const today = now.toLocaleDateString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).replace(/\//g, '-');
 
       mockSupabase.maybeSingle
         .mockResolvedValueOnce({

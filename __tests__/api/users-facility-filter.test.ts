@@ -26,6 +26,14 @@ jest.mock('@/lib/utils/timezone', () => ({
 
 const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
 const mockedCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;
+
+const mockAdminClient = {
+  auth: {
+    admin: {
+      listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+    },
+  },
+};
 const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<
   typeof getAuthenticatedUserMetadata
 >;
@@ -89,10 +97,13 @@ function buildClassQuery(classData: unknown[] = []) {
 describe('GET /api/users - facility_id フィルター', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   it('company_admin が facility_id パラメータを指定すると、その施設でフィルタされる', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -143,6 +154,7 @@ describe('GET /api/users - facility_id フィルター', () => {
 
   it('company_admin が別会社の施設IDを指定しても company_id フィルターにより別会社のユーザーは取得されない', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -187,6 +199,7 @@ describe('GET /api/users - facility_id フィルター', () => {
 
   it('facility_admin が facility_id パラメータを指定しても current_facility_id でフィルタされる（上書き不可）', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -250,10 +263,13 @@ describe('GET /api/users - facility_id フィルター', () => {
 describe('POST /api/users - facility_id 指定', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAdminClient.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
   });
 
   it('company_admin が body.facility_id を指定してユーザーを作成できる', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'company_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -264,6 +280,7 @@ describe('POST /api/users - facility_id 指定', () => {
       eq: jest.fn(),
       is: jest.fn(),
       single: jest.fn(),
+      maybeSingle: jest.fn(),
       insert: jest.fn(),
     };
     mUsersQuery.select.mockReturnValue(mUsersQuery);
@@ -272,20 +289,20 @@ describe('POST /api/users - facility_id 指定', () => {
     mUsersQuery.insert.mockReturnValue(mUsersQuery);
 
     // メールアドレス重複チェック → 存在しない
-    mUsersQuery.single
-      .mockResolvedValueOnce({ data: null, error: null })
-      // m_users insert 後の select().single()
-      .mockResolvedValueOnce({
-        data: {
-          id: 'new-user-id',
-          email: 'newuser@example.com',
-          name: 'New User',
-          role: 'staff',
-          hire_date: '2026-03-18',
-          created_at: '2026-03-18T00:00:00.000Z',
-        },
-        error: null,
-      });
+    mUsersQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    // m_users insert 後の select().single() でユーザーデータを返す
+    mUsersQuery.single.mockResolvedValue({
+      data: {
+        id: 'new-user-id',
+        email: 'newuser@example.com',
+        name: 'New User',
+        role: 'staff',
+        hire_date: '2026-03-18',
+        created_at: '2026-03-18T00:00:00.000Z',
+      },
+      error: null,
+    });
 
     const userFacilityQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
     const userClassQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
@@ -300,10 +317,13 @@ describe('POST /api/users - facility_id 指定', () => {
     const facilitiesQuery: Record<string, jest.Mock> = {
       select: jest.fn(),
       eq: jest.fn(),
+      is: jest.fn(),
       single: jest.fn().mockResolvedValue({ data: { name: 'テスト施設B' }, error: null }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'facility-2' }, error: null }),
     };
     facilitiesQuery.select.mockReturnValue(facilitiesQuery);
     facilitiesQuery.eq.mockReturnValue(facilitiesQuery);
+    facilitiesQuery.is.mockReturnValue(facilitiesQuery);
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
@@ -370,6 +390,7 @@ describe('POST /api/users - facility_id 指定', () => {
 
   it('facility_admin が body.facility_id を指定しても current_facility_id で施設紐付けされる', async () => {
     mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
       role: 'facility_admin',
       company_id: 'company-1',
       current_facility_id: 'facility-1',
@@ -380,6 +401,7 @@ describe('POST /api/users - facility_id 指定', () => {
       eq: jest.fn(),
       is: jest.fn(),
       single: jest.fn(),
+      maybeSingle: jest.fn(),
       insert: jest.fn(),
     };
     mUsersQuery.select.mockReturnValue(mUsersQuery);
@@ -387,19 +409,21 @@ describe('POST /api/users - facility_id 指定', () => {
     mUsersQuery.is.mockReturnValue(mUsersQuery);
     mUsersQuery.insert.mockReturnValue(mUsersQuery);
 
-    mUsersQuery.single
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: {
-          id: 'new-user-id',
-          email: 'staff2@example.com',
-          name: 'New Staff',
-          role: 'staff',
-          hire_date: '2026-03-18',
-          created_at: '2026-03-18T00:00:00.000Z',
-        },
-        error: null,
-      });
+    // メールアドレス重複チェック → 存在しない
+    mUsersQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    // m_users insert 後の select().single() でユーザーデータを返す
+    mUsersQuery.single.mockResolvedValue({
+      data: {
+        id: 'new-user-id',
+        email: 'staff2@example.com',
+        name: 'New Staff',
+        role: 'staff',
+        hire_date: '2026-03-18',
+        created_at: '2026-03-18T00:00:00.000Z',
+      },
+      error: null,
+    });
 
     const userFacilityQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
     const userClassQuery = { insert: jest.fn().mockResolvedValue({ data: null, error: null }) };
@@ -414,10 +438,13 @@ describe('POST /api/users - facility_id 指定', () => {
     const facilitiesQuery: Record<string, jest.Mock> = {
       select: jest.fn(),
       eq: jest.fn(),
+      is: jest.fn(),
       single: jest.fn().mockResolvedValue({ data: { name: 'テスト施設A' }, error: null }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'facility-1' }, error: null }),
     };
     facilitiesQuery.select.mockReturnValue(facilitiesQuery);
     facilitiesQuery.eq.mockReturnValue(facilitiesQuery);
+    facilitiesQuery.is.mockReturnValue(facilitiesQuery);
 
     const mockSupabase = {
       from: jest.fn((table: string) => {

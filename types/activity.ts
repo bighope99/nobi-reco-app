@@ -1,7 +1,7 @@
 /**
- * 活動記録関連の型定義
+ * 保育日誌関連の型定義
  *
- * このファイルは活動記録（r_activity）テーブルの拡張フィールド用の型定義を提供します。
+ * このファイルは保育日誌（r_activity）テーブルの拡張フィールド用の型定義を提供します。
  * データベーススキーマ: 015_add_activity_extended_fields.sql
  */
 
@@ -71,12 +71,12 @@ export interface Meal {
 }
 
 /**
- * 活動記録（拡張フィールド含む）
+ * 保育日誌（拡張フィールド含む）
  *
  * r_activityテーブルの完全な型定義
  */
 export interface ActivityRecord {
-  /** 活動記録ID */
+  /** 保育日誌ID */
   activity_id: string;
   /** 施設ID */
   facility_id: string;

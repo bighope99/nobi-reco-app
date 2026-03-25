@@ -7,8 +7,16 @@ export type ImportDefaults = {
   class_id?: string | null;
 };
 
+export type DuplicateInfo = {
+  child_id: string;
+  name: string;
+  birth_date: string;
+};
+
 export type ImportPreviewRow = {
   row: number;
+  child_id?: string;
+  is_update?: boolean;
   family_name: string;
   given_name: string;
   birth_date: string;
@@ -17,9 +25,11 @@ export type ImportPreviewRow = {
   enrolled_at: string;
   parent_name: string;
   errors: string[];
+  duplicates?: DuplicateInfo[];
 };
 
 const headerLabels = {
+  child_id: 'ID',
   family_name: '姓',
   given_name: '名',
   family_name_kana: 'セイ',
@@ -75,6 +85,7 @@ export function buildChildPayload(
 ): { payload?: ChildPayload; errors: string[] } {
   const errors: string[] = [];
 
+  const childId = getValue(row, headerLabels.child_id) || undefined;
   const familyName = getValue(row, headerLabels.family_name);
   const givenName = getValue(row, headerLabels.given_name);
   const birthDate = getValue(row, headerLabels.birth_date);
@@ -104,7 +115,19 @@ export function buildChildPayload(
 
   const emergencyContacts = buildEmergencyContacts(row);
 
+  // 緊急連絡先の電話番号バリデーション
+  for (let ecIdx = 0; ecIdx < emergencyContacts.length; ecIdx++) {
+    const ec = emergencyContacts[ecIdx];
+    if (ec.name?.trim() && ec.phone?.trim()) {
+      const normalizedEcPhone = normalizePhone(ec.phone);
+      if (normalizedEcPhone.length < 10 || normalizedEcPhone.length > 15) {
+        errors.push(`緊急連絡先${ecIdx + 1}の電話番号が不正です（10〜15桁で入力してください）`);
+      }
+    }
+  }
+
   const payload: ChildPayload = {
+    child_id: childId,
     basic_info: {
       family_name: familyName,
       given_name: givenName,
@@ -161,6 +184,8 @@ export function buildPreviewRow(
 
   return {
     row: rowNumber,
+    child_id: payload?.child_id,
+    is_update: !!payload?.child_id,
     family_name: payload?.basic_info?.family_name || getValue(row, headerLabels.family_name),
     given_name: payload?.basic_info?.given_name || getValue(row, headerLabels.given_name),
     birth_date: payload?.basic_info?.birth_date || getValue(row, headerLabels.birth_date),

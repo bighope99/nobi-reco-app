@@ -14,6 +14,7 @@ import {
     RotateCcw,
     Users,
     Download,
+    Upload,
     Loader2,
     CameraOff
 } from 'lucide-react';
@@ -378,6 +379,25 @@ export default function StudentList() {
         }
     };
 
+    const handleExportChildren = async () => {
+        try {
+            const response = await fetch('/api/children/export');
+            if (!response.ok) {
+                let message = 'エクスポートに失敗しました';
+                try {
+                    const data = await response.json();
+                    message = data?.error || message;
+                } catch {
+                    // 非JSON応答は既定メッセージを使う
+                }
+                throw new Error(message);
+            }
+            await downloadResponseBlob(response, '児童データ.csv');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'エクスポートに失敗しました');
+        }
+    };
+
     // Helper: Contract Badge
     const getContractBadge = (type: ContractType) => {
         switch (type) {
@@ -484,6 +504,21 @@ export default function StudentList() {
                         {/* Right: Actions */}
                         <div className="flex items-center gap-3 w-full md:w-auto justify-end" >
                             <button
+                                type="button"
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100"
+                                onClick={handleExportChildren}
+                            >
+                                <Download size={16} />
+                                エクスポート
+                            </button>
+                            <button
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100"
+                                onClick={() => window.location.href = '/children/import'}
+                            >
+                                <Upload size={16} />
+                                インポート
+                            </button>
+                            <button
                                 className={`flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm ${batchGenerating || processedStudents.length === 0
                                     ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
                                     : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
@@ -546,21 +581,12 @@ export default function StudentList() {
                                                 </div>
                                             </th>
                                             <th
-                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-28 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                                onClick={() => handleSort('contractType')}
-                                            >
-                                                <div className="flex items-center gap-1" >
-                                                    契約
-                                                    <SortIcon columnKey="contractType" />
-                                                </div>
-                                            </th>
-                                            <th
                                                 className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                                onClick={() => handleSort('siblings')}
+                                                onClick={() => handleSort('allergy')}
                                             >
                                                 <div className="flex items-center gap-1" >
-                                                    兄弟
-                                                    <SortIcon columnKey="siblings" />
+                                                    アレルギー
+                                                    <SortIcon columnKey="allergy" />
                                                 </div>
                                             </th>
                                             <th
@@ -573,15 +599,24 @@ export default function StudentList() {
                                                 </div>
                                             </th>
                                             <th
-                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                                onClick={() => handleSort('allergy')}
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-28 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('contractType')}
                                             >
                                                 <div className="flex items-center gap-1" >
-                                                    アレルギー
-                                                    <SortIcon columnKey="allergy" />
+                                                    契約
+                                                    <SortIcon columnKey="contractType" />
                                                 </div>
                                             </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48" > 保護者連絡先 </th>
+                                            <th
+                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                                                onClick={() => handleSort('siblings')}
+                                            >
+                                                <div className="flex items-center gap-1" >
+                                                    兄弟
+                                                    <SortIcon columnKey="siblings" />
+                                                </div>
+                                            </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32 text-center" > QRコード </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12" > </th>
                                         </tr>
@@ -639,23 +674,22 @@ export default function StudentList() {
 
                                                     {/* Class */}
                                                     <td className="px-3 py-4" >
-                                                        <span className="text-sm text-slate-600" > {student.className} </span>
+                                                        {student.className ? (
+                                                            <span className="text-sm text-slate-600" > {student.className} </span>
+                                                        ) : (
+                                                            <span className="text-slate-300 text-sm" > -</span>
+                                                        )}
                                                     </td>
 
-                                                    {/* Contract Type */}
+                                                    {/* Allergy (Max 2 lines) */}
                                                     <td className="px-2 py-4" >
-                                                        {getContractBadge(student.contractType)}
-                                                    </td>
-
-                                                    {/* Siblings */}
-                                                    <td className="px-3 py-4" >
                                                         {
-                                                            student.siblings.length > 0 ? (
-                                                                <div className="flex items-center gap-1 text-sm text-slate-600" >
-                                                                    <Users size={14} className="text-indigo-400" />
-                                                                    <span className="truncate" title={student.siblings.join(', ')} >
-                                                                        {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
-                                                                    </span>
+                                                            student.hasAllergy ? (
+                                                                <div
+                                                                    className="text-sm text-rose-600 font-medium leading-tight line-clamp-2"
+                                                                    title={student.allergyDetail}
+                                                                >
+                                                                    {student.allergyDetail || 'あり'}
                                                                 </div>
                                                             ) : (
                                                                 <span className="text-slate-300 text-sm" > -</span>
@@ -674,19 +708,9 @@ export default function StudentList() {
                                                         )}
                                                     </td>
 
-                                                    {/* Allergy (Max 2 lines) */}
+                                                    {/* Contract Type */}
                                                     <td className="px-2 py-4" >
-                                                        {
-                                                            student.hasAllergy ? (
-                                                                <div
-                                                                    className="text-sm text-rose-600 font-medium leading-tight line-clamp-2"
-                                                                    title={student.allergyDetail}
-                                                                >
-                                                                    {student.allergyDetail || 'あり'}
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-sm" > -</span>
-                                                            )}
+                                                        {getContractBadge(student.contractType)}
                                                     </td>
 
                                                     {/* Parent Contact */}
@@ -706,6 +730,21 @@ export default function StudentList() {
                                                                 <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
                                                             </div>
                                                         </div>
+                                                    </td>
+
+                                                    {/* Siblings */}
+                                                    <td className="px-3 py-4" >
+                                                        {
+                                                            student.siblings.length > 0 ? (
+                                                                <div className="flex items-center gap-1 text-sm text-slate-600" >
+                                                                    <Users size={14} className="text-indigo-400" />
+                                                                    <span className="truncate" title={student.siblings.join(', ')} >
+                                                                        {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-sm" > -</span>
+                                                            )}
                                                     </td>
 
                                                     {/* QR Download */}

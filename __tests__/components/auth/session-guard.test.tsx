@@ -15,6 +15,7 @@ import { SessionGuard } from '@/components/auth/session-guard'
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  usePathname: () => '/',
 }))
 
 // テスト用ヘルパー: Response オブジェクトを生成する

@@ -68,10 +68,6 @@ export async function GET(request: NextRequest) {
       .eq('enrollment_status', 'enrolled')
       .is('deleted_at', null);
 
-    if (class_id) {
-      childrenQuery = childrenQuery.eq('_child_class.class_id', class_id);
-    }
-
     const { data: childrenData, error: childrenError } = await childrenQuery;
 
     if (childrenError) {

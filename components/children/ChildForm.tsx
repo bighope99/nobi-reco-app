@@ -1,5 +1,6 @@
 "use client"
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import {
   User,
   Users,
@@ -145,7 +146,18 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [classes, setClasses] = useState<Array<{ class_id: string; class_name: string }>>([]);
+  const [classesLoaded, setClassesLoaded] = useState(false);
   const [schools, setSchools] = useState<Array<{ school_id: string; name: string }>>([]);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // 未保存変更アラート
+  useUnsavedChanges(isDirty);
+
+  // フォーム変更時にdirtyフラグを立てるラッパー
+  const updateFormData = useCallback((updates: Partial<typeof formData>) => {
+    setIsDirty(true);
+    setFormData(prev => ({ ...prev, ...updates }));
+  }, []);
 
   // フォームの状態
   const [formData, setFormData] = useState({
@@ -200,6 +212,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
         }
       } catch (err) {
         console.error('Failed to fetch classes:', err);
+      } finally {
+        setClassesLoaded(true);
       }
     };
 
@@ -304,23 +318,28 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     fetchChildData();
   }, [isEditMode, childId]);
 
-  // デモ用: スクロールスパイの実装
+  // スクロールスパイ: 画面上部を通過した最後のセクションをアクティブにする
   useEffect(() => {
+    const sections = ['basic', 'affiliation', 'family', 'care'];
+    const offset = 120; // sticky header + margin
+
     const handleScroll = () => {
-      const sections = ['basic', 'affiliation', 'family', 'care'];
+      let current = sections[0];
       for (const section of sections) {
         const element = document.getElementById(section);
         if (element) {
           const rect = element.getBoundingClientRect();
-          if (rect.top >= 0 && rect.top <= 300) {
-            setActiveSection(section);
-            break;
+          if (rect.top <= offset) {
+            current = section;
           }
         }
       }
+      setActiveSection(current);
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const scrollContainer = document.querySelector('main') ?? window;
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // 初期状態を設定
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
 
   // 電話番号変更時に兄弟を自動検索（デバウンス500ms）
@@ -423,10 +442,12 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
     if (emergencyContacts.length >= MAX_EMERGENCY_CONTACTS) return;
     contactIdRef.current += 1;
     setEmergencyContacts([...emergencyContacts, { id: contactIdRef.current, name: '', relation: '', phone: '' }]);
+    setIsDirty(true);
   };
 
   const removeEmergencyContact = (id: number) => {
     setEmergencyContacts(emergencyContacts.filter(c => c.id !== id));
+    setIsDirty(true);
   };
 
   // Handle form submit
@@ -505,6 +526,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       }
 
       if (result.success) {
+        setIsDirty(false);
         if (onSuccess) {
           onSuccess();
         } else {
@@ -616,12 +638,12 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         <Input
                           placeholder="姓"
                           value={formData.family_name}
-                          onChange={(e: any) => setFormData({ ...formData, family_name: e.target.value })}
+                          onChange={(e: any) => updateFormData({ family_name: e.target.value })}
                         />
                         <Input
                           placeholder="名"
                           value={formData.given_name}
-                          onChange={(e: any) => setFormData({ ...formData, given_name: e.target.value })}
+                          onChange={(e: any) => updateFormData({ given_name: e.target.value })}
                         />
                       </div>
                     </FieldGroup>
@@ -630,12 +652,12 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         <Input
                           placeholder="セイ"
                           value={formData.family_name_kana}
-                          onChange={(e: any) => setFormData({ ...formData, family_name_kana: e.target.value })}
+                          onChange={(e: any) => updateFormData({ family_name_kana: e.target.value })}
                         />
                         <Input
                           placeholder="メイ"
                           value={formData.given_name_kana}
-                          onChange={(e: any) => setFormData({ ...formData, given_name_kana: e.target.value })}
+                          onChange={(e: any) => updateFormData({ given_name_kana: e.target.value })}
                         />
                       </div>
                     </FieldGroup>
@@ -644,7 +666,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       <Input
                         placeholder="例: れんくん"
                         value={formData.nickname}
-                        onChange={(e: any) => setFormData({ ...formData, nickname: e.target.value })}
+                        onChange={(e: any) => updateFormData({ nickname: e.target.value })}
                       />
                     </FieldGroup>
 
@@ -656,7 +678,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                             name="gender"
                             value="male"
                             checked={formData.gender === 'male'}
-                            onChange={(e) => setFormData({ ...formData, gender: 'male' })}
+                            onChange={(e) => updateFormData({ gender: 'male' })}
                             className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
                           />
                           <span className="text-sm text-slate-700 group-hover:text-indigo-700">男児</span>
@@ -667,7 +689,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                             name="gender"
                             value="female"
                             checked={formData.gender === 'female'}
-                            onChange={(e) => setFormData({ ...formData, gender: 'female' })}
+                            onChange={(e) => updateFormData({ gender: 'female' })}
                             className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
                           />
                           <span className="text-sm text-slate-700 group-hover:text-indigo-700">女児</span>
@@ -682,7 +704,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           placeholder="年"
                           className="max-w-[100px]"
                           value={formData.birth_year}
-                          onChange={(e: any) => setFormData({ ...formData, birth_year: e.target.value })}
+                          onChange={(e: any) => updateFormData({ birth_year: e.target.value })}
                           min="1900"
                           max={new Date().getFullYear()}
                           suppressHydrationWarning
@@ -693,7 +715,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           placeholder="月"
                           className="max-w-[80px]"
                           value={formData.birth_month}
-                          onChange={(e: any) => setFormData({ ...formData, birth_month: e.target.value })}
+                          onChange={(e: any) => updateFormData({ birth_month: e.target.value })}
                           min="1"
                           max="12"
                         />
@@ -703,7 +725,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           placeholder="日"
                           className="max-w-[80px]"
                           value={formData.birth_day}
-                          onChange={(e: any) => setFormData({ ...formData, birth_day: e.target.value })}
+                          onChange={(e: any) => updateFormData({ birth_day: e.target.value })}
                           min="1"
                           max="31"
                         />
@@ -714,7 +736,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                     <FieldGroup label="通学している学校" className="sm:col-span-2">
                       <Select
                         value={formData.school_id}
-                        onChange={(e: any) => setFormData({ ...formData, school_id: e.target.value })}
+                        onChange={(e: any) => updateFormData({ school_id: e.target.value })}
                       >
                         <option value="">学校を選択してください</option>
                         {schools.map((school) => (
@@ -730,7 +752,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       <div className="flex items-center gap-4">
                         <Select
                           value={formData.grade_add.toString()}
-                          onChange={(e: any) => setFormData({ ...formData, grade_add: parseInt(e.target.value) })}
+                          onChange={(e: any) => updateFormData({ grade_add: parseInt(e.target.value) })}
                           className="w-48"
                         >
                           <option value="-2">-2年（2学年下）</option>
@@ -758,7 +780,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                   <FieldGroup label="ステータス" required>
                     <Select
                       value={formData.enrollment_status}
-                      onChange={(e: any) => setFormData({ ...formData, enrollment_status: e.target.value as any })}
+                      onChange={(e: any) => updateFormData({ enrollment_status: e.target.value as 'enrolled' | 'withdrawn' | 'suspended' })}
                     >
                       <option value="enrolled">在籍中</option>
                       <option value="suspended">休園中</option>
@@ -769,7 +791,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                   <FieldGroup label="契約形態" required>
                     <Select
                       value={formData.enrollment_type}
-                      onChange={(e: any) => setFormData({ ...formData, enrollment_type: e.target.value as any })}
+                      onChange={(e: any) => updateFormData({ enrollment_type: e.target.value as 'regular' | 'temporary' | 'spot' })}
                     >
                       <option value="regular">通年契約（月極）</option>
                       <option value="temporary">一時保育</option>
@@ -781,7 +803,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                     <Input
                       type="date"
                       value={formData.enrolled_at}
-                      onChange={(e: any) => setFormData({ ...formData, enrolled_at: e.target.value })}
+                      onChange={(e: any) => updateFormData({ enrolled_at: e.target.value })}
                     />
                   </FieldGroup>
 
@@ -790,24 +812,26 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       type="date"
                       placeholder="未定"
                       value={formData.withdrawn_at}
-                      onChange={(e: any) => setFormData({ ...formData, withdrawn_at: e.target.value })}
+                      onChange={(e: any) => updateFormData({ withdrawn_at: e.target.value })}
                     />
                   </FieldGroup>
 
-                  <FieldGroup label="現在のクラス">
-                    <Select
-                      value={formData.class_id}
-                      onChange={(e: any) => setFormData({ ...formData, class_id: e.target.value })}
-                    >
-                      <option value="">クラスを選択...</option>
-                      {classes.map((cls) => (
-                        <option key={cls.class_id} value={cls.class_id}>
-                          {cls.class_name}
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-slate-400 mt-1">※クラスは後から設定することもできます</p>
-                  </FieldGroup>
+                  {classesLoaded && classes.length > 0 && (
+                    <FieldGroup label="現在のクラス">
+                      <Select
+                        value={formData.class_id}
+                        onChange={(e: any) => updateFormData({ class_id: e.target.value })}
+                      >
+                        <option value="">クラスを選択...</option>
+                        {classes.map((cls) => (
+                          <option key={cls.class_id} value={cls.class_id}>
+                            {cls.class_name}
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-slate-400 mt-1">※クラスは後から設定することもできます</p>
+                    </FieldGroup>
+                  )}
                 </div>
               </SectionCard>
 
@@ -829,7 +853,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       <Input
                         placeholder="佐藤 太郎"
                         value={formData.parent_name}
-                        onChange={(e: any) => setFormData({ ...formData, parent_name: e.target.value })}
+                        onChange={(e: any) => updateFormData({ parent_name: e.target.value })}
                       />
                     </FieldGroup>
                     <FieldGroup label="メールアドレス">
@@ -838,7 +862,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         type="email"
                         placeholder="example@email.com"
                         value={formData.parent_email}
-                        onChange={(e: any) => setFormData({ ...formData, parent_email: e.target.value })}
+                        onChange={(e: any) => updateFormData({ parent_email: e.target.value })}
                       />
                     </FieldGroup>
 
@@ -872,7 +896,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         onChange={(e: any) => {
                           setSiblingSearchDismissed(false);
                           setSiblingResult(null);
-                          setFormData({ ...formData, parent_phone: e.target.value });
+                          updateFormData({ parent_phone: e.target.value });
                         }}
                       />
                       {isSearchingSibling && (
@@ -947,6 +971,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           const updated = [...emergencyContacts];
                           updated[index].name = e.target.value;
                           setEmergencyContacts(updated);
+                          setIsDirty(true);
                         }}
                       />
                       <Input
@@ -957,6 +982,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           const updated = [...emergencyContacts];
                           updated[index].relation = e.target.value;
                           setEmergencyContacts(updated);
+                          setIsDirty(true);
                         }}
                       />
                       <Input
@@ -967,6 +993,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           const updated = [...emergencyContacts];
                           updated[index].phone = e.target.value;
                           setEmergencyContacts(updated);
+                          setIsDirty(true);
                         }}
                       />
                       <button
@@ -1010,7 +1037,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                         className="border-orange-200 focus:ring-orange-500 focus:border-orange-500"
                         placeholder="例: 卵、そば、キウイフルーツ。完全除去か微量なら可かなど詳細に記載。"
                         value={formData.allergies}
-                        onChange={(e: any) => setFormData({ ...formData, allergies: e.target.value })}
+                        onChange={(e: any) => updateFormData({ allergies: e.target.value })}
                       />
                     </FieldGroup>
                     <div className="flex items-start gap-2 text-orange-800 bg-orange-100/50 p-3 rounded text-xs leading-relaxed">
@@ -1027,14 +1054,14 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                       <Textarea
                         placeholder="例: 大きな音が苦手、特定の布製品にこだわりがある等"
                         value={formData.child_characteristics}
-                        onChange={(e: any) => setFormData({ ...formData, child_characteristics: e.target.value })}
+                        onChange={(e: any) => updateFormData({ child_characteristics: e.target.value })}
                       />
                     </FieldGroup>
                     <FieldGroup label="保護者の状況・要望">
                       <Textarea
                         placeholder="例: 日本語があまり得意ではないため、ゆっくり話す必要がある等"
                         value={formData.parent_characteristics}
-                        onChange={(e: any) => setFormData({ ...formData, parent_characteristics: e.target.value })}
+                        onChange={(e: any) => updateFormData({ parent_characteristics: e.target.value })}
                       />
                     </FieldGroup>
                   </div>
@@ -1047,7 +1074,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           label="HP/SNSへの写真掲載"
                           description="園だより等への顔写真掲載許可"
                           checked={formData.photo_permission_public}
-                          onChange={(checked: boolean) => setFormData({ ...formData, photo_permission_public: checked })}
+                          onChange={(checked: boolean) => updateFormData({ photo_permission_public: checked })}
                         />
                       </div>
                       <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
@@ -1055,7 +1082,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
                           label="レポートへの記名"
                           description="クラス内共有物への名前記載"
                           checked={formData.photo_permission_share}
-                          onChange={(checked: boolean) => setFormData({ ...formData, photo_permission_share: checked })}
+                          onChange={(checked: boolean) => updateFormData({ photo_permission_share: checked })}
                         />
                       </div>
                     </div>

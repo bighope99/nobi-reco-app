@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     // 対象日（デフォルトは今日）
     const targetDate = dateParam || getCurrentDateJST();
 
-    // 活動記録を取得
+    // 保育日誌を取得
     let query = supabase
       .from('r_activity')
       .select(`
@@ -156,6 +156,7 @@ export async function GET(request: NextRequest) {
         role_assignments,
         special_notes,
         handover,
+        handover_completed,
         meal,
         recorded_by,
         created_at,
@@ -325,6 +326,7 @@ export async function GET(request: NextRequest) {
         role_assignments: activity.role_assignments,
         special_notes: activity.special_notes,
         handover: activity.handover,
+        handover_completed: activity.handover_completed ?? false,
         meal: activity.meal,
         recorded_by: activity.recorded_by || null,
         recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name ?? null,
@@ -506,14 +508,14 @@ export async function POST(request: NextRequest) {
 
     const validatedFields = extendedFieldsResult.data;
 
-    // 活動記録を作成
+    // 保育日誌を作成
     const { data: activity, error: activityError } = await supabase
       .from('r_activity')
       .insert({
         facility_id,
         class_id: class_id || null,  // 空文字列の場合はnullに変換
         activity_date,
-        title: title || '活動記録',
+        title: title || '保育日誌',
         content: content || '',
         snack: validatedFields.snack,
         photos: normalizedPhotos,

@@ -54,7 +54,7 @@ describe('/api/records/activity PUT', () => {
 
   describe('認証テスト', () => {
     it('認証されていない場合は401を返すこと', async () => {
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: null },
@@ -81,7 +81,7 @@ describe('/api/records/activity PUT', () => {
     it('activity_idが必須であること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
@@ -109,7 +109,7 @@ describe('/api/records/activity PUT', () => {
     it('activity_dateが必須であること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
@@ -135,12 +135,12 @@ describe('/api/records/activity PUT', () => {
     });
   });
 
-  describe('活動記録更新', () => {
-    it('活動記録を正しく更新できること', async () => {
+  describe('保育日誌更新', () => {
+    it('保育日誌を正しく更新できること', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       let updatedData: any = null;
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
@@ -198,10 +198,10 @@ describe('/api/records/activity PUT', () => {
       expect(updatedData.mentioned_children).toEqual(mockUpdateData.mentioned_children);
     });
 
-    it('存在しない活動記録の更新時は404を返すこと', async () => {
+    it('存在しない保育日誌の更新時は404を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
@@ -237,10 +237,10 @@ describe('/api/records/activity PUT', () => {
       expect(data.error).toContain('見つかりません');
     });
 
-    it('他の施設の活動記録を更新できないこと', async () => {
+    it('他の施設の保育日誌を更新できないこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
@@ -284,7 +284,7 @@ describe('/api/records/activity PUT', () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       let updatedData: any = null;
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },
@@ -343,7 +343,7 @@ describe('/api/records/activity PUT', () => {
     it('データベースエラー時は500を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
-      const mockSupabase = {
+      const mockSupabase: Record<string, unknown> = {
         auth: {
           getUser: jest.fn().mockResolvedValue({
             data: { user: mockUser },

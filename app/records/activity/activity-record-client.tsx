@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, GripVertical } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, GripVertical, Clipboard, Check, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import DOMPurify from "dompurify"
 import {
@@ -81,6 +81,7 @@ interface Activity {
   special_notes?: string | null
   meal?: Meal | null
   handover?: string | null
+  handover_completed?: boolean | null
 }
 
 interface MentionSuggestion {
@@ -686,7 +687,7 @@ export default function ActivityRecordClient() {
         throw new Error('メンションされた児童がありません')
       }
 
-      // 1. 先に活動記録を保存（編集モードの場合は更新）
+      // 1. 先に保育日誌を保存（編集モードの場合は更新）
       let savedActivityId: string | null = editingActivityId
 
       const sanitizedFields = getSanitizedExtendedFields()
@@ -719,10 +720,10 @@ export default function ActivityRecordClient() {
         const updateResult = await updateResponse.json()
 
         if (!updateResponse.ok || !updateResult.success) {
-          throw new Error(updateResult.error || '活動記録の更新に失敗しました')
+          throw new Error(updateResult.error || '保育日誌の更新に失敗しました')
         }
 
-        setSaveMessage('活動記録を更新しました')
+        setSaveMessage('保育日誌を更新しました')
       } else {
         // 新規保存
         const saveResponse = await fetch('/api/activities', {
@@ -750,11 +751,11 @@ export default function ActivityRecordClient() {
         const saveResult = await saveResponse.json()
 
         if (!saveResponse.ok || !saveResult.success) {
-          throw new Error(saveResult.error || '活動記録の保存に失敗しました')
+          throw new Error(saveResult.error || '保育日誌の保存に失敗しました')
         }
 
         savedActivityId = saveResult.data?.activity_id
-        setSaveMessage('活動記録を保存しました')
+        setSaveMessage('保育日誌を保存しました')
 
         // 新規保存後は編集モードに切り替え
         setEditingActivityId(savedActivityId)
@@ -772,7 +773,7 @@ export default function ActivityRecordClient() {
           content: activityContent,
           activity_date: activityDate,
           mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
-          activity_id: savedActivityId, // 保存した活動記録IDを紐付け
+          activity_id: savedActivityId, // 保存した保育日誌IDを紐付け
         }),
       })
 
@@ -787,7 +788,7 @@ export default function ActivityRecordClient() {
       setShowAnalysisModal(true)
       persistAiDraftsToCookie(analysisResults)
 
-      // 活動記録一覧を更新
+      // 保育日誌一覧を更新
       fetchActivities()
     } catch (err) {
       console.error('Failed to analyze:', err)
@@ -1109,7 +1110,7 @@ export default function ActivityRecordClient() {
   }
 
   const handleDelete = async (activityId: string) => {
-    const confirmed = window.confirm("この活動記録を削除しますか？")
+    const confirmed = window.confirm("この保育日誌を削除しますか？")
     if (!confirmed) return
 
     setIsDeletingId(activityId)
@@ -1233,6 +1234,8 @@ export default function ActivityRecordClient() {
   const handleRestart = () => {
     setDraggingScheduleIndex(null)
     setDragOverScheduleIndex(null)
+    setIsEditMode(false)
+    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1469,12 +1472,12 @@ export default function ActivityRecordClient() {
   }
 
   return (
-    <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
+    <StaffLayout title="保育日誌" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
         <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
-            <CardTitle>活動記録の入力</CardTitle>
+            <CardTitle>保育日誌の入力</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1584,11 +1587,22 @@ export default function ActivityRecordClient() {
                           draggable
                           onDragStart={(event) => {
                             event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', '')
                             handleScheduleDragStart(index)
                           }}
                           onDragEnd={handleScheduleDragEnd}
-                          className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing"
-                          aria-label={`${index + 1}行目をドラッグして並び替え`}
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === 'ArrowUp' && index > 0) {
+                              event.preventDefault()
+                              reorderScheduleItem(index, index - 1)
+                            } else if (event.key === 'ArrowDown' && index < dailySchedule.length - 1) {
+                              event.preventDefault()
+                              reorderScheduleItem(index, index + 1)
+                            }
+                          }}
+                          className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 rounded"
+                          aria-label={`${index + 1}行目をドラッグまたは矢印キーで並び替え`}
                         >
                           <GripVertical className="h-4 w-4" />
                         </div>
@@ -2075,7 +2089,7 @@ export default function ActivityRecordClient() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">活動記録一覧</h2>
+            <h2 className="text-xl font-semibold">保育日誌一覧</h2>
           </div>
 
           {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
@@ -2092,111 +2106,101 @@ export default function ActivityRecordClient() {
               </CardContent>
             </Card>
           ) : activitiesData?.activities.length ? (
-            <div className="space-y-3">
-              {activitiesData.activities.map((activity) => (
-                <Card key={activity.activity_id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-1">
-                            <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
-                              {activity.activity_date}
-                            </span>
-                            <span className="text-sm font-medium text-muted-foreground">
-                              {activity.class_name}
-                            </span>
-                          </div>
-                          <div className="text-sm leading-relaxed mt-2">
-                            <div
-                              dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(convertToMarkdown(getDisplayContent(activity)), DOMPURIFY_CONFIG),
-                              }}
-                            />
-                          </div>
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">内容</th>
+                    <th className="px-3 py-2.5 text-center font-medium text-muted-foreground whitespace-nowrap">引継ぎ</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">作成者</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {activitiesData.activities.map((activity) => {
+                    const displayContent = getDisplayContent(activity)
+                    const truncatedContent = displayContent.length > 80
+                      ? displayContent.slice(0, 80) + "..."
+                      : displayContent
+                    return (
+                      <tr key={activity.activity_id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="text-sm font-medium text-primary">
+                            {activity.activity_date}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="text-sm text-muted-foreground">
+                            {activity.class_name}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 max-w-xs">
+                          <p className="text-sm text-foreground truncate" title={displayContent}>
+                            {truncatedContent}
+                          </p>
                           {Array.isArray(activity.photos) && activity.photos.length > 0 && (
-                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {activity.photos.map((photo, index) => {
-                                const url =
-                                  typeof photo === "string"
-                                    ? photo
-                                    : photo.thumbnail_url || photo.url
-                                if (!url) return null
-                                return (
-                                  <div
-                                    key={typeof photo === "string" ? `${photo}-${index}` : photo.file_id ?? `${photo.url}-${index}`}
-                                    className="overflow-hidden rounded-lg border"
-                                  >
-                                    <img src={url} alt="活動写真" className="h-24 w-full object-cover" />
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                          {activity.handover && (
-                            <div className="mt-3 p-3 rounded-md bg-amber-50 border border-amber-200">
-                              <p className="text-xs font-medium text-amber-800 mb-1">引継ぎ</p>
-                              <p className="text-sm text-amber-900 whitespace-pre-wrap">{activity.handover}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleEdit(activity)}
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => handleDelete(activity.activity_id)}
-                            disabled={isDeletingId === activity.activity_id}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        {MENTION_ENABLED && (
-                          <div className="flex flex-col gap-2 flex-1">
                             <span className="text-xs text-muted-foreground">
-                              {activity.individual_record_count}件の児童記録
+                              写真{activity.photos.length}枚
                             </span>
-                            {activity.individual_records && activity.individual_records.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {activity.individual_records.map((record) => (
-                                  <Button
-                                    key={record.observation_id}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 px-2 text-xs hover:bg-primary/10"
-                                    onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
-                                  >
-                                    {record.child_name}
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {activity.handover ? (
+                            activity.handover_completed ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full" title={activity.handover}>
+                                <CheckCircle2 className="h-3 w-3" />
+                                完了
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title={activity.handover}>
+                                <Clipboard className="h-3 w-3" />
+                                あり
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="text-xs text-muted-foreground">
+                            {activity.created_by}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="保育日誌を編集"
+                              onClick={() => handleEdit(activity)}
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="保育日誌を削除"
+                              onClick={() => handleDelete(activity.activity_id)}
+                              disabled={isDeletingId === activity.activity_id}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          記入者: {activity.recorded_by_name || activity.created_by}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">活動記録はまだありません。</p>
+                <p className="text-muted-foreground">保育日誌はまだありません。</p>
                 <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
               </CardContent>
             </Card>

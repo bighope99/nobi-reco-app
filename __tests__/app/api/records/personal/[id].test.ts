@@ -209,10 +209,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1');
@@ -258,10 +257,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1');
@@ -302,10 +300,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1');
@@ -341,10 +338,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: null,
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1');
@@ -384,10 +380,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1');
@@ -420,10 +415,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1');
@@ -447,10 +441,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-999');
@@ -472,10 +465,9 @@ describe('GET /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-deleted');
@@ -536,10 +528,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -593,10 +584,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -645,10 +635,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -679,10 +668,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -707,10 +695,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -734,10 +721,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -762,10 +748,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const invalidFormats = [
@@ -799,10 +784,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -827,10 +811,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -855,10 +838,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -902,10 +884,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -952,10 +933,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: null,
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -989,10 +969,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -1022,10 +1001,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -1054,10 +1032,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {
@@ -1086,10 +1063,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-999', {
@@ -1116,10 +1092,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-deleted', {
@@ -1157,10 +1132,9 @@ describe('PATCH /api/records/personal/[id]', () => {
       mockCreateClient.mockResolvedValue(supabase as any);
       mockGetAuthenticatedUserMetadata.mockResolvedValue({
         user_id: 'user-1',
-        email: 'test@example.com',
         role: 'staff',
         current_facility_id: 'facility-1',
-        current_company_id: 'company-1',
+        company_id: 'company-1',
       });
 
       const request = new NextRequest('http://localhost/api/records/personal/obs-1', {

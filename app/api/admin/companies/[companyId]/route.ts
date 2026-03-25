@@ -129,11 +129,14 @@ export async function GET(
       role: user.role,
       is_active: user.is_active,
       email_confirmed: emailConfirmedMap.get(user.id) ?? true,
-      facilities: (user._user_facility || []).map((uf: UserFacilityRelation) => ({
-        facility_id: uf.facility_id,
-        facility_name: uf.m_facilities?.name || '',
-        is_primary: uf.is_primary,
-      })),
+      facilities: (user._user_facility || []).map((uf) => {
+        const mFacilities = Array.isArray(uf.m_facilities) ? uf.m_facilities[0] : uf.m_facilities;
+        return {
+          facility_id: uf.facility_id,
+          facility_name: mFacilities?.name || '',
+          is_primary: uf.is_primary,
+        };
+      }),
     }));
 
     return NextResponse.json({

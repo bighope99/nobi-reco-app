@@ -39,7 +39,12 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
   const facilityId = 'facility-123';
   const childId = 'child-456';
   const userId = 'user-789';
-  const attendanceDate = new Date().toISOString().split('T')[0];
+  const attendanceDate = new Date().toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/\//g, '-');
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -109,6 +114,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: userId } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -186,6 +204,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: userId } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -268,6 +299,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
             data: { session: { user: { id: userId } } },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') return childrenMock;
@@ -342,6 +386,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
             data: { session: { user: { id: userId } } },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') return childrenMock;
@@ -378,6 +435,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: userId } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
             error: null,
           }),
         },
@@ -448,6 +518,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
             data: { session: { user: { id: userId } } },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
+            error: null,
+          }),
         },
         from: jest.fn(),
       };
@@ -477,6 +560,10 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
             data: { session: null },
             error: null,
           }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'No session' },
+          }),
         },
         from: jest.fn(),
       };
@@ -504,6 +591,19 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
         auth: {
           getSession: jest.fn().mockResolvedValue({
             data: { session: { user: { id: userId } } },
+            error: null,
+          }),
+          getClaims: jest.fn().mockResolvedValue({
+            data: {
+              claims: {
+                sub: userId,
+                app_metadata: {
+                  role: 'staff',
+                  company_id: 'company-1',
+                  current_facility_id: facilityId,
+                },
+              },
+            },
             error: null,
           }),
         },
