@@ -157,7 +157,7 @@ export default function SelfCheckInPage() {
   }
 
   const goToFeedback = (child: ChildRecord) => {
-    const action: 'check_in' | 'check_out' = child.status !== 'checked_in' ? 'check_in' : 'check_out'
+    const action: 'check_in' | 'check_out' = child.status === 'not_checked_in' ? 'check_in' : 'check_out'
 
     // Optimistic update
     setGroups(prev => updateChildInGroups(prev, child.id, c => ({
@@ -198,11 +198,12 @@ export default function SelfCheckInPage() {
     if (selectedChild) {
       // Optimistic revert
       const childId = selectedChild.id
+      const prevStatus = selectedChild.status
       setGroups(prev => updateChildInGroups(prev, childId, c => ({
         ...c,
-        status: checkinAction === 'check_in' ? 'not_checked_in' : 'checked_in',
-        checkedInAt: checkinAction === 'check_in' ? undefined : c.checkedInAt,
-        checkedOutAt: checkinAction === 'check_out' ? undefined : c.checkedOutAt,
+        status: prevStatus,
+        checkedInAt: prevStatus === 'not_checked_in' ? undefined : c.checkedInAt,
+        checkedOutAt: prevStatus === 'checked_out' ? selectedChild.checkedOutAt : undefined,
       })))
       optimisticIdsRef.current.add(childId)
 
@@ -387,7 +388,7 @@ function ChildButton({
       >
         <div className="flex items-center justify-center gap-2">
           <Badge className="h-3 w-3 rounded-full bg-blue-500 p-0 shrink-0" />
-          <span className="text-sm font-bold text-blue-600">かえったよ {formatTime(child.checkedOutAt)}　タップでもどる</span>
+          <span className="text-sm font-bold text-blue-600">かえったよ {formatTime(child.checkedOutAt)}</span>
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
