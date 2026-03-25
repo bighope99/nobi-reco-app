@@ -188,6 +188,7 @@ function SortableScheduleRow({
         type="button"
         size="icon"
         variant="ghost"
+        aria-label="行を削除"
         onClick={onRemove}
         className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
       >
