@@ -240,7 +240,7 @@ export default function StatusPage() {
     const getSortValue = (child: Child, key: string): SortValue => {
         switch (key) {
             case 'name':
-                return child.kana ?? '';
+                return normalizeSearch(child.kana ?? '');
             case 'grade':
                 return child.grade ?? 0;
             case 'last_record_date':
@@ -277,8 +277,10 @@ export default function StatusPage() {
             if (aValue > bValue) return sortConfig.order === 'asc' ? 1 : -1
 
             // セカンダリソート: かな順（あいうえお昇順）
-            if ((a.kana ?? '') < (b.kana ?? '')) return -1
-            if ((a.kana ?? '') > (b.kana ?? '')) return 1
+            const aNorm = normalizeSearch(a.kana ?? '')
+            const bNorm = normalizeSearch(b.kana ?? '')
+            if (aNorm < bNorm) return -1
+            if (aNorm > bNorm) return 1
             return 0
         })
         return sorted

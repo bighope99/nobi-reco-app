@@ -4,6 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { getCurrentDateJST, getFirstDayOfMonthJST, getLastDayOfMonthJST, isoToDateJST, toDateStringJST } from '@/lib/utils/timezone';
+import { toKatakana } from '@/lib/utils/kana';
 
 export async function GET(request: NextRequest) {
   try {
@@ -299,7 +300,10 @@ export async function GET(request: NextRequest) {
       return {
         child_id: child.id,
         name: formatName([decryptedFamilyName, decryptedGivenName]),
-        kana: formatName([decryptedFamilyNameKana, decryptedGivenNameKana]),
+        kana: (() => {
+          const raw = formatName([decryptedFamilyNameKana, decryptedGivenNameKana]);
+          return raw ? toKatakana(raw) : null;
+        })(),
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
         age_group: classInfo?.age_group || '',
