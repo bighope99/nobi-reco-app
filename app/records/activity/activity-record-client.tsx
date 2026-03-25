@@ -1734,12 +1734,12 @@ export default function ActivityRecordClient() {
             {/* おやつ */}
             <div className="space-y-2">
               <Label htmlFor="snack">おやつ</Label>
-              <Input
+              <Textarea
                 id="snack"
-                type="text"
+                rows={3}
                 value={snack}
                 onChange={(e) => setSnack(e.target.value)}
-                placeholder="例: りんご、クッキー"
+                placeholder="例: りんご、クッキー（アレルギー情報も記入可）"
                 maxLength={MAX_SNACK_LENGTH}
               />
             </div>
