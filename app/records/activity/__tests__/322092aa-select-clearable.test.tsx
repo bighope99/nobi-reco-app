@@ -94,8 +94,8 @@ jest.mock("@/components/ui/select", () => ({
   SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
   SelectContent: ({ children }: { children: React.ReactNode }) => <div data-testid="select-content">{children}</div>,
-  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
-    <div data-testid={`select-item-${value}`}>{children}</div>
+  SelectItem: ({ children }: { children: React.ReactNode; value: string }) => (
+    <div>{children}</div>
   ),
 }))
 
@@ -169,8 +169,8 @@ import ActivityRecordClient from "../activity-record-client"
 describe("#322092aa セレクトクリア機能", () => {
   it("記録者セレクトに未選択オプションが存在する", async () => {
     render(<ActivityRecordClient />)
-    // 未選択オプションの存在確認
-    const noneItems = await screen.findAllByTestId("select-item-__none__")
-    expect(noneItems.length).toBeGreaterThanOrEqual(1)
+    // 未選択オプションの存在確認（テキストベースで検証）
+    const noneOptions = await screen.findAllByText("（未選択）")
+    expect(noneOptions.length).toBeGreaterThanOrEqual(1)
   })
 })

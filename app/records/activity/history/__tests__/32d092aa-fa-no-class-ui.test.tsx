@@ -2,7 +2,7 @@
  * #32d092aa-fa: クラスがない施設でもクラス表示が出ている
  * クラスが存在しない場合、クラス選択UIとクラス列が表示されないことを確認する
  */
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 
 const mockReplace = jest.fn()
 jest.mock("next/navigation", () => ({
@@ -57,6 +57,10 @@ import ActivityHistoryClient from "../activity-history-client"
 describe("#32d092aa-fa クラスなし施設でのUI非表示", () => {
   it("クラスがない場合、クラスフィルターが表示されない", async () => {
     render(<ActivityHistoryClient />)
+    // fetchが完了するまで待機
+    await waitFor(() => {
+      expect(screen.queryByText("読み込み中...")).not.toBeInTheDocument()
+    })
     // クラスラベルが存在しないことを確認
     const classLabel = screen.queryByText("クラス")
     expect(classLabel).toBeNull()
