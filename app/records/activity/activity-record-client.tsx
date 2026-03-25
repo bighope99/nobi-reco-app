@@ -24,7 +24,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/lib/utils"
 import { TimePicker } from "@/components/ui/time-picker"
 import DOMPurify from "dompurify"
@@ -109,6 +126,76 @@ interface StaffMember {
   name: string
 }
 
+// 1日の流れ行のDnD並べ替え用コンポーネント
+interface SortableScheduleRowProps {
+  id: string
+  item: { time: string; content: string }
+  index: number
+  onTimeChange: (val: string) => void
+  onContentChange: (val: string) => void
+  onRemove: () => void
+  maxLength: number
+}
+
+function SortableScheduleRow({
+  id,
+  item,
+  onTimeChange,
+  onContentChange,
+  onRemove,
+  maxLength,
+}: SortableScheduleRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+        {...attributes}
+        {...listeners}
+        aria-label="行を並べ替え"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <TimePicker
+        value={item.time || '10:00'}
+        onChange={onTimeChange}
+      />
+      <Input
+        type="text"
+        value={item.content}
+        onChange={(e) => onContentChange(e.target.value)}
+        placeholder="活動内容"
+        className="flex-1"
+        maxLength={maxLength}
+      />
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        onClick={onRemove}
+        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
 // AiObservationResult型は共通ファイルからimport済み
 
 export default function ActivityRecordClient() {
@@ -186,6 +273,15 @@ export default function ActivityRecordClient() {
     { time: "10:00", content: "" },
   ]
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
+  // DnD用のstable id（dailyScheduleと同じ長さを保つ）
+  const scheduleIdsRef = useRef<string[]>(DEFAULT_SCHEDULE.map(() => crypto.randomUUID()))
+  const getScheduleIds = () => {
+    // scheduleIdsRef が dailySchedule と長さが違う場合は補完
+    while (scheduleIdsRef.current.length < dailySchedule.length) {
+      scheduleIdsRef.current.push(crypto.randomUUID())
+    }
+    return scheduleIdsRef.current.slice(0, dailySchedule.length)
+  }
   // デフォルト2行
   const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
     { user_id: "", user_name: "", role: "" },
@@ -227,9 +323,32 @@ export default function ActivityRecordClient() {
   } = useActivityTemplates({
     onApply: (appliedEventName, appliedDailySchedule) => {
       setEventName(appliedEventName)
-      setDailySchedule(appliedDailySchedule.length > 0 ? appliedDailySchedule : DEFAULT_SCHEDULE)
+      const newSchedule = appliedDailySchedule.length > 0 ? appliedDailySchedule : DEFAULT_SCHEDULE
+      scheduleIdsRef.current = newSchedule.map(() => crypto.randomUUID())
+      setDailySchedule(newSchedule)
     },
   })
+
+  // DnD sensors
+  const dndSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleScheduleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const ids = getScheduleIds()
+    const oldIndex = ids.indexOf(active.id as string)
+    const newIndex = ids.indexOf(over.id as string)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    scheduleIdsRef.current = arrayMove(scheduleIdsRef.current, oldIndex, newIndex)
+    setDailySchedule((prev) => arrayMove(prev, oldIndex, newIndex))
+  }
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -1012,9 +1131,11 @@ export default function ActivityRecordClient() {
 
     // 新規フィールドを復元（デフォルト値と一貫性を保つ）
     setEventName(activity.event_name || "")
-    setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+    const restoredSchedule = activity.daily_schedule && activity.daily_schedule.length > 0
       ? activity.daily_schedule
-      : DEFAULT_SCHEDULE)
+      : DEFAULT_SCHEDULE
+    scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
+    setDailySchedule(restoredSchedule)
     setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
       : DEFAULT_ROLE_ASSIGNMENTS)
@@ -1204,6 +1325,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
@@ -1220,6 +1342,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
@@ -1610,49 +1733,54 @@ export default function ActivityRecordClient() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])}
+                  onClick={() => {
+                    scheduleIdsRef.current = [...scheduleIdsRef.current, crypto.randomUUID()]
+                    setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])
+                  }}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   追加
                 </Button>
               </div>
-              <div className="space-y-2">
-                {dailySchedule.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <TimePicker
-                        value={item.time || '10:00'}
-                        onChange={(val) => {
-                          const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, time: val }
-                          setDailySchedule(newSchedule)
-                        }}
-                      />
-                      <Input
-                        type="text"
-                        value={item.content}
-                        onChange={(e) => {
-                          const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, content: e.target.value }
-                          setDailySchedule(newSchedule)
-                        }}
-                        placeholder="活動内容"
-                        className="flex-1"
-                        maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setDailySchedule((prev) => prev.filter((_, i) => i !== index))
-                        }}
-                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                ))}
-              </div>
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleScheduleDragEnd}
+              >
+                <SortableContext
+                  items={getScheduleIds()}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2">
+                    {dailySchedule.map((item, index) => {
+                      const rowId = getScheduleIds()[index]
+                      return (
+                        <SortableScheduleRow
+                          key={rowId}
+                          id={rowId}
+                          item={item}
+                          index={index}
+                          onTimeChange={(val) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: val }
+                            setDailySchedule(newSchedule)
+                          }}
+                          onContentChange={(val) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, content: val }
+                            setDailySchedule(newSchedule)
+                          }}
+                          onRemove={() => {
+                            scheduleIdsRef.current = scheduleIdsRef.current.filter((_, i) => i !== index)
+                            setDailySchedule((prev) => prev.filter((_, i) => i !== index))
+                          }}
+                          maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
+                        />
+                      )
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
 
             {/* 役割分担 */}
