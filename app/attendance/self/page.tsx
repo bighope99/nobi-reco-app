@@ -273,7 +273,7 @@ export default function SelfCheckInPage() {
               <div className="flex flex-col items-center gap-2 px-6 text-center">
                 <Hand className="h-24 w-24" />
                 <p className="text-5xl font-bold mt-4">
-                  {checkinAction === 'check_in' ? 'しゅっせき かんりょう！' : 'おかえり！'}
+                  {checkinAction === 'check_in' ? 'しゅっせき かんりょう！' : 'またね！'}
                 </p>
                 <p className="text-4xl mt-2">{selectedChild?.kanaName}</p>
                 <p className="text-3xl mt-1">{checkinTime}</p>
