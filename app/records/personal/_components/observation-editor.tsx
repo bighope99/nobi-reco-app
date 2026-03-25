@@ -1438,15 +1438,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 
               </div>
               <div className="flex gap-2">
-                {!isNew && (
-                  <Button
-                    variant="outline"
-                    className="border-green-200 text-green-600 hover:bg-green-50"
-                    onClick={handleCreateNew}
-                  >
-                    <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
-                  </Button>
-                )}
                 <Button
                   variant="outline"
                   disabled={savingEdit || aiEditSaving || aiProcessing}
@@ -1503,7 +1494,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            {!(mode === 'edit' && hasAiOutput) && (
+            {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1697,6 +1688,25 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {isNew && showContinueButton && observation && (
+                    <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-blue-600" />
+                        <span className="text-gray-600">児童名</span>
+                        <span className="font-medium">{childDisplayName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-orange-600" />
+                        <span className="text-gray-600">記入スタッフ</span>
+                        <span className="font-medium">{recorderDisplayName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-green-600" />
+                        <span className="text-gray-600">日付</span>
+                        <span className="font-medium">{observation.observation_date ? formatDate(observation.observation_date) : '不明'}</span>
+                      </div>
+                    </div>
+                  )}
                   {mode === 'edit' && hasAiOutput && (
                     <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
                       <div className="flex items-center gap-2">
@@ -1862,6 +1872,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </div>
                     )}
                     <div className="flex justify-end gap-2">
+                      {isNew && showContinueButton && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-green-200 text-green-600 hover:bg-green-50"
+                          onClick={handleCreateNew}
+                        >
+                          <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
+                        </Button>
+                      )}
                       <Button type="submit" data-testid="ai-save" className="bg-purple-600 hover:bg-purple-700" disabled={aiEditSaving}>
                         {aiEditSaving ? (
                           <>
@@ -1894,7 +1914,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     return visibleObservations.length === 0 ? (
                       <p className="text-sm text-gray-500">過去の記録はありません。</p>
                     ) : (
-                      <div className="divide-y divide-gray-100 rounded-lg border bg-white">
+                      <div className="divide-y divide-gray-100">
                         {visibleObservations.map((item) => {
                           const tagBadges = getTagBadges(item.tag_ids);
                           const contentText = displayRecentContent(item.content);
