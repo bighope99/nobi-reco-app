@@ -54,14 +54,18 @@ export function TimePicker({ value, onChange, className }: TimePickerProps) {
   }, [value])
 
   // ドロップダウンが開いたら現在値に近い候補にスクロール
+  // Portal経由レンダリングのため requestAnimationFrame で1フレーム待つ
   React.useEffect(() => {
-    if (!open || !listRef.current) return
-    const idx = findClosestIndex(hh, mm)
-    const container = listRef.current
-    const li = container.children[idx] as HTMLElement | undefined
-    if (li) {
-      container.scrollTop = li.offsetTop - container.clientHeight / 2 + li.clientHeight / 2
-    }
+    if (!open) return
+    requestAnimationFrame(() => {
+      if (!listRef.current) return
+      const idx = findClosestIndex(hh, mm)
+      const container = listRef.current
+      const li = container.children[idx] as HTMLElement | undefined
+      if (li) {
+        container.scrollTop = li.offsetTop - container.clientHeight / 2 + li.clientHeight / 2
+      }
+    })
   }, [open, hh, mm])
 
   function handleHourBlur() {
@@ -132,7 +136,7 @@ export function TimePicker({ value, onChange, className }: TimePickerProps) {
       </div>
 
       <PopoverContent
-        className="w-28 p-0"
+        className="w-28 overflow-hidden p-0"
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
@@ -140,7 +144,7 @@ export function TimePicker({ value, onChange, className }: TimePickerProps) {
         <ul
           ref={listRef}
           role="listbox"
-          className="max-h-48 overflow-y-auto"
+          className="max-h-48 overflow-y-auto overscroll-contain"
         >
           {TIME_OPTIONS.map((opt, i) => (
             <li
