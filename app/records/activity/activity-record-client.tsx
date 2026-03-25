@@ -407,6 +407,26 @@ export default function ActivityRecordClient() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [searchParams])
 
+  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ）
+  useEffect(() => {
+    const isDirty =
+      activityContent.trim() !== "" ||
+      eventName.trim() !== "" ||
+      specialNotes.trim() !== "" ||
+      handover.trim() !== "" ||
+      snack.trim() !== ""
+
+    if (!isDirty) return
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [activityContent, eventName, specialNotes, handover, snack])
+
   const toHiragana = (text: string) =>
     text.replace(/[\u30a1-\u30f6]/g, (match) =>
       String.fromCharCode(match.charCodeAt(0) - 0x60)
