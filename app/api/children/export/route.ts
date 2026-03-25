@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
     // 施設名を取得（ファイル名に使用）
     let facilityName = '';
     {
-      const facilityQuery = supabase
+      let facilityQuery = supabase
         .from('m_facilities')
         .select('id, name')
         .eq('id', facilityId)
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
 
       if (role === 'company_admin') {
         // company_adminのスコープチェック: 自社施設のみエクスポート可能
-        facilityQuery.eq('company_id', company_id);
+        facilityQuery = facilityQuery.eq('company_id', company_id);
       }
 
       const { data: facilityData, error: facilityError } = await facilityQuery.maybeSingle();
