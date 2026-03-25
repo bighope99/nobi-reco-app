@@ -160,13 +160,6 @@ describe('POST /api/activity-templates', () => {
     expect(response.status).toBe(400);
   });
 
-  it('facility_id が現在の施設と異なる場合 403 を返す', async () => {
-    const response = await POST(
-      makeRequest({ name: 'テスト', facility_id: 'other-facility' })
-    );
-    expect(response.status).toBe(403);
-  });
-
   it('daily_schedule が配列でない場合 400 を返す', async () => {
     const response = await POST(
       makeRequest({

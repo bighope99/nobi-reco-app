@@ -43,6 +43,11 @@ CREATE POLICY "activity_templates_insert" ON s_activity_templates
         AND uf.is_current = true
     )
     AND created_by = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM m_users
+      WHERE id = auth.uid()
+        AND role IN ('staff', 'facility_admin', 'company_admin', 'site_admin')
+    )
   );
 
 -- UPDATE: facility_admin以上のみ（論理削除用）

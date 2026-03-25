@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getUserSession } from '@/lib/auth/session';
-import { validateDailySchedule, validateEventName } from '@/lib/validation/activityValidation';
+import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 
 /**
  * 活動記録テンプレート一覧取得
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, event_name, daily_schedule, facility_id } = body;
+    const { name, event_name, daily_schedule } = body;
 
     // テンプレート名バリデーション
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -81,24 +81,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // facility_id 一致確認
-    if (facility_id && facility_id !== session.current_facility_id) {
-      return NextResponse.json(
-        { error: 'facility_id does not match current facility' },
-        { status: 403 }
-      );
-    }
-
-    // event_name バリデーション
-    const eventNameResult = validateEventName(event_name);
-    if (!eventNameResult.valid) {
-      return NextResponse.json({ error: eventNameResult.error }, { status: 400 });
-    }
-
-    // daily_schedule バリデーション
-    const dailyScheduleResult = validateDailySchedule(daily_schedule);
-    if (!dailyScheduleResult.valid) {
-      return NextResponse.json({ error: dailyScheduleResult.error }, { status: 400 });
+    // event_name / daily_schedule バリデーション（既存の validateActivityExtendedFields を流用）
+    const extendedFieldsResult = validateActivityExtendedFields({ event_name, daily_schedule });
+    if (!extendedFieldsResult.valid) {
+      return NextResponse.json({ error: extendedFieldsResult.error }, { status: 400 });
     }
 
     const { data: template, error } = await supabase
@@ -106,8 +92,8 @@ export async function POST(request: NextRequest) {
       .insert({
         facility_id: session.current_facility_id,
         name: name.trim(),
-        event_name: eventNameResult.data,
-        daily_schedule: dailyScheduleResult.data,
+        event_name: extendedFieldsResult.data.event_name,
+        daily_schedule: extendedFieldsResult.data.daily_schedule,
         created_by: session.user_id,
       })
       .select()
