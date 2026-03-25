@@ -539,10 +539,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           className: child.class_name || '未設定',
           grade: child.grade ?? null,
         }));
-        // 学年降順（6年→1年）、同学年内はあいうえお順にソート
+        // 学年降順（6年→1年）、学年不明は最後尾、同学年内はあいうえお順にソート
         children.sort((a, b) => {
-          const gradeA = a.grade ?? 0;
-          const gradeB = b.grade ?? 0;
+          const gradeA = a.grade ?? -1;
+          const gradeB = b.grade ?? -1;
           if (gradeA !== gradeB) {
             return gradeB - gradeA;
           }
