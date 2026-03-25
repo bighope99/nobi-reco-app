@@ -103,6 +103,7 @@ export default function SelfCheckInPage() {
   const [selectedKana, setSelectedKana] = useState<string>('')
   const [selectedChild, setSelectedChild] = useState<ChildRecord | null>(null)
   const [checkinTime, setCheckinTime] = useState<string>('')
+  const [checkinHour, setCheckinHour] = useState<number>(0)
   const [checkinAction, setCheckinAction] = useState<'check_in' | 'check_out'>('check_in')
   const [attendanceId, setAttendanceId] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(3)
@@ -171,6 +172,7 @@ export default function SelfCheckInPage() {
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     setSelectedChild(child)
     setCheckinTime(timeStr)
+    setCheckinHour(now.getHours())
     setCheckinAction(action)
     setCountdown(3)
     setView('feedback')
@@ -311,9 +313,8 @@ export default function SelfCheckInPage() {
           {/* 画面3: フィードバックオーバーレイ */}
           {view === 'feedback' && (() => {
             const isCheckIn = checkinAction === 'check_in'
-            const hour = new Date().getHours()
             const feedbackText = isCheckIn
-              ? (hour < 12 ? 'おはよう！' : 'おかえり！')
+              ? (checkinHour < 12 ? 'おはよう！' : 'おかえり！')
               : 'さようなら！'
             const bgColor = isCheckIn ? '#FFFACD' : '#AFEEEE'
             const textColor = isCheckIn ? '#78590A' : '#1A6B6B'
