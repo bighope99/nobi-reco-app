@@ -151,8 +151,8 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
 #### Step 1: worktree 作成
 
 ```bash
-git gtr new <ブランチ名> --yes
-# 例: git gtr new fix/records-status-improvements --yes
+git gtr new <ブランチ名> --base main --yes
+# 例: git gtr new fix/records-status-improvements --base main --yes
 ```
 
 > ※ git gtr が使えない環境（Codex等）では `git worktree add` で代替:

@@ -183,8 +183,8 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
 Leader承認後、PMが各グループに対してworktreeを作成する。
 
 ```bash
-git gtr new <ブランチ名> --yes
-# 例: git gtr new fix/records-status-improvements --yes
+git gtr new <ブランチ名> --base main --yes
+# 例: git gtr new fix/records-status-improvements --base main --yes
 ```
 
 ### Step 2: Coderへの指示出し（PM担当）
@@ -314,7 +314,7 @@ Agent tool:
 
            役割:
            - Notionチケット取得・グルーピング案作成
-           - worktree作成（git gtr new <ブランチ名> --yes）
+           - worktree作成（git gtr new <ブランチ名> --base main --yes）
            - Coderへの指示出し（SendMessageを使用）
            - Notionステータス一括更新
 
