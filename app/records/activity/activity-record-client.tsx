@@ -440,7 +440,7 @@ export default function ActivityRecordClient() {
   }
 
   const handleClassChange = (value: string) => {
-    setSelectedClass(value)
+    setSelectedClass(value === "__none__" ? "" : value)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1441,11 +1441,12 @@ export default function ActivityRecordClient() {
               {!isLoadingClasses && classOptions.length > 0 && (
                 <div className="space-y-2">
                   <Label htmlFor="class">クラス</Label>
-                  <Select value={selectedClass} onValueChange={handleClassChange}>
+                  <Select value={selectedClass || "__none__"} onValueChange={handleClassChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="クラスを選択" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__none__">（未選択）</SelectItem>
                       {classOptions.map((classOption) => (
                         <SelectItem key={classOption.class_id} value={classOption.class_id}>
                           {classOption.class_name}
@@ -1471,13 +1472,14 @@ export default function ActivityRecordClient() {
               <div className="space-y-2">
                 <Label htmlFor="recorder">記録者 <span className="text-red-500">*</span></Label>
                 <Select
-                  value={selectedRecorder}
-                  onValueChange={(value) => setSelectedRecorder(value)}
+                  value={selectedRecorder || "__none__"}
+                  onValueChange={(value) => setSelectedRecorder(value === "__none__" ? "" : value)}
                 >
                   <SelectTrigger id="recorder">
                     <SelectValue placeholder="記録者を選択" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">（未選択）</SelectItem>
                     {staffList.map((staff) => (
                       <SelectItem key={staff.user_id} value={staff.user_id}>
                         {staff.name}
