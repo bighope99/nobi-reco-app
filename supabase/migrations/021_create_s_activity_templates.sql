@@ -55,6 +55,7 @@ CREATE POLICY "activity_templates_update" ON s_activity_templates
       WHERE uf.user_id = auth.uid()
         AND uf.is_current = true
     )
+    AND deleted_at IS NULL
     AND EXISTS (
       SELECT 1 FROM m_users
       WHERE id = auth.uid()
