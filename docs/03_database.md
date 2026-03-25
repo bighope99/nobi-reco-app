@@ -30,7 +30,7 @@
 |---|---|---|---|
 |`m_`|マスタ|会社、施設、職員、子ども、学校など基本エンティティ|7|
 |`r_`|記録|日々の業務記録|4|
-|`s_`|設定|施設設定、スケジュールパターンなど|3|
+|`s_`|設定|施設設定、スケジュールパターンなど|4|
 |`h_`|履歴・ログ|システムログ、監査用データ|1|
 |`_`|中間テーブル|多対多リレーションの紐付け|4|
 
@@ -1003,6 +1003,54 @@ SELECT entity_id FROM s_pii_search_index
 WHERE entity_type = 'child'
   AND search_type = 'name'
   AND normalized_value ILIKE '%田中%';
+```
+
+---
+
+### 6.5 活動記録テンプレート（`s_activity_templates`）
+
+```sql
+CREATE TABLE IF NOT EXISTS s_activity_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+
+  -- テンプレート内容
+  name VARCHAR(100) NOT NULL,          -- テンプレート名
+  event_name TEXT,                     -- 行事名
+  daily_schedule JSONB,                -- [{time, content}, ...] 形式
+
+  -- 作成者
+  created_by UUID NOT NULL REFERENCES m_users(id),
+
+  -- タイムスタンプ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE  -- 論理削除
+);
+
+-- インデックス
+CREATE INDEX idx_s_activity_templates_facility
+  ON s_activity_templates(facility_id)
+  WHERE deleted_at IS NULL;
+```
+
+**説明**:
+- 活動記録フォームで使用するテンプレートを施設単位で管理
+- `daily_schedule`はJSONB型で、時間帯と活動内容のペアを配列で保持
+- 論理削除に対応（`deleted_at`）
+
+**権限（RLS）**:
+- **SELECT**: 同一施設のスタッフのみ
+- **INSERT**: staff以上（同一施設）
+- **UPDATE**（論理削除）: facility_admin以上のみ
+
+**`daily_schedule` のデータ例**:
+```json
+[
+  { "time": "10:00", "content": "朝の会" },
+  { "time": "10:30", "content": "自由遊び" },
+  { "time": "12:00", "content": "昼食" }
+]
 ```
 
 ---
