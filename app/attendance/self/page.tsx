@@ -166,12 +166,13 @@ export default function SelfCheckInPage() {
               {KANA_ROWS.map((row) => {
                 const count = rowCounts[row] ?? 0
                 return (
-                  <button
+                  <Button
                     key={row}
+                    variant="outline"
                     onClick={() => count > 0 && handleRowSelect(row, count)}
                     disabled={count === 0}
                     className={[
-                      'flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md',
+                      'flex min-h-24 h-auto flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md',
                       'active:scale-95 transition-transform',
                       count > 0
                         ? 'hover:bg-blue-50 cursor-pointer'
@@ -180,7 +181,7 @@ export default function SelfCheckInPage() {
                   >
                     <span className="text-6xl font-bold">{row}</span>
                     <span className="text-sm text-gray-500">{count}にん</span>
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -197,13 +198,14 @@ export default function SelfCheckInPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {VOWELS.map((vowel) => (
-                  <button
+                  <Button
                     key={vowel}
+                    variant="outline"
                     onClick={() => handleVowelSelect(vowel)}
-                    className="flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md hover:bg-blue-50 active:scale-95 transition-transform"
+                    className="flex min-h-24 h-auto flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md hover:bg-blue-50 active:scale-95 transition-transform"
                   >
                     <span className="text-6xl font-bold">{vowel}</span>
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -247,12 +249,13 @@ export default function SelfCheckInPage() {
                 <p className="text-3xl mt-1">{checkinTime}</p>
               </div>
               <div className="mt-12 flex flex-col items-center gap-4">
-                <button
-                  className="bg-white text-green-600 font-bold px-8 py-4 rounded-2xl text-2xl shadow-lg active:scale-95 transition-transform"
+                <Button
+                  variant="outline"
+                  className="bg-white text-green-600 font-bold px-8 py-4 rounded-2xl text-2xl shadow-lg active:scale-95 transition-transform h-auto"
                   onClick={handleUndo}
                 >
                   とりけす
-                </button>
+                </Button>
                 <p className="text-xl mt-2">{countdown}びょうで もどります</p>
               </div>
             </div>
@@ -301,11 +304,12 @@ function ChildButton({
   }
 
   return (
-    <button
+    <Button
+      variant="outline"
       onClick={() => !isLoading && onSelect(child)}
       disabled={isLoading}
       className={[
-        'flex min-h-24 w-full flex-col justify-center rounded-2xl bg-white px-4 py-3 shadow-md text-left',
+        'flex min-h-24 h-auto w-full flex-col justify-center rounded-2xl bg-white px-4 py-3 shadow-md text-left',
         'active:scale-95 transition-transform',
         isLoading ? 'opacity-60 cursor-wait' : 'hover:bg-blue-50',
       ].join(' ')}
@@ -321,6 +325,6 @@ function ChildButton({
           {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
         </>
       )}
-    </button>
+    </Button>
   )
 }
