@@ -822,9 +822,11 @@ export default function ActivityRecordClient() {
       setSaveMessage('保存しました')
       fetchActivities()
 
-      // 新規保存時のみテンプレート保存ダイアログを表示
-      setShowSaveTemplateDialog(true)
-      setTemplateNameInput("")
+      // 新規保存時のみテンプレート保存ダイアログを表示（テンプレート選択済みの場合はスキップ）
+      if (!selectedTemplateId) {
+        setShowSaveTemplateDialog(true)
+        setTemplateNameInput("")
+      }
 
       // AI分析自動実行（観察記録+メンションがある場合のみ）
       if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0) {
@@ -1196,6 +1198,8 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    // テンプレート選択をリセット
+    setSelectedTemplateId("")
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
@@ -1480,12 +1484,16 @@ export default function ActivityRecordClient() {
 
             {/* テンプレート選択 */}
             {templates.length > 0 && (
-              <div className="space-y-2">
-                <Label>テンプレート</Label>
+              <div className="inline-flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                <span className="text-xs text-gray-500">テンプレート</span>
                 <div className="flex items-center gap-2">
                   <Select
                     value={selectedTemplateId}
                     onValueChange={(id) => {
+                      if (id === "__none__") {
+                        setSelectedTemplateId("")
+                        return
+                      }
                       const template = templates.find((t) => t.id === id)
                       if (!template) return
                       const hasExistingInput = eventName.trim() !== "" || dailySchedule.some((s) => s.content.trim() !== "")
@@ -1496,12 +1504,13 @@ export default function ActivityRecordClient() {
                       applyTemplate(template)
                     }}
                   >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="テンプレートを選択" />
+                    <SelectTrigger className="h-8 w-52 text-xs text-gray-600 border-gray-200 bg-white">
+                      <SelectValue placeholder="テンプレートなし" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__none__" className="text-xs text-gray-400">テンプレートなし</SelectItem>
                       {templates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
+                        <SelectItem key={t.id} value={t.id} className="text-xs">
                           {t.name}
                         </SelectItem>
                       ))}
@@ -1510,20 +1519,21 @@ export default function ActivityRecordClient() {
                   {canDeleteTemplate && selectedTemplateId && (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       disabled={isDeletingTemplate}
+                      className="h-8 px-2 text-xs text-gray-500 hover:text-red-500"
                       onClick={() => {
                         if (!window.confirm("このテンプレートを削除しますか？")) return
                         void deleteTemplate(selectedTemplateId)
                       }}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3 w-3 mr-1" />
                       削除
                     </Button>
                   )}
                 </div>
-                {templateError && <p className="text-sm text-red-500">{templateError}</p>}
+                {templateError && <p className="text-xs text-red-500">{templateError}</p>}
               </div>
             )}
 
