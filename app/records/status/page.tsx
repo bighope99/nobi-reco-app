@@ -240,7 +240,7 @@ export default function StatusPage() {
     const getSortValue = (child: Child, key: string): SortValue => {
         switch (key) {
             case 'name':
-                return child.kana;
+                return child.kana ?? '';
             case 'grade':
                 return child.grade ?? 0;
             case 'last_record_date':
@@ -263,7 +263,7 @@ export default function StatusPage() {
         const normalizedTerm = normalize(committedSearchTerm).trim()
         return recordsData.children.filter(child => {
             return normalize(child.name).includes(normalizedTerm) ||
-                normalize(child.kana).includes(normalizedTerm)
+                normalize(child.kana ?? '').includes(normalizedTerm)
         })
     }, [recordsData, committedSearchTerm])
 
@@ -277,8 +277,8 @@ export default function StatusPage() {
             if (aValue > bValue) return sortConfig.order === 'asc' ? 1 : -1
 
             // セカンダリソート: かな順（あいうえお昇順）
-            if (a.kana < b.kana) return -1
-            if (a.kana > b.kana) return 1
+            if ((a.kana ?? '') < (b.kana ?? '')) return -1
+            if ((a.kana ?? '') > (b.kana ?? '')) return 1
             return 0
         })
         return sorted
@@ -564,14 +564,13 @@ export default function StatusPage() {
                                         <tr key={child.child_id} className="hover:bg-slate-50 transition-colors group">
 
                                             <td className="sticky left-0 z-20 bg-white px-4 sm:px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
-                                                <button
-                                                    type="button"
+                                                <Link
+                                                    href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
                                                     className="flex flex-col text-left cursor-pointer group/name"
-                                                    onClick={() => handleOpenHistory(child)}
                                                 >
                                                     <span className="text-sm font-bold text-slate-900 group-hover/name:text-indigo-600 group-hover/name:underline transition-colors">{child.name}</span>
                                                     <span className="text-xs text-slate-400">{child.kana}</span>
-                                                </button>
+                                                </Link>
                                             </td>
 
                                             <td className="px-4 py-4 whitespace-nowrap">
