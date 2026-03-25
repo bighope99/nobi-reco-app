@@ -10,8 +10,26 @@ const TIME_OPTIONS: string[] = Array.from({ length: 24 * 12 }, (_, i) => {
   return `${h}:${m}`
 })
 
-function isValidTime(value: string): boolean {
-  return /^\d{2}:\d{2}$/.test(value)
+function clamp(val: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, val))
+}
+
+function findClosestIndex(hh: string, mm: string): number {
+  const h = parseInt(hh, 10)
+  const m = parseInt(mm, 10)
+  if (isNaN(h) || isNaN(m)) return 0
+  const minutes = h * 60 + m
+  let closest = 0
+  let minDiff = Infinity
+  TIME_OPTIONS.forEach((opt, i) => {
+    const [oh, om] = opt.split(':').map(Number)
+    const diff = Math.abs(oh * 60 + om - minutes)
+    if (diff < minDiff) {
+      minDiff = diff
+      closest = i
+    }
+  })
+  return closest
 }
 
 interface TimePickerProps {
@@ -21,26 +39,31 @@ interface TimePickerProps {
 }
 
 export function TimePicker({ value, onChange, className }: TimePickerProps) {
-  const [inputValue, setInputValue] = React.useState(value)
+  const [hh, setHh] = React.useState(() => value.split(':')[0] ?? '10')
+  const [mm, setMm] = React.useState(() => value.split(':')[1] ?? '00')
   const [open, setOpen] = React.useState(false)
+
   const containerRef = React.useRef<HTMLDivElement>(null)
   const listRef = React.useRef<HTMLUListElement>(null)
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const hourRef = React.useRef<HTMLInputElement>(null)
+  const minuteRef = React.useRef<HTMLInputElement>(null)
 
   // 親から value が変わったら同期
   React.useEffect(() => {
-    setInputValue(value)
+    const parts = value.split(':')
+    setHh(parts[0] ?? '10')
+    setMm(parts[1] ?? '00')
   }, [value])
 
   // ドロップダウンが開いたら現在値に近い候補にスクロール
   React.useEffect(() => {
     if (!open || !listRef.current) return
-    const idx = findClosestIndex(inputValue)
+    const idx = findClosestIndex(hh, mm)
     const li = listRef.current.children[idx] as HTMLElement | undefined
     if (li) {
-      li.scrollIntoView({ block: 'nearest' })
+      li.scrollIntoView({ block: 'center' })
     }
-  }, [open, inputValue])
+  }, [open, hh, mm])
 
   // 外側クリックで閉じる
   React.useEffect(() => {
@@ -53,86 +76,89 @@ export function TimePicker({ value, onChange, className }: TimePickerProps) {
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [])
 
-  function findClosestIndex(val: string): number {
-    if (!isValidTime(val)) return 0
-    const [h, m] = val.split(':').map(Number)
-    const minutes = h * 60 + m
-    let closest = 0
-    let minDiff = Infinity
-    TIME_OPTIONS.forEach((opt, i) => {
-      const [oh, om] = opt.split(':').map(Number)
-      const diff = Math.abs(oh * 60 + om - minutes)
-      if (diff < minDiff) {
-        minDiff = diff
-        closest = i
-      }
-    })
-    return closest
+  function commitChange(newHh: string, newMm: string) {
+    const h = clamp(parseInt(newHh, 10) || 0, 0, 23).toString().padStart(2, '0')
+    const m = clamp(parseInt(newMm, 10) || 0, 0, 59).toString().padStart(2, '0')
+    setHh(h)
+    setMm(m)
+    onChange(`${h}:${m}`)
   }
 
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setInputValue(e.target.value)
+  function handleHourBlur() {
+    const h = clamp(parseInt(hh, 10) || 0, 0, 23).toString().padStart(2, '0')
+    setHh(h)
+    onChange(`${h}:${mm}`)
   }
 
-  function handleInputBlur() {
-    if (isValidTime(inputValue)) {
-      onChange(inputValue)
-    } else {
-      // 不正値はリセット
-      setInputValue(value)
-    }
+  function handleMinuteBlur() {
+    const m = clamp(parseInt(mm, 10) || 0, 0, 59).toString().padStart(2, '0')
+    setMm(m)
+    onChange(`${hh}:${m}`)
   }
 
   function handleSelect(opt: string) {
-    setInputValue(opt)
+    const [h, m] = opt.split(':')
+    setHh(h)
+    setMm(m)
     onChange(opt)
     setOpen(false)
-    inputRef.current?.focus()
   }
 
-  const closestIdx = findClosestIndex(inputValue)
+  const closestIdx = findClosestIndex(hh, mm)
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
-      <div className="flex items-center">
+    <div ref={containerRef} className={cn('relative inline-flex', className)}>
+      {/* 時/分フィールド */}
+      <div className="flex h-9 items-center rounded-md border border-input bg-transparent px-2 text-sm shadow-xs focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
         <input
-          ref={inputRef}
+          ref={hourRef}
           type="text"
-          value={inputValue}
-          onChange={handleInputChange}
-          onBlur={handleInputBlur}
-          onFocus={() => setOpen(true)}
-          placeholder="HH:MM"
-          maxLength={5}
-          aria-invalid={inputValue !== '' && !isValidTime(inputValue)}
-          className={cn(
-            'h-9 w-20 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition-[color,box-shadow]',
-            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
-            'aria-invalid:border-destructive',
-          )}
+          inputMode="numeric"
+          value={hh}
+          onChange={(e) => setHh(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          onFocus={(e) => { setOpen(true); e.target.select() }}
+          onBlur={handleHourBlur}
+          maxLength={2}
+          aria-label="時"
+          className="w-6 bg-transparent text-center outline-none"
         />
-        <button
-          type="button"
-          tabIndex={-1}
-          onPointerDown={(e) => {
-            e.preventDefault()
-            setOpen((prev) => !prev)
-            inputRef.current?.focus()
-          }}
-          className="ml-[-1px] flex h-9 items-center rounded-r-md border border-l-0 border-input bg-transparent px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          aria-label="時刻候補を表示"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        <span className="select-none text-muted-foreground">:</span>
+        <input
+          ref={minuteRef}
+          type="text"
+          inputMode="numeric"
+          value={mm}
+          onChange={(e) => setMm(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          onFocus={(e) => { setOpen(true); e.target.select() }}
+          onBlur={handleMinuteBlur}
+          maxLength={2}
+          aria-label="分"
+          className="w-6 bg-transparent text-center outline-none"
+        />
       </div>
 
+      {/* ▼ボタン */}
+      <button
+        type="button"
+        tabIndex={-1}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          setOpen((prev) => !prev)
+        }}
+        className="ml-1 flex h-9 w-7 items-center justify-center rounded-md border border-input bg-transparent text-muted-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+        aria-label="時刻候補を表示"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {/* ドロップダウン */}
       {open && (
         <ul
           ref={listRef}
           role="listbox"
-          className="absolute z-50 mt-1 max-h-48 w-28 overflow-y-auto rounded-md border border-input bg-popover shadow-md"
+          className="absolute left-0 top-full z-50 mt-1 max-h-48 w-24 overflow-y-auto rounded-md border border-input bg-popover shadow-md"
         >
           {TIME_OPTIONS.map((opt, i) => (
             <li
