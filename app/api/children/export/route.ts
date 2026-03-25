@@ -110,18 +110,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 });
     }
 
-    // company_adminのスコープチェック: 自社施設のみエクスポート可能
-    if (role === 'company_admin') {
-      const { data: scopedFacility, error: scopeError } = await supabase
+    // 施設名を取得（ファイル名に使用）
+    let facilityName = '';
+    {
+      const facilityQuery = supabase
         .from('m_facilities')
-        .select('id')
+        .select('id, name')
         .eq('id', facilityId)
-        .eq('company_id', company_id)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (scopeError || !scopedFacility) {
+        .is('deleted_at', null);
+
+      if (role === 'company_admin') {
+        // company_adminのスコープチェック: 自社施設のみエクスポート可能
+        facilityQuery.eq('company_id', company_id);
+      }
+
+      const { data: facilityData, error: facilityError } = await facilityQuery.maybeSingle();
+
+      if (role === 'company_admin' && (facilityError || !facilityData)) {
         return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
       }
+
+      facilityName = facilityData?.name || '';
     }
 
     // 児童一覧を取得（保護者・緊急連絡先含む）
@@ -245,10 +254,15 @@ export async function GET(request: NextRequest) {
 
     const csv = `\ufeff${csvRows.join('\r\n')}\r\n`;
 
+    // ファイル名: YYYYMMDD_[施設名].csv
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    const exportFileName = facilityName ? `${dateStr}_${facilityName}.csv` : `${dateStr}_児童データ.csv`;
+
     return new Response(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent('児童データ.csv')}`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(exportFileName)}`,
         'Cache-Control': 'private, no-store, max-age=0',
         'Pragma': 'no-cache',
         'Expires': '0',

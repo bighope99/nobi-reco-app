@@ -25,6 +25,55 @@ jest.mock('@/utils/crypto/decryption-helper', () => ({
   },
 }));
 
+/**
+ * Supabaseモックビルダー
+ * m_facilities: 施設名クエリ（maybeSingle で返す）
+ * m_children: 児童一覧クエリ（order で返す）
+ */
+const buildMockSupabase = (options: {
+  facilityData?: { id: string; name: string } | null;
+  childrenData?: any[];
+  childrenError?: any;
+}) => {
+  const {
+    facilityData = { id: 'facility-1', name: 'テスト施設' },
+    childrenData = [],
+    childrenError = null,
+  } = options;
+
+  return {
+    from: jest.fn((table: string) => {
+      if (table === 'm_facilities') {
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              is: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: facilityData,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      // m_children
+      return {
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            is: jest.fn().mockReturnValue({
+              order: jest.fn().mockResolvedValue({
+                data: childrenData,
+                error: childrenError,
+              }),
+            }),
+          }),
+        }),
+      };
+    }),
+  };
+};
+
 describe('GET /api/children/export', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
   const mockedGetMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
@@ -51,11 +100,8 @@ describe('GET /api/children/export', () => {
       company_id: 'company-1',
     });
 
-    const mockSelect = jest.fn().mockReturnThis();
-    const mockEq = jest.fn().mockReturnThis();
-    const mockIs = jest.fn().mockReturnThis();
-    const mockOrder = jest.fn().mockResolvedValue({
-      data: [
+    const mockSupabase = buildMockSupabase({
+      childrenData: [
         {
           id: 'child-uuid-1',
           family_name: '山田',
@@ -89,17 +135,7 @@ describe('GET /api/children/export', () => {
           ],
         },
       ],
-      error: null,
     });
-
-    const mockSupabase = {
-      from: jest.fn(() => ({
-        select: mockSelect,
-        eq: mockEq,
-        is: mockIs,
-        order: mockOrder,
-      })),
-    };
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
@@ -131,19 +167,9 @@ describe('GET /api/children/export', () => {
       company_id: 'company-1',
     });
 
-    const mockOrder = jest.fn().mockResolvedValue({
-      data: null,
-      error: { message: 'DB connection failed' },
+    const mockSupabase = buildMockSupabase({
+      childrenError: { message: 'DB connection failed' },
     });
-
-    const mockSupabase = {
-      from: jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        is: jest.fn().mockReturnThis(),
-        order: mockOrder,
-      })),
-    };
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
@@ -165,8 +191,8 @@ describe('GET /api/children/export', () => {
       company_id: 'company-1',
     });
 
-    const mockOrder = jest.fn().mockResolvedValue({
-      data: [
+    const mockSupabase = buildMockSupabase({
+      childrenData: [
         {
           id: 'child-uuid-kana',
           family_name: 'encrypted-family',
@@ -189,17 +215,7 @@ describe('GET /api/children/export', () => {
           _child_guardian: [],
         },
       ],
-      error: null,
     });
-
-    const mockSupabase = {
-      from: jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        is: jest.fn().mockReturnThis(),
-        order: mockOrder,
-      })),
-    };
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
@@ -221,7 +237,7 @@ describe('GET /api/children/export', () => {
     expect(dataFields[meiIndex]).toBe('ハナコ');
   });
 
-  it('should output kana fields (セイ・メイ) in correct CSV columns', async () => {
+  it('should include facility name and date in filename', async () => {
     mockedGetMetadata.mockResolvedValue({
       user_id: 'user-1',
       role: 'facility_admin',
@@ -229,60 +245,48 @@ describe('GET /api/children/export', () => {
       company_id: 'company-1',
     });
 
-    const mockOrder = jest.fn().mockResolvedValue({
-      data: [
-        {
-          id: 'child-uuid-1',
-          family_name: '山田',
-          given_name: '花子',
-          family_name_kana: 'ヤマダ',
-          given_name_kana: 'ハナコ',
-          nickname: null,
-          gender: 'female',
-          birth_date: '2019-04-12',
-          enrollment_status: 'enrolled',
-          enrollment_type: 'regular',
-          enrolled_at: '2024-04-01T00:00:00.000Z',
-          withdrawn_at: null,
-          allergies: null,
-          child_characteristics: null,
-          parent_characteristics: null,
-          photo_permission_public: true,
-          photo_permission_share: true,
-          _child_guardian: [],
-        },
-      ],
-      error: null,
+    const mockSupabase = buildMockSupabase({
+      facilityData: { id: 'facility-1', name: 'ひまわり学童' },
+      childrenData: [],
     });
-
-    const mockSupabase = {
-      from: jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        is: jest.fn().mockReturnThis(),
-        order: mockOrder,
-      })),
-    };
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
     const response = await GET(makeRequest());
     expect(response.status).toBe(200);
 
-    const text = await response.text();
-    const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
+    const contentDisposition = response.headers.get('Content-Disposition') || '';
+    // YYYYMMDD_施設名.csv 形式であることを確認
+    expect(contentDisposition).toMatch(/filename\*=UTF-8''/);
+    const encodedFilename = contentDisposition.match(/filename\*=UTF-8''(.+)/)?.[1] || '';
+    const filename = decodeURIComponent(encodedFilename);
+    // 日付（8桁）_施設名.csv の形式
+    expect(filename).toMatch(/^\d{8}_ひまわり学童\.csv$/);
+  });
 
-    // ヘッダー行の確認
-    const headers = lines[0].split(',');
-    const seiIndex = headers.indexOf('セイ');
-    const meiIndex = headers.indexOf('メイ');
-    expect(seiIndex).toBeGreaterThan(-1);
-    expect(meiIndex).toBeGreaterThan(-1);
+  it('should use fallback filename when facility name is empty', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'facility_admin',
+      current_facility_id: 'facility-1',
+      company_id: 'company-1',
+    });
 
-    // データ行のフリガナが正しく出力されていることを確認
-    const dataFields = lines[1].split(',');
-    expect(dataFields[seiIndex]).toBe('ヤマダ');
-    expect(dataFields[meiIndex]).toBe('ハナコ');
+    const mockSupabase = buildMockSupabase({
+      facilityData: null,
+      childrenData: [],
+    });
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+    const response = await GET(makeRequest());
+    expect(response.status).toBe(200);
+
+    const contentDisposition = response.headers.get('Content-Disposition') || '';
+    const encodedFilename = contentDisposition.match(/filename\*=UTF-8''(.+)/)?.[1] || '';
+    const filename = decodeURIComponent(encodedFilename);
+    // 施設名がない場合は YYYYMMDD_児童データ.csv
+    expect(filename).toMatch(/^\d{8}_児童データ\.csv$/);
   });
 
   it('should return empty CSV when no children exist', async () => {
@@ -293,19 +297,7 @@ describe('GET /api/children/export', () => {
       company_id: 'company-1',
     });
 
-    const mockOrder = jest.fn().mockResolvedValue({
-      data: [],
-      error: null,
-    });
-
-    const mockSupabase = {
-      from: jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        is: jest.fn().mockReturnThis(),
-        order: mockOrder,
-      })),
-    };
+    const mockSupabase = buildMockSupabase({ childrenData: [] });
 
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
