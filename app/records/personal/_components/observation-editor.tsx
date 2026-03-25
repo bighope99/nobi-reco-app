@@ -1695,7 +1695,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-green-600" />
                         <span className="text-gray-600">日付</span>
-                        <span className="font-medium">{observation.observation_date ? formatDate(observation.observation_date) : '不明'}</span>
+                        <span className="font-medium">{observation.observed_at ? formatDate(observation.observed_at) : '不明'}</span>
                       </div>
                     </div>
                   )}
