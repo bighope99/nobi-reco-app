@@ -51,17 +51,21 @@ export async function POST(req: NextRequest) {
 
   if (!existing) {
     // 1回目: チェックイン
-    const { error } = await supabase.from('h_attendance').insert({
-      child_id,
-      facility_id: facilityId,
-      checked_in_at: now,
-      check_in_method: 'self',
-      checked_in_by: userId,
-    })
+    const { data: insertData, error } = await supabase
+      .from('h_attendance')
+      .insert({
+        child_id,
+        facility_id: facilityId,
+        checked_in_at: now,
+        check_in_method: 'self',
+        checked_in_by: userId,
+      })
+      .select('id')
+      .single()
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    return NextResponse.json({ action: 'check_in', time: now })
+    return NextResponse.json({ action: 'check_in', time: now, attendance_id: insertData.id })
   } else {
     // 2回目以降: チェックアウト（上書き含む）
     const { error } = await supabase
@@ -75,6 +79,62 @@ export async function POST(req: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    return NextResponse.json({ action: 'check_out', time: now })
+    return NextResponse.json({ action: 'check_out', time: now, attendance_id: existing.id })
   }
+}
+
+export async function DELETE(req: NextRequest) {
+  const metadata = await getAuthenticatedUserMetadata()
+  if (!metadata) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const { current_facility_id: facilityId } = metadata
+  if (!facilityId) {
+    return NextResponse.json({ error: 'No facility' }, { status: 404 })
+  }
+
+  const { attendance_id, action } = await req.json()
+  if (!attendance_id || !action) {
+    return NextResponse.json({ error: 'attendance_id and action required' }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+
+  // 施設所属チェック
+  const { data: record } = await supabase
+    .from('h_attendance')
+    .select('id')
+    .eq('id', attendance_id)
+    .eq('facility_id', facilityId)
+    .maybeSingle()
+
+  if (!record) {
+    return NextResponse.json({ error: 'Record not found' }, { status: 404 })
+  }
+
+  if (action === 'check_in') {
+    // チェックインのundo → レコードを削除
+    const { error } = await supabase
+      .from('h_attendance')
+      .delete()
+      .eq('id', attendance_id)
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+  } else {
+    // チェックアウトのundo → checked_out_at をクリア
+    const { error } = await supabase
+      .from('h_attendance')
+      .update({
+        checked_out_at: null,
+        check_out_method: null,
+        checked_out_by: null,
+      })
+      .eq('id', attendance_id)
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+  }
+
+  return NextResponse.json({ ok: true })
 }

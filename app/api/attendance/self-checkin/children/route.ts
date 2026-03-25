@@ -9,6 +9,7 @@ type ChildEntry = {
   id: string
   kanaName: string
   kanjiName: string
+  grade?: number
   status: 'not_checked_in' | 'checked_in' | 'checked_out'
   checkedInAt?: string
   checkedOutAt?: string
@@ -32,7 +33,7 @@ export async function GET() {
   // 在籍中の児童取得
   const { data: children, error } = await supabase
     .from('m_children')
-    .select('id, family_name, given_name, family_name_kana, given_name_kana')
+    .select('id, family_name, given_name, family_name_kana, given_name_kana, grade_add')
     .eq('facility_id', facilityId)
     .eq('enrollment_status', 'enrolled')
     .is('deleted_at', null)
@@ -77,6 +78,7 @@ export async function GET() {
       id: child.id,
       kanaName: `${familyKana} ${givenKana}`.trim(),
       kanjiName: `${familyKanji} ${givenKanji}`.trim(),
+      grade: child.grade_add ?? undefined,
       status,
       checkedInAt: att?.checked_in_at,
       checkedOutAt: att?.checked_out_at,

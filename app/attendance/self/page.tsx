@@ -12,6 +12,7 @@ interface ChildRecord {
   id: string
   kanaName: string
   kanjiName: string
+  grade?: number
   status: ChildStatus
   checkedInAt?: string
   checkedOutAt?: string
@@ -42,6 +43,8 @@ export default function SelfCheckInPage() {
   const [selectedChild, setSelectedChild] = useState<ChildRecord | null>(null)
   const [checkinTime, setCheckinTime] = useState<string>('')
   const [checkinAction, setCheckinAction] = useState<'check_in' | 'check_out'>('check_in')
+  const [attendanceId, setAttendanceId] = useState<string | null>(null)
+  const [loadingChildId, setLoadingChildId] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(3)
 
   const fetchChildren = useCallback(async () => {
@@ -84,6 +87,7 @@ export default function SelfCheckInPage() {
   }
 
   const goToFeedback = async (child: ChildRecord) => {
+    setLoadingChildId(child.id)
     try {
       const res = await fetch('/api/attendance/self-checkin', {
         method: 'POST',
@@ -94,31 +98,47 @@ export default function SelfCheckInPage() {
       const time = data.time ? formatTime(data.time) : formatTime(new Date().toISOString())
       setCheckinTime(time)
       setCheckinAction(data.action ?? 'check_in')
+      setAttendanceId(data.attendance_id ?? null)
     } catch {
       const now = new Date()
       setCheckinTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
       setCheckinAction('check_in')
+      setAttendanceId(null)
+    } finally {
+      setLoadingChildId(null)
     }
     setSelectedChild(child)
     setCountdown(3)
     setView('feedback')
-    // 登録後にデータ再取得
     fetchChildren()
   }
 
-  const backToChildSelect = useCallback(() => {
+  const handleUndo = async () => {
+    if (attendanceId) {
+      try {
+        await fetch('/api/attendance/self-checkin', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attendance_id: attendanceId, action: checkinAction }),
+        })
+      } catch {
+        // エラーは無視して画面を戻す
+      }
+      fetchChildren()
+    }
+    setAttendanceId(null)
     setView('child-select')
-  }, [])
+  }
 
   useEffect(() => {
     if (view !== 'feedback') return
     if (countdown <= 0) {
-      backToChildSelect()
+      setView('child-select')
       return
     }
     const timer = setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => clearTimeout(timer)
-  }, [view, countdown, backToChildSelect])
+  }, [view, countdown])
 
   // 表示する児童（母音フィルタ含む）
   const rowChildren = groups[selectedRow] ?? []
@@ -204,7 +224,12 @@ export default function SelfCheckInPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {visibleChildren.map((child) => (
-                  <ChildButton key={child.id} child={child} onSelect={goToFeedback} />
+                  <ChildButton
+                    key={child.id}
+                    child={child}
+                    onSelect={goToFeedback}
+                    isLoading={loadingChildId === child.id}
+                  />
                 ))}
               </div>
             </div>
@@ -224,7 +249,7 @@ export default function SelfCheckInPage() {
               <div className="mt-12 flex flex-col items-center gap-4">
                 <button
                   className="bg-white text-green-600 font-bold px-8 py-4 rounded-2xl text-2xl shadow-lg active:scale-95 transition-transform"
-                  onClick={backToChildSelect}
+                  onClick={handleUndo}
                 >
                   とりけす
                 </button>
@@ -241,9 +266,11 @@ export default function SelfCheckInPage() {
 function ChildButton({
   child,
   onSelect,
+  isLoading,
 }: {
   child: ChildRecord
   onSelect: (child: ChildRecord) => void
+  isLoading: boolean
 }) {
   if (child.status === 'checked_in') {
     return (
@@ -254,6 +281,7 @@ function ChildButton({
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
+        {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
       </div>
     )
   }
@@ -267,17 +295,32 @@ function ChildButton({
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
+        {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
       </div>
     )
   }
 
   return (
     <button
-      onClick={() => onSelect(child)}
-      className="flex min-h-24 w-full flex-col justify-center rounded-2xl bg-white px-4 py-3 shadow-md hover:bg-blue-50 active:scale-95 transition-transform text-left"
+      onClick={() => !isLoading && onSelect(child)}
+      disabled={isLoading}
+      className={[
+        'flex min-h-24 w-full flex-col justify-center rounded-2xl bg-white px-4 py-3 shadow-md text-left',
+        'active:scale-95 transition-transform',
+        isLoading ? 'opacity-60 cursor-wait' : 'hover:bg-blue-50',
+      ].join(' ')}
     >
-      <p className="text-3xl font-bold text-gray-800">{child.kanaName}</p>
-      <p className="text-base text-gray-500">{child.kanjiName}</p>
+      {isLoading ? (
+        <div className="flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      ) : (
+        <>
+          <p className="text-3xl font-bold text-gray-800">{child.kanaName}</p>
+          <p className="text-base text-gray-500">{child.kanjiName}</p>
+          {child.grade && <p className="text-sm text-gray-400">{child.grade}年生</p>}
+        </>
+      )}
     </button>
   )
 }
