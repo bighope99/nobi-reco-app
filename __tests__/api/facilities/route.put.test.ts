@@ -26,6 +26,12 @@ function buildMockSupabase({
   facilityCompanyId = 'company-1',
   authUser = { id: 'user-1' } as { id: string } | null,
   authError = null as Error | null,
+}: {
+  role: string | null;
+  userCompanyId: string;
+  facilityCompanyId?: string;
+  authUser?: { id: string } | null;
+  authError?: Error | null;
 }) {
   const authGetUser = jest.fn().mockResolvedValue({
     data: { user: authUser },
