@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useActivityTemplates } from "@/hooks/useActivityTemplates"
 import { useRole } from "@/hooks/useRole"
@@ -25,7 +26,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical, Clipboard, CheckCircle2 } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/lib/utils"
 import { TimePicker } from "@/components/ui/time-picker"
 import DOMPurify from "dompurify"
@@ -85,6 +103,7 @@ interface Activity {
   special_notes?: string | null
   meal?: Meal | null
   handover?: string | null
+  handover_completed?: boolean | null
 }
 
 interface MentionSuggestion {
@@ -108,6 +127,76 @@ interface ActivitiesData {
 interface StaffMember {
   user_id: string
   name: string
+}
+
+// 1日の流れ行のDnD並べ替え用コンポーネント
+interface SortableScheduleRowProps {
+  id: string
+  item: { time: string; content: string }
+  onTimeChange: (val: string) => void
+  onContentChange: (val: string) => void
+  onRemove: () => void
+  maxLength: number
+}
+
+function SortableScheduleRow({
+  id,
+  item,
+  onTimeChange,
+  onContentChange,
+  onRemove,
+  maxLength,
+}: SortableScheduleRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+        {...attributes}
+        {...listeners}
+        aria-label="行を並べ替え"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <TimePicker
+        value={item.time || '10:00'}
+        onChange={onTimeChange}
+      />
+      <Input
+        type="text"
+        value={item.content}
+        onChange={(e) => onContentChange(e.target.value)}
+        placeholder="活動内容"
+        className="flex-1"
+        maxLength={maxLength}
+      />
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        aria-label="行を削除"
+        onClick={onRemove}
+        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  )
 }
 
 // AiObservationResult型は共通ファイルからimport済み
@@ -187,6 +276,27 @@ export default function ActivityRecordClient() {
     { time: "10:00", content: "" },
   ]
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
+  // DnD用のstable id（dailyScheduleと同じ長さを保つ）
+  const scheduleIdsRef = useRef<string[]>(DEFAULT_SCHEDULE.map(() => crypto.randomUUID()))
+  // 空フォーム状態のフィンガープリントで初期化（日付・記録者は含まない）
+  // DEFAULT_ROLE_ASSIGNMENTSはこの後に宣言されるため、空行2行分を直接インライン展開
+  const savedFingerprintRef = useRef<string>(JSON.stringify({
+    activityContent: "",
+    eventName: "",
+    specialNotes: "",
+    handover: "",
+    snack: "",
+    dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+    roleAssignments: [{ user_id: "", role: "" }, { user_id: "", role: "" }],
+    meal: { menu: "", items_to_bring: "", notes: "" },
+  }))
+  const getScheduleIds = () => {
+    // scheduleIdsRef が dailySchedule と長さが違う場合は補完
+    while (scheduleIdsRef.current.length < dailySchedule.length) {
+      scheduleIdsRef.current.push(crypto.randomUUID())
+    }
+    return scheduleIdsRef.current.slice(0, dailySchedule.length)
+  }
   // デフォルト2行
   const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
     { user_id: "", user_name: "", role: "" },
@@ -200,6 +310,7 @@ export default function ActivityRecordClient() {
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
+  const [isMealOpen, setIsMealOpen] = useState(false)
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -226,9 +337,32 @@ export default function ActivityRecordClient() {
   } = useActivityTemplates({
     onApply: (appliedEventName, appliedDailySchedule) => {
       setEventName(appliedEventName)
-      setDailySchedule(appliedDailySchedule.length > 0 ? appliedDailySchedule : DEFAULT_SCHEDULE)
+      const newSchedule = appliedDailySchedule.length > 0 ? appliedDailySchedule : DEFAULT_SCHEDULE
+      scheduleIdsRef.current = newSchedule.map(() => crypto.randomUUID())
+      setDailySchedule(newSchedule)
     },
   })
+
+  // DnD sensors
+  const dndSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleScheduleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const ids = getScheduleIds()
+    const oldIndex = ids.indexOf(active.id as string)
+    const newIndex = ids.indexOf(over.id as string)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    scheduleIdsRef.current = arrayMove(scheduleIdsRef.current, oldIndex, newIndex)
+    setDailySchedule((prev) => arrayMove(prev, oldIndex, newIndex))
+  }
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -406,6 +540,26 @@ export default function ActivityRecordClient() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [searchParams])
 
+  // フォームの現在状態を文字列化して比較用フィンガープリントを生成
+  const buildFingerprint = () => JSON.stringify({
+    activityContent: activityContent.trim(),
+    eventName: eventName.trim(),
+    specialNotes: specialNotes.trim(),
+    handover: handover.trim(),
+    snack: snack.trim(),
+    dailySchedule: dailySchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+    roleAssignments: roleAssignments.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+    meal: {
+      menu: meal?.menu?.trim() ?? "",
+      items_to_bring: meal?.items_to_bring?.trim() ?? "",
+      notes: meal?.notes?.trim() ?? "",
+    },
+  })
+
+  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ・サイドメニュー遷移）
+  const isFormDirty = buildFingerprint() !== savedFingerprintRef.current
+  useUnsavedChanges(isFormDirty, "変更内容が失われます。ページを移動しますか？")
+
   const toHiragana = (text: string) =>
     text.replace(/[\u30a1-\u30f6]/g, (match) =>
       String.fromCharCode(match.charCodeAt(0) - 0x60)
@@ -441,7 +595,7 @@ export default function ActivityRecordClient() {
   }
 
   const handleClassChange = (value: string) => {
-    setSelectedClass(value)
+    setSelectedClass(value === "__none__" ? "" : value)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -826,6 +980,7 @@ export default function ActivityRecordClient() {
       setEditingActivityId(savedActivityId)
       setIsEditMode(true)
       setOriginalContent(contentForDB)
+      savedFingerprintRef.current = buildFingerprint()
       setSaveMessage('保存しました')
       fetchActivities()
 
@@ -931,6 +1086,7 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '更新に失敗しました')
       }
 
+      savedFingerprintRef.current = buildFingerprint()
       setSaveMessage('更新しました')
       fetchActivities()
 
@@ -971,6 +1127,15 @@ export default function ActivityRecordClient() {
   }
 
   const handleEdit = async (activity: Activity) => {
+    if (typeof window !== 'undefined') {
+      const scrollContainer = document.querySelector('main')
+      if (scrollContainer instanceof HTMLElement) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
     // @[child_id] 形式を @表示名 形式に変換して表示
@@ -991,16 +1156,39 @@ export default function ActivityRecordClient() {
 
     // 新規フィールドを復元（デフォルト値と一貫性を保つ）
     setEventName(activity.event_name || "")
-    setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+    const restoredSchedule = activity.daily_schedule && activity.daily_schedule.length > 0
       ? activity.daily_schedule
-      : DEFAULT_SCHEDULE)
-    setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+      : DEFAULT_SCHEDULE
+    scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
+    setDailySchedule(restoredSchedule)
+    const restoredRoleAssignments = activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
-      : DEFAULT_ROLE_ASSIGNMENTS)
-    setSnack(activity.snack || "")
-    setMeal(activity.meal || null)
-    setSpecialNotes(activity.special_notes || "")
-    setHandover(activity.handover || "")
+      : DEFAULT_ROLE_ASSIGNMENTS
+    setRoleAssignments(restoredRoleAssignments)
+    const restoredSnack = activity.snack || ""
+    const restoredMeal = activity.meal || null
+    const restoredSpecialNotes = activity.special_notes || ""
+    const restoredHandover = activity.handover || ""
+    setSnack(restoredSnack)
+    setMeal(restoredMeal)
+    setSpecialNotes(restoredSpecialNotes)
+    setHandover(restoredHandover)
+
+    // 編集開始時点のフィンガープリントを記録（これと差異があれば dirty と判定）
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: displayContent.trim(),
+      eventName: (activity.event_name || "").trim(),
+      specialNotes: restoredSpecialNotes.trim(),
+      handover: restoredHandover.trim(),
+      snack: restoredSnack.trim(),
+      dailySchedule: restoredSchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: restoredRoleAssignments.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: {
+        menu: restoredMeal?.menu?.trim() ?? "",
+        items_to_bring: restoredMeal?.items_to_bring?.trim() ?? "",
+        notes: restoredMeal?.notes?.trim() ?? "",
+      },
+    })
 
     // メンション復元: クラスの児童リストから名前情報を取得
     if (MENTION_ENABLED && activity.mentioned_children && activity.mentioned_children.length > 0) {
@@ -1183,12 +1371,23 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const handleRestart = () => {
@@ -1199,6 +1398,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
@@ -1207,6 +1407,16 @@ export default function ActivityRecordClient() {
     setHandover("")
     // テンプレート選択をリセット
     setSelectedTemplateId("")
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
@@ -1429,6 +1639,8 @@ export default function ActivityRecordClient() {
     return query ? `/records/personal/new?${query}` : "/records/personal/new"
   }
 
+  const scheduleIds = getScheduleIds()
+
   return (
     <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
@@ -1442,11 +1654,12 @@ export default function ActivityRecordClient() {
               {!isLoadingClasses && classOptions.length > 0 && (
                 <div className="space-y-2">
                   <Label htmlFor="class">クラス</Label>
-                  <Select value={selectedClass} onValueChange={handleClassChange}>
+                  <Select value={selectedClass || "__none__"} onValueChange={handleClassChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="クラスを選択" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__none__">（未選択）</SelectItem>
                       {classOptions.map((classOption) => (
                         <SelectItem key={classOption.class_id} value={classOption.class_id}>
                           {classOption.class_name}
@@ -1472,13 +1685,14 @@ export default function ActivityRecordClient() {
               <div className="space-y-2">
                 <Label htmlFor="recorder">記録者 <span className="text-red-500">*</span></Label>
                 <Select
-                  value={selectedRecorder}
-                  onValueChange={(value) => setSelectedRecorder(value)}
+                  value={selectedRecorder || "__none__"}
+                  onValueChange={(value) => setSelectedRecorder(value === "__none__" ? "" : value)}
                 >
                   <SelectTrigger id="recorder">
                     <SelectValue placeholder="記録者を選択" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">（未選択）</SelectItem>
                     {staffList.map((staff) => (
                       <SelectItem key={staff.user_id} value={staff.user_id}>
                         {staff.name}
@@ -1581,60 +1795,64 @@ export default function ActivityRecordClient() {
 
             {/* 1日の流れ */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium">1日の流れ</Label>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])}
+                  onClick={() => {
+                    scheduleIdsRef.current = [...scheduleIdsRef.current, crypto.randomUUID()]
+                    setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])
+                  }}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   追加
                 </Button>
               </div>
-              <div className="space-y-2">
-                {dailySchedule.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <TimePicker
-                        value={item.time || '10:00'}
-                        onChange={(val) => {
-                          const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, time: val }
-                          setDailySchedule(newSchedule)
-                        }}
-                      />
-                      <Input
-                        type="text"
-                        value={item.content}
-                        onChange={(e) => {
-                          const newSchedule = [...dailySchedule]
-                          newSchedule[index] = { ...item, content: e.target.value }
-                          setDailySchedule(newSchedule)
-                        }}
-                        placeholder="活動内容"
-                        className="flex-1"
-                        maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setDailySchedule((prev) => prev.filter((_, i) => i !== index))
-                        }}
-                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                ))}
-              </div>
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleScheduleDragEnd}
+              >
+                <SortableContext
+                  items={scheduleIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2">
+                    {dailySchedule.map((item, index) => {
+                      const rowId = scheduleIds[index]
+                      return (
+                        <SortableScheduleRow
+                          key={rowId}
+                          id={rowId}
+                          item={item}
+                          onTimeChange={(val) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: val }
+                            setDailySchedule(newSchedule)
+                          }}
+                          onContentChange={(val) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, content: val }
+                            setDailySchedule(newSchedule)
+                          }}
+                          onRemove={() => {
+                            scheduleIdsRef.current = scheduleIdsRef.current.filter((_, i) => i !== index)
+                            setDailySchedule((prev) => prev.filter((_, i) => i !== index))
+                          }}
+                          maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
+                        />
+                      )
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
 
             {/* 役割分担 */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium">役割分担</Label>
                 <Button
                   type="button"
@@ -1675,15 +1893,14 @@ export default function ActivityRecordClient() {
                       </SelectContent>
                     </Select>
                     <Input
-                      type="text"
-                      value={assignment.role}
+                      className="flex-1"
+                      value={assignment.role || ""}
                       onChange={(e) => {
                         const newAssignments = [...roleAssignments]
                         newAssignments[index] = { ...assignment, role: e.target.value }
                         setRoleAssignments(newAssignments)
                       }}
-                      placeholder="役割（例: 主担当、配膳）"
-                      className="flex-1"
+                      placeholder="役割を入力"
                       maxLength={MAX_ROLE_LENGTH}
                     />
                     <Button
@@ -1705,20 +1922,35 @@ export default function ActivityRecordClient() {
             {/* おやつ */}
             <div className="space-y-2">
               <Label htmlFor="snack">おやつ</Label>
-              <Input
+              <Textarea
                 id="snack"
-                type="text"
+                rows={3}
                 value={snack}
                 onChange={(e) => setSnack(e.target.value)}
-                placeholder="例: りんご、クッキー"
+                placeholder="例: りんご、クッキー（アレルギー情報も記入可）"
                 maxLength={MAX_SNACK_LENGTH}
               />
             </div>
 
-            {/* ごはん */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">ごはん</Label>
-              <div className="grid grid-cols-1 gap-3 p-4 border rounded-lg bg-muted/30">
+            {/* ごはん（デフォルト折りたたみ） */}
+            <div className="border border-orange-200 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 bg-orange-50 hover:bg-orange-100 transition-colors text-sm font-medium text-orange-800"
+                onClick={() => setIsMealOpen((prev) => !prev)}
+                aria-expanded={isMealOpen}
+              >
+                <span>ごはん</span>
+                <span className="flex items-center gap-1 text-xs text-orange-600">
+                  {isMealOpen ? (
+                    <><ChevronUp className="h-4 w-4" />折りたたむ</>
+                  ) : (
+                    <><ChevronDown className="h-4 w-4" />展開</>
+                  )}
+                </span>
+              </button>
+              {isMealOpen && (
+              <div className="grid grid-cols-1 gap-3 p-4 bg-orange-50/50">
                 <div className="space-y-2">
                   <Label htmlFor="mealMenu" className="text-xs text-muted-foreground">メニュー</Label>
                   <Input
@@ -1765,6 +1997,7 @@ export default function ActivityRecordClient() {
                   />
                 </div>
               </div>
+              )}
             </div>
 
             {/* 観察記録（旧: 活動内容） */}
@@ -2037,7 +2270,7 @@ export default function ActivityRecordClient() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">活動記録一覧</h2>
+            <h2 className="text-xl font-semibold">保育日誌一覧</h2>
           </div>
 
           {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
@@ -2054,111 +2287,103 @@ export default function ActivityRecordClient() {
               </CardContent>
             </Card>
           ) : activitiesData?.activities.length ? (
-            <div className="space-y-3">
-              {activitiesData.activities.map((activity) => (
-                <Card key={activity.activity_id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-1">
-                            <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
-                              {activity.activity_date}
-                            </span>
-                            <span className="text-sm font-medium text-muted-foreground">
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
+                    {classOptions.length > 0 && <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>}
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">内容</th>
+                    <th className="px-3 py-2.5 text-center font-medium text-muted-foreground whitespace-nowrap">引継ぎ</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">記録者</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {activitiesData.activities.map((activity) => {
+                    const displayContent = getDisplayContent(activity)
+                    const truncatedContent = displayContent.length > 80
+                      ? displayContent.slice(0, 80) + "..."
+                      : displayContent
+                    return (
+                      <tr key={activity.activity_id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="text-sm font-medium text-primary">
+                            {activity.activity_date}
+                          </span>
+                        </td>
+                        {classOptions.length > 0 && (
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className="text-sm text-muted-foreground">
                               {activity.class_name}
                             </span>
-                          </div>
-                          <div className="text-sm leading-relaxed mt-2">
-                            <div
-                              dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(convertToMarkdown(getDisplayContent(activity)), DOMPURIFY_CONFIG),
-                              }}
-                            />
-                          </div>
-                          {Array.isArray(activity.photos) && activity.photos.length > 0 && (
-                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {activity.photos.map((photo, index) => {
-                                const url =
-                                  typeof photo === "string"
-                                    ? photo
-                                    : photo.thumbnail_url || photo.url
-                                if (!url) return null
-                                return (
-                                  <div
-                                    key={typeof photo === "string" ? `${photo}-${index}` : photo.file_id ?? `${photo.url}-${index}`}
-                                    className="overflow-hidden rounded-lg border"
-                                  >
-                                    <img src={url} alt="活動写真" className="h-24 w-full object-cover" />
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                          {activity.handover && (
-                            <div className="mt-3 p-3 rounded-md bg-amber-50 border border-amber-200">
-                              <p className="text-xs font-medium text-amber-800 mb-1">引継ぎ</p>
-                              <p className="text-sm text-amber-900 whitespace-pre-wrap">{activity.handover}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleEdit(activity)}
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => handleDelete(activity.activity_id)}
-                            disabled={isDeletingId === activity.activity_id}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        {MENTION_ENABLED && (
-                          <div className="flex flex-col gap-2 flex-1">
-                            <span className="text-xs text-muted-foreground">
-                              {activity.individual_record_count}件の児童記録
-                            </span>
-                            {activity.individual_records && activity.individual_records.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {activity.individual_records.map((record) => (
-                                  <Button
-                                    key={record.observation_id}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 px-2 text-xs hover:bg-primary/10"
-                                    onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
-                                  >
-                                    {record.child_name}
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          </td>
                         )}
-                        <span className="text-xs text-muted-foreground">
-                          記入者: {activity.recorded_by_name || activity.created_by}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        <td className="px-3 py-2.5 max-w-xs">
+                          <p className="text-sm text-foreground truncate" title={displayContent}>
+                            {truncatedContent}
+                          </p>
+                          {Array.isArray(activity.photos) && activity.photos.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              写真{activity.photos.length}枚
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {activity.handover ? (
+                            activity.handover_completed ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full" title={activity.handover}>
+                                <CheckCircle2 className="h-3 w-3" />
+                                完了
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title={activity.handover}>
+                                <Clipboard className="h-3 w-3" />
+                                あり
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="text-xs text-muted-foreground">
+                            {activity.recorded_by_name || activity.created_by}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="保育日誌を編集"
+                              onClick={() => handleEdit(activity)}
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="保育日誌を削除"
+                              onClick={() => handleDelete(activity.activity_id)}
+                              disabled={isDeletingId === activity.activity_id}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">活動記録はまだありません。</p>
+                <p className="text-muted-foreground">保育日誌はまだありません。</p>
                 <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
               </CardContent>
             </Card>
