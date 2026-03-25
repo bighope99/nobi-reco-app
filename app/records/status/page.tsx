@@ -148,7 +148,7 @@ export default function StatusPage() {
     const [inputSearchTerm, setInputSearchTerm] = useState('')
     const [committedSearchTerm, setCommittedSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
-    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'asc' })
+    const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
 
     // 日付の初期化（クライアント側でのみ実行）
     useEffect(() => {
@@ -275,6 +275,10 @@ export default function StatusPage() {
 
             if (aValue < bValue) return sortConfig.order === 'asc' ? -1 : 1
             if (aValue > bValue) return sortConfig.order === 'asc' ? 1 : -1
+
+            // セカンダリソート: かな順（あいうえお昇順）
+            if (a.kana < b.kana) return -1
+            if (a.kana > b.kana) return 1
             return 0
         })
         return sorted
@@ -560,10 +564,14 @@ export default function StatusPage() {
                                         <tr key={child.child_id} className="hover:bg-slate-50 transition-colors group">
 
                                             <td className="sticky left-0 z-20 bg-white px-4 sm:px-6 py-4 whitespace-nowrap shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50 transition-colors">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-900">{child.name}</span>
+                                                <button
+                                                    type="button"
+                                                    className="flex flex-col text-left cursor-pointer group/name"
+                                                    onClick={() => handleOpenHistory(child)}
+                                                >
+                                                    <span className="text-sm font-bold text-slate-900 group-hover/name:text-indigo-600 group-hover/name:underline transition-colors">{child.name}</span>
                                                     <span className="text-xs text-slate-400">{child.kana}</span>
-                                                </div>
+                                                </button>
                                             </td>
 
                                             <td className="px-4 py-4 whitespace-nowrap">
