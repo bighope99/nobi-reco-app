@@ -8,7 +8,6 @@ import {
   Plus,
   MapPin,
   Phone,
-  Mail,
   Users,
   ChevronRight,
   Search,
@@ -176,10 +175,7 @@ export default function FacilityListPage() {
                         <Phone size={14} className="text-slate-400" />
                         <span>{facility.phone}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Mail size={14} className="text-slate-400" />
-                        <span className="truncate">{facility.email}</span>
-                      </div>
+
                     </div>
 
                     {/* Stats */}
