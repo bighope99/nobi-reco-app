@@ -1007,6 +1007,15 @@ export default function ActivityRecordClient() {
   }
 
   const handleEdit = async (activity: Activity) => {
+    if (typeof window !== 'undefined') {
+      const scrollContainer = document.querySelector('main')
+      if (scrollContainer instanceof HTMLElement) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
     // @[child_id] 形式を @表示名 形式に変換して表示
@@ -2114,7 +2123,7 @@ export default function ActivityRecordClient() {
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">内容</th>
                     <th className="px-3 py-2.5 text-center font-medium text-muted-foreground whitespace-nowrap">引継ぎ</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">作成者</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">記録者</th>
                     <th className="px-3 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
                   </tr>
                 </thead>
@@ -2165,7 +2174,7 @@ export default function ActivityRecordClient() {
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <span className="text-xs text-muted-foreground">
-                            {activity.created_by}
+                            {activity.recorded_by_name || activity.created_by}
                           </span>
                         </td>
                         <td className="px-3 py-2.5">
