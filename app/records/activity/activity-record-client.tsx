@@ -200,6 +200,7 @@ export default function ActivityRecordClient() {
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
   const [isMealOpen, setIsMealOpen] = useState(false)
+  const ROLE_OPTIONS = ["連絡帳", "おやつ", "見守り", "主担当", "配膳", "清掃", "その他"]
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -1676,18 +1677,24 @@ export default function ActivityRecordClient() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input
-                      type="text"
-                      value={assignment.role}
-                      onChange={(e) => {
+                    <Select
+                      value={assignment.role || "__none__"}
+                      onValueChange={(value) => {
                         const newAssignments = [...roleAssignments]
-                        newAssignments[index] = { ...assignment, role: e.target.value }
+                        newAssignments[index] = { ...assignment, role: value === "__none__" ? "" : value }
                         setRoleAssignments(newAssignments)
                       }}
-                      placeholder="役割（例: 主担当、配膳）"
-                      className="flex-1"
-                      maxLength={MAX_ROLE_LENGTH}
-                    />
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="役割を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">（未選択）</SelectItem>
+                        {ROLE_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
                       size="icon"
