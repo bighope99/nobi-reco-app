@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent, type DragEvent } from "react"
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { useActivityTemplates } from "@/hooks/useActivityTemplates"
+import { useRole } from "@/hooks/useRole"
 import { getCurrentDateJST } from "@/lib/utils/timezone"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, GripVertical, Clipboard, Check, CheckCircle2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import DOMPurify from "dompurify"
 import {
@@ -81,7 +83,6 @@ interface Activity {
   special_notes?: string | null
   meal?: Meal | null
   handover?: string | null
-  handover_completed?: boolean | null
 }
 
 interface MentionSuggestion {
@@ -109,15 +110,11 @@ interface StaffMember {
 
 // AiObservationResult型は共通ファイルからimport済み
 
-const createScheduleItem = (): DailyScheduleItem => ({ time: "10:00", content: "" })
-const cloneSchedule = (items: DailyScheduleItem[]): DailyScheduleItem[] =>
-  items.map((item) => ({ ...item }))
-const createDefaultSchedule = (): DailyScheduleItem[] =>
-  Array.from({ length: 5 }, () => createScheduleItem())
-
 export default function ActivityRecordClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { isFacilityAdmin, isAdmin } = useRole()
+  const canDeleteTemplate = isFacilityAdmin || isAdmin
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -170,10 +167,20 @@ export default function ActivityRecordClient() {
   const autoOpenedActivityIdRef = useRef<string | null>(null)
   const [originalContent, setOriginalContent] = useState<string>("")
 
+  // テンプレート保存ダイアログの状態
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false)
+  const [templateNameInput, setTemplateNameInput] = useState("")
+
   // 新規フィールドの状態
   const [eventName, setEventName] = useState("")
   // デフォルト5行、初期値10:00
-  const DEFAULT_SCHEDULE: DailyScheduleItem[] = createDefaultSchedule()
+  const DEFAULT_SCHEDULE: DailyScheduleItem[] = [
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+  ]
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
   // デフォルト2行
   const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
@@ -188,8 +195,6 @@ export default function ActivityRecordClient() {
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
-  const [draggingScheduleIndex, setDraggingScheduleIndex] = useState<number | null>(null)
-  const [dragOverScheduleIndex, setDragOverScheduleIndex] = useState<number | null>(null)
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -201,76 +206,22 @@ export default function ActivityRecordClient() {
     KEEP_CONTENT: true,
   }
 
-  const appendScheduleItem = () => {
-    setDailySchedule((prev) => [...prev, createScheduleItem()])
-  }
-
-  const insertScheduleItemAt = (index: number) => {
-    setDailySchedule((prev) => {
-      const next = [...prev]
-      next.splice(index, 0, createScheduleItem())
-      return next
-    })
-  }
-
-  const updateScheduleItem = (index: number, patch: Partial<DailyScheduleItem>) => {
-    setDailySchedule((prev) =>
-      prev.map((item, currentIndex) =>
-        currentIndex === index ? { ...item, ...patch } : item
-      )
-    )
-  }
-
-  const removeScheduleItem = (index: number) => {
-    setDailySchedule((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
-  }
-
-  const reorderScheduleItem = (fromIndex: number, toIndex: number) => {
-    setDailySchedule((prev) => {
-      if (
-        fromIndex === toIndex ||
-        fromIndex < 0 ||
-        toIndex < 0 ||
-        fromIndex >= prev.length ||
-        toIndex >= prev.length
-      ) {
-        return prev
-      }
-
-      const next = [...prev]
-      const [movedItem] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, movedItem)
-      return next
-    })
-  }
-
-  const handleScheduleDragStart = (index: number) => {
-    setDraggingScheduleIndex(index)
-    setDragOverScheduleIndex(index)
-  }
-
-  const handleScheduleDragEnter = (index: number) => {
-    if (draggingScheduleIndex === null || draggingScheduleIndex === index) {
-      return
-    }
-    setDragOverScheduleIndex(index)
-  }
-
-  const handleScheduleDragEnd = () => {
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
-  }
-
-  const handleScheduleDrop = (event: DragEvent<HTMLDivElement>, dropIndex: number) => {
-    event.preventDefault()
-    if (draggingScheduleIndex === null) {
-      return
-    }
-
-    reorderScheduleItem(draggingScheduleIndex, dropIndex)
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
-  }
+  const {
+    templates,
+    selectedTemplateId,
+    setSelectedTemplateId,
+    applyTemplate,
+    deleteTemplate,
+    saveTemplate,
+    isDeleting: isDeletingTemplate,
+    isSavingTemplate,
+    templateError,
+  } = useActivityTemplates({
+    onApply: (appliedEventName, appliedDailySchedule) => {
+      setEventName(appliedEventName)
+      setDailySchedule(appliedDailySchedule.length > 0 ? appliedDailySchedule : DEFAULT_SCHEDULE)
+    },
+  })
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -687,7 +638,7 @@ export default function ActivityRecordClient() {
         throw new Error('メンションされた児童がありません')
       }
 
-      // 1. 先に保育日誌を保存（編集モードの場合は更新）
+      // 1. 先に活動記録を保存（編集モードの場合は更新）
       let savedActivityId: string | null = editingActivityId
 
       const sanitizedFields = getSanitizedExtendedFields()
@@ -720,10 +671,10 @@ export default function ActivityRecordClient() {
         const updateResult = await updateResponse.json()
 
         if (!updateResponse.ok || !updateResult.success) {
-          throw new Error(updateResult.error || '保育日誌の更新に失敗しました')
+          throw new Error(updateResult.error || '活動記録の更新に失敗しました')
         }
 
-        setSaveMessage('保育日誌を更新しました')
+        setSaveMessage('活動記録を更新しました')
       } else {
         // 新規保存
         const saveResponse = await fetch('/api/activities', {
@@ -751,11 +702,11 @@ export default function ActivityRecordClient() {
         const saveResult = await saveResponse.json()
 
         if (!saveResponse.ok || !saveResult.success) {
-          throw new Error(saveResult.error || '保育日誌の保存に失敗しました')
+          throw new Error(saveResult.error || '活動記録の保存に失敗しました')
         }
 
         savedActivityId = saveResult.data?.activity_id
-        setSaveMessage('保育日誌を保存しました')
+        setSaveMessage('活動記録を保存しました')
 
         // 新規保存後は編集モードに切り替え
         setEditingActivityId(savedActivityId)
@@ -773,7 +724,7 @@ export default function ActivityRecordClient() {
           content: activityContent,
           activity_date: activityDate,
           mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
-          activity_id: savedActivityId, // 保存した保育日誌IDを紐付け
+          activity_id: savedActivityId, // 保存した活動記録IDを紐付け
         }),
       })
 
@@ -788,7 +739,7 @@ export default function ActivityRecordClient() {
       setShowAnalysisModal(true)
       persistAiDraftsToCookie(analysisResults)
 
-      // 保育日誌一覧を更新
+      // 活動記録一覧を更新
       fetchActivities()
     } catch (err) {
       console.error('Failed to analyze:', err)
@@ -870,6 +821,10 @@ export default function ActivityRecordClient() {
       setOriginalContent(contentForDB)
       setSaveMessage('保存しました')
       fetchActivities()
+
+      // 新規保存時のみテンプレート保存ダイアログを表示
+      setShowSaveTemplateDialog(true)
+      setTemplateNameInput("")
 
       // AI分析自動実行（観察記録+メンションがある場合のみ）
       if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0) {
@@ -1027,11 +982,9 @@ export default function ActivityRecordClient() {
 
     // 新規フィールドを復元（デフォルト値と一貫性を保つ）
     setEventName(activity.event_name || "")
-    setDailySchedule(
-      activity.daily_schedule && activity.daily_schedule.length > 0
-        ? cloneSchedule(activity.daily_schedule)
-        : createDefaultSchedule()
-    )
+    setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+      ? activity.daily_schedule
+      : DEFAULT_SCHEDULE)
     setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
       : DEFAULT_ROLE_ASSIGNMENTS)
@@ -1110,7 +1063,7 @@ export default function ActivityRecordClient() {
   }
 
   const handleDelete = async (activityId: string) => {
-    const confirmed = window.confirm("この保育日誌を削除しますか？")
+    const confirmed = window.confirm("この活動記録を削除しますか？")
     if (!confirmed) return
 
     setIsDeletingId(activityId)
@@ -1213,8 +1166,6 @@ export default function ActivityRecordClient() {
   const handleCancelEdit = () => {
     setIsEditMode(false)
     setEditingActivityId(null)
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1223,7 +1174,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule(createDefaultSchedule())
+    setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
@@ -1232,10 +1183,6 @@ export default function ActivityRecordClient() {
   }
 
   const handleRestart = () => {
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
-    setIsEditMode(false)
-    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1243,7 +1190,7 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule(createDefaultSchedule())
+    setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")
     setMeal(null)
@@ -1472,12 +1419,12 @@ export default function ActivityRecordClient() {
   }
 
   return (
-    <StaffLayout title="保育日誌" subtitle="1日の活動のまとめを記録">
+    <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
         <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
-            <CardTitle>保育日誌の入力</CardTitle>
+            <CardTitle>活動記録の入力</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1531,6 +1478,55 @@ export default function ActivityRecordClient() {
               </div>
             </div>
 
+            {/* テンプレート選択 */}
+            {templates.length > 0 && (
+              <div className="space-y-2">
+                <Label>テンプレート</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedTemplateId}
+                    onValueChange={(id) => {
+                      const template = templates.find((t) => t.id === id)
+                      if (!template) return
+                      const hasExistingInput = eventName.trim() !== "" || dailySchedule.some((s) => s.content.trim() !== "")
+                      if (hasExistingInput) {
+                        if (!window.confirm("行事名・1日の流れが上書きされます。続けますか？")) return
+                      }
+                      setSelectedTemplateId(id)
+                      applyTemplate(template)
+                    }}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="テンプレートを選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {canDeleteTemplate && selectedTemplateId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isDeletingTemplate}
+                      onClick={() => {
+                        if (!window.confirm("このテンプレートを削除しますか？")) return
+                        void deleteTemplate(selectedTemplateId)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      削除
+                    </Button>
+                  )}
+                </div>
+                {templateError && <p className="text-sm text-red-500">{templateError}</p>}
+              </div>
+            )}
+
             {/* 今日の行事・イベント */}
             <div className="space-y-2">
               <Label htmlFor="eventName">今日の行事・イベント</Label>
@@ -1552,7 +1548,7 @@ export default function ActivityRecordClient() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={appendScheduleItem}
+                  onClick={() => setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   追加
@@ -1564,120 +1560,73 @@ export default function ActivityRecordClient() {
                   const timeParts = (item.time || '10:00').split(':')
                   const hours = timeParts[0] || '10'
                   const minutes = timeParts[1] || '00'
-                  const isDragging = draggingScheduleIndex === index
-                  const isDropTarget =
-                    dragOverScheduleIndex === index && draggingScheduleIndex !== null && !isDragging
                   return (
-                    <div
-                      key={`${item.time}-${index}`}
-                      onDragEnter={() => handleScheduleDragEnter(index)}
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        event.dataTransfer.dropEffect = 'move'
-                      }}
-                      onDrop={(event) => handleScheduleDrop(event, index)}
-                      className={cn(
-                        "p-1 transition-colors",
-                        isDragging && "opacity-60",
-                        isDropTarget && "rounded-md bg-primary/5"
-                      )}
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                        <div
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = 'move'
-                            event.dataTransfer.setData('text/plain', '')
-                            handleScheduleDragStart(index)
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={hours}
+                          onValueChange={(value) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: `${value}:${minutes}` }
+                            setDailySchedule(newSchedule)
                           }}
-                          onDragEnd={handleScheduleDragEnd}
-                          tabIndex={0}
-                          onKeyDown={(event) => {
-                            if (event.key === 'ArrowUp' && index > 0) {
-                              event.preventDefault()
-                              reorderScheduleItem(index, index - 1)
-                            } else if (event.key === 'ArrowDown' && index < dailySchedule.length - 1) {
-                              event.preventDefault()
-                              reorderScheduleItem(index, index + 1)
-                            }
-                          }}
-                          className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 rounded"
-                          aria-label={`${index + 1}行目をドラッグまたは矢印キーで並び替え`}
                         >
-                          <GripVertical className="h-4 w-4" />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Select
-                            value={hours}
-                            onValueChange={(value) => {
-                              updateScheduleItem(index, { time: `${value}:${minutes}` })
-                            }}
-                          >
-                            <SelectTrigger className="w-16">
-                              <SelectValue placeholder="時" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
-                                <SelectItem key={h} value={h}>
-                                  {h}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <span className="text-sm text-muted-foreground">時</span>
-                          <Select
-                            value={minutes}
-                            onValueChange={(value) => {
-                              updateScheduleItem(index, { time: `${hours}:${value}` })
-                            }}
-                          >
-                            <SelectTrigger className="w-16">
-                              <SelectValue placeholder="分" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
-                                <SelectItem key={m} value={m}>
-                                  {m}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <span className="text-sm text-muted-foreground">分</span>
-                        </div>
-                        <Input
-                          type="text"
-                          value={item.content}
-                          onChange={(e) => {
-                            updateScheduleItem(index, { content: e.target.value })
+                          <SelectTrigger className="w-16">
+                            <SelectValue placeholder="時" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
+                              <SelectItem key={h} value={h}>
+                                {h}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">時</span>
+                        <Select
+                          value={minutes}
+                          onValueChange={(value) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: `${hours}:${value}` }
+                            setDailySchedule(newSchedule)
                           }}
-                          placeholder="活動内容"
-                          className="flex-1"
-                          maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
-                        />
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => insertScheduleItemAt(index + 1)}
-                          >
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            下に追加
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              removeScheduleItem(index)
-                            }}
-                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                            aria-label={`${index + 1}行目を削除`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        >
+                          <SelectTrigger className="w-16">
+                            <SelectValue placeholder="分" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
+                              <SelectItem key={m} value={m}>
+                                {m}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">分</span>
                       </div>
+                      <Input
+                        type="text"
+                        value={item.content}
+                        onChange={(e) => {
+                          const newSchedule = [...dailySchedule]
+                          newSchedule[index] = { ...item, content: e.target.value }
+                          setDailySchedule(newSchedule)
+                        }}
+                        placeholder="活動内容"
+                        className="flex-1"
+                        maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setDailySchedule((prev) => prev.filter((_, i) => i !== index))
+                        }}
+                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
                   )
                 })}
@@ -2089,7 +2038,7 @@ export default function ActivityRecordClient() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">保育日誌一覧</h2>
+            <h2 className="text-xl font-semibold">活動記録一覧</h2>
           </div>
 
           {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
@@ -2106,101 +2055,111 @@ export default function ActivityRecordClient() {
               </CardContent>
             </Card>
           ) : activitiesData?.activities.length ? (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">内容</th>
-                    <th className="px-3 py-2.5 text-center font-medium text-muted-foreground whitespace-nowrap">引継ぎ</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">作成者</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {activitiesData.activities.map((activity) => {
-                    const displayContent = getDisplayContent(activity)
-                    const truncatedContent = displayContent.length > 80
-                      ? displayContent.slice(0, 80) + "..."
-                      : displayContent
-                    return (
-                      <tr key={activity.activity_id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="text-sm font-medium text-primary">
-                            {activity.activity_date}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="text-sm text-muted-foreground">
-                            {activity.class_name}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 max-w-xs">
-                          <p className="text-sm text-foreground truncate" title={displayContent}>
-                            {truncatedContent}
-                          </p>
-                          {Array.isArray(activity.photos) && activity.photos.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              写真{activity.photos.length}枚
+            <div className="space-y-3">
+              {activitiesData.activities.map((activity) => (
+                <Card key={activity.activity_id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
+                              {activity.activity_date}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          {activity.handover ? (
-                            activity.handover_completed ? (
-                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full" title={activity.handover}>
-                                <CheckCircle2 className="h-3 w-3" />
-                                完了
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title={activity.handover}>
-                                <Clipboard className="h-3 w-3" />
-                                あり
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="text-xs text-muted-foreground">
-                            {activity.created_by}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label="保育日誌を編集"
-                              onClick={() => handleEdit(activity)}
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                              aria-label="保育日誌を削除"
-                              onClick={() => handleDelete(activity.activity_id)}
-                              disabled={isDeletingId === activity.activity_id}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            <span className="text-sm font-medium text-muted-foreground">
+                              {activity.class_name}
+                            </span>
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          <div className="text-sm leading-relaxed mt-2">
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(convertToMarkdown(getDisplayContent(activity)), DOMPURIFY_CONFIG),
+                              }}
+                            />
+                          </div>
+                          {Array.isArray(activity.photos) && activity.photos.length > 0 && (
+                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {activity.photos.map((photo, index) => {
+                                const url =
+                                  typeof photo === "string"
+                                    ? photo
+                                    : photo.thumbnail_url || photo.url
+                                if (!url) return null
+                                return (
+                                  <div
+                                    key={typeof photo === "string" ? `${photo}-${index}` : photo.file_id ?? `${photo.url}-${index}`}
+                                    className="overflow-hidden rounded-lg border"
+                                  >
+                                    <img src={url} alt="活動写真" className="h-24 w-full object-cover" />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {activity.handover && (
+                            <div className="mt-3 p-3 rounded-md bg-amber-50 border border-amber-200">
+                              <p className="text-xs font-medium text-amber-800 mb-1">引継ぎ</p>
+                              <p className="text-sm text-amber-900 whitespace-pre-wrap">{activity.handover}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleEdit(activity)}
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDelete(activity.activity_id)}
+                            disabled={isDeletingId === activity.activity_id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        {MENTION_ENABLED && (
+                          <div className="flex flex-col gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground">
+                              {activity.individual_record_count}件の児童記録
+                            </span>
+                            {activity.individual_records && activity.individual_records.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {activity.individual_records.map((record) => (
+                                  <Button
+                                    key={record.observation_id}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs hover:bg-primary/10"
+                                    onClick={() => router.push(`/records/personal/${record.observation_id}/edit`)}
+                                  >
+                                    {record.child_name}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          記入者: {activity.recorded_by_name || activity.created_by}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">保育日誌はまだありません。</p>
+                <p className="text-muted-foreground">活動記録はまだありません。</p>
                 <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
               </CardContent>
             </Card>
@@ -2268,6 +2227,55 @@ export default function ActivityRecordClient() {
         </Dialog>
 
       </div>
+
+      {/* テンプレート保存ダイアログ */}
+      <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>テンプレートとして保存しますか？</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              現在の行事名・1日の流れをテンプレートとして保存できます。次回から選択して使えます。
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="templateName">テンプレート名 <span className="text-red-500">*</span></Label>
+              <Input
+                id="templateName"
+                value={templateNameInput}
+                onChange={(e) => setTemplateNameInput(e.target.value)}
+                placeholder="例: 通常日程（平日）"
+                maxLength={100}
+              />
+            </div>
+            {templateError && <p className="text-sm text-red-500">{templateError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowSaveTemplateDialog(false)}
+              >
+                スキップ
+              </Button>
+              <Button
+                type="button"
+                disabled={isSavingTemplate || !templateNameInput.trim()}
+                onClick={async () => {
+                  try {
+                    await saveTemplate(templateNameInput.trim(), eventName, dailySchedule)
+                    setShowSaveTemplateDialog(false)
+                  } catch {
+                    // templateError に表示済み
+                  }
+                }}
+              >
+                {isSavingTemplate ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </StaffLayout>
   )
 }
