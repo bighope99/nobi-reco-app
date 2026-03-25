@@ -11,14 +11,18 @@ type ChildStatus = 'absent' | 'checked-in' | 'checked-out'
 interface ChildRecord {
   id: string
   name: string
+  kanjiName: string
   status: ChildStatus
   time?: string
 }
 
-type View = 'row-select' | 'child-select' | 'feedback'
+type View = 'row-select' | 'vowel-select' | 'child-select' | 'feedback'
+
+const VOWEL_THRESHOLD = 6
+const VOWELS = ['あ', 'い', 'う', 'え', 'お']
 
 const KANA_ROWS = [
-  { row: 'あ', count: 5 },
+  { row: 'あ', count: 8 },
   { row: 'か', count: 4 },
   { row: 'さ', count: 3 },
   { row: 'た', count: 6 },
@@ -31,22 +35,36 @@ const KANA_ROWS = [
 ]
 
 const DUMMY_CHILDREN: ChildRecord[] = [
-  { id: '1', name: 'あおき たろう', status: 'absent' },
-  { id: '2', name: 'あさの はなこ', status: 'checked-in', time: '14:30' },
-  { id: '3', name: 'いとう じろう', status: 'checked-out', time: '17:00' },
-  { id: '4', name: 'うえだ みく', status: 'absent' },
-  { id: '5', name: 'えのもと けんた', status: 'absent' },
+  { id: '1', name: 'あおき たろう', kanjiName: '青木 太郎', status: 'absent' },
+  { id: '2', name: 'あさの はなこ', kanjiName: '浅野 花子', status: 'checked-in', time: '14:30' },
+  { id: '3', name: 'いとう じろう', kanjiName: '伊藤 二郎', status: 'checked-out', time: '17:00' },
+  { id: '4', name: 'うえだ みく', kanjiName: '上田 美久', status: 'absent' },
+  { id: '5', name: 'えのもと けんた', kanjiName: '榎本 健太', status: 'absent' },
+  { id: '6', name: 'あかい さくら', kanjiName: '赤井 さくら', status: 'absent' },
+  { id: '7', name: 'あんどう りく', kanjiName: '安藤 陸', status: 'absent' },
+  { id: '8', name: 'おかだ ゆい', kanjiName: '岡田 結衣', status: 'absent' },
 ]
 
 export default function SelfCheckInPage() {
   const [view, setView] = useState<View>('row-select')
   const [selectedRow, setSelectedRow] = useState<string>('')
+  const [selectedVowel, setSelectedVowel] = useState<string>('')
   const [selectedChild, setSelectedChild] = useState<ChildRecord | null>(null)
   const [checkinTime, setCheckinTime] = useState<string>('')
   const [countdown, setCountdown] = useState(3)
 
-  const goToChildSelect = (row: string) => {
+  const handleRowSelect = (row: string, count: number) => {
     setSelectedRow(row)
+    setSelectedVowel('')
+    if (count >= VOWEL_THRESHOLD) {
+      setView('vowel-select')
+    } else {
+      setView('child-select')
+    }
+  }
+
+  const handleVowelSelect = (vowel: string) => {
+    setSelectedVowel(vowel)
     setView('child-select')
   }
 
@@ -74,6 +92,15 @@ export default function SelfCheckInPage() {
     return () => clearTimeout(timer)
   }, [view, countdown, backToChildSelect])
 
+  // 表示する児童をフィルタリング
+  const visibleChildren = selectedVowel
+    ? DUMMY_CHILDREN.filter((c) => c.name.startsWith(selectedVowel))
+    : DUMMY_CHILDREN
+
+  const childSelectTitle = selectedVowel
+    ? `「${selectedRow}行・${selectedVowel}」のおともだち`
+    : `「${selectedRow}」のおともだち`
+
   return (
     <StaffLayout title="タッチ出席" subtitle="なまえをえらんで しゅっせきをとろう">
       {/* 画面1: 50音行選択 */}
@@ -82,7 +109,7 @@ export default function SelfCheckInPage() {
           {KANA_ROWS.map(({ row, count }) => (
             <button
               key={row}
-              onClick={() => count > 0 && goToChildSelect(row)}
+              onClick={() => count > 0 && handleRowSelect(row, count)}
               disabled={count === 0}
               className={[
                 'flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md',
@@ -99,16 +126,43 @@ export default function SelfCheckInPage() {
         </div>
       )}
 
-      {/* 画面2: 児童選択 */}
-      {view === 'child-select' && (
+      {/* 画面1.5: 母音選択（6人以上の行） */}
+      {view === 'vowel-select' && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 mb-4">
             <Button variant="outline" size="sm" onClick={() => setView('row-select')}>
               ← もどる
             </Button>
-            <span className="text-xl font-bold">「{selectedRow}」のおともだち</span>
+            <span className="text-xl font-bold">「{selectedRow}行」— どれ？</span>
           </div>
-          {DUMMY_CHILDREN.map((child) => (
+          <div className="grid grid-cols-2 gap-4">
+            {VOWELS.map((vowel) => (
+              <button
+                key={vowel}
+                onClick={() => handleVowelSelect(vowel)}
+                className="flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md hover:bg-blue-50 active:scale-95 transition-transform"
+              >
+                <span className="text-6xl font-bold">{vowel}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 画面2: 児童選択 */}
+      {view === 'child-select' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => selectedVowel ? setView('vowel-select') : setView('row-select')}
+            >
+              ← もどる
+            </Button>
+            <span className="text-xl font-bold">{childSelectTitle}</span>
+          </div>
+          {visibleChildren.map((child) => (
             <ChildButton key={child.id} child={child} onSelect={goToFeedback} />
           ))}
         </div>
@@ -124,14 +178,12 @@ export default function SelfCheckInPage() {
             <p className="text-3xl mt-1">{checkinTime}</p>
           </div>
           <div className="mt-12 flex flex-col items-center gap-4">
-            <Button
-              variant="outline"
-              size="lg"
-              className="border-2 border-white text-white hover:bg-green-400 text-2xl px-10 py-4 h-auto"
+            <button
+              className="bg-white text-green-600 font-bold px-8 py-4 rounded-2xl text-2xl shadow-lg active:scale-95 transition-transform"
               onClick={backToChildSelect}
             >
               とりけす
-            </Button>
+            </button>
             <p className="text-xl mt-2">{countdown}びょうで もどります</p>
           </div>
         </div>
@@ -151,7 +203,10 @@ function ChildButton({
     return (
       <div className="flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 border-green-400 bg-green-50 px-6 shadow-md">
         <Badge className="h-4 w-4 rounded-full bg-green-500 p-0 shrink-0" />
-        <span className="flex-1 text-4xl font-bold text-gray-800">{child.name}</span>
+        <div className="flex-1">
+          <p className="text-4xl font-bold text-gray-800">{child.name}</p>
+          <p className="text-lg text-gray-500">{child.kanjiName}</p>
+        </div>
         <span className="text-sm font-bold text-green-600 text-right leading-tight">
           きたよ！<br />{child.time}
         </span>
@@ -163,7 +218,10 @@ function ChildButton({
     return (
       <div className="flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 border-blue-400 bg-blue-50 px-6 shadow-md">
         <Badge className="h-4 w-4 rounded-full bg-blue-500 p-0 shrink-0" />
-        <span className="flex-1 text-4xl font-bold text-gray-800">{child.name}</span>
+        <div className="flex-1">
+          <p className="text-4xl font-bold text-gray-800">{child.name}</p>
+          <p className="text-lg text-gray-500">{child.kanjiName}</p>
+        </div>
         <span className="text-sm font-bold text-blue-600 text-right leading-tight">
           かえったよ<br />{child.time}
         </span>
@@ -177,7 +235,10 @@ function ChildButton({
       className="flex min-h-20 w-full items-center gap-4 rounded-2xl bg-white px-6 shadow-md hover:bg-blue-50 active:scale-95 transition-transform text-left"
     >
       <Badge variant="outline" className="h-4 w-4 rounded-full p-0 shrink-0" />
-      <span className="flex-1 text-4xl font-bold text-gray-800">{child.name}</span>
+      <div className="flex-1">
+        <p className="text-4xl font-bold text-gray-800">{child.name}</p>
+        <p className="text-lg text-gray-500">{child.kanjiName}</p>
+      </div>
     </button>
   )
 }
