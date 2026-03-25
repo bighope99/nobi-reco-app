@@ -319,6 +319,20 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
 
+  // 入力途中に離脱した場合のブラウザ警告（新規作成時のみ）
+  useEffect(() => {
+    if (!isNew) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (editText.trim()) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isNew, editText]);
+
   // 日付の初期化（クライアント側でのみ実行）
   useEffect(() => {
     if (!observationDate) {
