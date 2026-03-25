@@ -33,13 +33,21 @@ const ROW_KANA: [string, string[]][] = [
   ['ら', ['ら', 'り', 'る', 'れ', 'ろ']],
   ['わ', ['わ', 'を', 'ん']],
 ]
-const ALL_KANA: string[] = []
 for (const [row, kanas] of ROW_KANA) {
   for (const k of kanas) {
-    ALL_KANA.push(k)
     KANA_ROW_MAP[k] = row
   }
 }
+
+/** 縦書き五十音表（右→左、上→下） */
+const KANA_GRID: (string | null)[][] = [
+  ['わ', 'ら', 'や', 'ま', 'は', 'な', 'た', 'さ', 'か', 'あ'],
+  [null,  'り', null,  'み', 'ひ', 'に', 'ち', 'し', 'き', 'い'],
+  [null,  'る', 'ゆ',  'む', 'ふ', 'ぬ', 'つ', 'す', 'く', 'う'],
+  [null,  'れ', null,  'め', 'へ', 'ね', 'て', 'せ', 'け', 'え'],
+  ['を',  'ろ', 'よ',  'も', 'ほ', 'の', 'と', 'そ', 'こ', 'お'],
+  ['ん',  null,  null,  null, null,  null, null, null, null, null],
+]
 
 function formatTime(isoString?: string): string {
   if (!isoString) return ''
@@ -110,7 +118,7 @@ export default function SelfCheckInPage() {
 
   // 各かな文字ごとの児童数
   const kanaCounts = Object.fromEntries(
-    ALL_KANA.map((kana) => {
+    Object.keys(KANA_ROW_MAP).map((kana) => {
       const row = KANA_ROW_MAP[kana]
       const children = groups[row] ?? []
       return [kana, children.filter(c => toKatakana(c.kanaName).startsWith(toKatakana(kana))).length]
@@ -223,26 +231,27 @@ export default function SelfCheckInPage() {
 
       {!loading && (
         <>
-          {/* 画面1: 50音選択 */}
+          {/* 画面1: 50音選択（縦書き・右から左） */}
           {view === 'kana-select' && (
-            <div className="grid grid-cols-5 gap-2">
-              {ALL_KANA.map((kana) => {
+            <div className="grid grid-cols-10 gap-1.5 sm:gap-2">
+              {KANA_GRID.flat().map((kana, i) => {
+                if (!kana) return <div key={i} />
                 const count = kanaCounts[kana] ?? 0
                 return (
                   <button
-                    key={kana}
+                    key={i}
                     onClick={() => count > 0 && handleKanaSelect(kana)}
                     disabled={count === 0}
                     className={[
-                      'flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white p-2 min-h-16 shadow-md',
+                      'flex aspect-square flex-col items-center justify-center rounded-xl bg-white shadow-md',
                       'active:scale-95 transition-transform',
                       count > 0
                         ? 'hover:bg-blue-50 cursor-pointer'
                         : 'opacity-30 cursor-not-allowed',
                     ].join(' ')}
                   >
-                    <span className="text-3xl font-bold">{kana}</span>
-                    {count > 0 && <span className="text-xs text-gray-500">{count}</span>}
+                    <span className="text-2xl sm:text-4xl font-bold">{kana}</span>
+                    {count > 0 && <span className="text-[10px] sm:text-xs text-gray-500">{count}</span>}
                   </button>
                 )
               })}
