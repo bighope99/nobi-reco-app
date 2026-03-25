@@ -623,6 +623,11 @@ CREATE TABLE IF NOT EXISTS r_activity (
   updated_by UUID REFERENCES m_users(id),
   recorded_by UUID REFERENCES m_users(id),       -- 実際に記録を書いたスタッフ（created_byはAPIコール者）
 
+  -- 引き継ぎ完了管理
+  handover_completed BOOLEAN DEFAULT false,       -- 引き継ぎ完了フラグ
+  handover_completed_at TIMESTAMP WITH TIME ZONE, -- 完了日時
+  handover_completed_by UUID REFERENCES m_users(id), -- 完了操作者
+
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
   last_edited_at TIMESTAMP WITH TIME ZONE,       -- 最後の編集日時
@@ -641,6 +646,7 @@ CREATE INDEX idx_activity_created_by ON r_activity(created_by);
 CREATE INDEX idx_activity_recorded_by ON r_activity(recorded_by) WHERE recorded_by IS NOT NULL;
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
+CREATE INDEX idx_activity_handover_completed ON r_activity(handover_completed) WHERE deleted_at IS NULL AND handover IS NOT NULL;
 ```
 
 **JSONBカラムのスキーマ定義**:
@@ -846,6 +852,9 @@ CREATE TABLE IF NOT EXISTS m_schools (
   postal_code VARCHAR(10),                         -- 郵便番号
   address VARCHAR(500),                            -- 住所
   phone VARCHAR(20),                               -- 電話番号
+
+  -- 遅刻設定
+  late_threshold_minutes INTEGER NOT NULL DEFAULT 30,  -- 遅刻とみなす閾値（分）。学校全体に適用。
 
   -- ステータス
   is_active BOOLEAN NOT NULL DEFAULT true,         -- 有効/無効

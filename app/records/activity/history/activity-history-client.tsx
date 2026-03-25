@@ -289,7 +289,7 @@ export default function ActivityHistoryClient() {
                             href={`/records/activity?activityId=${item.id}`}
                             onClick={(e) => e.stopPropagation()}
                             className="block text-slate-700 line-clamp-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 rounded"
-                            aria-label={`${item.date}の活動記録を開く`}
+                            aria-label={`${item.date}の保育日誌を開く`}
                           >
                             {item.content}
                           </Link>

@@ -106,7 +106,7 @@ describe('/api/activities GET - individual_records機能', () => {
   });
 
   describe('個別記録情報の取得', () => {
-    it('活動記録に紐づく個別記録をindividual_recordsとして返すこと', async () => {
+    it('保育日誌に紐づく個別記録をindividual_recordsとして返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       const mockSupabase: Record<string, unknown> = {
@@ -199,7 +199,7 @@ describe('/api/activities GET - individual_records機能', () => {
       });
     });
 
-    it('個別記録がない活動記録は空配列を返すこと', async () => {
+    it('個別記録がない保育日誌は空配列を返すこと', async () => {
       (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       const mockSupabase: Record<string, unknown> = {

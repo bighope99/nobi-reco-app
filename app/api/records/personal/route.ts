@@ -157,6 +157,9 @@ export async function GET(request: NextRequest) {
         child_id,
         observation_date,
         content,
+        objective,
+        subjective,
+        is_ai_analyzed,
         created_by,
         recorded_by,
         m_children!inner(
@@ -253,6 +256,9 @@ export async function GET(request: NextRequest) {
         category: tagData?.name ?? null,
         category_color: tagData?.color ?? null,
         content: obs.content,
+        objective: obs.objective ?? null,
+        subjective: obs.subjective ?? null,
+        is_ai_analyzed: obs.is_ai_analyzed ?? false,
         staff_name: staffUser?.name ?? null,
         recorded_by_name: recordedByUser?.name ?? null,
       };

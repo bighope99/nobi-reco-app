@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
 
         // 学校マスタ
         schoolIds.length > 0
-          ? supabase.from('m_schools').select('id, name').in('id', schoolIds).is('deleted_at', null)
+          ? supabase.from('m_schools').select('id, name, late_threshold_minutes').in('id', schoolIds).is('deleted_at', null)
           : Promise.resolve({ data: [], error: null }),
 
         // 保護者連絡先（アラート表示用）
@@ -202,6 +202,12 @@ export async function GET(request: NextRequest) {
       ((schoolsResult.data || []) as SchoolInfo[]).map((s) => [s.id, s.name])
     );
 
+    // 学校別遅刻閾値マップ
+    const schoolLateThresholds: Record<string, number> = {};
+    for (const school of (schoolsResult.data || []) as Array<{ id: string; late_threshold_minutes: number }>) {
+      schoolLateThresholds[school.id] = school.late_threshold_minutes ?? 30;
+    }
+
     // 4. バッチ復号化（電話番号）- 施設IDでキャッシュ分離
     const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data as unknown as Array<{ child_id: string; is_primary?: boolean; guardian?: { phone?: string | null } | null }> || [], facility_id);
 
@@ -216,6 +222,11 @@ export async function GET(request: NextRequest) {
       if (!matchedSchedule) return null;
       const weekdayKey = `${dayOfWeekKey}_time` as keyof SchoolSchedule;
       return (matchedSchedule[weekdayKey] as string | null) || null;
+    };
+
+    const getLateThreshold = (schoolId: string | null): number => {
+      if (!schoolId) return LATE_ARRIVAL_THRESHOLD_MINUTES;
+      return schoolLateThresholds[schoolId] ?? LATE_ARRIVAL_THRESHOLD_MINUTES;
     };
 
     const formatTimeToMinutes = (time: string | null) => {
@@ -296,7 +307,8 @@ export async function GET(request: NextRequest) {
       }
       // 遅刻（未登所で予定開始時刻超過）
       if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time) {
-        if (getMinutesDiff(currentTime, c.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES) {
+        const threshold = getLateThreshold(c.child.school_id);
+        if (getMinutesDiff(currentTime, c.scheduled_start_time) >= threshold) {
           return true;
         }
       }
@@ -353,7 +365,8 @@ export async function GET(request: NextRequest) {
         }
       }
       if (s.status === 'absent' && s.is_scheduled_today && s.scheduled_start_time) {
-        if (getMinutesDiff(currentTime, s.scheduled_start_time) >= LATE_ARRIVAL_THRESHOLD_MINUTES) {
+        const threshold = getLateThreshold(s.child.school_id);
+        if (getMinutesDiff(currentTime, s.scheduled_start_time) >= threshold) {
           alertType = 'late';
         }
       }

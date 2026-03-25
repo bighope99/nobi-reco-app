@@ -89,7 +89,7 @@ interface UserSession {
 | `POST` | `/activities` | **活動記録の保存**<br>親となる活動記録と、紐づく個別記録をまとめて保存（トランザクション）。 | **Req:**<br>`{ "content": "...", "class_id": "...", "photos": [...], "individual_records": [...] }`<br>※確認画面で確定したデータを受け取る。 |
 | `GET` | `/activities` | 活動記録の一覧取得（タイムライン） | Query: `?date=2025-11-01&class_id=...` |
 | `GET` | `/activities/{id}` | 特定の活動記録の詳細取得 | |
-| `PUT` | `/activities/{id}` | 活動記録の修正 | |
+| `PUT` | `/activities/{id}` | 活動記録の修正（AI解析済みの場合、本文は編集不可。事実・所感の直接編集のみ） | |
 | `DELETE` | `/activities/{id}` | 活動記録の削除 | 紐づく個別記録も論理削除 |
 
 ### 2.4 個別記録・ダッシュボード (Individual & Dashboard)

@@ -174,6 +174,9 @@ type RecentObservation = {
   id: string;
   observation_date: string;
   content: string;
+  objective?: string | null;
+  subjective?: string | null;
+  is_ai_analyzed?: boolean;
   created_at: string;
   tag_ids?: string[];
 };
@@ -296,6 +299,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
+  const [isDateEditing, setIsDateEditing] = useState(false);
+  const [isRecorderEditing, setIsRecorderEditing] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -947,7 +952,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ...normalizedFlags,
       };
 
-      // TODO: API実装 - AI解析結果の更新処理
+      // TODO: API実装 - 観察内容分類の更新処理
       const response = await fetch(`/api/records/personal/${observation.id}/ai`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -957,7 +962,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'AI解析結果の保存に失敗しました');
+        throw new Error(result.error || '観察内容分類の保存に失敗しました');
       }
 
       setAiEditSuccess(true);
@@ -1036,29 +1041,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ),
       );
       setIsEditing(false);
-      setAiProcessing(true);
-      const aiResult = await runAiAnalysis(text);
-      const aiAction = toIdText(aiResult.ai_action);
-      const aiOpinion = toIdText(aiResult.ai_opinion);
-      const aiSaveResponse = await fetch(`/api/records/personal/${observation.id}/ai`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ai_action: aiAction,
-          ai_opinion: aiOpinion,
-          ...aiResult.flags,
-        }),
-      });
-      const aiSaveResult = await aiSaveResponse.json();
-      if (!aiSaveResponse.ok || !aiSaveResult.success) {
-        throw new Error(aiSaveResult.error || 'AI解析結果の保存に失敗しました');
-      }
-      applyAiResult({ ...aiResult, ai_action: aiAction, ai_opinion: aiOpinion });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '更新に失敗しました';
       setError(errorMessage);
     } finally {
-      setAiProcessing(false);
       setSavingEdit(false);
     }
   };
@@ -1199,7 +1185,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleSaveEdit = async () => {
     if (savingEdit) return;
-    if (isNew) {
+    if (isNew && !observation) {
       await handleCreateObservation({ forceAi: true });
       return;
     }
@@ -1502,6 +1488,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
+            {!(mode === 'edit' && hasAiOutput) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1590,66 +1577,102 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="observation_body">本文</Label>
-                      <span className="text-sm text-gray-500">
-                        {editText.length}/{OBSERVATION_BODY_MAX}文字
-                      </span>
-                    </div>
-                    <div className="flex justify-end mb-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isRecording ? 'destructive' : 'outline'}
-                        onClick={isRecording ? stopRecording : startRecording}
-                        disabled={isTranscribing}
-                      >
-                        <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
-                        {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
-                      </Button>
-                    </div>
-                    <MentionTextarea
-                      id="observation_body"
-                      autoFocus
-                      className="min-h-[200px]"
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      maxLength={OBSERVATION_BODY_MAX}
-                    />
-                    <div className="flex justify-end gap-2">
-                      {!isNew && (
-                        <Button variant="outline" onClick={() => setIsEditing(false)}>
-                          <X className="h-4 w-4 mr-2" /> キャンセル
-                        </Button>
-                      )}
-                      <Button
-                        data-testid="observation-save"
-                        className="bg-blue-600 hover:bg-blue-700"
-                        onClick={handleSaveEdit}
-                        disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
-                      >
-                        {savingEdit ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4 mr-2" /> 保存
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    {/* AI解析済みの編集時は本文を非表示にし、事実・所感のみ編集可能にする */}
+                    {!isNew && Boolean(observation?.ai_action?.trim() || observation?.ai_opinion?.trim()) ? (
+                      <>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-sm text-gray-500 mb-1">本文（読み取り専用）</p>
+                          <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
+                            {toDisplayText(observation?.body_text || '')}
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setIsEditing(false)}>
+                            <X className="h-4 w-4 mr-2" /> キャンセル
+                          </Button>
+                          <Button
+                            data-testid="observation-save"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit}
+                          >
+                            {savingEdit ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" /> 保存
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="observation_body">本文</Label>
+                          <span className="text-sm text-gray-500">
+                            {editText.length}/{OBSERVATION_BODY_MAX}文字
+                          </span>
+                        </div>
+                        <div className="flex justify-end mb-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isRecording ? 'destructive' : 'outline'}
+                            onClick={isRecording ? stopRecording : startRecording}
+                            disabled={isTranscribing}
+                          >
+                            <Mic className={`mr-2 h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                            {isRecording ? '停止' : isTranscribing ? '文字起こし中...' : '音声入力'}
+                          </Button>
+                        </div>
+                        <MentionTextarea
+                          id="observation_body"
+                          autoFocus
+                          className="min-h-[200px]"
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          maxLength={OBSERVATION_BODY_MAX}
+                        />
+                        <div className="flex justify-end gap-2">
+                          {!isNew && (
+                            <Button variant="outline" onClick={() => setIsEditing(false)}>
+                              <X className="h-4 w-4 mr-2" /> キャンセル
+                            </Button>
+                          )}
+                          <Button
+                            data-testid="observation-save"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
+                          >
+                            {savingEdit ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" /> 保存
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
+            )}
 
             {hasAiOutput && (
               <Card>
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="flex items-center gap-2">
-                      <Brain className="h-5 w-5 text-purple-600" /> AI解析結果
+                      <Brain className="h-5 w-5 text-purple-600" /> 観察内容分類
                     </CardTitle>
                     {aiProcessing && (
                       <Badge className="bg-blue-100 text-blue-700">
@@ -1659,6 +1682,86 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {mode === 'edit' && hasAiOutput && (
+                    <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-green-600" />
+                        <span className="text-gray-600">観察日</span>
+                        {isDateEditing ? (
+                          <div className="flex items-center gap-1">
+                            <div className="min-w-[180px]">
+                              <DatePicker
+                                date={observationDate ?? undefined}
+                                onSelect={(date) => date && setObservationDate(date)}
+                                placeholder="記録日を選択"
+                                disabled={savingEdit}
+                              />
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(false)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(true)}>
+                            <Pencil className="h-3 w-3 mr-1" /> 変更
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-orange-600" />
+                        <span className="text-gray-600">記録者</span>
+                        {isRecorderEditing ? (
+                          <div className="flex items-center gap-1">
+                            {staffLoadError ? (
+                              <span className="text-sm text-destructive">記録者情報の取得に失敗しました</span>
+                            ) : staffList.length > 0 ? (
+                              <Select value={selectedRecorder} onValueChange={setSelectedRecorder}>
+                                <SelectTrigger className="h-8 w-[160px]">
+                                  <SelectValue placeholder="記録者を選択" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {staffList.map((staff) => (
+                                    <SelectItem key={staff.user_id} value={staff.user_id}>
+                                      {staff.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-sm text-gray-500">読み込み中...</span>
+                            )}
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(false)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(true)}>
+                            <Pencil className="h-3 w-3 mr-1" /> 変更
+                          </Button>
+                        )}
+                      </div>
+                      <div className="ml-auto flex items-center gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditing(false); setIsDateEditing(false); setIsRecorderEditing(false); }}>
+                          <X className="h-3 w-3 mr-1" /> 編集終了
+                        </Button>
+                        {(isDateEditing || isRecorderEditing) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit}
+                          >
+                            {savingEdit ? (
+                              <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> 保存中...</>
+                            ) : (
+                              <><Save className="h-3 w-3 mr-1" /> 保存</>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <form className="space-y-4" onSubmit={handleAiEditSubmit}>
                     <div>
                       <div className="flex items-center justify-between">
@@ -1680,9 +1783,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     </div>
                     <div>
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
-                          解釈・所感
-                        </Label>
+                        <div>
+                          <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
+                            解釈・所感
+                          </Label>
+                          <span className="ml-2 text-xs text-gray-400">今日この子の行動を見て感じたこと・発見したことは？</span>
+                        </div>
                         <span className="text-sm text-gray-500">
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
                         </span>
@@ -1737,7 +1843,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <div className="rounded-md border border-green-200 bg-green-50 p-4 text-green-800">
                         <div className="flex items-center gap-2">
                           <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>AI解析結果を保存しました</span>
+                          <span>観察内容分類を保存しました</span>
                         </div>
                       </div>
                     )}
@@ -1764,55 +1870,94 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 <CardHeader>
                   <CardTitle className="text-lg">過去の記録（直近10件）</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent>
                   {recentLoading ? (
                     <p className="text-sm text-gray-500">読み込み中...</p>
                   ) : recentError ? (
                     <p className="text-sm text-red-600">{recentError}</p>
-                  ) : recentObservations.filter((item) => item.id !== observation?.id).length === 0 ? (
-                    <p className="text-sm text-gray-500">過去の記録はありません。</p>
-                  ) : (
-                    recentObservations.filter((item) => item.id !== observation?.id).map((item) => {
-                      const tagBadges = getTagBadges(item.tag_ids);
-                      return (
-                        <div key={item.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                          <div className="flex items-start justify-between gap-2 text-xs text-gray-500">
-                            <span>{item.observation_date ? formatDate(item.observation_date) : '日付不明'}</span>
-                            <div className="flex gap-1">
-                              <Button variant="outline" size="sm" onClick={() => handleEditRecent(item.id)}>
-                                編集
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteClick(item.id)}
-                                disabled={deletingObservationId === item.id}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                              >
-                                {deletingObservationId === item.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">
-                            {displayRecentContent(item.content)}
-                          </p>
-                          {tagBadges.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              {tagBadges.map((tag) => (
-                                <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200">
-                                  {tag.name}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
+                  ) : (() => {
+                    const visibleObservations = recentObservations.filter((o) => o.id !== observation?.id);
+                    return visibleObservations.length === 0 ? (
+                      <p className="text-sm text-gray-500">過去の記録はありません。</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">内容</th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">タグ</th>
+                              <th className="px-3 py-2 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                          {visibleObservations.map((item) => {
+                            const tagBadges = getTagBadges(item.tag_ids);
+                            const contentText = displayRecentContent(item.content);
+                            const truncated = contentText.length > 60
+                              ? contentText.slice(0, 60) + '...'
+                              : contentText;
+                            return (
+                              <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                                <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+                                  {item.observation_date ? formatDate(item.observation_date) : '日付不明'}
+                                </td>
+                                <td className="px-3 py-2 max-w-xs">
+                                  {item.is_ai_analyzed && (item.objective || item.subjective) ? (
+                                    <div className="space-y-0.5">
+                                      {item.objective && (
+                                        <div><span className="text-xs font-semibold text-gray-500">事実：</span><span className="text-sm text-gray-800 line-clamp-5">{displayRecentContent(item.objective)}</span></div>
+                                      )}
+                                      {item.subjective && (
+                                        <div><span className="text-xs font-semibold text-gray-500">所感：</span><span className="text-sm text-gray-800 line-clamp-5">{displayRecentContent(item.subjective)}</span></div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-800 truncate" title={contentText}>
+                                      {truncated}
+                                    </p>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {tagBadges.length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {tagBadges.map((tag) => (
+                                        <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
+                                          {tag.name}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex justify-end gap-1">
+                                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleEditRecent(item.id)}>
+                                      編集
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                      aria-label={`${item.observation_date ? formatDate(item.observation_date) : '日付不明'}の記録を削除`}
+                                      onClick={() => handleDeleteClick(item.id)}
+                                      disabled={deletingObservationId === item.id}
+                                    >
+                                      {deletingObservationId === item.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}
@@ -2005,7 +2150,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             <DialogHeader>
               <DialogTitle>AI再解析の確認</DialogTitle>
               <DialogDescription>
-                現在の「抽出された事実」「解釈・所感」「非認知能力フラグ」の入力内容を上書きしますか？
+                現在の「抽出された事実」「所感」「非認知能力フラグ」の入力内容を上書きしますか？
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

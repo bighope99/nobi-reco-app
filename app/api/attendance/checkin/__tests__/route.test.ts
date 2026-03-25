@@ -320,7 +320,12 @@ describe('/api/attendance/checkin POST', () => {
 
     it('正常にチェックインできる', async () => {
       const now = new Date();
-      const today = now.toISOString().split('T')[0];
+      const today = now.toLocaleDateString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).replace(/\//g, '-');
 
       mockSupabase.maybeSingle
         .mockResolvedValueOnce({

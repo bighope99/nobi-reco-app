@@ -9,7 +9,7 @@ export function HistoryTabs() {
   const searchParams = useSearchParams()
 
   const tabs = [
-    { name: "活動記録", href: "/records/activity/history" },
+    { name: "保育日誌", href: "/records/activity/history" },
     { name: "個別記録", href: "/records/personal/history" },
   ]
 

@@ -176,13 +176,14 @@ describe('/api/handover GET', () => {
           id: 'activity-1',
           activity_date: '2026-02-28',
           handover: '明日は体育館を使います',
+          handover_completed: false,
           class_id: 'class-1',
           m_classes: { id: 'class-1', name: 'ひまわり組' },
           m_users: { id: 'user-1', name: '山田太郎' },
         },
       ];
 
-      const mockQuery: Record<string, jest.Mock> = {
+      const mockHandoverQuery: Record<string, jest.Mock> = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         is: jest.fn().mockReturnThis(),
@@ -196,8 +197,22 @@ describe('/api/handover GET', () => {
         ),
       };
 
+      // next record チェック用クエリモック
+      const mockNextRecordQuery: Record<string, jest.Mock> = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        gt: jest.fn().mockReturnThis(),
+        lt: jest.fn().mockResolvedValue({ count: 0, data: null, error: null }),
+      };
+
+      let fromCallCount = 0;
       const mockSupabase = {
-        from: jest.fn().mockReturnValue(mockQuery),
+        from: jest.fn().mockImplementation(() => {
+          fromCallCount++;
+          if (fromCallCount === 1) return mockHandoverQuery;
+          return mockNextRecordQuery;
+        }),
       };
       mockCreateClient.mockResolvedValue(mockSupabase);
 
@@ -208,10 +223,12 @@ describe('/api/handover GET', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.data.handover_date).toBe('2026-02-28');
+      expect(data.data.has_next_record).toBe(false);
       expect(data.data.items).toHaveLength(1);
       expect(data.data.items[0]).toEqual({
         activity_id: 'activity-1',
         handover: '明日は体育館を使います',
+        handover_completed: false,
         class_name: 'ひまわり組',
         created_by_name: '山田太郎',
       });
