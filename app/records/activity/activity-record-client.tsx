@@ -277,6 +277,7 @@ export default function ActivityRecordClient() {
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
   // DnD用のstable id（dailyScheduleと同じ長さを保つ）
   const scheduleIdsRef = useRef<string[]>(DEFAULT_SCHEDULE.map(() => crypto.randomUUID()))
+  const savedFingerprintRef = useRef<string>("")
   const getScheduleIds = () => {
     // scheduleIdsRef が dailySchedule と長さが違う場合は補完
     while (scheduleIdsRef.current.length < dailySchedule.length) {
@@ -527,13 +528,24 @@ export default function ActivityRecordClient() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [searchParams])
 
+  // フォームの現在状態を文字列化して比較用フィンガープリントを生成
+  const buildFingerprint = () => JSON.stringify({
+    activityContent: activityContent.trim(),
+    eventName: eventName.trim(),
+    specialNotes: specialNotes.trim(),
+    handover: handover.trim(),
+    snack: snack.trim(),
+    dailySchedule: dailySchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+    roleAssignments: roleAssignments.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+    meal: {
+      menu: meal?.menu?.trim() ?? "",
+      items_to_bring: meal?.items_to_bring?.trim() ?? "",
+      notes: meal?.notes?.trim() ?? "",
+    },
+  })
+
   // 入力途中の離脱警告（ブラウザリロード・タブ閉じ・サイドメニュー遷移）
-  const isFormDirty =
-    activityContent.trim() !== "" ||
-    eventName.trim() !== "" ||
-    specialNotes.trim() !== "" ||
-    handover.trim() !== "" ||
-    snack.trim() !== ""
+  const isFormDirty = buildFingerprint() !== savedFingerprintRef.current
   useUnsavedChanges(isFormDirty, "変更内容が失われます。ページを移動しますか？")
 
   const toHiragana = (text: string) =>
@@ -956,6 +968,7 @@ export default function ActivityRecordClient() {
       setEditingActivityId(savedActivityId)
       setIsEditMode(true)
       setOriginalContent(contentForDB)
+      savedFingerprintRef.current = buildFingerprint()
       setSaveMessage('保存しました')
       fetchActivities()
 
@@ -1061,6 +1074,7 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '更新に失敗しました')
       }
 
+      savedFingerprintRef.current = buildFingerprint()
       setSaveMessage('更新しました')
       fetchActivities()
 
@@ -1135,13 +1149,34 @@ export default function ActivityRecordClient() {
       : DEFAULT_SCHEDULE
     scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
     setDailySchedule(restoredSchedule)
-    setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+    const restoredRoleAssignments = activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
-      : DEFAULT_ROLE_ASSIGNMENTS)
-    setSnack(activity.snack || "")
-    setMeal(activity.meal || null)
-    setSpecialNotes(activity.special_notes || "")
-    setHandover(activity.handover || "")
+      : DEFAULT_ROLE_ASSIGNMENTS
+    setRoleAssignments(restoredRoleAssignments)
+    const restoredSnack = activity.snack || ""
+    const restoredMeal = activity.meal || null
+    const restoredSpecialNotes = activity.special_notes || ""
+    const restoredHandover = activity.handover || ""
+    setSnack(restoredSnack)
+    setMeal(restoredMeal)
+    setSpecialNotes(restoredSpecialNotes)
+    setHandover(restoredHandover)
+
+    // 編集開始時点のフィンガープリントを記録（これと差異があれば dirty と判定）
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: displayContent.trim(),
+      eventName: (activity.event_name || "").trim(),
+      specialNotes: restoredSpecialNotes.trim(),
+      handover: restoredHandover.trim(),
+      snack: restoredSnack.trim(),
+      dailySchedule: restoredSchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: restoredRoleAssignments.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: {
+        menu: restoredMeal?.menu?.trim() ?? "",
+        items_to_bring: restoredMeal?.items_to_bring?.trim() ?? "",
+        notes: restoredMeal?.notes?.trim() ?? "",
+      },
+    })
 
     // メンション復元: クラスの児童リストから名前情報を取得
     if (MENTION_ENABLED && activity.mentioned_children && activity.mentioned_children.length > 0) {
@@ -1331,6 +1366,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    savedFingerprintRef.current = ""
   }
 
   const handleRestart = () => {
@@ -1350,6 +1386,7 @@ export default function ActivityRecordClient() {
     setHandover("")
     // テンプレート選択をリセット
     setSelectedTemplateId("")
+    savedFingerprintRef.current = ""
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
