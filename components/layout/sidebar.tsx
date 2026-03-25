@@ -17,6 +17,7 @@ import {
   Home,
   Tag,
   X,
+  Hand,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/LogoutButton"
@@ -49,6 +50,7 @@ const staffNavItems: NavItem[] = [
     children: [
       { label: "出席予定登録", href: "/attendance/schedule" },
       { label: "QR出欠", href: "/attendance/qr" },
+      { label: "タッチ出欠", href: "/attendance/self" },
       { label: "出席児童一覧", href: "/attendance/list" },
     ],
   },
