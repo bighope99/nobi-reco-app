@@ -7,9 +7,10 @@
  *   npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts [--status <value>] [--limit <number>] [--assignee-name <name>]
  *
  * Options:
- *   --status         ステータスフィルター (default: "承認OK")
- *   --limit          最大取得件数 (default: 30)
- *   --assignee-name  担当者名フィルター (default: null)
+ *   --status             ステータスフィルター (default: "承認OK")
+ *   --limit              最大取得件数 (default: 30)
+ *   --assignee-name      担当者名フィルター (default: null)
+ *   --exclude-priority   除外する優先度（カンマ区切り、例: "低い" or "低い,通常"）(default: "")
  */
 
 import {
@@ -168,6 +169,8 @@ interface Args {
   limit: number;
   /** 担当者名フィルター（multi_select の選択肢名、例: "中村"） */
   assigneeName: string | null;
+  /** 除外する優先度リスト（例: ["低い", "通常"]） */
+  excludePriorities: string[];
 }
 
 function parseArgs(): Args {
@@ -175,6 +178,7 @@ function parseArgs(): Args {
   let status = "承認OK";
   let limit = 30;
   let assigneeName: string | null = null;
+  let excludePriorities: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--status" && argv[i + 1]) {
@@ -187,10 +191,13 @@ function parseArgs(): Args {
     } else if (argv[i] === "--assignee-name" && argv[i + 1]) {
       assigneeName = argv[i + 1];
       i++;
+    } else if (argv[i] === "--exclude-priority" && argv[i + 1]) {
+      excludePriorities = argv[i + 1].split(",").map((p) => p.trim()).filter((p) => p.length > 0);
+      i++;
     }
   }
 
-  return { status, limit, assigneeName };
+  return { status, limit, assigneeName, excludePriorities };
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +208,8 @@ async function queryDatabase(
   token: string,
   statusFilter: string,
   limit: number,
-  assigneeName: string | null
+  assigneeName: string | null,
+  excludePriorities: string[]
 ): Promise<NotionPage[]> {
   const pages: NotionPage[] = [];
   let cursor: string | null = null;
@@ -212,20 +220,22 @@ async function queryDatabase(
     status: { equals: statusFilter },
   };
 
-  const filter =
-    assigneeName !== null
-      ? {
-          and: [
-            statusCondition,
-            {
-              or: [
-                { property: "担当者", multi_select: { contains: assigneeName } },
-                { property: "担当者", multi_select: { is_empty: true } },
-              ],
-            },
-          ],
-        }
-      : statusCondition;
+  const conditions: unknown[] = [statusCondition];
+
+  if (assigneeName !== null) {
+    conditions.push({
+      or: [
+        { property: "担当者", multi_select: { contains: assigneeName } },
+        { property: "担当者", multi_select: { is_empty: true } },
+      ],
+    });
+  }
+
+  for (const priority of excludePriorities) {
+    conditions.push({ property: "優先度", status: { does_not_equal: priority } });
+  }
+
+  const filter = conditions.length === 1 ? conditions[0] : { and: conditions };
 
   while (pages.length < limit) {
     const body: Record<string, unknown> = {
@@ -497,8 +507,11 @@ async function main(): Promise<void> {
   if (args.assigneeName !== null) {
     process.stderr.write(`assignee filter: ${args.assigneeName}\n`);
   }
+  if (args.excludePriorities.length > 0) {
+    process.stderr.write(`exclude-priority filter: ${args.excludePriorities.join(", ")}\n`);
+  }
 
-  const pages = await queryDatabase(token, args.status, args.limit, args.assigneeName);
+  const pages = await queryDatabase(token, args.status, args.limit, args.assigneeName, args.excludePriorities);
 
   process.stderr.write(`Fetching content for ${pages.length} tickets...\n`);
 
