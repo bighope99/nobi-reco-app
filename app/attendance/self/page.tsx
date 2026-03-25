@@ -5,6 +5,7 @@ import { Hand, Loader2 } from "lucide-react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { toKatakana } from "@/lib/utils/kana"
 
 type ChildStatus = 'not_checked_in' | 'checked_in' | 'checked_out'
 
@@ -155,8 +156,16 @@ export default function SelfCheckInPage() {
   // 表示する児童（母音フィルタ含む）
   const rowChildren = groups[selectedRow] ?? []
   const visibleChildren = selectedVowel
-    ? rowChildren.filter((c) => c.kanaName.startsWith(selectedVowel))
+    ? rowChildren.filter((c) => c.kanaName.startsWith(toKatakana(selectedVowel)))
     : rowChildren
+
+  // 修正2: 母音ごとの人数（disabled判定に使用）
+  const vowelCounts = Object.fromEntries(
+    (ROW_VOWELS[selectedRow] ?? []).map((vowel) => [
+      vowel,
+      rowChildren.filter((c) => c.kanaName.startsWith(toKatakana(vowel))).length,
+    ])
+  )
 
   const childSelectTitle = selectedVowel
     ? `「${selectedRow}行・${selectedVowel}」のおともだち`
@@ -209,16 +218,25 @@ export default function SelfCheckInPage() {
                 <span className="text-xl font-bold">「{selectedRow}行」— どれ？</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {(ROW_VOWELS[selectedRow] ?? []).map((vowel) => (
-                  <Button
-                    key={vowel}
-                    variant="outline"
-                    onClick={() => handleVowelSelect(vowel)}
-                    className="flex min-h-24 h-auto flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md hover:bg-blue-50 active:scale-95 transition-transform"
-                  >
-                    <span className="text-6xl font-bold">{vowel}</span>
-                  </Button>
-                ))}
+                {(ROW_VOWELS[selectedRow] ?? []).map((vowel) => {
+                  const count = vowelCounts[vowel] ?? 0
+                  return (
+                    <Button
+                      key={vowel}
+                      variant="ghost"
+                      onClick={() => count > 0 && handleVowelSelect(vowel)}
+                      disabled={count === 0}
+                      className={[
+                        'flex min-h-24 h-auto flex-col items-center justify-center gap-1 rounded-2xl bg-white shadow-md',
+                        'active:scale-95 transition-transform',
+                        count > 0 ? 'hover:bg-blue-50' : 'opacity-40 cursor-not-allowed',
+                      ].join(' ')}
+                    >
+                      <span className="text-6xl font-bold">{vowel}</span>
+                      <span className="text-sm text-gray-500">{count}にん</span>
+                    </Button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -255,7 +273,7 @@ export default function SelfCheckInPage() {
               <div className="flex flex-col items-center gap-2 px-6 text-center">
                 <Hand className="h-24 w-24" />
                 <p className="text-5xl font-bold mt-4">
-                  {checkinAction === 'check_in' ? 'しゅっせき かんりょう！' : 'たいしょ かんりょう！'}
+                  {checkinAction === 'check_in' ? 'しゅっせき かんりょう！' : 'おかえり！'}
                 </p>
                 <p className="text-4xl mt-2">{selectedChild?.kanaName}</p>
                 <p className="text-3xl mt-1">{checkinTime}</p>
@@ -289,15 +307,31 @@ function ChildButton({
 }) {
   if (child.status === 'checked_in') {
     return (
-      <div className="flex min-h-24 w-full flex-col justify-center rounded-2xl border-2 border-green-400 bg-green-50 px-4 py-3 shadow-md">
-        <div className="flex items-center gap-2">
-          <Badge className="h-3 w-3 rounded-full bg-green-500 p-0 shrink-0" />
-          <span className="text-sm font-bold text-green-600">きたよ！ {formatTime(child.checkedInAt)}</span>
-        </div>
-        <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
-        <p className="text-base text-gray-500">{child.kanjiName}</p>
-        {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
-      </div>
+      <button
+        onClick={() => !isLoading && onSelect(child)}
+        disabled={isLoading}
+        className={[
+          'flex min-h-24 w-full flex-col justify-center rounded-2xl border-2 border-green-400 bg-green-50 px-4 py-3 shadow-md text-left',
+          'active:scale-95 transition-transform',
+          isLoading ? 'opacity-60 cursor-wait' : 'hover:bg-green-100',
+        ].join(' ')}
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-green-400" />
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <Badge className="h-3 w-3 rounded-full bg-green-500 p-0 shrink-0" />
+              <span className="text-sm font-bold text-green-600">きたよ！ {formatTime(child.checkedInAt)}　タップでかえる</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
+            <p className="text-base text-gray-500">{child.kanjiName}</p>
+            {child.gradeLabel && <p className="text-sm text-gray-400">{child.gradeLabel}</p>}
+          </>
+        )}
+      </button>
     )
   }
 
