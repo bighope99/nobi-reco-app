@@ -679,25 +679,27 @@ export default function StatusPage() {
                             ) : historyRecords.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">記録がありません</div>
                             ) : (
-                                historyRecords.map((record) => (
-                                    <div
-                                        key={record.id}
-                                        className="border rounded-lg p-4 hover:bg-slate-50 cursor-pointer transition-colors"
-                                        onClick={() => handleEditRecord(record.id)}
-                                    >
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-700">
-                                                {record.observation_date}
-                                            </span>
-                                            <span className="text-xs text-slate-400" suppressHydrationWarning>
-                                                作成: {new Date(record.created_at).toLocaleString('ja-JP')}
-                                            </span>
+                                <div className="divide-y divide-slate-100 bg-white rounded-lg border">
+                                    {historyRecords.map((record) => (
+                                        <div
+                                            key={record.id}
+                                            className="px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                                            onClick={() => handleEditRecord(record.id)}
+                                        >
+                                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                                <span className="text-xs font-medium text-slate-700">
+                                                    {record.observation_date}
+                                                </span>
+                                                <span className="text-xs text-slate-400" suppressHydrationWarning>
+                                                    作成: {new Date(record.created_at).toLocaleString('ja-JP')}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-slate-600 line-clamp-3">
+                                                {toDisplayText(record.content)}
+                                            </p>
                                         </div>
-                                        <p className="text-sm text-slate-600 line-clamp-2">
-                                            {toDisplayText(record.content)}
-                                        </p>
-                                    </div>
-                                ))
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </DialogContent>
