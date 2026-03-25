@@ -46,6 +46,7 @@ import {
   loadAiDraftsFromCookie,
   markDraftAsSaved,
 } from '@/lib/drafts/aiDraftCookie';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { replaceChildIdsWithNames, replaceChildNamesWithIds } from '@/lib/ai/childIdFormatter';
 
 // TODO: UIコンポーネントライブラリからインポートに置き換え（今後開発）
@@ -319,19 +320,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const lockedChildId = paramChildId || initialChildId || '';
   const isChildLocked = !isNew && Boolean(lockedChildId);
 
-  // 入力途中に離脱した場合のブラウザ警告（新規作成時のみ）
-  useEffect(() => {
-    if (!isNew) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (editText.trim()) {
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [isNew, editText]);
+  // 入力途中に離脱した場合の警告（beforeunload + サイドメニュークリック）
+  const isFormDirty = (isNew && !showContinueButton && editText.trim().length > 0) ||
+    (!isNew && isEditing && editText.trim().length > 0);
+  useUnsavedChanges(isFormDirty, '変更内容が失われます。ページを移動しますか？');
 
   // 日付の初期化（クライアント側でのみ実行）
   useEffect(() => {
