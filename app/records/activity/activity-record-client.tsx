@@ -2100,11 +2100,11 @@ export default function ActivityRecordClient() {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-1">
-                            <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
+                          <div className="flex items-center gap-3 mb-1 flex-wrap">
+                            <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
                               {activity.activity_date}
                             </span>
-                            <span className="text-sm font-medium text-muted-foreground">
+                            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
                               {activity.class_name}
                             </span>
                           </div>
