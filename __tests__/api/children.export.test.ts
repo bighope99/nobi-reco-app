@@ -155,6 +155,136 @@ describe('GET /api/children/export', () => {
     expect(json.success).toBe(false);
   });
 
+  it('should output kana fields (セイ・メイ) as plaintext without decryption', async () => {
+    // family_name_kana / given_name_kana は平文で保存されるため、
+    // decryptOrEmpty を通さずそのまま出力される必要がある
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'facility_admin',
+      current_facility_id: 'facility-1',
+      company_id: 'company-1',
+    });
+
+    const mockOrder = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'child-uuid-kana',
+          family_name: 'encrypted-family',
+          given_name: 'encrypted-given',
+          // フリガナは平文で保存されている（暗号化されていない）
+          family_name_kana: 'ヤマダ',
+          given_name_kana: 'ハナコ',
+          nickname: null,
+          gender: 'female',
+          birth_date: '2019-04-12',
+          enrollment_status: 'enrolled',
+          enrollment_type: 'regular',
+          enrolled_at: '2024-04-01T00:00:00.000Z',
+          withdrawn_at: null,
+          allergies: null,
+          child_characteristics: null,
+          parent_characteristics: null,
+          photo_permission_public: true,
+          photo_permission_share: true,
+          _child_guardian: [],
+        },
+      ],
+      error: null,
+    });
+
+    const mockSupabase = {
+      from: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        order: mockOrder,
+      })),
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+    const response = await GET(makeRequest());
+    expect(response.status).toBe(200);
+
+    const text = await response.text();
+    const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
+
+    const headers = lines[0].split(',');
+    const seiIndex = headers.indexOf('セイ');
+    const meiIndex = headers.indexOf('メイ');
+    expect(seiIndex).toBeGreaterThan(-1);
+    expect(meiIndex).toBeGreaterThan(-1);
+
+    // 平文のフリガナがそのまま出力されること（decryptOrEmpty を通すと空文字になるバグの修正確認）
+    const dataFields = lines[1].split(',');
+    expect(dataFields[seiIndex]).toBe('ヤマダ');
+    expect(dataFields[meiIndex]).toBe('ハナコ');
+  });
+
+  it('should output kana fields (セイ・メイ) in correct CSV columns', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'facility_admin',
+      current_facility_id: 'facility-1',
+      company_id: 'company-1',
+    });
+
+    const mockOrder = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'child-uuid-1',
+          family_name: '山田',
+          given_name: '花子',
+          family_name_kana: 'ヤマダ',
+          given_name_kana: 'ハナコ',
+          nickname: null,
+          gender: 'female',
+          birth_date: '2019-04-12',
+          enrollment_status: 'enrolled',
+          enrollment_type: 'regular',
+          enrolled_at: '2024-04-01T00:00:00.000Z',
+          withdrawn_at: null,
+          allergies: null,
+          child_characteristics: null,
+          parent_characteristics: null,
+          photo_permission_public: true,
+          photo_permission_share: true,
+          _child_guardian: [],
+        },
+      ],
+      error: null,
+    });
+
+    const mockSupabase = {
+      from: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        order: mockOrder,
+      })),
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+    const response = await GET(makeRequest());
+    expect(response.status).toBe(200);
+
+    const text = await response.text();
+    const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
+
+    // ヘッダー行の確認
+    const headers = lines[0].split(',');
+    const seiIndex = headers.indexOf('セイ');
+    const meiIndex = headers.indexOf('メイ');
+    expect(seiIndex).toBeGreaterThan(-1);
+    expect(meiIndex).toBeGreaterThan(-1);
+
+    // データ行のフリガナが正しく出力されていることを確認
+    const dataFields = lines[1].split(',');
+    expect(dataFields[seiIndex]).toBe('ヤマダ');
+    expect(dataFields[meiIndex]).toBe('ハナコ');
+  });
+
   it('should return empty CSV when no children exist', async () => {
     mockedGetMetadata.mockResolvedValue({
       user_id: 'user-1',

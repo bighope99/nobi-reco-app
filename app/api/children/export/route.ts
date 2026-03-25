@@ -179,8 +179,9 @@ export async function GET(request: NextRequest) {
 
       const decryptedFamilyName = decryptOrEmpty(child.family_name);
       const decryptedGivenName = decryptOrEmpty(child.given_name);
-      const decryptedFamilyNameKana = decryptOrEmpty(child.family_name_kana);
-      const decryptedGivenNameKana = decryptOrEmpty(child.given_name_kana);
+      // family_name_kana / given_name_kana は平文で保存されているため復号不要
+      const decryptedFamilyNameKana = child.family_name_kana || '';
+      const decryptedGivenNameKana = child.given_name_kana || '';
 
       // 保護者情報の復号化
       let parentName = '';
