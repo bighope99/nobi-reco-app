@@ -92,40 +92,37 @@ export function TimePicker({ value, onChange, className }: TimePickerProps) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <div className={cn('inline-flex items-center gap-1', className)}>
-        {/* 時/分フィールド */}
-        <div className="flex h-9 items-center rounded-md border border-input bg-transparent px-2 text-sm shadow-xs focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={hh}
-            onChange={(e) => setHh(e.target.value.replace(/\D/g, '').slice(0, 2))}
-            onFocus={(e) => e.target.select()}
-            onBlur={handleHourBlur}
-            maxLength={2}
-            aria-label="時"
-            className="w-6 bg-transparent text-center outline-none"
-          />
-          <span className="select-none text-muted-foreground">:</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={mm}
-            onChange={(e) => setMm(e.target.value.replace(/\D/g, '').slice(0, 2))}
-            onFocus={(e) => e.target.select()}
-            onBlur={handleMinuteBlur}
-            maxLength={2}
-            aria-label="分"
-            className="w-6 bg-transparent text-center outline-none"
-          />
-        </div>
-
+      {/* 時/分フィールド + ▼ボタンを一体化 */}
+      <div className={cn('flex h-9 items-center rounded-md border border-input bg-transparent px-2 text-sm shadow-xs focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]', className)}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={hh}
+          onChange={(e) => setHh(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          onFocus={(e) => e.target.select()}
+          onBlur={handleHourBlur}
+          maxLength={2}
+          aria-label="時"
+          className="w-6 bg-transparent text-center outline-none"
+        />
+        <span className="select-none text-muted-foreground">:</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={mm}
+          onChange={(e) => setMm(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          onFocus={(e) => e.target.select()}
+          onBlur={handleMinuteBlur}
+          maxLength={2}
+          aria-label="分"
+          className="w-6 bg-transparent text-center outline-none"
+        />
         {/* ▼ボタン（PopoverTrigger） */}
         <PopoverTrigger asChild>
           <button
             type="button"
             tabIndex={-1}
-            className="flex h-9 w-7 items-center justify-center rounded-md border border-input bg-transparent text-muted-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+            className="ml-1 flex items-center text-muted-foreground transition-colors hover:text-foreground"
             aria-label="時刻候補を表示"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
