@@ -6,6 +6,31 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { toKatakana } from "@/lib/utils/kana"
 
+/** 濁音・半濁音を清音に変換（カタカナ1文字） */
+function stripDakuten(ch: string): string {
+  // 濁音 (ガ→カ, ギ→キ, ... ヅ→ツ, ... ボ→ホ)
+  const code = ch.charCodeAt(0)
+  // カ(0x30AB)〜ド(0x30C9): 濁音は奇数コード、清音は偶数
+  if (code >= 0x30AC && code <= 0x30C2 && code % 2 === 0) return String.fromCharCode(code - 1) // ガ〜ヂ
+  if (code >= 0x30C5 && code <= 0x30C9 && code % 2 === 1) return String.fromCharCode(code - 1) // ヅ〜ド
+  // バ行: バ(0x30D0),ビ,ブ,ベ,ボ — 清音はハ(0x30CF),ヒ,フ,ヘ,ホ (offset -1)
+  // パ行: パ(0x30D1),ピ,プ,ペ,ポ — 清音はハ,ヒ,フ,ヘ,ホ (offset -2)
+  if (code >= 0x30D0 && code <= 0x30DD) {
+    const offset = code - 0x30CF // 0x30CF = ハ
+    const base = offset % 3 // バ=1,パ=2,ビ=4→1,ピ=5→2...
+    if (offset % 3 === 1) return String.fromCharCode(code - 1) // 濁音
+    if (offset % 3 === 2) return String.fromCharCode(code - 2) // 半濁音
+  }
+  return ch
+}
+
+/** 名前の先頭カタカナを清音化して比較 */
+function nameMatchesKana(kanaName: string, targetKana: string): boolean {
+  const first = toKatakana(kanaName).charAt(0)
+  const targetKatakana = toKatakana(targetKana).charAt(0)
+  return stripDakuten(first) === targetKatakana
+}
+
 type ChildStatus = 'not_checked_in' | 'checked_in' | 'checked_out'
 
 interface ChildRecord {
@@ -121,7 +146,7 @@ export default function SelfCheckInPage() {
     Object.keys(KANA_ROW_MAP).map((kana) => {
       const row = KANA_ROW_MAP[kana]
       const children = groups[row] ?? []
-      return [kana, children.filter(c => toKatakana(c.kanaName).startsWith(toKatakana(kana))).length]
+      return [kana, children.filter(c => nameMatchesKana(c.kanaName, kana)).length]
     })
   )
 
@@ -218,7 +243,7 @@ export default function SelfCheckInPage() {
   const selectedRow = KANA_ROW_MAP[selectedKana] ?? ''
   const rowChildren = groups[selectedRow] ?? []
   const visibleChildren = selectedKana
-    ? rowChildren.filter((c) => toKatakana(c.kanaName).startsWith(toKatakana(selectedKana)))
+    ? rowChildren.filter((c) => nameMatchesKana(c.kanaName, selectedKana))
     : []
 
   return (
