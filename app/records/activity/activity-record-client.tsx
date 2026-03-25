@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useActivityTemplates } from "@/hooks/useActivityTemplates"
 import { useRole } from "@/hooks/useRole"
@@ -525,28 +526,14 @@ export default function ActivityRecordClient() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [searchParams])
 
-  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ・SPA遷移）
-  useEffect(() => {
-    const isDirty =
-      activityContent.trim() !== "" ||
-      eventName.trim() !== "" ||
-      specialNotes.trim() !== "" ||
-      handover.trim() !== "" ||
-      snack.trim() !== ""
-
-    if (!isDirty) return
-
-    // リロード・タブ閉じ
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      e.returnValue = ""
-    }
-    window.addEventListener("beforeunload", handleBeforeUnload)
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
-    }
-  }, [activityContent, eventName, specialNotes, handover, snack])
+  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ・サイドメニュー遷移）
+  const isFormDirty =
+    activityContent.trim() !== "" ||
+    eventName.trim() !== "" ||
+    specialNotes.trim() !== "" ||
+    handover.trim() !== "" ||
+    snack.trim() !== ""
+  useUnsavedChanges(isFormDirty, "変更内容が失われます。ページを移動しますか？")
 
   const toHiragana = (text: string) =>
     text.replace(/[\u30a1-\u30f6]/g, (match) =>
