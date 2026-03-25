@@ -297,7 +297,6 @@ export default function ActivityRecordClient() {
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
   const [isMealOpen, setIsMealOpen] = useState(false)
-  const ROLE_OPTIONS = ["連絡帳", "おやつ", "見守り", "主担当", "配膳", "清掃", "その他"]
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -527,7 +526,7 @@ export default function ActivityRecordClient() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [searchParams])
 
-  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ）
+  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ・SPA遷移）
   useEffect(() => {
     const isDirty =
       activityContent.trim() !== "" ||
@@ -538,13 +537,32 @@ export default function ActivityRecordClient() {
 
     if (!isDirty) return
 
+    // リロード・タブ閉じ
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       e.returnValue = ""
     }
-
     window.addEventListener("beforeunload", handleBeforeUnload)
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+
+    // SPA遷移（Next.js App Router）
+    const originalPushState = window.history.pushState.bind(window.history)
+    const originalReplaceState = window.history.replaceState.bind(window.history)
+    window.history.pushState = (...args: Parameters<typeof window.history.pushState>) => {
+      if (window.confirm("変更内容が失われます。ページを移動しますか？")) {
+        originalPushState(...args)
+      }
+    }
+    window.history.replaceState = (...args: Parameters<typeof window.history.replaceState>) => {
+      if (window.confirm("変更内容が失われます。ページを移動しますか？")) {
+        originalReplaceState(...args)
+      }
+    }
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      window.history.pushState = originalPushState
+      window.history.replaceState = originalReplaceState
+    }
   }, [activityContent, eventName, specialNotes, handover, snack])
 
   const toHiragana = (text: string) =>
@@ -1835,24 +1853,17 @@ export default function ActivityRecordClient() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Select
-                      value={assignment.role || "__none__"}
-                      onValueChange={(value) => {
+                    <Input
+                      className="flex-1"
+                      value={assignment.role || ""}
+                      onChange={(e) => {
                         const newAssignments = [...roleAssignments]
-                        newAssignments[index] = { ...assignment, role: value === "__none__" ? "" : value }
+                        newAssignments[index] = { ...assignment, role: e.target.value }
                         setRoleAssignments(newAssignments)
                       }}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="役割を選択" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">（未選択）</SelectItem>
-                        {ROLE_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>{option}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="役割を入力"
+                      maxLength={MAX_ROLE_LENGTH}
+                    />
                     <Button
                       type="button"
                       size="icon"
@@ -1882,19 +1893,25 @@ export default function ActivityRecordClient() {
               />
             </div>
 
-            {/* ごはん（長期休み期間のみ使用・デフォルト折りたたみ） */}
-            <div className="space-y-3">
+            {/* ごはん（デフォルト折りたたみ） */}
+            <div className="border border-orange-200 rounded-lg overflow-hidden">
               <button
                 type="button"
-                className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 bg-orange-50 hover:bg-orange-100 transition-colors text-sm font-medium text-orange-800"
                 onClick={() => setIsMealOpen((prev) => !prev)}
                 aria-expanded={isMealOpen}
               >
-                {isMealOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                ごはん（長期休み期間）
+                <span>ごはん</span>
+                <span className="flex items-center gap-1 text-xs text-orange-600">
+                  {isMealOpen ? (
+                    <><ChevronUp className="h-4 w-4" />折りたたむ</>
+                  ) : (
+                    <><ChevronDown className="h-4 w-4" />展開</>
+                  )}
+                </span>
               </button>
               {isMealOpen && (
-              <div className="grid grid-cols-1 gap-3 p-4 border rounded-lg bg-muted/30">
+              <div className="grid grid-cols-1 gap-3 p-4 bg-orange-50/50">
                 <div className="space-y-2">
                   <Label htmlFor="mealMenu" className="text-xs text-muted-foreground">メニュー</Label>
                   <Input
