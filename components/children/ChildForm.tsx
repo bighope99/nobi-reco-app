@@ -378,16 +378,26 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       }
 
       if (result.success && result.data.found && result.data.candidates.length > 0) {
-        // 最初の候補を表示
-        const candidate = result.data.candidates[0];
-        setSiblingResult({
-          id: candidate.child_id,
-          name: candidate.name,
-          kana: candidate.kana,
-          class: `${candidate.class_name}${candidate.age ? ` (${candidate.age}歳)` : ''}`,
-          status: candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済',
-          image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
-        });
+        // 登録済み兄弟のIDセットを作成して候補から除外
+        const registeredSiblingIds = new Set(siblings.map(s => s.child_id));
+        const unregisteredCandidates = result.data.candidates.filter(
+          (c: any) => !registeredSiblingIds.has(c.child_id)
+        );
+
+        if (unregisteredCandidates.length > 0) {
+          // 最初の未登録候補を表示
+          const candidate = unregisteredCandidates[0];
+          setSiblingResult({
+            id: candidate.child_id,
+            name: candidate.name,
+            kana: candidate.kana,
+            class: `${candidate.class_name}${candidate.age ? ` (${candidate.age}歳)` : ''}`,
+            status: candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済',
+            image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
+          });
+        } else {
+          setSiblingResult(null);
+        }
       } else {
         setSiblingResult(null);
       }
