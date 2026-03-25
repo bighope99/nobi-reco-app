@@ -277,7 +277,18 @@ export default function ActivityRecordClient() {
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
   // DnD用のstable id（dailyScheduleと同じ長さを保つ）
   const scheduleIdsRef = useRef<string[]>(DEFAULT_SCHEDULE.map(() => crypto.randomUUID()))
-  const savedFingerprintRef = useRef<string>("")
+  // 空フォーム状態のフィンガープリントで初期化（日付・記録者は含まない）
+  // DEFAULT_ROLE_ASSIGNMENTSはこの後に宣言されるため、空行2行分を直接インライン展開
+  const savedFingerprintRef = useRef<string>(JSON.stringify({
+    activityContent: "",
+    eventName: "",
+    specialNotes: "",
+    handover: "",
+    snack: "",
+    dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+    roleAssignments: [{ user_id: "", role: "" }, { user_id: "", role: "" }],
+    meal: { menu: "", items_to_bring: "", notes: "" },
+  }))
   const getScheduleIds = () => {
     // scheduleIdsRef が dailySchedule と長さが違う場合は補完
     while (scheduleIdsRef.current.length < dailySchedule.length) {
@@ -1366,7 +1377,16 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
-    savedFingerprintRef.current = ""
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const handleRestart = () => {
@@ -1386,7 +1406,16 @@ export default function ActivityRecordClient() {
     setHandover("")
     // テンプレート選択をリセット
     setSelectedTemplateId("")
-    savedFingerprintRef.current = ""
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
