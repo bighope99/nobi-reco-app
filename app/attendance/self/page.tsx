@@ -322,28 +322,39 @@ export default function SelfCheckInPage() {
           )}
 
           {/* 画面3: フィードバックオーバーレイ */}
-          {view === 'feedback' && (
-            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-green-500 text-white">
-              <div className="flex flex-col items-center gap-2 px-6 text-center">
-                <Hand className="h-24 w-24" />
-                <p className="text-5xl font-bold mt-4">
-                  {checkinAction === 'check_in' ? 'おかえり！' : 'またね！'}
-                </p>
-                <p className="text-4xl mt-2">{selectedChild?.kanaName}</p>
-                <p className="text-3xl mt-1">{checkinTime}</p>
+          {view === 'feedback' && (() => {
+            const isCheckIn = checkinAction === 'check_in'
+            const hour = new Date().getHours()
+            const feedbackText = isCheckIn
+              ? (hour < 12 ? 'おはよう！' : 'おかえり！')
+              : 'さようなら！'
+            const bgColor = isCheckIn ? '#FFFACD' : '#AFEEEE'
+            const textColor = isCheckIn ? '#78590A' : '#1A6B6B'
+            return (
+              <div
+                className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+                style={{ backgroundColor: bgColor, color: textColor }}
+              >
+                <div className="flex flex-col items-center gap-2 px-6 text-center">
+                  <Hand className="h-24 w-24" />
+                  <p className="text-5xl font-bold mt-4">{feedbackText}</p>
+                  <p className="text-4xl mt-2">{selectedChild?.kanaName}</p>
+                  <p className="text-3xl mt-1">{checkinTime}</p>
+                </div>
+                <div className="mt-12 flex flex-col items-center gap-4">
+                  <Button
+                    variant="outline"
+                    className="font-bold px-8 py-4 rounded-2xl text-2xl shadow-lg active:scale-95 transition-transform h-auto"
+                    style={{ backgroundColor: 'white', color: textColor }}
+                    onClick={handleUndo}
+                  >
+                    とりけす
+                  </Button>
+                  <p className="text-xl mt-2">{countdown}びょうで もどります</p>
+                </div>
               </div>
-              <div className="mt-12 flex flex-col items-center gap-4">
-                <Button
-                  variant="outline"
-                  className="bg-white text-green-600 font-bold px-8 py-4 rounded-2xl text-2xl shadow-lg active:scale-95 transition-transform h-auto"
-                  onClick={handleUndo}
-                >
-                  とりけす
-                </Button>
-                <p className="text-xl mt-2">{countdown}びょうで もどります</p>
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </>
       )}
     </div>
