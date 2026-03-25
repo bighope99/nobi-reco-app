@@ -2292,6 +2292,7 @@ export default function ActivityRecordClient() {
                   try {
                     await saveTemplate(templateNameInput.trim(), eventName, dailySchedule)
                     setShowSaveTemplateDialog(false)
+                    setTemplateNameInput('')
                   } catch {
                     // templateError に表示済み
                   }
