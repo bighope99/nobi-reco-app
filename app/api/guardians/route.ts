@@ -110,20 +110,8 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await Promise.all(
-      (guardians ?? []).map(async (g: {
-        id: string;
-        family_name: string;
-        family_name_kana: string | null;
-        photo_path: string | null;
-        notes: string | null;
-        updated_at: string;
-        _child_guardian: Array<{
-          relationship: string | null;
-          is_primary: boolean;
-          child_id: string;
-          m_children: { id: string; family_name: string; given_name: string } | null;
-        }>;
-      }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (guardians ?? []).map(async (g: any) => {
         const name = decryptOrFallback(g.family_name) ?? '';
         const kana = decryptOrFallback(g.family_name_kana) ?? '';
         const photoUrl = await getSignedPhotoUrl(supabase, g.photo_path);

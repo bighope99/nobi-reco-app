@@ -83,26 +83,18 @@ export async function GET(
     const phone = decryptOrFallback(guardian.phone) ?? '';
     const photoUrl = await getSignedPhotoUrl(supabase, guardian.photo_path);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const linkedChildren = (guardian._child_guardian ?? [])
-      .filter((link: { m_children: unknown }) => link.m_children)
-      .map((link: {
-        relationship: string | null;
-        is_primary: boolean;
-        is_emergency_contact: boolean;
-        child_id: string;
-        m_children: {
-          id: string;
-          family_name: string;
-          given_name: string;
-          _child_class: Array<{ is_current: boolean; m_classes: { name: string } | null }>;
-        } | null;
-      }) => {
-        const currentClass = link.m_children!._child_class?.find(c => c.is_current);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((link: any) => link.m_children)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((link: any) => {
+        const currentClass = link.m_children._child_class?.find((c: any) => c.is_current);
         return {
-          id: link.m_children!.id,
+          id: link.m_children.id,
           name: [
-            decryptOrFallback(link.m_children!.family_name),
-            decryptOrFallback(link.m_children!.given_name),
+            decryptOrFallback(link.m_children.family_name),
+            decryptOrFallback(link.m_children.given_name),
           ]
             .filter(Boolean)
             .join(' '),
@@ -113,9 +105,9 @@ export async function GET(
         };
       });
 
-    const primaryLink = (guardian._child_guardian as Array<{ is_primary: boolean; relationship: string | null }>)
-      ?.find(l => l.is_primary);
-    const relationship = primaryLink?.relationship ?? (guardian._child_guardian as Array<{ relationship: string | null }>)?.[0]?.relationship ?? null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const primaryLink = (guardian._child_guardian as any[])?.find((l: any) => l.is_primary);
+    const relationship = primaryLink?.relationship ?? (guardian._child_guardian as any[])?.[0]?.relationship ?? null;
 
     return NextResponse.json({
       data: {
