@@ -565,6 +565,13 @@ export async function POST(request: NextRequest) {
 
     if (activityError) {
       console.error('Activity insert error:', activityError);
+      // PostgreSQL unique violation (23505) → 409
+      if (activityError.code === '23505') {
+        return NextResponse.json(
+          { success: false, error: '同日同クラスの活動記録が既に存在します' },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { success: false, error: 'Failed to create activity' },
         { status: 500 }

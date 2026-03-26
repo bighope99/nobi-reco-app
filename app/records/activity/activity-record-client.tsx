@@ -461,6 +461,7 @@ export default function ActivityRecordClient() {
 
   // クラスまたは日付が変わったとき、既存記録を自動ロード（新規モード時のみ）
   useEffect(() => {
+    if (isLoadingClasses) return
     if (isEditMode) return
     if (!selectedClass && classOptions.length > 0) return
     if (!activityDate) return
@@ -511,8 +512,7 @@ export default function ActivityRecordClient() {
     void loadExistingActivity()
 
     return () => { controller.abort() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClass, activityDate])
+  }, [selectedClass, activityDate, classOptions.length, isLoadingClasses, isEditMode])
 
   useEffect(() => {
     const activityId = searchParams.get('activityId')
@@ -1039,12 +1039,14 @@ export default function ActivityRecordClient() {
 
       const result = await response.json()
 
-      // 重複エラー（409）の場合は既存記録を編集モードで開く
+      // 重複エラー（409）の場合は既存記録をフォームにロードして編集モードで開く
       if (response.status === 409 && result.existing_activity_id) {
-        setEditingActivityId(result.existing_activity_id)
-        setIsEditMode(true)
+        const existingResponse = await fetch(`/api/activities/${result.existing_activity_id}`)
+        const existingResult = await existingResponse.json()
+        if (existingResponse.ok && existingResult.success && existingResult.data?.activity) {
+          await handleEdit(existingResult.data.activity as Activity)
+        }
         setSaveError('同日同クラスの活動記録が既に存在します。既存の記録を編集してください。')
-        setIsSaving(false)
         return
       }
 
