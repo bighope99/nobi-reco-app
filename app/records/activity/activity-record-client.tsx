@@ -786,7 +786,7 @@ export default function ActivityRecordClient() {
     setEventName("")
     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -799,7 +799,7 @@ export default function ActivityRecordClient() {
       handover: "",
       snack: "",
       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
       meal: { menu: "", items_to_bring: "", notes: "" },
     })
   }
@@ -1596,7 +1596,7 @@ export default function ActivityRecordClient() {
     setEventName("")
     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -1608,7 +1608,7 @@ export default function ActivityRecordClient() {
       handover: "",
       snack: "",
       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
       meal: { menu: "", items_to_bring: "", notes: "" },
     })
   }
@@ -1623,7 +1623,7 @@ export default function ActivityRecordClient() {
     setEventName("")
     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -1637,7 +1637,7 @@ export default function ActivityRecordClient() {
       handover: "",
       snack: "",
       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
       meal: { menu: "", items_to_bring: "", notes: "" },
     })
   }
@@ -1921,7 +1921,7 @@ export default function ActivityRecordClient() {
                     setEventName("")
                     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
                     setDailySchedule([...DEFAULT_SCHEDULE])
-                    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+                    setRoleAssignments(getPresetOrDefault())
                     setSnack("")
                     setMeal(null)
                     setSpecialNotes("")
@@ -1934,7 +1934,7 @@ export default function ActivityRecordClient() {
                       handover: "",
                       snack: "",
                       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-                      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+                      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
                       meal: { menu: "", items_to_bring: "", notes: "" },
                     })
                   }}
