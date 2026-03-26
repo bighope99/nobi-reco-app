@@ -42,12 +42,29 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 【チケット】: [チケット本文]
 【PMの論点】: [PMの出力]
+【worktreeパス】: [git gtr go <ブランチ名> で確認]
 
 確認すること:
 - 既存のデザイン・画面フローとの整合性
 - ユーザー体験上の問題点
-- デザイン変更が必要かどうか（不要なら「変更不要」と明記）
-- 提案があれば具体的なUI案を示す
+- デザイン変更が必要かどうか
+
+【UIの変更が必要な場合】
+該当のページ・コンポーネントファイルに直接モックを書く。
+
+モックの書き方:
+- 実際のファイルパス（例: `app/records/page.tsx`）を特定し、そのファイルを編集する
+- ダミーデータを `const mockData = [...]` としてファイル内に定義し、それを使って描画する
+- データフェッチ・API呼び出し・状態管理は不要。見た目だけでOK
+- 既存の Tailwind クラス・Radix UI コンポーネントをそのまま使う
+
+返すこと:
+- 編集したファイルパス
+- UIの変更内容の説明（何をどう変えたか）
+- Engineerへの実装メモ（ダミーデータを本物のデータに差し替える方法、追加すべきロジック）
+
+【UIの変更が不要な場合】
+「変更不要」と明記し、ファイルを編集しない。
 ```
 
 ---
@@ -199,6 +216,24 @@ Phase 5 でユーザーが「実装を進める」を選択した場合に実行
              2. Notionステータスを「進行中」に更新:
                 npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts
                   --page-id <チケットID> --status 進行中"
+
+※ Designerが関与していたチケット（UI変更あり）の場合:
+親Claude → Designer をSpawn（worktree作成後に実行）:
+  Agent tool:
+    name: "Designer"
+    team_name: "spec-discussion-team"
+    prompt: [agents.md の Designer プロンプトに 【チケット】・【PMの論点】・【worktreeパス】を埋めて渡す]
+
+Designer → 該当ページファイルに直接モックを書く（ダミーデータで描画）→ 編集ファイルパスを親Claudeへ返す
+
+親Claude → AskUserQuestion でユーザーにモックを提示:
+  「モックを作成しました: {編集したファイルパス}
+   開発サーバー（http://localhost:3000/...）で確認できます。
+   このデザインで実装を進めますか？
+   1. 進める
+   2. 修正が必要（具体的に指示）」
+
+→ ユーザー承認後に Engineer をSpawn
 
 親Claude → Engineer をSpawn（agents.md の Engineer プロンプトを使用）:
   Agent tool:
