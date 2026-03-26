@@ -125,7 +125,9 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       ilike: jest.fn().mockReturnThis(),
       or: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnValue({
-        order: jest.fn().mockResolvedValue({ data: usersData, error: usersError }),
+        order: jest.fn(() => ({
+          order: jest.fn().mockResolvedValue({ data: usersData, error: usersError }),
+        })),
       }),
     };
 

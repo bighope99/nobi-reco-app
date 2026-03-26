@@ -85,7 +85,9 @@ describe('GET /api/users', () => {
     ];
 
     usersQuery.order.mockImplementationOnce(() => ({
-      order: jest.fn().mockResolvedValue({ data: usersData, error: null }),
+      order: jest.fn(() => ({
+        order: jest.fn().mockResolvedValue({ data: usersData, error: null }),
+      })),
     }));
 
     const mockSupabase = {
