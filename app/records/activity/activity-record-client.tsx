@@ -1007,10 +1007,10 @@ export default function ActivityRecordClient() {
         const updateResult = await updateResponse.json()
 
         if (!updateResponse.ok || !updateResult.success) {
-          throw new Error(updateResult.error || '活動記録の更新に失敗しました')
+          throw new Error(updateResult.error || '保育日誌の更新に失敗しました')
         }
 
-        setSaveMessage('活動記録を更新しました')
+        setSaveMessage('保育日誌を更新しました')
       } else {
         // 新規保存
         const saveResponse = await fetch('/api/activities', {
@@ -1038,11 +1038,11 @@ export default function ActivityRecordClient() {
         const saveResult = await saveResponse.json()
 
         if (!saveResponse.ok || !saveResult.success) {
-          throw new Error(saveResult.error || '活動記録の保存に失敗しました')
+          throw new Error(saveResult.error || '保育日誌の保存に失敗しました')
         }
 
         savedActivityId = saveResult.data?.activity_id
-        setSaveMessage('活動記録を保存しました')
+        setSaveMessage('保育日誌を保存しました')
 
         // 新規保存後は編集モードに切り替え
         setEditingActivityId(savedActivityId)
@@ -1837,12 +1837,12 @@ export default function ActivityRecordClient() {
   const scheduleIds = getScheduleIds()
 
   return (
-    <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
+    <StaffLayout title="保育日誌" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
         <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
-            <CardTitle>活動記録の入力</CardTitle>
+            <CardTitle>保育日誌の入力</CardTitle>
             {isEditMode && lastUpdatedAt && (
               <p className="text-sm text-gray-500">
                 {(() => {
