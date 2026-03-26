@@ -95,6 +95,7 @@ export async function PUT(
     if (body.name_kana !== undefined) updateData.name_kana = body.name_kana;
     if (body.phone !== undefined) updateData.phone = body.phone;
     if (body.email !== undefined) updateData.email = body.email || null;
+    if (body.hire_date !== undefined) updateData.hire_date = body.hire_date;
     if (body.birth_date !== undefined) updateData.birth_date = body.birth_date;
     if (body.position !== undefined) updateData.position = body.position;
     if (body.employment_type !== undefined) updateData.employment_type = body.employment_type;

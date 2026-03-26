@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: usersData, error: usersError } = await query.order('role').order('name');
+    const { data: usersData, error: usersError } = await query.order('role').order('hire_date', { ascending: true, nullsFirst: false }).order('name');
 
     if (usersError) {
       throw usersError;
@@ -316,9 +316,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 必須パラメータチェック
-    if (!body.name || !body.role) {
+    if (!body.name || !body.role || !body.hire_date) {
       return NextResponse.json(
-        { success: false, error: 'Missing required parameters: name, role' },
+        { success: false, error: 'Missing required parameters: name, role, hire_date' },
         { status: 400 }
       );
     }

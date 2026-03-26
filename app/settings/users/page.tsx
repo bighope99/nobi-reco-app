@@ -15,7 +15,8 @@ import {
   Save,
   Trash2,
   ChevronRight,
-  Edit2
+  Edit2,
+  Calendar
 } from 'lucide-react';
 
 interface User {
@@ -25,6 +26,7 @@ interface User {
   name_kana?: string;
   phone?: string;
   role: string;
+  hire_date?: string;
   is_active: boolean;
   assigned_classes?: Array<{
     class_id: string;
@@ -88,7 +90,7 @@ export default function UsersSettingsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff' });
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff', hire_date: '' });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,8 @@ export default function UsersSettingsPage() {
     name: '',
     email: '',
     phone: '',
-    role: 'staff'
+    role: 'staff',
+    hire_date: '',
   });
 
   // 初期ロード
@@ -156,7 +159,7 @@ export default function UsersSettingsPage() {
     const normalizedName = newUser.name.trim();
     const normalizedEmail = newUser.email.trim();
     const normalizedPhone = (newUser.phone || '').trim() || null;
-    if (!normalizedName || (isEmailRequired && !normalizedEmail)) return;
+    if (!normalizedName || (isEmailRequired && !normalizedEmail) || !newUser.hire_date) return;
     if (submitting) return;
 
     setSubmitting(true);
@@ -169,6 +172,7 @@ export default function UsersSettingsPage() {
           name: normalizedName,
           email: normalizedEmail || null,
           phone: normalizedPhone,
+          hire_date: `${newUser.hire_date}-04-01`,
         }),
       });
 
@@ -179,7 +183,7 @@ export default function UsersSettingsPage() {
       }
 
       alert(data.message || '職員を追加しました。');
-      setNewUser({ name: '', email: '', phone: '', role: 'staff' });
+      setNewUser({ name: '', email: '', phone: '', role: 'staff', hire_date: '' });
       setShowAddModal(false);
       fetchUsers();
     } catch (err) {
@@ -192,7 +196,7 @@ export default function UsersSettingsPage() {
 
   const handleEditStart = (user: User) => {
     setEditingUser(user);
-    setEditForm({ name: user.name, email: user.email || '', phone: user.phone || '', role: user.role });
+    setEditForm({ name: user.name, email: user.email || '', phone: user.phone || '', role: user.role, hire_date: user.hire_date ? user.hire_date.substring(0, 4) : '' });
     setShowEditModal(true);
   };
 
@@ -208,6 +212,7 @@ export default function UsersSettingsPage() {
           email: editForm.email.trim() || null,
           phone: editForm.phone.trim() || null,
           role: editForm.role,
+          hire_date: editForm.hire_date ? `${editForm.hire_date}-04-01` : undefined,
         }),
       });
       const data = await response.json();
@@ -368,6 +373,9 @@ export default function UsersSettingsPage() {
                           電話番号
                         </th>
                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          入社年
+                        </th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                           権限
                         </th>
                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -407,6 +415,14 @@ export default function UsersSettingsPage() {
                             <div className="flex items-center gap-2 text-sm text-slate-600">
                               <Phone size={14} className="text-slate-400" />
                               <span>{user.phone || '-'}</span>
+                            </div>
+                          </td>
+
+                          {/* Hire Year */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <Calendar size={14} className="text-slate-400" />
+                              <span>{user.hire_date ? `${user.hire_date.substring(0, 4)}年` : '-'}</span>
                             </div>
                           </td>
 
@@ -522,6 +538,20 @@ export default function UsersSettingsPage() {
                   />
                 </FieldGroup>
 
+                <FieldGroup label="入社年" required>
+                  <Select
+                    value={newUser.hire_date}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_date: e.target.value })}
+                  >
+                    <option value="">選択してください</option>
+                    {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                      <option key={year} value={String(year)}>
+                        {year}年
+                      </option>
+                    ))}
+                  </Select>
+                </FieldGroup>
+
                 <FieldGroup label="権限" required>
                   <Select
                     value={newUser.role}
@@ -549,7 +579,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim())}
+                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim()) || !newUser.hire_date}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? (
@@ -617,6 +647,20 @@ export default function UsersSettingsPage() {
                   />
                 </FieldGroup>
 
+                <FieldGroup label="入社年" required>
+                  <Select
+                    value={editForm.hire_date}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_date: e.target.value })}
+                  >
+                    <option value="">選択してください</option>
+                    {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                      <option key={year} value={String(year)}>
+                        {year}年
+                      </option>
+                    ))}
+                  </Select>
+                </FieldGroup>
+
                 <FieldGroup label="権限" required>
                   <Select
                     value={editForm.role}
@@ -644,7 +688,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleSaveUser}
-                  disabled={submitting || !editForm.name.trim()}
+                  disabled={submitting || !editForm.name.trim() || !editForm.hire_date}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? (
