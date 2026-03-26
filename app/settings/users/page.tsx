@@ -1,6 +1,8 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { normalizeSearch } from '@/lib/utils/kana';
+import { useRole } from '@/hooks/useRole';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Users,
@@ -78,6 +80,8 @@ const FieldGroup = ({ label, required, children }: any) => (
 );
 
 export default function UsersSettingsPage() {
+  const { isStaff } = useRole();
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -242,6 +246,12 @@ export default function UsersSettingsPage() {
       </span>
     );
   };
+
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
+
+  if (isStaff) return null
 
   return (
     <StaffLayout title="職員管理">

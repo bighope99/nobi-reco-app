@@ -221,10 +221,10 @@ export async function DELETE(
       );
     }
 
-    // 対象ユーザーの存在確認
+    // 対象ユーザーの存在確認（emailも取得してメールなしスタッフを判定）
     const { data: targetUser, error: targetUserError } = await supabase
       .from('m_users')
-      .select('id, name, role')
+      .select('id, name, role, email')
       .eq('id', targetUserId)
       .is('deleted_at', null)
       .single();
@@ -238,26 +238,21 @@ export async function DELETE(
 
     const deletedAt = new Date().toISOString();
 
-    // STEP 1: Auth削除を先に実行（データの不整合を防ぐため）
-    const supabaseAdmin = await createAdminClient();
-    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
-      targetUserId
-    );
-
-    if (authDeleteError) {
-      console.error('Failed to delete auth user:', authDeleteError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to delete authentication user',
-          message: authDeleteError.message,
-        },
-        { status: 500 }
+    // STEP 1: メールありスタッフのみ Auth削除を実行
+    // メールなしスタッフは auth.users に登録されていないため削除不要
+    if (targetUser.email) {
+      const supabaseAdmin = await createAdminClient();
+      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
+        targetUserId
       );
+
+      if (authDeleteError) {
+        // auth.usersに存在しない場合（メールなしスタッフが誤ってemailを持つケース等）はスキップ
+        console.warn('Failed to delete auth user (continuing with soft delete):', authDeleteError.message);
+      }
     }
 
-    // STEP 2: Auth削除が成功した場合のみDB更新を実行
-    // ユーザー無効化（ソフトデリート）
+    // STEP 2: ユーザー無効化（ソフトデリート）
     const { error: deleteError } = await supabase
       .from('m_users')
       .update({

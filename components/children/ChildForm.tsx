@@ -129,9 +129,10 @@ interface ChildFormProps {
   mode: 'new' | 'edit';
   childId?: string;
   onSuccess?: () => void;
+  readOnly?: boolean;
 }
 
-export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) {
+export default function ChildForm({ mode, childId, onSuccess, readOnly = false }: ChildFormProps) {
   const isEditMode = mode === 'edit';
   const MAX_EMERGENCY_CONTACTS = 2;
   const contactIdRef = useRef(1);
@@ -463,6 +464,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
 
     // 生年月日の組み立て
     const birthDate = formData.birth_year && formData.birth_month && formData.birth_day
@@ -1113,28 +1115,30 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             onClick={() => window.location.href = '/children'}
             className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors"
           >
-            キャンセル
+            {readOnly ? '戻る' : 'キャンセル'}
           </button>
-          <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              form="child-form"
-              disabled={saving}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  {isEditMode ? '更新中...' : '登録中...'}
-                </>
-              ) : (
-                <>
-                  <Save size={18} />
-                  {isEditMode ? '更新する' : '登録する'}
-                </>
-              )}
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center gap-4">
+              <button
+                type="submit"
+                form="child-form"
+                disabled={saving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    {isEditMode ? '更新中...' : '登録中...'}
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    {isEditMode ? '更新する' : '登録する'}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

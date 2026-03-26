@@ -220,7 +220,7 @@ export default function FacilityDetailPage() {
   //   isFacilityAdmin: facility_admin（施設ごとの管理者）
   //   isStaff        : staff（一般職員）
   //   hasRole(...)   : 指定したロールのいずれかに一致するか判定
-  const { hasRole } = useRole();
+  const { hasRole, isStaff } = useRole();
   // 施設管理者の追加は company_admin のみ可能
   const canAddFacilityAdmin = hasRole('company_admin');
 
@@ -390,6 +390,12 @@ export default function FacilityDetailPage() {
       </StaffLayout>
     );
   }
+
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
+
+  if (isStaff) return null
 
   return (
     <StaffLayout title="施設詳細">

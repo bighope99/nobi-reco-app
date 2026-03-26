@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { normalizeKana } from '@/lib/utils/kana'
+import { useRole } from "@/hooks/useRole"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -56,6 +58,8 @@ type SortKey = 'name' | 'class' | 'grade'
 type SortOrder = 'asc' | 'desc'
 
 export default function AttendanceSchedulePage() {
+  const { isStaff } = useRole()
+  const router = useRouter()
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +70,12 @@ export default function AttendanceSchedulePage() {
   const [editMode, setEditMode] = useState(false)
   const [modifiedSchedules, setModifiedSchedules] = useState<Map<string, ChildSchedule['schedule']>>(new Map())
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (isStaff) {
+      router.replace('/dashboard')
+    }
+  }, [isStaff, router])
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -268,6 +278,8 @@ export default function AttendanceSchedulePage() {
     setEditMode(false)
   }
 
+  if (isStaff) return null
+
   return (
     <StaffLayout title="出席予定登録" subtitle="曜日ベースの通所設定">
       <div className="min-h-screen">
@@ -341,20 +353,22 @@ export default function AttendanceSchedulePage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              {/* Class Filter */}
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 md:flex-none">
-                <Filter size={16} className="text-slate-400" />
-                <select
-                  className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 min-w-[120px] w-full"
-                  value={filterClass}
-                  onChange={(e) => setFilterClass(e.target.value)}
-                >
-                  <option value="all">全クラス</option>
-                  {classOptions.map(cls => (
-                    <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Class Filter - クラスが登録されている場合のみ表示 */}
+              {classOptions.length > 0 && (
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 md:flex-none">
+                  <Filter size={16} className="text-slate-400" />
+                  <select
+                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 min-w-[120px] w-full"
+                    value={filterClass}
+                    onChange={(e) => setFilterClass(e.target.value)}
+                  >
+                    <option value="all">全クラス</option>
+                    {classOptions.map(cls => (
+                      <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Stats */}
               <div className="text-sm text-slate-500 whitespace-nowrap">
