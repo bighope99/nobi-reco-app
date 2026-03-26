@@ -128,7 +128,19 @@ const MOCK_OBSERVATION = {
   created_at: "2026-03-25T00:00:00Z",
   updated_at: "2026-03-25T00:00:00Z",
   is_ai_analyzed: true,
-  recent_observations: [],
+  recent_observations: [
+    {
+      id: "obs-0",
+      observation_date: "2026-03-24",
+      content: "前回の観察記録",
+      created_at: "2026-03-24T00:00:00Z",
+      recorded_by_name: "テスト職員",
+      is_ai_analyzed: true,
+      objective: "前回の事実",
+      subjective: "前回の所感",
+      tag_ids: ["tag-1"],
+    },
+  ],
   tag_ids: ["tag-1"],
 }
 
@@ -149,7 +161,7 @@ const setupFetchMock = () => {
     if (typeof url === "string" && url.includes("/api/children")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ success: true, data: { children: [{ child_id: "child-1", child_name: "テスト太郎", class_name: "ひまわり" }] } }),
+        json: () => Promise.resolve({ success: true, data: { children: [{ child_id: "child-1", name: "テスト太郎", class_name: "ひまわり" }] } }),
       } as Response)
     }
     if (typeof url === "string" && url.includes("/api/records/personal/child/")) {
@@ -210,9 +222,9 @@ describe("タグUI改善", () => {
     it("色が設定されたタグに色付きドットが表示されること", async () => {
       render(<ObservationEditor mode="edit" observationId="obs-1" />)
       await waitFor(() => {
-        expect(screen.getByText("自立")).toBeInTheDocument()
+        expect(screen.getAllByText("自立").length).toBeGreaterThanOrEqual(1)
       })
-      const independenceLabel = screen.getByText("自立").closest("label")
+      const independenceLabel = screen.getAllByText("自立").find((el) => el.closest("label"))?.closest("label")
       const colorDot = independenceLabel?.querySelector(".rounded-full")
       expect(colorDot).toBeInTheDocument()
       expect((colorDot as HTMLElement)?.style.backgroundColor).toBe("rgb(76, 175, 80)")
@@ -227,6 +239,20 @@ describe("タグUI改善", () => {
       const colorDot = curiosityLabel?.querySelector(".rounded-full")
       expect(colorDot).toBeInTheDocument()
       expect((colorDot as HTMLElement)?.style.backgroundColor).toBe("rgb(156, 163, 175)")
+    })
+
+    it("過去の記録のBadgeにタグ色が反映されること", async () => {
+      render(<ObservationEditor mode="edit" observationId="obs-1" />)
+      await waitFor(() => {
+        expect(screen.getByText("過去の記録（直近10件）")).toBeInTheDocument()
+      })
+      const badges = screen.getAllByTestId("badge")
+      const recentBadge = badges.find((b) => b.textContent?.includes("自立") && b.closest(".divide-y"))
+      expect(recentBadge).toBeDefined()
+      if (recentBadge) {
+        expect(recentBadge.style.color).toBe("rgb(76, 175, 80)")
+        expect(recentBadge.style.borderColor).toBe("rgb(76, 175, 80)")
+      }
     })
   })
 })
