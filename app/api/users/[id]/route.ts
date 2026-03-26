@@ -44,7 +44,7 @@ export async function PUT(
     // 対象ユーザーの存在確認
     const { data: targetUser, error: targetUserError } = await supabase
       .from('m_users')
-      .select('id, name, role, company_id')
+      .select('id, name, role, company_id, email')
       .eq('id', targetUserId)
       .is('deleted_at', null)
       .single();
@@ -94,6 +94,7 @@ export async function PUT(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.name_kana !== undefined) updateData.name_kana = body.name_kana;
     if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.email !== undefined) updateData.email = body.email || null;
     if (body.birth_date !== undefined) updateData.birth_date = body.birth_date;
     if (body.position !== undefined) updateData.position = body.position;
     if (body.employment_type !== undefined) updateData.employment_type = body.employment_type;
@@ -110,6 +111,24 @@ export async function PUT(
 
     if (updateError) {
       throw updateError;
+    }
+
+    // emailが新規追加された場合はauth招待を送信
+    const existingEmail = targetUser.email;
+    if (body.email && !existingEmail) {
+      const supabaseAdmin = await createAdminClient();
+      // まずauth.usersにユーザーが既にいるか確認
+      const { data: existingAuthUser } = await supabaseAdmin.auth.admin.getUserById(targetUserId);
+      if (!existingAuthUser?.user?.email) {
+        // auth.usersにいない場合はinviteUserByEmailで招待
+        const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(body.email, {
+          data: { user_id: targetUserId },
+        });
+        if (inviteError) {
+          console.error('Failed to invite user:', inviteError.message);
+          // 招待失敗は警告のみ（m_users更新は成功しているため）
+        }
+      }
     }
 
     // クラス担当更新（管理者のみ）
