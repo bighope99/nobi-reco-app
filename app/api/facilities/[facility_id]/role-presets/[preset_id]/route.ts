@@ -23,6 +23,24 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // site_admin・company_admin は全施設にアクセス可、それ以外は自施設のみ
+    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
+      if (metadata.current_facility_id !== facilityId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    } else if (metadata.role === 'company_admin') {
+      // company_admin は自社施設のみに制限
+      const { data: facility } = await supabase
+        .from('m_facilities')
+        .select('company_id')
+        .eq('id', facilityId)
+        .is('deleted_at', null)
+        .single();
+      if (facility?.company_id !== metadata.company_id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const { error } = await supabase
       .from('m_role_presets')
       .update({ deleted_at: new Date().toISOString() })

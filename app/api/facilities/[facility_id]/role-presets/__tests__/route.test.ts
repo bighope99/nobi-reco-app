@@ -241,4 +241,14 @@ describe('DELETE /api/facilities/:facility_id/role-presets/:preset_id', () => {
     const response = await DELETE(makeDeleteRequest(), { params: makeDeleteParams() });
     expect(response.status).toBe(403);
   });
+
+  it('異なる施設IDを指定した場合 403 を返す', async () => {
+    mockGetMetadata.mockResolvedValue({
+      ...ADMIN_METADATA,
+      current_facility_id: 'other-facility-id',
+    });
+
+    const response = await DELETE(makeDeleteRequest(), { params: makeDeleteParams() });
+    expect(response.status).toBe(403);
+  });
 });

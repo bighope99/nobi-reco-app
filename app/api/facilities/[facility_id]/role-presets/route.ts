@@ -3,6 +3,32 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt';
 
 /**
+ * 施設へのアクセス権限を確認する
+ * - site_admin: 全施設にアクセス可
+ * - company_admin: 自社施設のみ
+ * - facility_admin / staff: 自施設のみ（current_facility_id 一致）
+ */
+async function checkFacilityAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  metadata: NonNullable<Awaited<ReturnType<typeof getAuthenticatedUserMetadata>>>,
+  facilityId: string
+): Promise<boolean> {
+  if (metadata.role === 'site_admin') return true;
+
+  if (metadata.role === 'company_admin') {
+    const { data: facility } = await supabase
+      .from('m_facilities')
+      .select('company_id')
+      .eq('id', facilityId)
+      .is('deleted_at', null)
+      .single();
+    return facility?.company_id === metadata.company_id;
+  }
+
+  return metadata.current_facility_id === facilityId;
+}
+
+/**
  * GET /api/facilities/:facility_id/role-presets
  * 施設の役割プリセット一覧を取得
  */
@@ -19,11 +45,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // site_admin・company_admin は全施設にアクセス可、それ以外は自施設のみ
-    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
-      if (metadata.current_facility_id !== facilityId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+    if (!await checkFacilityAccess(supabase, metadata, facilityId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { data, error } = await supabase
@@ -68,11 +91,8 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // site_admin・company_admin は全施設にアクセス可、それ以外は自施設のみ
-    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
-      if (metadata.current_facility_id !== facilityId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+    if (!await checkFacilityAccess(supabase, metadata, facilityId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
