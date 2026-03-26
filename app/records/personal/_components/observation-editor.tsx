@@ -587,7 +587,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           }));
           setClassList(classes);
         }
-      } catch {
+      } catch (err) {
+        console.error('Classes load error:', err);
         // クラス取得失敗は無視（全児童表示にフォールバック）
       }
     };
@@ -647,7 +648,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     return () => {
       isMounted = false;
     };
-  }, [isNew, classList, selectedClassId]);
+  }, [isNew, selectedClassId]);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -1107,6 +1108,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         ),
       );
       setIsEditing(false);
+      setIsDateEditing(false);
+      setIsRecorderEditing(false);
+      setIsChildEditing(false);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '更新に失敗しました';
       setError(errorMessage);
@@ -1421,9 +1425,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
-  const childDisplayName = isNew
-    ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
-    : childOptions.find((c) => c.id === observation?.child_id)?.name || observation?.child_name || observation?.child_id;
+  const childDisplayName = useMemo(() => {
+    if (isNew) return lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択');
+    return childOptions.find((c) => c.id === observation?.child_id)?.name || observation?.child_name || observation?.child_id;
+  }, [isNew, lockedChildName, selectedChild, selectedChildId, childOptions, observation]);
   const recorderDisplayName =
     observation?.recorded_by_name ||
     observation?.created_by_name ||
