@@ -7,6 +7,7 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useActivityTemplates } from "@/hooks/useActivityTemplates"
 import { useRole } from "@/hooks/useRole"
+import { useSession } from "@/hooks/useSession"
 import { getCurrentDateJST } from "@/lib/utils/timezone"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical, Clipboard, CheckCircle2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical, Clipboard, CheckCircle2, Pin } from "lucide-react"
 import {
   DndContext,
   closestCenter,
@@ -209,6 +210,11 @@ export default function ActivityRecordClient() {
   const searchParams = useSearchParams()
   const { isFacilityAdmin, isAdmin } = useRole()
   const canDeleteTemplate = isFacilityAdmin || isAdmin
+  const session = useSession()
+  const canManagePresets = isFacilityAdmin || isAdmin
+
+  // 役割プリセット
+  const [rolePresets, setRolePresets] = useState<{ id: string; role_name: string; sort_order: number }[]>([])
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -433,6 +439,66 @@ export default function ActivityRecordClient() {
 
     fetchStaff()
   }, [])
+
+  // 役割プリセットを取得し、フォーム初期値に反映
+  useEffect(() => {
+    const facilityId = session?.current_facility_id
+    if (!facilityId) return
+
+    const fetchPresets = async () => {
+      try {
+        const response = await fetch(`/api/facilities/${facilityId}/role-presets`)
+        if (!response.ok) return
+        const result = await response.json()
+        const presets: { id: string; role_name: string; sort_order: number }[] = result.presets || []
+        setRolePresets(presets)
+
+        if (presets.length > 0) {
+          const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
+          // デフォルト行数より少ない場合は残りを空行で補完
+          const MIN_ROWS = 2
+          while (initial.length < MIN_ROWS) {
+            initial.push({ user_id: "", user_name: "", role: "" })
+          }
+          setRoleAssignments(initial)
+        }
+      } catch (err) {
+        console.error('Failed to fetch role presets:', err)
+      }
+    }
+
+    fetchPresets()
+  }, [session?.current_facility_id])
+
+  // 役割固定ボタンの toggle（保存/解除）
+  const handleTogglePreset = async (roleName: string) => {
+    const facilityId = session?.current_facility_id
+    if (!facilityId || !roleName.trim()) return
+
+    const existing = rolePresets.find((p) => p.role_name === roleName.trim())
+    try {
+      if (existing) {
+        // 解除: soft delete
+        await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
+        setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+      } else {
+        // 追加
+        const response = await fetch(`/api/facilities/${facilityId}/role-presets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role_name: roleName.trim() }),
+        })
+        if (response.ok) {
+          const result = await response.json()
+          if (!result.skipped) {
+            setRolePresets((prev) => [...prev, result.preset])
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle role preset:', err)
+    }
+  }
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -2062,6 +2128,27 @@ export default function ActivityRecordClient() {
                       placeholder="役割を入力"
                       maxLength={MAX_ROLE_LENGTH}
                     />
+                    {canManagePresets && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleTogglePreset(assignment.role || "")}
+                        disabled={!assignment.role?.trim()}
+                        className={cn(
+                          "h-8 w-8",
+                          rolePresets.some((p) => p.role_name === assignment.role?.trim())
+                            ? "text-primary hover:text-primary/80"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title={rolePresets.some((p) => p.role_name === assignment.role?.trim()) ? "プリセットから解除" : "プリセットに固定"}
+                      >
+                        <Pin
+                          className="h-4 w-4"
+                          fill={rolePresets.some((p) => p.role_name === assignment.role?.trim()) ? "currentColor" : "none"}
+                        />
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       size="icon"
