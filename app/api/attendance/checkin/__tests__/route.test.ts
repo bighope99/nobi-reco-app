@@ -318,7 +318,7 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.data).toHaveProperty('checked_out_at');
     });
 
-    it('既にチェックアウト済みの場合は409を返す', async () => {
+    it('既にチェックアウト済みの場合（3回目以降）は帰宅時間を更新する', async () => {
       mockSupabase.maybeSingle
         .mockResolvedValueOnce({
           data: {
@@ -348,6 +348,11 @@ describe('/api/attendance/checkin POST', () => {
         error: null,
       });
 
+      // update for checkout time update
+      mockSupabase.update = jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      });
+
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
         body: JSON.stringify({
@@ -361,8 +366,10 @@ describe('/api/attendance/checkin POST', () => {
       const response = await POST(request);
       const data = await response.json();
 
-      expect(response.status).toBe(409);
-      expect(data.success).toBe(false);
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data).toHaveProperty('action_type', 'check_out');
+      expect(data.data).toHaveProperty('checked_out_at');
     });
   });
 

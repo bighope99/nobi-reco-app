@@ -155,17 +155,9 @@ export async function POST(request: NextRequest) {
       .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
-    // If already checked in today: 2nd QR scan = check out, 3rd+ = error
+    // If already checked in today: 2nd+ QR scan = check out (or update check-out time)
     if (existing) {
-      // Already checked out — no more actions available today
-      if (existing.checked_out_at) {
-        return NextResponse.json({
-          success: false,
-          error: 'きょうは もう おわっているよ',
-        }, { status: 409 });
-      }
-
-      // Not yet checked out — perform check out (2nd QR scan)
+      // Already checked out — update check-out time (3rd+ QR scan)
       const { error: checkoutError } = await supabase
         .from('h_attendance')
         .update({
