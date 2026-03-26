@@ -115,6 +115,8 @@ export default function PersonalHistoryClient() {
       if (childName.trim()) params.set('child_name', childName.trim())
       if (selectedGrade) params.set('grade', selectedGrade)
       if (debouncedKeyword.trim()) params.set('keyword', debouncedKeyword.trim())
+      const childId = searchParams.get('childId')
+      if (childId) params.set('child_id', childId)
 
       const res = await fetch(`/api/records/personal?${params}`)
       if (!res.ok) {
@@ -166,7 +168,7 @@ export default function PersonalHistoryClient() {
         setLoading(false)
       }
     }
-  }, [fromDate, toDate, selectedClass, selectedStaff, childName, selectedGrade, debouncedKeyword])
+  }, [fromDate, toDate, selectedClass, selectedStaff, childName, selectedGrade, debouncedKeyword, searchParams])
 
   useEffect(() => {
     fetchObservations(0, false)
