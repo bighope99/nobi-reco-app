@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -92,6 +94,7 @@ interface Activity {
   created_by: string
   recorded_by_name?: string | null
   created_at: string
+  updated_at?: string | null
   individual_record_count: number
   individual_records: IndividualRecord[]
   mentioned_children?: string[]
@@ -249,8 +252,10 @@ export default function ActivityRecordClient() {
   // 編集モードの状態
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [photos, setPhotos] = useState<ActivityPhoto[]>([])
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
@@ -456,6 +461,82 @@ export default function ActivityRecordClient() {
     fetchActivities()
   }, [fetchActivities])
 
+  // クラスまたは日付が変わったとき、既存記録を自動ロード（新規モード時のみ）
+  useEffect(() => {
+    if (isLoadingClasses) return
+    if (isEditMode) return
+    if (!selectedClass && classOptions.length > 0) return
+    if (!activityDate) return
+
+    const controller = new AbortController()
+
+    const loadExistingActivity = async () => {
+      try {
+        const params = new URLSearchParams({ date: activityDate })
+        if (selectedClass) params.set('class_id', selectedClass)
+        const response = await fetch(`/api/activities?${params.toString()}&limit=1`, { signal: controller.signal })
+        const result = await response.json()
+
+        if (!response.ok || !result.success) return
+
+        const activities: Activity[] = result.data?.activities || []
+        if (activities.length === 0) return
+
+        // 既存記録があれば編集モードで自動展開
+        const activity = activities[0]
+        setEditingActivityId(activity.activity_id)
+        setIsEditMode(true)
+        setLastUpdatedAt(activity.updated_at ?? null)
+        setActivityContent(activity.content || '')
+        setSelectedRecorder(activity.recorded_by || '')
+        setOriginalContent(activity.content || '')
+        const mappedPhotos = (activity.photos || [])
+          .map((photo) => (typeof photo === 'string' ? { url: photo } : photo))
+          .filter(Boolean) as ActivityPhoto[]
+        setPhotos(mappedPhotos)
+        setEventName(activity.event_name || '')
+        const restoredSchedule = activity.daily_schedule && activity.daily_schedule.length > 0
+          ? activity.daily_schedule
+          : DEFAULT_SCHEDULE
+        scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
+        setDailySchedule(restoredSchedule)
+        setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+          ? activity.role_assignments
+          : DEFAULT_ROLE_ASSIGNMENTS)
+        setSnack(activity.snack || '')
+        setMeal(activity.meal || null)
+        setSpecialNotes(activity.special_notes || '')
+        setHandover(activity.handover || '')
+        // 編集開始時点のフィンガープリントを記録（dirty扱いにならないよう）
+        savedFingerprintRef.current = JSON.stringify({
+          activityContent: (activity.content || '').trim(),
+          eventName: (activity.event_name || '').trim(),
+          specialNotes: (activity.special_notes || '').trim(),
+          handover: (activity.handover || '').trim(),
+          snack: (activity.snack || '').trim(),
+          dailySchedule: restoredSchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+          roleAssignments: (activity.role_assignments && activity.role_assignments.length > 0
+            ? activity.role_assignments
+            : DEFAULT_ROLE_ASSIGNMENTS
+          ).map((r) => ({ user_id: r.user_id, role: (r.role ?? '').trim() })),
+          meal: {
+            menu: activity.meal?.menu?.trim() ?? '',
+            items_to_bring: activity.meal?.items_to_bring?.trim() ?? '',
+            notes: activity.meal?.notes?.trim() ?? '',
+          },
+        })
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        // 自動ロード失敗は無視（新規入力モードのまま）
+        console.error('Failed to auto-load existing activity:', err)
+      }
+    }
+
+    void loadExistingActivity()
+
+    return () => { controller.abort() }
+  }, [selectedClass, activityDate, classOptions.length, isLoadingClasses, isEditMode])
+
   useEffect(() => {
     const activityId = searchParams.get('activityId')
 
@@ -596,9 +677,31 @@ export default function ActivityRecordClient() {
 
   const handleClassChange = (value: string) => {
     setSelectedClass(value === "__none__" ? "" : value)
+    setIsEditMode(false)
+    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
+    setPhotos([])
+    setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setSnack("")
+    setMeal(null)
+    setSpecialNotes("")
+    setHandover("")
+    setLastUpdatedAt(null)
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const removeMention = (mention: MentionSuggestion) => {
@@ -971,6 +1074,17 @@ export default function ActivityRecordClient() {
 
       const result = await response.json()
 
+      // 重複エラー（409）の場合は既存記録をフォームにロードして編集モードで開く
+      if (response.status === 409 && result.existing_activity_id) {
+        const existingResponse = await fetch(`/api/activities/${result.existing_activity_id}`)
+        const existingResult = await existingResponse.json()
+        if (existingResponse.ok && existingResult.success && existingResult.data?.activity) {
+          await handleEdit(existingResult.data.activity as Activity)
+        }
+        setSaveError('同日同クラスの活動記録が既に存在します。既存の記録を編集してください。')
+        return
+      }
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました')
       }
@@ -1138,6 +1252,7 @@ export default function ActivityRecordClient() {
 
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
+    setLastUpdatedAt(activity.updated_at ?? null)
     // @[child_id] 形式を @表示名 形式に変換して表示
     const idToNameMap = new Map(Object.entries(activity.mentioned_children_names || {}))
     const displayContent = convertToDisplayNames(activity.content, idToNameMap)
@@ -1259,10 +1374,15 @@ export default function ActivityRecordClient() {
     }
   }
 
-  const handleDelete = async (activityId: string) => {
-    const confirmed = window.confirm("この活動記録を削除しますか？")
-    if (!confirmed) return
+  const handleDelete = (activityId: string) => {
+    setDeleteConfirmId(activityId)
+  }
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId) return
+
+    const activityId = deleteConfirmId
+    setDeleteConfirmId(null)
     setIsDeletingId(activityId)
     setDeleteError(null)
 
@@ -1277,6 +1397,9 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '削除に失敗しました')
       }
 
+      if (activityId === editingActivityId) {
+        handleCancelEdit()
+      }
       fetchActivities()
     } catch (err) {
       console.error('Failed to delete:', err)
@@ -1648,6 +1771,18 @@ export default function ActivityRecordClient() {
         <Card>
           <CardHeader>
             <CardTitle>活動記録の入力</CardTitle>
+            {isEditMode && lastUpdatedAt && (
+              <p className="text-sm text-gray-500">
+                {(() => {
+                  const d = new Date(lastUpdatedAt)
+                  const m = d.getMonth() + 1
+                  const day = d.getDate()
+                  const hh = String(d.getHours()).padStart(2, '0')
+                  const mm = String(d.getMinutes()).padStart(2, '0')
+                  return `${m}/${day} ${hh}時${mm}分に更新`
+                })()}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1677,8 +1812,32 @@ export default function ActivityRecordClient() {
                   id="activityDate"
                   type="date"
                   value={activityDate}
-                  max={getCurrentDateJST()}
-                  onChange={(event) => setActivityDate(event.target.value)}
+                  onChange={(event) => {
+                    setActivityDate(event.target.value)
+                    setIsEditMode(false)
+                    setEditingActivityId(null)
+                    setActivityContent("")
+                    setPhotos([])
+                    setEventName("")
+                    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
+                    setDailySchedule([...DEFAULT_SCHEDULE])
+                    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+                    setSnack("")
+                    setMeal(null)
+                    setSpecialNotes("")
+                    setHandover("")
+                    setLastUpdatedAt(null)
+                    savedFingerprintRef.current = JSON.stringify({
+                      activityContent: "",
+                      eventName: "",
+                      specialNotes: "",
+                      handover: "",
+                      snack: "",
+                      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+                      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+                      meal: { menu: "", items_to_bring: "", notes: "" },
+                    })
+                  }}
                 />
               </div>
 
@@ -2617,6 +2776,26 @@ export default function ActivityRecordClient() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 削除確認ダイアログ */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>活動記録を削除</DialogTitle>
+            <DialogDescription>
+              この活動記録を削除しますか？この操作は元に戻せません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+              キャンセル
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
+              削除する
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

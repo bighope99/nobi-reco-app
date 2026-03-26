@@ -83,8 +83,42 @@ jest.mock("@/components/ui/card", () => ({
 jest.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+jest.mock("@/hooks/useUnsavedChanges", () => ({
+  useUnsavedChanges: () => {},
+}))
+
+jest.mock("@dnd-kit/core", () => ({
+  DndContext: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  closestCenter: jest.fn(),
+  KeyboardSensor: jest.fn(),
+  PointerSensor: jest.fn(),
+  useSensor: jest.fn(() => ({})),
+  useSensors: jest.fn(() => []),
+}))
+
+jest.mock("@dnd-kit/sortable", () => ({
+  arrayMove: jest.fn((arr: unknown[]) => arr),
+  SortableContext: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  sortableKeyboardCoordinates: jest.fn(),
+  useSortable: jest.fn(() => ({
+    attributes: {},
+    listeners: {},
+    setNodeRef: jest.fn(),
+    transform: null,
+    transition: undefined,
+    isDragging: false,
+  })),
+  verticalListSortingStrategy: jest.fn(),
+}))
+
+jest.mock("@dnd-kit/utilities", () => ({
+  CSS: { Transform: { toString: jest.fn(() => "") } },
 }))
 
 jest.mock("@/components/ui/select", () => ({
