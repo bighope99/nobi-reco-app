@@ -559,7 +559,12 @@ export async function handleChildSave(request: NextRequest, childId?: string) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id } = metadata;
+    const { role, current_facility_id } = metadata;
+    const allowedRoles = ['facility_admin', 'staff', 'site_admin', 'company_admin'];
+    if (!role || !allowedRoles.includes(role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }

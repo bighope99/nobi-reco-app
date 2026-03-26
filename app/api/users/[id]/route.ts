@@ -247,8 +247,16 @@ export async function DELETE(
       );
 
       if (authDeleteError) {
-        // auth.usersに存在しない場合（メールなしスタッフが誤ってemailを持つケース等）はスキップ
-        console.warn('Failed to delete auth user (continuing with soft delete):', authDeleteError.message);
+        // 404 (ユーザー未登録) はスキップ、それ以外はエラーとして返す
+        const status = (authDeleteError as { status?: number }).status;
+        if (status !== 404) {
+          console.error('Failed to delete auth user:', authDeleteError.message);
+          return NextResponse.json(
+            { success: false, error: 'Failed to delete auth user', message: authDeleteError.message },
+            { status: 500 }
+          );
+        }
+        console.warn('Auth user not found (skipping):', authDeleteError.message);
       }
     }
 
