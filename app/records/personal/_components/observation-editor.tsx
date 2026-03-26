@@ -1060,12 +1060,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleUpdateObservation = async () => {
     if (!observation) return;
-    const displayText = editText.trim();
-    const text = toIdText(displayText).trim();
-    if (!text) {
-      setError('本文を入力してください');
-      return;
+
+    // isEditing（本文編集中）の場合のみ content を送信
+    let contentToSave: string | undefined;
+    if (isEditing) {
+      const displayText = editText.trim();
+      const text = toIdText(displayText).trim();
+      if (!text) {
+        setError('本文を入力してください');
+        return;
+      }
+      contentToSave = text;
     }
+
     if (!selectedRecorder && !staffLoadError) {
       setError('記録者を選択してください');
       return;
@@ -1077,7 +1084,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: text,
+          ...(contentToSave !== undefined ? { content: contentToSave } : {}),
           observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
           recorded_by: selectedRecorder || null,
           child_id: selectedChildId || undefined,
