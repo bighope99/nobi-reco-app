@@ -89,7 +89,7 @@ const [classChildren, setClassChildren] = useState<MentionSuggestion[]>([]);
   onChange={(e) => handleContentChange(e.target.value)}
   rows={12}
   maxLength={10000}
-  placeholder="園での活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
+  placeholder="活動内容を入力してください&#10;&#10;ヒント: @を入力すると児童選択モーダルが開きます"
 />
 ```
 

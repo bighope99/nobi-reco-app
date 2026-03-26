@@ -2372,7 +2372,7 @@ export default function ActivityRecordClient() {
                 onChange={handleContentChange}
                 onKeyDown={handleTextareaKeyDown}
                 maxLength={ACTIVITY_CONTENT_MAX}
-                placeholder="園での活動内容を入力してください"
+                placeholder="活動内容を入力してください"
                 className="min-h-[300px]"
               />
 
