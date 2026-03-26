@@ -488,6 +488,36 @@ export async function POST(request: NextRequest) {
 
     const normalizedPhotos = normalizePhotos(photos);
 
+    // 同一クラス×同一日付の重複チェック
+    const duplicateQueryBuilder = supabase
+      .from('r_activity')
+      .select('id')
+      .eq('facility_id', facility_id)
+      .eq('activity_date', activity_date)
+      .is('deleted_at', null)
+      .limit(1);
+
+    const duplicateQuery = class_id
+      ? duplicateQueryBuilder.eq('class_id', class_id)
+      : duplicateQueryBuilder.is('class_id', null);
+
+    const { data: existingActivity, error: duplicateError } = await duplicateQuery.maybeSingle();
+
+    if (duplicateError) {
+      console.error('Duplicate check error:', duplicateError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to check for duplicate activity' },
+        { status: 500 }
+      );
+    }
+
+    if (existingActivity) {
+      return NextResponse.json(
+        { success: false, error: '同日同クラスの活動記録が既に存在します', existing_activity_id: existingActivity.id },
+        { status: 409 }
+      );
+    }
+
     // 新規フィールドのバリデーション
     const extendedFieldsResult = validateActivityExtendedFields({
       event_name,

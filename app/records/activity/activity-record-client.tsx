@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -251,6 +253,7 @@ export default function ActivityRecordClient() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [photos, setPhotos] = useState<ActivityPhoto[]>([])
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
@@ -456,6 +459,61 @@ export default function ActivityRecordClient() {
     fetchActivities()
   }, [fetchActivities])
 
+  // クラスまたは日付が変わったとき、既存記録を自動ロード（新規モード時のみ）
+  useEffect(() => {
+    if (isEditMode) return
+    if (!selectedClass && classOptions.length > 0) return
+    if (!activityDate) return
+
+    const controller = new AbortController()
+
+    const loadExistingActivity = async () => {
+      try {
+        const params = new URLSearchParams({ date: activityDate })
+        if (selectedClass) params.set('class_id', selectedClass)
+        const response = await fetch(`/api/activities?${params.toString()}&limit=1`, { signal: controller.signal })
+        const result = await response.json()
+
+        if (!response.ok || !result.success) return
+
+        const activities: Activity[] = result.data?.activities || []
+        if (activities.length === 0) return
+
+        // 既存記録があれば編集モードで自動展開
+        const activity = activities[0]
+        setEditingActivityId(activity.activity_id)
+        setIsEditMode(true)
+        setActivityContent(activity.content || '')
+        setSelectedRecorder(activity.recorded_by || '')
+        setOriginalContent(activity.content || '')
+        const mappedPhotos = (activity.photos || [])
+          .map((photo) => (typeof photo === 'string' ? { url: photo } : photo))
+          .filter(Boolean) as ActivityPhoto[]
+        setPhotos(mappedPhotos)
+        setEventName(activity.event_name || '')
+        setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+          ? activity.daily_schedule
+          : DEFAULT_SCHEDULE)
+        setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+          ? activity.role_assignments
+          : DEFAULT_ROLE_ASSIGNMENTS)
+        setSnack(activity.snack || '')
+        setMeal(activity.meal || null)
+        setSpecialNotes(activity.special_notes || '')
+        setHandover(activity.handover || '')
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        // 自動ロード失敗は無視（新規入力モードのまま）
+        console.error('Failed to auto-load existing activity:', err)
+      }
+    }
+
+    void loadExistingActivity()
+
+    return () => { controller.abort() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClass, activityDate])
+
   useEffect(() => {
     const activityId = searchParams.get('activityId')
 
@@ -596,9 +654,19 @@ export default function ActivityRecordClient() {
 
   const handleClassChange = (value: string) => {
     setSelectedClass(value === "__none__" ? "" : value)
+    setIsEditMode(false)
+    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
+    setPhotos([])
+    setEventName("")
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setSnack("")
+    setMeal(null)
+    setSpecialNotes("")
+    setHandover("")
   }
 
   const removeMention = (mention: MentionSuggestion) => {
@@ -971,6 +1039,15 @@ export default function ActivityRecordClient() {
 
       const result = await response.json()
 
+      // 重複エラー（409）の場合は既存記録を編集モードで開く
+      if (response.status === 409 && result.existing_activity_id) {
+        setEditingActivityId(result.existing_activity_id)
+        setIsEditMode(true)
+        setSaveError('同日同クラスの活動記録が既に存在します。既存の記録を編集してください。')
+        setIsSaving(false)
+        return
+      }
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました')
       }
@@ -1259,10 +1336,15 @@ export default function ActivityRecordClient() {
     }
   }
 
-  const handleDelete = async (activityId: string) => {
-    const confirmed = window.confirm("この活動記録を削除しますか？")
-    if (!confirmed) return
+  const handleDelete = (activityId: string) => {
+    setDeleteConfirmId(activityId)
+  }
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId) return
+
+    const activityId = deleteConfirmId
+    setDeleteConfirmId(null)
     setIsDeletingId(activityId)
     setDeleteError(null)
 
@@ -1677,8 +1759,20 @@ export default function ActivityRecordClient() {
                   id="activityDate"
                   type="date"
                   value={activityDate}
-                  max={getCurrentDateJST()}
-                  onChange={(event) => setActivityDate(event.target.value)}
+                  onChange={(event) => {
+                    setActivityDate(event.target.value)
+                    setIsEditMode(false)
+                    setEditingActivityId(null)
+                    setActivityContent("")
+                    setPhotos([])
+                    setEventName("")
+                    setDailySchedule([...DEFAULT_SCHEDULE])
+                    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+                    setSnack("")
+                    setMeal(null)
+                    setSpecialNotes("")
+                    setHandover("")
+                  }}
                 />
               </div>
 
@@ -2617,6 +2711,26 @@ export default function ActivityRecordClient() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 削除確認ダイアログ */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>活動記録を削除</DialogTitle>
+            <DialogDescription>
+              この活動記録を削除しますか？この操作は元に戻せません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+              キャンセル
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
+              削除する
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
