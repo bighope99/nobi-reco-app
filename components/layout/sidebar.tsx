@@ -22,12 +22,20 @@ import {
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/LogoutButton"
 
+type NavChildItem = {
+  label: string
+  href: string
+  hidden?: boolean
+  target?: string
+  roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
+}
+
 type NavItem = {
   label: string
   href: string
   icon: React.ReactNode
   roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
-  children?: { label: string; href: string; hidden?: boolean; target?: string }[]
+  children?: NavChildItem[]
 }
 
 const staffNavItems: NavItem[] = [
@@ -48,7 +56,7 @@ const staffNavItems: NavItem[] = [
     href: "/attendance",
     icon: <UserCheck className="h-5 w-5" />,
     children: [
-      { label: "出席予定登録", href: "/attendance/schedule" },
+      { label: "出席予定登録", href: "/attendance/schedule", roles: ["facility_admin"] },
       { label: "QR出欠", href: "/attendance/qr", target: "_blank" },
       { label: "タッチ出欠", href: "/attendance/self", target: "_blank" },
       { label: "出席児童一覧", href: "/attendance/list" },
@@ -60,14 +68,15 @@ const staffNavItems: NavItem[] = [
     icon: <Users className="h-5 w-5" />,
     children: [
       { label: "子ども一覧", href: "/children" },
-      { label: "新規登録", href: "/children/new" },
-      { label: "CSV一括登録", href: "/children/import" },
+      { label: "新規登録", href: "/children/new", roles: ["facility_admin"] },
+      { label: "CSV一括登録", href: "/children/import", roles: ["facility_admin"] },
     ],
   },
   {
     label: "施設設定",
     href: "/settings",
     icon: <Settings className="h-5 w-5" />,
+    roles: ["facility_admin"],
     children: [
       { label: "施設情報", href: "/settings/facility" },
       { label: "クラス管理", href: "/settings/classes" },
@@ -207,7 +216,7 @@ export function Sidebar({ type, role, userName, isOpen = false, onClose }: Sideb
                     {item.label}
                   </div>
                   <ul className="ml-8 mt-1 space-y-1">
-                    {item.children.map((child) => (
+                    {item.children.filter((child) => !child.roles || (role !== undefined && child.roles.includes(role))).map((child) => (
                       <li key={child.href}>
                         <Link
                           href={child.href}

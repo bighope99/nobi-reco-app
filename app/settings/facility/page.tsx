@@ -1,8 +1,10 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { useSession } from '@/hooks/useSession';
+import { useRole } from '@/hooks/useRole';
 import {
   Building2,
   Plus,
@@ -29,6 +31,8 @@ interface Facility {
 
 export default function FacilityListPage() {
   const session = useSession();
+  const { isStaff } = useRole();
+  const router = useRouter();
   const isAdmin = session?.role === 'site_admin' || session?.role === 'company_admin';
   const isCompanyAdmin = isAdmin;
   const Layout: React.ComponentType<{ title: string; subtitle?: string; children: React.ReactNode }> = isAdmin ? AdminLayout : StaffLayout;
@@ -73,6 +77,12 @@ export default function FacilityListPage() {
   const handleSearch = () => {
     fetchFacilities();
   };
+
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
+
+  if (isStaff) return null
 
   return (
     <Layout title="施設情報">

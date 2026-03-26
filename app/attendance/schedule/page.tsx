@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { normalizeKana } from '@/lib/utils/kana'
+import { useRole } from "@/hooks/useRole"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -56,16 +58,25 @@ type SortKey = 'name' | 'class' | 'grade'
 type SortOrder = 'asc' | 'desc'
 
 export default function AttendanceSchedulePage() {
+  const { isStaff } = useRole()
+  const router = useRouter()
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasClasses, setHasClasses] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterClass, setFilterClass] = useState('all')
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [sortKey, setSortKey] = useState<SortKey>('grade')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [editMode, setEditMode] = useState(false)
   const [modifiedSchedules, setModifiedSchedules] = useState<Map<string, ChildSchedule['schedule']>>(new Map())
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (isStaff) {
+      router.replace('/dashboard')
+    }
+  }, [isStaff, router])
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -92,6 +103,21 @@ export default function AttendanceSchedulePage() {
     }
 
     fetchSchedules()
+  }, [])
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const res = await fetch('/api/children/classes')
+        const data = await res.json()
+        if (data.success && Array.isArray(data.data?.classes)) {
+          setHasClasses(data.data.classes.length > 0)
+        }
+      } catch {
+        // クラス取得失敗時は非表示のまま
+      }
+    }
+    fetchClasses()
   }, [])
 
   // O(1) child lookup map
@@ -268,6 +294,8 @@ export default function AttendanceSchedulePage() {
     setEditMode(false)
   }
 
+  if (isStaff) return null
+
   return (
     <StaffLayout title="出席予定登録" subtitle="曜日ベースの通所設定">
       <div className="min-h-screen">
@@ -341,20 +369,22 @@ export default function AttendanceSchedulePage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              {/* Class Filter */}
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 md:flex-none">
-                <Filter size={16} className="text-slate-400" />
-                <select
-                  className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 min-w-[120px] w-full"
-                  value={filterClass}
-                  onChange={(e) => setFilterClass(e.target.value)}
-                >
-                  <option value="all">全クラス</option>
-                  {classOptions.map(cls => (
-                    <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Class Filter - クラスが登録されている場合のみ表示 */}
+              {hasClasses && (
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 md:flex-none">
+                  <Filter size={16} className="text-slate-400" />
+                  <select
+                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 cursor-pointer p-0 min-w-[120px] w-full"
+                    value={filterClass}
+                    onChange={(e) => setFilterClass(e.target.value)}
+                  >
+                    <option value="all">全クラス</option>
+                    {classOptions.map(cls => (
+                      <option key={cls.class_id} value={cls.class_id}>{cls.class_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Stats */}
               <div className="text-sm text-slate-500 whitespace-nowrap">
@@ -411,15 +441,17 @@ export default function AttendanceSchedulePage() {
                           <SortIcon columnKey="grade" />
                         </div>
                       </th>
-                      <th
-                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                        onClick={() => handleSort('class')}
-                      >
-                        <div className="flex items-center gap-1">
-                          クラス
-                          <SortIcon columnKey="class" />
-                        </div>
-                      </th>
+                      {hasClasses && (
+                        <th
+                          className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                          onClick={() => handleSort('class')}
+                        >
+                          <div className="flex items-center gap-1">
+                            クラス
+                            <SortIcon columnKey="class" />
+                          </div>
+                        </th>
+                      )}
                       {weekdays.map((day) => (
                         <th key={day.key} className="px-4 py-3 text-center font-semibold text-slate-600 text-sm">
                           {day.label}
@@ -450,9 +482,11 @@ export default function AttendanceSchedulePage() {
                           <td className="px-2 py-4">
                             <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
                           </td>
-                          <td className="px-3 py-4">
-                            <span className="text-sm text-slate-600">{child.class_name}</span>
-                          </td>
+                          {hasClasses && (
+                            <td className="px-3 py-4">
+                              <span className="text-sm text-slate-600">{child.class_name}</span>
+                            </td>
+                          )}
                           {weekdays.map((day) => (
                             <td key={day.key} className="px-4 py-4 text-center">
                               <div className="flex justify-center">

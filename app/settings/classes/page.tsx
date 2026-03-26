@@ -1,5 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useRole } from '@/hooks/useRole';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Users,
@@ -34,12 +36,18 @@ interface Facility {
 }
 
 export default function ClassesListPage() {
+  const { isStaff } = useRole();
+  const router = useRouter();
   const [classes, setClasses] = useState<Class[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFacility, setFilterFacility] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
 
   // 初期ロード
   useEffect(() => {
@@ -106,6 +114,8 @@ export default function ClassesListPage() {
       fetchClasses();
     }
   }, [filterFacility]);
+
+  if (isStaff) return null
 
   return (
     <StaffLayout title="クラス管理">
