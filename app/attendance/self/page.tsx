@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Hand, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,9 +17,9 @@ function stripDakuten(ch: string): string {
   // パ行: パ(0x30D1),ピ,プ,ペ,ポ — 清音はハ,ヒ,フ,ヘ,ホ (offset -2)
   if (code >= 0x30D0 && code <= 0x30DD) {
     const offset = code - 0x30CF // 0x30CF = ハ
-    const base = offset % 3 // バ=1,パ=2,ビ=4→1,ピ=5→2...
-    if (offset % 3 === 1) return String.fromCharCode(code - 1) // 濁音
-    if (offset % 3 === 2) return String.fromCharCode(code - 2) // 半濁音
+    const mod = offset % 3 // バ=1,パ=2,ビ=4→1,ピ=5→2...
+    if (mod === 1) return String.fromCharCode(code - 1) // 濁音
+    if (mod === 2) return String.fromCharCode(code - 2) // 半濁音
   }
   return ch
 }
@@ -144,13 +144,13 @@ export default function SelfCheckInPage() {
   }, [fetchChildren])
 
   // 各かな文字ごとの児童数
-  const kanaCounts = Object.fromEntries(
+  const kanaCounts = useMemo(() => Object.fromEntries(
     Object.keys(KANA_ROW_MAP).map((kana) => {
       const row = KANA_ROW_MAP[kana]
       const children = groups[row] ?? []
       return [kana, children.filter(c => nameMatchesKana(c.kanaName, kana)).length]
     })
-  )
+  ), [groups])
 
   const handleKanaSelect = (kana: string) => {
     setSelectedKana(kana)
@@ -242,6 +242,8 @@ export default function SelfCheckInPage() {
           } else {
             optimisticIdsRef.current.delete(childId)
           }
+        }).catch(() => {
+          optimisticIdsRef.current.delete(childId)
         })
       } else {
         optimisticIdsRef.current.delete(childId)
@@ -264,11 +266,11 @@ export default function SelfCheckInPage() {
   }, [view, countdown])
 
   // 選択されたかなに該当する児童
-  const selectedRow = KANA_ROW_MAP[selectedKana] ?? ''
-  const rowChildren = groups[selectedRow] ?? []
-  const visibleChildren = selectedKana
-    ? rowChildren.filter((c) => nameMatchesKana(c.kanaName, selectedKana))
-    : []
+  const visibleChildren = useMemo(() => {
+    if (!selectedKana) return []
+    const row = KANA_ROW_MAP[selectedKana] ?? ''
+    return (groups[row] ?? []).filter((c) => nameMatchesKana(c.kanaName, selectedKana))
+  }, [selectedKana, groups])
 
   return (
     <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
