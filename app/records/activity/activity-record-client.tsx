@@ -315,7 +315,8 @@ export default function ActivityRecordClient() {
   const getPresetOrDefault = useCallback((): RoleAssignment[] => {
     if (rolePresets.length > 0) {
       const initial = rolePresets.map(p => ({ user_id: "", user_name: "", role: p.role_name }))
-      while (initial.length < 2) initial.push({ user_id: "", user_name: "", role: "" })
+      // プリセットが埋まっていても必ず末尾に空白行を1つ追加
+      initial.push({ user_id: "", user_name: "", role: "" })
       return initial
     }
     return DEFAULT_ROLE_ASSIGNMENTS
