@@ -611,6 +611,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
               </div>
             )}
 
+            <fieldset disabled={readOnly} className="contents">
             <form id="child-form" onSubmit={handleSubmit}>
 
               {/* 1. 基本情報 */}
@@ -1103,6 +1104,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
               </SectionCard>
 
             </form>
+            </fieldset>
           </main>
         </div>
       </div>

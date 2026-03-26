@@ -234,6 +234,10 @@ export default function FacilityDetailPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [addLoading, setAddLoading] = useState(false);
 
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
+
   const fetchFacility = async () => {
     try {
       setLoading(true);
@@ -390,10 +394,6 @@ export default function FacilityDetailPage() {
       </StaffLayout>
     );
   }
-
-  useEffect(() => {
-    if (isStaff) router.replace('/dashboard');
-  }, [isStaff, router]);
 
   if (isStaff) return null
 
