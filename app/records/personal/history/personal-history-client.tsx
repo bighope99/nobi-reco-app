@@ -150,111 +150,120 @@ export default function PersonalHistoryClient() {
         <HistoryTabs />
 
         {/* Filters */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-col gap-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[300px]">
-              <label className="text-xs font-bold text-slate-500">日付</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                />
-                <span className="text-slate-400">～</span>
-                <input
-                  type="date"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                />
-              </div>
-            </div>
+        {(() => {
+          const childId = searchParams.get('childId')
+          return (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-col gap-4">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex flex-col gap-1.5 min-w-[240px] flex-1">
+                  <label className="text-xs font-bold text-slate-500">日付</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                    />
+                    <span className="text-slate-400">～</span>
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                    />
+                  </div>
+                </div>
 
-            {classes.length > 0 && (
-              <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[160px]">
-                <label className="text-xs font-bold text-slate-500">クラス</label>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                  >
-                    <option value="all">すべて</option>
-                    {classes.map((c) => (
-                      <option key={c.class_id} value={c.class_id}>{c.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                {classes.length > 0 && (
+                  <div className="flex flex-col gap-1.5 w-[160px]">
+                    <label className="text-xs font-bold text-slate-500">クラス</label>
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={selectedClass}
+                        onChange={(e) => setSelectedClass(e.target.value)}
+                      >
+                        <option value="all">すべて</option>
+                        {classes.map((c) => (
+                          <option key={c.class_id} value={c.class_id}>{c.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
+
+                {!childId && (
+                  <div className="flex flex-col gap-1.5 w-[160px]">
+                    <label className="text-xs font-bold text-slate-500">学年</label>
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={selectedGrade}
+                        onChange={(e) => setSelectedGrade(e.target.value)}
+                      >
+                        {GRADES.map((g) => (
+                          <option key={g.value} value={g.value}>{g.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5 w-[160px]">
+                  <label className="text-xs font-bold text-slate-500">記入者</label>
+                  <div className="relative">
+                    <select
+                      className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={selectedStaff}
+                      onChange={(e) => setSelectedStaff(e.target.value)}
+                    >
+                      <option value="all">すべて</option>
+                      {staffList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[160px]">
-              <label className="text-xs font-bold text-slate-500">学年</label>
-              <div className="relative">
-                <select
-                  className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={selectedGrade}
-                  onChange={(e) => setSelectedGrade(e.target.value)}
-                >
-                  {GRADES.map((g) => (
-                    <option key={g.value} value={g.value}>{g.label}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+              <div className="flex flex-wrap gap-4">
+                {!childId && (
+                  <div className="flex flex-col gap-1.5 w-[200px]">
+                    <label className="text-xs font-bold text-slate-500">児童名</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="児童名で検索"
+                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={childName}
+                        onChange={(e) => setChildName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
+                  <label className="text-xs font-bold text-slate-500">キーワード</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="記録から検索"
+                      maxLength={100}
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={keyword}
+                      onChange={(e) => setKeyword(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[160px]">
-              <label className="text-xs font-bold text-slate-500">記入者</label>
-              <div className="relative">
-                <select
-                  className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={selectedStaff}
-                  onChange={(e) => setSelectedStaff(e.target.value)}
-                >
-                  <option value="all">すべて</option>
-                  {staffList.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1 md:max-w-[200px]">
-              <label className="text-xs font-bold text-slate-500">児童名</label>
-              <div className="relative">
-                <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="児童名で検索"
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={childName}
-                  onChange={(e) => setChildName(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="w-full md:w-auto flex flex-col gap-1.5 flex-1">
-              <label className="text-xs font-bold text-slate-500">キーワード</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="記録から検索"
-                  maxLength={100}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* List */}
         <div className="flex flex-col gap-4">
