@@ -56,7 +56,7 @@ describe("Sidebar", () => {
 
     it("does not highlight '子ども一覧' when pathname is /children/new", () => {
       mockPathname.mockReturnValue("/children/new")
-      render(<Sidebar type="facility_admin" />)
+      render(<Sidebar type="staff" role="facility_admin" />)
 
       const childrenLink = screen.getByRole("link", { name: "子ども一覧" })
       expect(childrenLink).not.toHaveClass("bg-sidebar-accent")
@@ -103,7 +103,7 @@ describe("Sidebar", () => {
 
     it("auto-opens parent menu containing the active child", () => {
       mockPathname.mockReturnValue("/settings/classes")
-      render(<Sidebar type="facility_admin" />)
+      render(<Sidebar type="staff" role="facility_admin" />)
 
       // The child item should be visible (parent menu is open)
       const classesLink = screen.getByRole("link", { name: "クラス管理" })
