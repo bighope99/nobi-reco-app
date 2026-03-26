@@ -471,6 +471,21 @@ export default function ActivityRecordClient() {
             if (!isPristine) return prev
             const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
             initial.push({ user_id: "", user_name: "", role: "" })
+            // プリセット適用後のフィンガープリントを更新して「未保存の変更あり」にならないようにする
+            savedFingerprintRef.current = JSON.stringify({
+              activityContent: activityContent.trim(),
+              eventName: eventName.trim(),
+              specialNotes: specialNotes.trim(),
+              handover: handover.trim(),
+              snack: snack.trim(),
+              dailySchedule: dailySchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+              roleAssignments: initial.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+              meal: {
+                menu: meal?.menu?.trim() ?? "",
+                items_to_bring: meal?.items_to_bring?.trim() ?? "",
+                notes: meal?.notes?.trim() ?? "",
+              },
+            })
             return initial
           })
         }
@@ -2181,6 +2196,8 @@ export default function ActivityRecordClient() {
                         type="button"
                         size="icon"
                         variant="ghost"
+                        aria-label={isPinned ? "プリセットから解除" : "プリセットに固定"}
+                        aria-pressed={isPinned}
                         onClick={() => handleTogglePreset(assignment.role || "")}
                         disabled={!assignment.role?.trim()}
                         className={cn(

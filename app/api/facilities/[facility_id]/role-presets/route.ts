@@ -70,8 +70,8 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await request.json();
-    if (typeof body.role_name !== 'string') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body.role_name !== 'string') {
       return NextResponse.json({ error: 'role_name is required' }, { status: 400 });
     }
     const roleName = body.role_name.trim();
@@ -84,44 +84,23 @@ export async function POST(
       return NextResponse.json({ error: 'role_name must be 50 characters or less' }, { status: 400 });
     }
 
-    // sort_order: 現在の最大値 + 1
-    const { data: maxOrderData } = await supabase
-      .from('m_role_presets')
-      .select('sort_order')
-      .eq('facility_id', facilityId)
-      .is('deleted_at', null)
-      .order('sort_order', { ascending: false })
-      .limit(1)
-      .single();
+    // DB側でatomicにsort_order採番 + insert（競合時は既存を返す）
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('insert_role_preset', {
+        p_facility_id: facilityId,
+        p_role_name: roleName,
+      });
 
-    const nextSortOrder = maxOrderData ? maxOrderData.sort_order + 1 : 0;
+    if (rpcError) throw rpcError;
 
-    const { data: inserted, error: insertError } = await supabase
-      .from('m_role_presets')
-      .insert({
-        facility_id: facilityId,
-        role_name: roleName,
-        sort_order: nextSortOrder,
-      })
-      .select('id, role_name, sort_order')
-      .single();
+    const row = rpcResult?.[0];
+    if (!row) throw new Error('insert_role_preset returned no rows');
 
-    if (insertError) {
-      // 一意制約違反: 既存レコードを返す
-      if (insertError.code === '23505') {
-        const { data: existingPreset } = await supabase
-          .from('m_role_presets')
-          .select('id, role_name, sort_order')
-          .eq('facility_id', facilityId)
-          .eq('role_name', roleName)
-          .is('deleted_at', null)
-          .single();
-        return NextResponse.json({ preset: existingPreset, skipped: true });
-      }
-      throw insertError;
+    if (row.skipped) {
+      return NextResponse.json({ preset: { id: row.id, role_name: row.role_name, sort_order: row.sort_order }, skipped: true });
     }
 
-    return NextResponse.json({ preset: inserted }, { status: 201 });
+    return NextResponse.json({ preset: { id: row.id, role_name: row.role_name, sort_order: row.sort_order } }, { status: 201 });
   } catch (error) {
     console.error('Error creating role preset:', error);
     return NextResponse.json(
