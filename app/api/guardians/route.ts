@@ -117,12 +117,14 @@ export async function GET(request: NextRequest) {
         const photoUrl = await getSignedPhotoUrl(supabase, g.photo_path);
 
         const linkedChildren = (g._child_guardian ?? [])
-          .filter(link => link.m_children)
-          .map(link => ({
-            id: link.m_children!.id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .filter((link: any) => link.m_children)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((link: any) => ({
+            id: link.m_children.id,
             name: [
-              decryptOrFallback(link.m_children!.family_name),
-              decryptOrFallback(link.m_children!.given_name),
+              decryptOrFallback(link.m_children.family_name),
+              decryptOrFallback(link.m_children.given_name),
             ]
               .filter(Boolean)
               .join(' '),
@@ -131,7 +133,8 @@ export async function GET(request: NextRequest) {
           }));
 
         // 続柄は_child_guardianのrelationshipから取得（is_primaryのものを優先）
-        const primaryLink = g._child_guardian?.find(l => l.is_primary);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const primaryLink = g._child_guardian?.find((l: any) => l.is_primary);
         const relationship = primaryLink?.relationship ?? g._child_guardian?.[0]?.relationship ?? null;
 
         return {
