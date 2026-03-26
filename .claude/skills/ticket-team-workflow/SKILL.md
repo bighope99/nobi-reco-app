@@ -182,7 +182,19 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
 
 Leader承認後、PMが各グループに対してworktreeを作成する。
 
+**⚠️ 重要: ブランチが既存の場合は必ず削除してから作成する**
+
+既存ブランチがあると古いコミットを引き継ぎ、mainとのコンフリクト原因になる。
+
 ```bash
+# 既存ブランチ・worktreeを削除してからクリーンに作成する
+git fetch origin
+# リモートに同名ブランチが存在する場合は削除
+git push origin --delete <ブランチ名> 2>/dev/null || true
+# ローカルに同名ブランチが存在する場合は削除
+git branch -D <ブランチ名> 2>/dev/null || true
+
+# mainの最新から新規作成
 git gtr new <ブランチ名> --base main --yes
 # 例: git gtr new fix/records-status-improvements --base main --yes
 ```
@@ -314,7 +326,7 @@ Agent tool:
 
            役割:
            - Notionチケット取得・グルーピング案作成
-           - worktree作成（git gtr new <ブランチ名> --base main --yes）
+           - worktree作成（既存ブランチは削除してから git gtr new <ブランチ名> --base main --yes）
            - Coderへの指示出し（SendMessageを使用）
            - Notionステータス一括更新
 
