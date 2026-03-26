@@ -507,6 +507,24 @@ export default function ActivityRecordClient() {
         setMeal(activity.meal || null)
         setSpecialNotes(activity.special_notes || '')
         setHandover(activity.handover || '')
+        // 編集開始時点のフィンガープリントを記録（dirty扱いにならないよう）
+        savedFingerprintRef.current = JSON.stringify({
+          activityContent: (activity.content || '').trim(),
+          eventName: (activity.event_name || '').trim(),
+          specialNotes: (activity.special_notes || '').trim(),
+          handover: (activity.handover || '').trim(),
+          snack: (activity.snack || '').trim(),
+          dailySchedule: restoredSchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+          roleAssignments: (activity.role_assignments && activity.role_assignments.length > 0
+            ? activity.role_assignments
+            : DEFAULT_ROLE_ASSIGNMENTS
+          ).map((r) => ({ user_id: r.user_id, role: (r.role ?? '').trim() })),
+          meal: {
+            menu: activity.meal?.menu?.trim() ?? '',
+            items_to_bring: activity.meal?.items_to_bring?.trim() ?? '',
+            notes: activity.meal?.notes?.trim() ?? '',
+          },
+        })
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
         // 自動ロード失敗は無視（新規入力モードのまま）
@@ -673,6 +691,17 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    setLastUpdatedAt(null)
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const removeMention = (mention: MentionSuggestion) => {
@@ -1368,6 +1397,9 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '削除に失敗しました')
       }
 
+      if (activityId === editingActivityId) {
+        handleCancelEdit()
+      }
       fetchActivities()
     } catch (err) {
       console.error('Failed to delete:', err)
@@ -1787,12 +1819,24 @@ export default function ActivityRecordClient() {
                     setActivityContent("")
                     setPhotos([])
                     setEventName("")
+                    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
                     setDailySchedule([...DEFAULT_SCHEDULE])
                     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
                     setSnack("")
                     setMeal(null)
                     setSpecialNotes("")
                     setHandover("")
+                    setLastUpdatedAt(null)
+                    savedFingerprintRef.current = JSON.stringify({
+                      activityContent: "",
+                      eventName: "",
+                      specialNotes: "",
+                      handover: "",
+                      snack: "",
+                      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+                      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+                      meal: { menu: "", items_to_bring: "", notes: "" },
+                    })
                   }}
                 />
               </div>
