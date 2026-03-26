@@ -52,7 +52,21 @@ describe('GET /api/users', () => {
     const classQuery: any = {
       select: jest.fn(() => classQuery),
       in: jest.fn(() => classQuery),
-      eq: jest.fn(),
+      eq: jest.fn().mockResolvedValue({
+        data: [
+          {
+            user_id: 'user-1',
+            class_role: 'main',
+            m_classes: { id: 'class-1', name: 'ひまわり組' },
+          },
+          {
+            user_id: 'user-1',
+            class_role: 'sub',
+            m_classes: { id: 'class-2', name: 'さくら組' },
+          },
+        ],
+        error: null,
+      }),
     };
 
     const usersData = [
@@ -73,22 +87,6 @@ describe('GET /api/users', () => {
     usersQuery.order.mockImplementationOnce(() => ({
       order: jest.fn().mockResolvedValue({ data: usersData, error: null }),
     }));
-
-    classQuery.eq.mockResolvedValue({
-      data: [
-        {
-          user_id: 'user-1',
-          class_role: 'main',
-          m_classes: { id: 'class-1', name: 'ひまわり組' },
-        },
-        {
-          user_id: 'user-1',
-          class_role: 'sub',
-          m_classes: { id: 'class-2', name: 'さくら組' },
-        },
-      ],
-      error: null,
-    });
 
     const mockSupabase = {
       from: jest.fn((table: string) => {

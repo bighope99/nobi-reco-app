@@ -629,7 +629,7 @@ export default function StatusPage() {
                                                         <History className="w-4 h-4" />
                                                     </button>
                                                     <Link
-                                                        href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}`}
+                                                        href={`/records/personal/new?childId=${encodeURIComponent(child.child_id)}&childName=${encodeURIComponent(child.name)}${selectedClass !== 'all' ? `&classId=${encodeURIComponent(selectedClass)}` : ''}`}
                                                         className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all"
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
