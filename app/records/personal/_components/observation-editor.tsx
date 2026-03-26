@@ -1423,7 +1423,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const childDisplayName = isNew
     ? lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択')
-    : observation?.child_name || observation?.child_id;
+    : childOptions.find((c) => c.id === observation?.child_id)?.name || observation?.child_name || observation?.child_id;
   const recorderDisplayName =
     observation?.recorded_by_name ||
     observation?.created_by_name ||
