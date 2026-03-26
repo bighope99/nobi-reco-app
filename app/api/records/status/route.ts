@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     // チケット3: 児童名フィールドは暗号化されているため、サーバー側のilike検索は機能しない。
     // 検索はクライアント側で復号化済みデータに対して行う。
     const warning_only = searchParams.get('warning_only') === 'true';
-    const mode = searchParams.get('mode') || 'monthly'; // 'recent30' | 'monthly'
+    const modeParam = searchParams.get('mode') || 'monthly';
+    const mode = modeParam === 'recent30' ? 'recent30' : 'monthly';
 
     // バリデーション
     if (year < 1900 || year > 2100 || month < 1 || month > 12) {
@@ -283,6 +284,19 @@ export async function GET(request: NextRequest) {
       heatmapObservationsByChild.get(o.child_id)!.push(o);
     });
 
+    // ヒートマップ用の日付配列を事前計算（児童ループ外で1回だけ生成）
+    const heatmapDateStrings: string[] = [];
+    for (let i = 0; i < heatmapDays; i++) {
+      if (mode === 'recent30') {
+        const d = new Date(`${heatmapStartDateStr}T00:00:00+09:00`);
+        d.setDate(d.getDate() + i);
+        heatmapDateStrings.push(toDateStringJST(d));
+      } else {
+        const monthStr = String(month).padStart(2, '0');
+        heatmapDateStrings.push(`${year}-${monthStr}-${String(i + 1).padStart(2, '0')}`);
+      }
+    }
+
     // データ整形
     const children = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
@@ -328,15 +342,7 @@ export async function GET(request: NextRequest) {
 
       const dailyStatus: string[] = [];
       for (let i = 0; i < heatmapDays; i++) {
-        let dateStr: string;
-        if (mode === 'recent30') {
-          const d = new Date(`${heatmapStartDateStr}T00:00:00+09:00`);
-          d.setDate(d.getDate() + i);
-          dateStr = toDateStringJST(d);
-        } else {
-          const monthStr = String(month).padStart(2, '0');
-          dateStr = `${year}-${monthStr}-${String(i + 1).padStart(2, '0')}`;
-        }
+        const dateStr = heatmapDateStrings[i];
         const isAttended = hmAttendanceDates.has(dateStr);
         const isRecorded = hmObservationDates.has(dateStr);
 

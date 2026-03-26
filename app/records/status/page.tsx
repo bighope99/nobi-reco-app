@@ -519,10 +519,10 @@ export default function StatusPage() {
                         {warningOnly && <span className="ml-2 text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-xs font-bold">要確認対象</span>}
                     </div>
                     <div className="flex items-center gap-4 text-xs">
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#2d895a' }}></div> 記録済（来所）</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#55cb9a' }}></div> 記録済（来所なし）</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#bccd5d' }}></div> 記録なし（来所）</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#E0E7FF' }}></div> 休み</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: HEATMAP_COLORS.present }}></div> 記録済（来所）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: HEATMAP_COLORS.recorded_absent }}></div> 記録済（来所なし）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: HEATMAP_COLORS.late }}></div> 記録なし（来所）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: HEATMAP_COLORS.absent }}></div> 休み</div>
                     </div>
                 </div>
 
