@@ -151,12 +151,22 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
 #### Step 1: worktree 作成
 
 ```bash
+# 既存ブランチ・worktreeを削除してからクリーンに作成する
+git fetch origin
+# リモートに同名ブランチが存在する場合は削除
+git push origin --delete <ブランチ名> 2>/dev/null || true
+# ローカルに同名ブランチが存在する場合は削除
+git branch -D <ブランチ名> 2>/dev/null || true
+# mainの最新から新規作成
 git gtr new <ブランチ名> --base main --yes
 # 例: git gtr new fix/records-status-improvements --base main --yes
 ```
 
 > ※ git gtr が使えない環境（Codex等）では `git worktree add` で代替:
 > ```bash
+> git fetch origin
+> git push origin --delete <ブランチ名> 2>/dev/null || true
+> git branch -D <ブランチ名> 2>/dev/null || true
 > git worktree add ../nobi-reco-app-<ブランチ名> -b <ブランチ名>
 > ```
 
