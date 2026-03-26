@@ -334,7 +334,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [childOptionsError, setChildOptionsError] = useState('');
   const [childOptionsLoading, setChildOptionsLoading] = useState(false);
   const [classList, setClassList] = useState<Array<{ id: string; name: string }>>([]);
-  const [selectedClassId, setSelectedClassId] = useState(paramClassId);
+  const [selectedClassId, setSelectedClassId] = useState(paramClassId || 'all');
   const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
@@ -603,7 +603,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setChildOptionsLoading(true);
       setChildOptionsError('');
       try {
-        const classFilter = isNew && classList.length > 0 && selectedClassId
+        const classFilter = isNew && classList.length > 0 && selectedClassId !== 'all'
           ? `&class_id=${encodeURIComponent(selectedClassId)}`
           : '';
         const response = await fetch(`/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200${classFilter}`);
@@ -1575,7 +1575,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           <SelectValue placeholder="クラスを選択" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">全クラス</SelectItem>
+                          <SelectItem value="all">全クラス</SelectItem>
                           {classList.map((cls) => (
                             <SelectItem key={cls.id} value={cls.id}>
                               {cls.name}
