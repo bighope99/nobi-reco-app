@@ -1561,8 +1561,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         </div>
 
         {/* メインコンテンツ */}
-        <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="space-y-6">
             {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton) && (
             <Card>
               <CardHeader>
@@ -1859,9 +1859,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         )}
                       </div>
                       <div className="ml-auto flex items-center gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditing(false); setIsDateEditing(false); setIsRecorderEditing(false); }}>
-                          <X className="h-3 w-3 mr-1" /> 編集終了
-                        </Button>
+                        {isEditing && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditing(false); setIsDateEditing(false); setIsRecorderEditing(false); }}>
+                            <X className="h-3 w-3 mr-1" /> 編集終了
+                          </Button>
+                        )}
                         {(isDateEditing || isRecorderEditing) && (
                           <Button
                             type="button"
@@ -1973,6 +1975,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           onClick={handleCreateNew}
                         >
                           <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
+                        </Button>
+                      )}
+                      {isNew && (
+                        <Button type="button" variant="outline" className="border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
+                          <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
                         </Button>
                       )}
                       <Button type="submit" data-testid="ai-save" className="bg-purple-600 hover:bg-purple-700" disabled={aiEditSaving}>
@@ -2101,74 +2108,20 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 </CardContent>
               </Card>
             )}
+
+            {!isNew && (
+              <div className="flex justify-start">
+                <Button
+                  variant="outline"
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                  onClick={() => setShowReassignDialog(true)}
+                >
+                  <SwitchCamera className="h-4 w-4 mr-2" /> 児童付け替え
+                </Button>
+              </div>
+            )}
           </div>
 
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">観察情報</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <User className="h-4 w-4 text-blue-600" />
-                  <span className="text-gray-600">対象児童:</span>
-                  <span className="font-medium">{childDisplayName}</span>
-                </div>
-                {!isNew && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4 text-green-600" />
-                    <span className="text-gray-600">観察日</span>
-                    <span>{observation ? formatDate(observation.observed_at) : '未保存'}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-purple-600" />
-                  <span className="text-gray-600">記録日時</span>
-                  <span>{observation ? formatDateTime(observation.created_at) : '未保存'}</span>
-                </div>
-                {!isNew && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <User className="h-4 w-4 text-orange-600" />
-                    <span className="text-gray-600">記録者</span>
-                    <span className="font-medium">{recorderDisplayName}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">操作</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!isNew && (
-                  <Button
-                    variant="outline"
-                    className="w-full border-orange-200 text-orange-600 hover:bg-orange-50"
-                    onClick={() => setShowReassignDialog(true)}
-                  >
-                    <SwitchCamera className="h-4 w-4 mr-2" /> 児童付け替え
-                  </Button>
-                )}
-
-                {isNew && (
-                  <Button variant="outline" className="w-full border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
-                    <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
-                  </Button>
-                )}
-
-                {!isNew && (
-                  <Button
-                    variant="outline"
-                    className="w-full border-blue-200 text-blue-600 hover:bg-blue-50"
-                    onClick={() => observation && load(observation.id)}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" /> データを元に戻す
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
 
         {!isNew && (
