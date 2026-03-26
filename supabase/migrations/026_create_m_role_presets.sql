@@ -11,6 +11,8 @@ CREATE TABLE m_role_presets (
 
 CREATE INDEX idx_role_presets_facility_id ON m_role_presets(facility_id) WHERE deleted_at IS NULL;
 
+CREATE UNIQUE INDEX idx_role_presets_facility_role ON m_role_presets(facility_id, role_name) WHERE deleted_at IS NULL;
+
 ALTER TABLE m_role_presets ENABLE ROW LEVEL SECURITY;
 
 -- 施設メンバー全員が自施設のプリセットを読み取れる

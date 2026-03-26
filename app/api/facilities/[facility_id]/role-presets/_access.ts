@@ -15,12 +15,13 @@ export async function checkFacilityAccess(
   if (metadata.role === 'site_admin') return true;
 
   if (metadata.role === 'company_admin') {
-    const { data: facility } = await supabase
+    const { data: facility, error } = await supabase
       .from('m_facilities')
       .select('company_id')
       .eq('id', facilityId)
       .is('deleted_at', null)
       .single();
+    if (error) throw error;
     return facility?.company_id === metadata.company_id;
   }
 

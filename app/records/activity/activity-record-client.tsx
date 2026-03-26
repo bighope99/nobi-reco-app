@@ -466,10 +466,13 @@ export default function ActivityRecordClient() {
         setRolePresets(presets)
 
         if (presets.length > 0) {
-          const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
-          // プリセットが埋まっていても必ず末尾に空白行を1つ追加（getPresetOrDefault と同じロジック）
-          initial.push({ user_id: "", user_name: "", role: "" })
-          setRoleAssignments(initial)
+          setRoleAssignments((prev) => {
+            const isPristine = prev.every((r) => !r.user_id && !r.role)
+            if (!isPristine) return prev
+            const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
+            initial.push({ user_id: "", user_name: "", role: "" })
+            return initial
+          })
         }
       } catch (err) {
         console.error('Failed to fetch role presets:', err)
@@ -485,12 +488,13 @@ export default function ActivityRecordClient() {
     if (!facilityId || !roleName.trim()) return
 
     const existing = rolePresets.find((p) => p.role_name === roleName.trim())
+    const tempId = crypto.randomUUID()
 
     // 楽観的更新：APIレスポンスを待たずに先にUIを変える
     if (existing) {
       setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
     } else {
-      setRolePresets((prev) => [...prev, { id: 'temp', role_name: roleName.trim(), sort_order: prev.length }])
+      setRolePresets((prev) => [...prev, { id: tempId, role_name: roleName.trim(), sort_order: prev.length }])
     }
 
     try {
@@ -514,12 +518,12 @@ export default function ActivityRecordClient() {
           // 仮IDを正式なレスポンスデータで置換
           setRolePresets((prev) =>
             result.skipped
-              ? prev.filter((p) => p.id !== 'temp')
-              : prev.map((p) => (p.id === 'temp' ? result.preset : p))
+              ? prev.filter((p) => p.id !== tempId)
+              : prev.map((p) => (p.id === tempId ? result.preset : p))
           )
         } else {
           // ロールバック
-          setRolePresets((prev) => prev.filter((p) => p.id !== 'temp'))
+          setRolePresets((prev) => prev.filter((p) => p.id !== tempId))
           setSaveError('役割プリセットの保存に失敗しました')
         }
       }
@@ -528,7 +532,7 @@ export default function ActivityRecordClient() {
       if (existing) {
         setRolePresets((prev) => [...prev, existing])
       } else {
-        setRolePresets((prev) => prev.filter((p) => p.id !== 'temp'))
+        setRolePresets((prev) => prev.filter((p) => p.id !== tempId))
       }
       console.error('Failed to toggle role preset:', err)
       setSaveError('役割プリセットの更新に失敗しました')

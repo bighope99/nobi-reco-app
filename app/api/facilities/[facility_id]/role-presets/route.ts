@@ -71,7 +71,10 @@ export async function POST(
     }
 
     const body = await request.json();
-    const roleName = body.role_name?.trim();
+    if (typeof body.role_name !== 'string') {
+      return NextResponse.json({ error: 'role_name is required' }, { status: 400 });
+    }
+    const roleName = body.role_name.trim();
 
     if (!roleName) {
       return NextResponse.json({ error: 'role_name is required' }, { status: 400 });
@@ -79,19 +82,6 @@ export async function POST(
 
     if (roleName.length > 50) {
       return NextResponse.json({ error: 'role_name must be 50 characters or less' }, { status: 400 });
-    }
-
-    // 既存の同一 role_name を確認（論理削除済みを含まない）
-    const { data: existing } = await supabase
-      .from('m_role_presets')
-      .select('id')
-      .eq('facility_id', facilityId)
-      .eq('role_name', roleName)
-      .is('deleted_at', null)
-      .single();
-
-    if (existing) {
-      return NextResponse.json({ preset: existing, skipped: true });
     }
 
     // sort_order: 現在の最大値 + 1
@@ -117,6 +107,17 @@ export async function POST(
       .single();
 
     if (insertError) {
+      // 一意制約違反: 既存レコードを返す
+      if (insertError.code === '23505') {
+        const { data: existingPreset } = await supabase
+          .from('m_role_presets')
+          .select('id, role_name, sort_order')
+          .eq('facility_id', facilityId)
+          .eq('role_name', roleName)
+          .is('deleted_at', null)
+          .single();
+        return NextResponse.json({ preset: existingPreset, skipped: true });
+      }
       throw insertError;
     }
 
