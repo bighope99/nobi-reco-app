@@ -59,7 +59,7 @@ const Input = ({ icon: Icon, className = "", ...props }: any) => (
 const Select = ({ children, className = "", ...props }: any) => (
   <div className="relative">
     <select
-      className={`w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 appearance-none cursor-pointer transition-shadow ${className}`}
+      className={`w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 pr-8 appearance-none cursor-pointer transition-shadow ${className}`}
       {...props}
     >
       {children}
