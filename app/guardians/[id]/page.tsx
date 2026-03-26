@@ -12,7 +12,6 @@ import {
   Upload,
   FileText,
   Users,
-  AlertTriangle,
   Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -372,10 +371,6 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           description="印象・対応時の注意点など、スタッフ間で共有するメモを記録できます"
         >
           <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              <AlertTriangle size={12} />
-              このメモは施設スタッフのみ閲覧できます。保護者には表示されません。
-            </div>
             <textarea
               className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-3 resize-none"
               rows={5}
