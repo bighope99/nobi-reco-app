@@ -343,13 +343,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [showContinueButton, setShowContinueButton] = useState(false);
-  const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
+
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
   const [isDateEditing, setIsDateEditing] = useState(false);
   const [isRecorderEditing, setIsRecorderEditing] = useState(false);
-  const [isAiActionEditing, setIsAiActionEditing] = useState(false);
-  const [isAiOpinionEditing, setIsAiOpinionEditing] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -1352,32 +1350,26 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     autoAiDraftTriggeredRef.current = false;
   }, [savingEdit, aiEditSaving, aiProcessing, observationTags]);
 
-  // 新規作成ページへ遷移
-  const navigateToNewRecord = useCallback(() => {
-    if (selectedChildId) {
-      router.push(`/records/personal/new?childId=${selectedChildId}`);
-    } else {
-      router.push('/records/personal/new');
-    }
-  }, [selectedChildId, router]);
-
-  // 別の記録を作成ハンドラー
+  // 別の記録を作成ハンドラー（児童リセット・記録者維持）
   const handleCreateNew = useCallback(() => {
-    // 編集中かつ未保存の変更がある場合は確認ダイアログ表示
-    const hasUnsavedChanges = isEditing && editText.trim() !== toDisplayText(observation?.body_text || '');
-
-    if (hasUnsavedChanges) {
-      setShowCreateNewDialog(true);
-    } else {
-      navigateToNewRecord();
-    }
-  }, [isEditing, editText, toDisplayText, observation?.body_text, navigateToNewRecord]);
-
-  // 確認ダイアログでOK押下時
-  const handleCreateNewConfirm = useCallback(() => {
-    setShowCreateNewDialog(false);
-    navigateToNewRecord();
-  }, [navigateToNewRecord]);
+    if (savingEdit || aiEditSaving || aiProcessing) return;
+    setSelectedChildId('');
+    setSelectedClassId('');
+    setEditText('');
+    setAiEditForm({
+      ai_action: '',
+      ai_opinion: '',
+      flags: buildDefaultTagFlags(observationTags),
+    });
+    setObservation(null);
+    setIsEditing(true);
+    setShowContinueButton(false);
+    setError('');
+    setAiEditError('');
+    setAiEditSuccess(false);
+    autoAiTriggeredRef.current = false;
+    autoAiDraftTriggeredRef.current = false;
+  }, [savingEdit, aiEditSaving, aiProcessing, observationTags]);
 
   // 音声録音開始
   const startRecording = async () => {
@@ -1908,85 +1900,41 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <form className="space-y-4" onSubmit={handleAiEditSubmit}>
                     <div>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
-                            抽出された事実
-                          </Label>
-                          {!isAiActionEditing && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setIsAiActionEditing(true)}
-                              disabled={aiEditSaving}
-                              className="h-6 px-2 text-xs"
-                            >
-                              <Pencil className="h-3 w-3 mr-1" /> 編集
-                            </Button>
-                          )}
-                        </div>
-                        {isAiActionEditing && (
-                          <span className="text-sm text-gray-500">
-                            {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
-                          </span>
-                        )}
+                        <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
+                          抽出された事実
+                        </Label>
+                        <span className="text-sm text-gray-500">
+                          {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
+                        </span>
                       </div>
-                      {isAiActionEditing ? (
-                        <MentionTextarea
-                          id="ai_action"
-                          className="min-h-[120px]"
-                          value={aiEditForm.ai_action}
-                          onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
-                          disabled={aiEditSaving}
-                          maxLength={AI_RESULT_MAX}
-                          autoFocus
-                        />
-                      ) : (
-                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 min-h-[80px] text-gray-900 leading-relaxed whitespace-pre-wrap text-sm">
-                          {aiEditForm.ai_action || <span className="text-gray-400">未入力</span>}
-                        </div>
-                      )}
+                      <MentionTextarea
+                        id="ai_action"
+                        className="min-h-[120px]"
+                        value={aiEditForm.ai_action}
+                        onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
+                        disabled={aiEditSaving}
+                        maxLength={AI_RESULT_MAX}
+                      />
                     </div>
                     <div>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                        <div>
                           <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
                             解釈・所感
                           </Label>
-                          {!isAiOpinionEditing && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setIsAiOpinionEditing(true)}
-                              disabled={aiEditSaving}
-                              className="h-6 px-2 text-xs"
-                            >
-                              <Pencil className="h-3 w-3 mr-1" /> 編集
-                            </Button>
-                          )}
                         </div>
-                        {isAiOpinionEditing && (
-                          <span className="text-sm text-gray-500">
-                            {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
-                          </span>
-                        )}
+                        <span className="text-sm text-gray-500">
+                          {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
+                        </span>
                       </div>
-                      {isAiOpinionEditing ? (
-                        <MentionTextarea
-                          id="ai_opinion"
-                          className="min-h-[120px]"
-                          value={aiEditForm.ai_opinion}
-                          onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
-                          disabled={aiEditSaving}
-                          maxLength={AI_RESULT_MAX}
-                          autoFocus
-                        />
-                      ) : (
-                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 min-h-[80px] text-gray-900 leading-relaxed whitespace-pre-wrap text-sm">
-                          {aiEditForm.ai_opinion || <span className="text-gray-400">未入力</span>}
-                        </div>
-                      )}
+                      <MentionTextarea
+                        id="ai_opinion"
+                        className="min-h-[120px]"
+                        value={aiEditForm.ai_opinion}
+                        onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
+                        disabled={aiEditSaving}
+                        maxLength={AI_RESULT_MAX}
+                      />
                     </div>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -2249,26 +2197,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 削除する
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* 別の記録を作成の確認ダイアログ */}
-        <Dialog open={showCreateNewDialog} onOpenChange={setShowCreateNewDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>別の記録を作成しますか？</DialogTitle>
-              <DialogDescription>
-                編集中の内容は破棄されます。よろしいですか？
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCreateNewDialog(false)}>
-                キャンセル
-              </Button>
-              <Button onClick={handleCreateNewConfirm}>
-                作成する
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
