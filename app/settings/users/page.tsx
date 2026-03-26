@@ -16,7 +16,8 @@ import {
   Trash2,
   ChevronRight,
   Edit2,
-  Calendar
+  Calendar,
+  SendHorizontal
 } from 'lucide-react';
 
 interface User {
@@ -27,6 +28,7 @@ interface User {
   phone?: string;
   role: string;
   hire_date?: string;
+  password_set?: boolean;
   is_active: boolean;
   assigned_classes?: Array<{
     class_id: string;
@@ -93,6 +95,7 @@ export default function UsersSettingsPage() {
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff', hire_date: '' });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // New user form
@@ -272,6 +275,26 @@ export default function UsersSettingsPage() {
     } catch (err) {
       console.error('Error deleting user:', err);
       alert(err instanceof Error ? err.message : 'Failed to delete user');
+    }
+  };
+
+  const handleResendInvitation = async (userId: string) => {
+    if (!confirm('認証メールを再送信しますか？')) return;
+    setResendingUserId(userId);
+    try {
+      const response = await fetch(`/api/users/${userId}/resend-invitation`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to resend invitation');
+      }
+      alert(data.message || '認証メールを再送信しました');
+    } catch (err) {
+      console.error('Error resending invitation:', err);
+      alert(err instanceof Error ? err.message : '認証メールの再送信に失敗しました');
+    } finally {
+      setResendingUserId(null);
     }
   };
 
@@ -455,6 +478,20 @@ export default function UsersSettingsPage() {
                                   title="編集"
                                 >
                                   <Edit2 size={18} />
+                                </button>
+                              )}
+                              {isFacilityAdmin && user.email && !user.password_set && (
+                                <button
+                                  onClick={() => handleResendInvitation(user.user_id)}
+                                  disabled={resendingUserId === user.user_id}
+                                  className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                                  title="認証メール再送"
+                                >
+                                  {resendingUserId === user.user_id ? (
+                                    <div className="animate-spin w-[18px] h-[18px] border-2 border-emerald-500 border-t-transparent rounded-full" />
+                                  ) : (
+                                    <SendHorizontal size={18} />
+                                  )}
                                 </button>
                               )}
                               <button

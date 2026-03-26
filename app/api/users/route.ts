@@ -5,6 +5,7 @@ import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
+import type { User as AuthUser } from '@supabase/supabase-js';
 
 interface ClassAssignmentInput {
   class_id: string;
@@ -232,25 +233,32 @@ export async function GET(request: NextRequest) {
       page: 1,
       perPage: 1000,
     });
-    const authUserMap = new Map<string, string | null>(
-      (authUsersData?.users ?? []).map((au) => [au.id, au.last_sign_in_at ?? null])
+    const authUserMap = new Map<string, { last_sign_in_at: string | null; password_set: boolean }>(
+      (authUsersData?.users ?? []).map((au: AuthUser) => [au.id, {
+        last_sign_in_at: au.last_sign_in_at ?? null,
+        password_set: hasCompletedPasswordSetup(au),
+      }])
     );
 
     // 同期的にデータを結合
-    const usersWithDetails = (usersData || []).map((u) => ({
-      user_id: u.id,
-      email: u.email,
-      name: u.name,
-      name_kana: u.name_kana,
-      role: u.role,
-      phone: u.phone,
-      hire_date: u.hire_date,
-      is_active: u.is_active,
-      assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: authUserMap.get(u.id) ?? null,
-      created_at: u.created_at,
-      updated_at: u.updated_at,
-    }));
+    const usersWithDetails = (usersData || []).map((u) => {
+      const authInfo = authUserMap.get(u.id);
+      return {
+        user_id: u.id,
+        email: u.email,
+        name: u.name,
+        name_kana: u.name_kana,
+        role: u.role,
+        phone: u.phone,
+        hire_date: u.hire_date,
+        is_active: u.is_active,
+        assigned_classes: classAssignmentMap.get(u.id) || [],
+        last_login_at: authInfo?.last_sign_in_at ?? null,
+        password_set: authInfo?.password_set ?? false,
+        created_at: u.created_at,
+        updated_at: u.updated_at,
+      };
+    });
 
     // 統計情報
     const totalUsers = usersWithDetails.length;
