@@ -26,6 +26,7 @@ export interface ChildPayload {
     birth_date?: string;
     school_id?: string | null;
     grade_add?: number;
+    photo_url?: string;
   };
   affiliation?: {
     enrollment_status?: string;
@@ -149,6 +150,8 @@ export async function saveChild(
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
     photo_permission_public: permissions?.photo_permission_public !== false,
     photo_permission_share: permissions?.photo_permission_share !== false,
+    // photo_url: 送信された場合のみ更新（undefined の場合はキー削除パターンで上書きしない）
+    photo_url: isUpdate ? basic_info.photo_url : (basic_info.photo_url || null),
   };
 
   let result;
