@@ -138,6 +138,15 @@ export async function GET(
       m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
     }));
 
+    // photo_url（パス）から署名URLを生成
+    let photoSignedUrl: string | null = null
+    if (childData.photo_url) {
+      const { data: signedData } = await supabase.storage
+        .from('private-child-photos')
+        .createSignedUrl(childData.photo_url, 3600)
+      photoSignedUrl = signedData?.signedUrl ?? null
+    }
+
     // データ整形
     const response = {
       success: true,
@@ -151,7 +160,7 @@ export async function GET(
           nickname: childData.nickname,
           gender: childData.gender,
           birth_date: childData.birth_date,
-          photo_url: childData.photo_url,
+          photo_url: photoSignedUrl,
           school_id: childData.school_id,
           grade_add: childData.grade_add || 0,
         },

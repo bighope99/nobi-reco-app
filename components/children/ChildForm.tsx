@@ -303,6 +303,11 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             );
           }
 
+          // 写真プレビューの初期化（APIが署名URLを返す）
+          if (data.basic_info.photo_url) {
+            setPhotoPreviewUrl(data.basic_info.photo_url);
+          }
+
           // 紐付け済み兄弟の初期化
           if (data.siblings && data.siblings.length > 0) {
             setSiblings(data.siblings);
@@ -488,6 +493,25 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
       setSaving(true);
       setError(null);
 
+      // 写真ファイルがある場合はアップロードしてパスを取得
+      // サーバー側でUUIDを生成するため child_id は不要
+      let uploadedPhotoPath: string | undefined = undefined;
+      if (photoFile) {
+        const photoFormData = new FormData();
+        photoFormData.append('file', photoFile);
+
+        const uploadResponse = await fetch('/api/storage/upload/child-photo', {
+          method: 'POST',
+          body: photoFormData,
+        });
+        const uploadResult = await uploadResponse.json();
+
+        if (!uploadResponse.ok || !uploadResult.success) {
+          throw new Error(uploadResult.error || '写真のアップロードに失敗しました');
+        }
+        uploadedPhotoPath = uploadResult.data.file_path;
+      }
+
       const requestBody = {
         child_id: isEditMode ? childId : undefined,
         basic_info: {
@@ -500,6 +524,8 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
           birth_date: birthDate,
           school_id: formData.school_id || null,
           grade_add: formData.grade_add,
+          // photo_url: アップロードした場合のみ含める（未変更時は省略して既存値を維持）
+          ...(uploadedPhotoPath !== undefined ? { photo_url: uploadedPhotoPath } : {}),
         },
         affiliation: {
           enrollment_status: formData.enrollment_status,
