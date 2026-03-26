@@ -481,6 +481,8 @@ export default function ActivityRecordClient() {
         const res = await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
         if (res.ok) {
           setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+        } else {
+          setSaveError('役割プリセットの解除に失敗しました')
         }
       } else {
         // 追加
@@ -494,10 +496,13 @@ export default function ActivityRecordClient() {
           if (!result.skipped) {
             setRolePresets((prev) => [...prev, result.preset])
           }
+        } else {
+          setSaveError('役割プリセットの保存に失敗しました')
         }
       }
     } catch (err) {
       console.error('Failed to toggle role preset:', err)
+      setSaveError('役割プリセットの更新に失敗しました')
     }
   }
 

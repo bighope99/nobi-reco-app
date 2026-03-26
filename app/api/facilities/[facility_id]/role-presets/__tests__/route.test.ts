@@ -219,7 +219,8 @@ describe('DELETE /api/facilities/:facility_id/role-presets/:preset_id', () => {
     const updateChain = {
       update: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
-      is: jest.fn().mockResolvedValue({ error: null }),
+      is: jest.fn().mockReturnThis(),
+      select: jest.fn().mockResolvedValue({ data: [{ id: PRESET_ID }], error: null }),
     };
     mockSupabase.from.mockReturnValue(updateChain);
 
@@ -232,6 +233,19 @@ describe('DELETE /api/facilities/:facility_id/role-presets/:preset_id', () => {
     expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({ deleted_at: expect.any(String) })
     );
+  });
+
+  it('存在しないプリセットを削除しようとすると 404 を返す', async () => {
+    const updateChain = {
+      update: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      select: jest.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    mockSupabase.from.mockReturnValue(updateChain);
+
+    const response = await DELETE(makeDeleteRequest(), { params: makeDeleteParams() });
+    expect(response.status).toBe(404);
   });
 
   it('staff ロールで DELETE すると 403 を返す', async () => {

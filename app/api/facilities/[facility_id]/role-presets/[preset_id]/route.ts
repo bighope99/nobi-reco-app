@@ -41,15 +41,20 @@ export async function DELETE(
       }
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('m_role_presets')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', presetId)
       .eq('facility_id', facilityId)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .select('id');
 
     if (error) {
       throw error;
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Preset not found' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });
