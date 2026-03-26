@@ -584,8 +584,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         const response = await fetch('/api/classes?is_active=true');
         const result = await response.json();
         if (isMounted && response.ok && result.success) {
-          const classes = (result.data?.classes || []).map((cls: { id: string; name: string }) => ({
-            id: cls.id,
+          const classes = (result.data?.classes || []).map((cls: { class_id: string; name: string }) => ({
+            id: cls.class_id,
             name: cls.name,
           }));
           setClassList(classes);
