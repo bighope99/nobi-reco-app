@@ -19,6 +19,13 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // site_admin・company_admin は全施設にアクセス可、それ以外は自施設のみ
+    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
+      if (metadata.current_facility_id !== facilityId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     const { data, error } = await supabase
       .from('m_role_presets')
       .select('id, role_name, sort_order')
@@ -59,6 +66,13 @@ export async function POST(
 
     if (!hasPermission(metadata, ['facility_admin', 'company_admin', 'site_admin'])) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // site_admin・company_admin は全施設にアクセス可、それ以外は自施設のみ
+    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
+      if (metadata.current_facility_id !== facilityId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     const body = await request.json();

@@ -87,6 +87,16 @@ describe('GET /api/facilities/:facility_id/role-presets', () => {
     const response = await GET(makeRequest('GET'), { params: makeParams() });
     expect(response.status).toBe(401);
   });
+
+  it('異なる施設IDを指定した場合 403 を返す', async () => {
+    mockGetMetadata.mockResolvedValue({
+      ...STAFF_METADATA,
+      current_facility_id: 'other-facility-id',
+    });
+
+    const response = await GET(makeRequest('GET'), { params: makeParams() });
+    expect(response.status).toBe(403);
+  });
 });
 
 describe('POST /api/facilities/:facility_id/role-presets', () => {
@@ -168,6 +178,21 @@ describe('POST /api/facilities/:facility_id/role-presets', () => {
   it('role_name が空の場合 400 を返す', async () => {
     const response = await POST(makeRequest('POST', { role_name: '' }), { params: makeParams() });
     expect(response.status).toBe(400);
+  });
+
+  it('role_name が 50 文字超の場合 400 を返す', async () => {
+    const response = await POST(makeRequest('POST', { role_name: 'a'.repeat(51) }), { params: makeParams() });
+    expect(response.status).toBe(400);
+  });
+
+  it('異なる施設IDを指定した場合 403 を返す', async () => {
+    mockGetMetadata.mockResolvedValue({
+      ...ADMIN_METADATA,
+      current_facility_id: 'other-facility-id',
+    });
+
+    const response = await POST(makeRequest('POST', { role_name: '司会' }), { params: makeParams() });
+    expect(response.status).toBe(403);
   });
 });
 

@@ -13,13 +13,19 @@ CREATE INDEX idx_role_presets_facility_id ON m_role_presets(facility_id) WHERE d
 
 ALTER TABLE m_role_presets ENABLE ROW LEVEL SECURITY;
 
+-- 施設メンバー全員が自施設のプリセットを読み取れる
 CREATE POLICY "facility members can read role presets"
   ON m_role_presets FOR SELECT
   USING (facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid);
 
+-- facility_admin 以上が自施設のプリセットを管理できる（挿入・更新・削除）
 CREATE POLICY "facility_admin can manage role presets"
   ON m_role_presets FOR ALL
   USING (
+    facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
+    AND (auth.jwt()->'app_metadata'->>'role') IN ('facility_admin', 'company_admin', 'site_admin')
+  )
+  WITH CHECK (
     facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
     AND (auth.jwt()->'app_metadata'->>'role') IN ('facility_admin', 'company_admin', 'site_admin')
   );

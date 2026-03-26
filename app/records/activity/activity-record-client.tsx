@@ -209,9 +209,8 @@ export default function ActivityRecordClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isFacilityAdmin, isAdmin } = useRole()
-  const canDeleteTemplate = isFacilityAdmin || isAdmin
+  const canManageAsAdmin = isFacilityAdmin || isAdmin
   const session = useSession()
-  const canManagePresets = isFacilityAdmin || isAdmin
 
   // 役割プリセット
   const [rolePresets, setRolePresets] = useState<{ id: string; role_name: string; sort_order: number }[]>([])
@@ -479,8 +478,10 @@ export default function ActivityRecordClient() {
     try {
       if (existing) {
         // 解除: soft delete
-        await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
-        setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+        const res = await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
+        if (res.ok) {
+          setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+        }
       } else {
         // 追加
         const response = await fetch(`/api/facilities/${facilityId}/role-presets`, {
@@ -1984,7 +1985,7 @@ export default function ActivityRecordClient() {
                       編集
                     </Button>
                   )}
-                  {canDeleteTemplate && selectedTemplateId && (
+                  {canManageAsAdmin && selectedTemplateId && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -2128,7 +2129,7 @@ export default function ActivityRecordClient() {
                       placeholder="役割を入力"
                       maxLength={MAX_ROLE_LENGTH}
                     />
-                    {canManagePresets && (
+                    {canManageAsAdmin && (
                       <Button
                         type="button"
                         size="icon"
