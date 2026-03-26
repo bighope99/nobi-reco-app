@@ -312,6 +312,14 @@ export default function ActivityRecordClient() {
     { user_id: "", user_name: "", role: "" },
     { user_id: "", user_name: "", role: "" },
   ]
+  const getPresetOrDefault = useCallback((): RoleAssignment[] => {
+    if (rolePresets.length > 0) {
+      const initial = rolePresets.map(p => ({ user_id: "", user_name: "", role: p.role_name }))
+      while (initial.length < 2) initial.push({ user_id: "", user_name: "", role: "" })
+      return initial
+    }
+    return DEFAULT_ROLE_ASSIGNMENTS
+  }, [rolePresets])
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>(DEFAULT_ROLE_ASSIGNMENTS)
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
@@ -593,7 +601,7 @@ export default function ActivityRecordClient() {
         setDailySchedule(restoredSchedule)
         setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
           ? activity.role_assignments
-          : DEFAULT_ROLE_ASSIGNMENTS)
+          : getPresetOrDefault())
         setSnack(activity.snack || '')
         setMeal(activity.meal || null)
         setSpecialNotes(activity.special_notes || '')
@@ -1369,7 +1377,7 @@ export default function ActivityRecordClient() {
     setDailySchedule(restoredSchedule)
     const restoredRoleAssignments = activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
-      : DEFAULT_ROLE_ASSIGNMENTS
+      : getPresetOrDefault()
     setRoleAssignments(restoredRoleAssignments)
     const restoredSnack = activity.snack || ""
     const restoredMeal = activity.meal || null
@@ -2119,8 +2127,14 @@ export default function ActivityRecordClient() {
                 {roleAssignments.map((assignment, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <Select
-                      value={assignment.user_id}
+                      value={assignment.user_id || "__none__"}
                       onValueChange={(value) => {
+                        if (value === "__none__") {
+                          const newAssignments = [...roleAssignments]
+                          newAssignments[index] = { ...assignment, user_id: "", user_name: "" }
+                          setRoleAssignments(newAssignments)
+                          return
+                        }
                         const staff = staffList.find((s) => s.user_id === value)
                         const newAssignments = [...roleAssignments]
                         newAssignments[index] = {
@@ -2135,6 +2149,7 @@ export default function ActivityRecordClient() {
                         <SelectValue placeholder="職員を選択" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">（未選択）</SelectItem>
                         {staffList.map((staff) => (
                           <SelectItem key={staff.user_id} value={staff.user_id}>
                             {staff.name}
