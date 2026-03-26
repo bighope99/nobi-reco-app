@@ -974,16 +974,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }));
   };
 
-  const handleAiSelectAll = (checked: boolean) => {
-    const nextFlags = buildDefaultTagFlags(observationTags);
-    Object.keys(nextFlags).forEach((key) => {
-      nextFlags[key] = checked;
-    });
-    setAiEditForm((prev) => ({
-      ...prev,
-      flags: nextFlags,
-    }));
-  };
 
   const handleAiEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1271,6 +1261,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       return {
         id: tagId,
         name: tag?.name || tagId,
+        color: tag?.color || null,
       };
     });
   };
@@ -1947,17 +1938,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       />
                     </div>
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium text-gray-700 mb-3 block">非認知能力フラグ</Label>
-                        <div className="flex gap-2">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => handleAiSelectAll(true)} disabled={aiEditSaving}>
-                            全選択
-                          </Button>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => handleAiSelectAll(false)} disabled={aiEditSaving}>
-                            全解除
-                          </Button>
-                        </div>
-                      </div>
+                      <Label className="text-sm font-medium text-gray-700 mb-3 block">非認知能力フラグ</Label>
                       {tagError ? (
                         <Alert variant="destructive">
                           <AlertDescription>{tagError}</AlertDescription>
@@ -1972,7 +1953,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                 onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
                                 disabled={aiEditSaving}
                               />
-                              <span>{tag.name}</span>
+                              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color || '#9CA3AF' }} />
+                              <div className="flex flex-col">
+                                <span>{tag.name}</span>
+                                {tag.description && (
+                                  <span className="text-xs text-gray-400">{tag.description}</span>
+                                )}
+                              </div>
                             </label>
                           ))}
                         </div>
@@ -2055,7 +2042,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                       <span className="text-xs text-gray-500 whitespace-nowrap">{item.recorded_by_name}</span>
                                     )}
                                     {tagBadges.map((tag) => (
-                                      <Badge key={tag.id} variant="secondary" className="bg-white text-gray-700 border border-gray-200 text-xs">
+                                      <Badge
+                                        key={tag.id}
+                                        variant="secondary"
+                                        className="text-xs"
+                                        style={tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color, borderColor: tag.color } : { backgroundColor: 'white', color: '#374151', borderColor: '#E5E7EB' }}
+                                      >
                                         {tag.name}
                                       </Badge>
                                     ))}
