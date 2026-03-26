@@ -475,13 +475,21 @@ export default function ActivityRecordClient() {
     if (!facilityId || !roleName.trim()) return
 
     const existing = rolePresets.find((p) => p.role_name === roleName.trim())
+
+    // 楽観的更新：APIレスポンスを待たずに先にUIを変える
+    if (existing) {
+      setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+    } else {
+      setRolePresets((prev) => [...prev, { id: 'temp', role_name: roleName.trim(), sort_order: prev.length }])
+    }
+
     try {
       if (existing) {
         // 解除: soft delete
         const res = await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
-        if (res.ok) {
-          setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
-        } else {
+        if (!res.ok) {
+          // ロールバック
+          setRolePresets((prev) => [...prev, existing])
           setSaveError('役割プリセットの解除に失敗しました')
         }
       } else {
@@ -493,14 +501,25 @@ export default function ActivityRecordClient() {
         })
         if (response.ok) {
           const result = await response.json()
-          if (!result.skipped) {
-            setRolePresets((prev) => [...prev, result.preset])
-          }
+          // 仮IDを正式なレスポンスデータで置換
+          setRolePresets((prev) =>
+            result.skipped
+              ? prev.filter((p) => p.id !== 'temp')
+              : prev.map((p) => (p.id === 'temp' ? result.preset : p))
+          )
         } else {
+          // ロールバック
+          setRolePresets((prev) => prev.filter((p) => p.id !== 'temp'))
           setSaveError('役割プリセットの保存に失敗しました')
         }
       }
     } catch (err) {
+      // ロールバック
+      if (existing) {
+        setRolePresets((prev) => [...prev, existing])
+      } else {
+        setRolePresets((prev) => prev.filter((p) => p.id !== 'temp'))
+      }
       console.error('Failed to toggle role preset:', err)
       setSaveError('役割プリセットの更新に失敗しました')
     }
