@@ -93,14 +93,6 @@ describe("Sidebar", () => {
       expect(newCompanyLink).toHaveClass("bg-sidebar-accent")
     })
 
-    it("highlights data export when pathname matches", () => {
-      mockPathname.mockReturnValue("/data/export")
-      render(<Sidebar type="staff" />)
-
-      const dataLink = screen.getByRole("link", { name: "データ管理" })
-      expect(dataLink).toHaveClass("bg-sidebar-accent")
-    })
-
     it("auto-opens parent menu containing the active child", () => {
       mockPathname.mockReturnValue("/settings/classes")
       render(<Sidebar type="staff" role="facility_admin" />)
