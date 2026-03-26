@@ -348,6 +348,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
   const [isDateEditing, setIsDateEditing] = useState(false);
   const [isRecorderEditing, setIsRecorderEditing] = useState(false);
+  const [isAiActionEditing, setIsAiActionEditing] = useState(false);
+  const [isAiOpinionEditing, setIsAiOpinionEditing] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -1499,6 +1501,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   return (
     <RequireAuth>
       <div className="space-y-6">
+        {aiProcessing && (
+          <div className="fixed inset-0 z-50 bg-white/80 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
+              <span className="text-lg font-medium text-gray-700">解析中...</span>
+            </div>
+          </div>
+        )}
         {/* ヘッダー（全幅） */}
         <div className="border-b -m-4 sm:-m-6 px-4 sm:px-6 py-4">
           <div className="max-w-6xl mx-auto">
@@ -1563,7 +1573,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto">
           <div className="space-y-6">
-            {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton && !isEditing) && (
+            {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1773,51 +1783,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             </Card>
             )}
 
-            {isNew && showContinueButton && !isEditing && observation && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" /> 観察内容
-                    </CardTitle>
-                    <div className="flex items-center gap-3">
-                      {(observation.updated_at || observation.created_at) && (
-                        <span className="text-xs text-gray-400">
-                          {formatDateTime(observation.updated_at || observation.created_at)}に更新
-                        </span>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditText(toDisplayText(observation.body_text || ''));
-                          setIsEditing(true);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3 mr-1" /> 編集
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
-                    {toDisplayText(observation.body_text || '')}
-                  </div>
-                  {!draftId && (
-                    <div className="mt-4 flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        className="border-green-200 text-green-600 hover:bg-green-50"
-                        onClick={handleContinueInput}
-                      >
-                        <RefreshCw className="h-4 w-4 mr-2" /> 続けて入力
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
 
             {hasAiOutput && (
               <Card>
@@ -1830,6 +1795,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       <Badge className="bg-blue-100 text-blue-700">
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" /> 解析中...
                       </Badge>
+                    )}
+                    {!aiProcessing && (observation?.updated_at || observation?.created_at) && (
+                      <span className="text-xs text-gray-400">
+                        {formatDateTime(observation.updated_at || observation.created_at)}に更新
+                      </span>
                     )}
                   </div>
                 </CardHeader>
@@ -1938,41 +1908,85 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <form className="space-y-4" onSubmit={handleAiEditSubmit}>
                     <div>
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
-                          抽出された事実
-                        </Label>
-                        <span className="text-sm text-gray-500">
-                          {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="ai_action" className="text-sm font-medium text-gray-700">
+                            抽出された事実
+                          </Label>
+                          {!isAiActionEditing && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setIsAiActionEditing(true)}
+                              disabled={aiEditSaving}
+                              className="h-6 px-2 text-xs"
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> 編集
+                            </Button>
+                          )}
+                        </div>
+                        {isAiActionEditing && (
+                          <span className="text-sm text-gray-500">
+                            {aiEditForm.ai_action.length}/{AI_RESULT_MAX}文字
+                          </span>
+                        )}
                       </div>
-                      <MentionTextarea
-                        id="ai_action"
-                        className="min-h-[120px]"
-                        value={aiEditForm.ai_action}
-                        onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
-                        disabled={aiEditSaving}
-                        maxLength={AI_RESULT_MAX}
-                      />
+                      {isAiActionEditing ? (
+                        <MentionTextarea
+                          id="ai_action"
+                          className="min-h-[120px]"
+                          value={aiEditForm.ai_action}
+                          onChange={(e) => handleAiFieldChange('ai_action', e.target.value)}
+                          disabled={aiEditSaving}
+                          maxLength={AI_RESULT_MAX}
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 min-h-[80px] text-gray-900 leading-relaxed whitespace-pre-wrap text-sm">
+                          {aiEditForm.ai_action || <span className="text-gray-400">未入力</span>}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="flex items-center gap-2">
                           <Label htmlFor="ai_opinion" className="text-sm font-medium text-gray-700">
                             解釈・所感
                           </Label>
+                          {!isAiOpinionEditing && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setIsAiOpinionEditing(true)}
+                              disabled={aiEditSaving}
+                              className="h-6 px-2 text-xs"
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> 編集
+                            </Button>
+                          )}
                         </div>
-                        <span className="text-sm text-gray-500">
-                          {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
-                        </span>
+                        {isAiOpinionEditing && (
+                          <span className="text-sm text-gray-500">
+                            {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
+                          </span>
+                        )}
                       </div>
-                      <MentionTextarea
-                        id="ai_opinion"
-                        className="min-h-[120px]"
-                        value={aiEditForm.ai_opinion}
-                        onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
-                        disabled={aiEditSaving}
-                        maxLength={AI_RESULT_MAX}
-                      />
+                      {isAiOpinionEditing ? (
+                        <MentionTextarea
+                          id="ai_opinion"
+                          className="min-h-[120px]"
+                          value={aiEditForm.ai_opinion}
+                          onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
+                          disabled={aiEditSaving}
+                          maxLength={AI_RESULT_MAX}
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 min-h-[80px] text-gray-900 leading-relaxed whitespace-pre-wrap text-sm">
+                          {aiEditForm.ai_opinion || <span className="text-gray-400">未入力</span>}
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
