@@ -1105,7 +1105,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         prev
           ? {
               ...prev,
-              body_text: displayText,
+              ...(contentToSave !== undefined ? { body_text: contentToSave } : {}),
               observed_at: nextObservationDate,
               recorded_by_name: nextRecorderName || prev.recorded_by_name,
               child_name: nextChildName || prev.child_name,
@@ -1113,12 +1113,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             }
           : prev,
       );
-      // 過去記録リスト内の該当レコードも更新
-      setRecentObservations((prev) =>
-        prev.map((item) =>
-          item.id === observation.id ? { ...item, content: text } : item,
-        ),
-      );
+      // 過去記録リスト内の該当レコードも更新（本文が変わった場合のみ）
+      if (contentToSave !== undefined) {
+        setRecentObservations((prev) =>
+          prev.map((item) =>
+            item.id === observation.id ? { ...item, content: contentToSave } : item,
+          ),
+        );
+      }
       setIsEditing(false);
       setIsDateEditing(false);
       setIsRecorderEditing(false);
