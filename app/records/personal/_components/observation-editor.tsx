@@ -14,7 +14,7 @@ import { MentionTextarea } from '@/components/ui/mention-textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -226,6 +226,15 @@ const buildDefaultTagFlags = (tags: ObservationTag[]) =>
 };
 
 
+const GRADE_LABELS: Record<number, string> = {
+  1: '1年生',
+  2: '2年生',
+  3: '3年生',
+  4: '4年生',
+  5: '5年生',
+  6: '6年生',
+};
+
 const ChildSelect = ({
   value,
   onChange,
@@ -240,20 +249,52 @@ const ChildSelect = ({
   testId?: string;
   disabled?: boolean;
   options: ChildOption[];
-}) => (
-  <Select value={value} onValueChange={onChange} disabled={disabled}>
-    <SelectTrigger data-testid={testId} aria-label={placeholder}>
-      <SelectValue placeholder={placeholder} />
-    </SelectTrigger>
-    <SelectContent>
-      {options.map((child) => (
-        <SelectItem key={child.id} value={child.id}>
-          {child.name}（{child.className}）
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
+}) => {
+  // 学年でグループ化
+  const groups = useMemo(() => {
+    const map = new Map<string, ChildOption[]>();
+    options.forEach((child) => {
+      const key = child.grade != null ? String(child.grade) : 'other';
+      const existing = map.get(key) || [];
+      existing.push(child);
+      map.set(key, existing);
+    });
+    // 学年昇順、その他は末尾
+    const sorted: Array<{ key: string; label: string; children: ChildOption[] }> = [];
+    Array.from(map.entries())
+      .sort(([a], [b]) => {
+        if (a === 'other') return 1;
+        if (b === 'other') return -1;
+        return Number(a) - Number(b);
+      })
+      .forEach(([key, children]) => {
+        const grade = Number(key);
+        const label = GRADE_LABELS[grade] ?? 'その他';
+        sorted.push({ key, label, children });
+      });
+    return sorted;
+  }, [options]);
+
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger data-testid={testId} aria-label={placeholder}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {groups.map((group) => (
+          <SelectGroup key={group.key}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.children.map((child) => (
+              <SelectItem key={child.id} value={child.id}>
+                {child.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
 
 export function ObservationEditor({ mode, observationId, initialChildId }: ObservationEditorProps) {
   const isNew = mode === 'new';
@@ -263,6 +304,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const paramChildId = searchParams?.get('childId')?.trim() || '';
   const paramChildName = searchParams?.get('childName')?.trim() || '';
   const paramActivityId = searchParams?.get('activityId')?.trim() || '';
+  const paramClassId = searchParams?.get('classId')?.trim() || '';
   const { user } = useAuth();
   const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
@@ -295,6 +337,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [childOptions, setChildOptions] = useState<ChildOption[]>([]);
   const [childOptionsError, setChildOptionsError] = useState('');
   const [childOptionsLoading, setChildOptionsLoading] = useState(false);
+  const [classList, setClassList] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedClassId, setSelectedClassId] = useState(paramClassId);
   const [deletingObservationId, setDeletingObservationId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
@@ -531,6 +575,29 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     };
   }, []);
 
+  // クラス一覧取得（新規作成時のみ）
+  useEffect(() => {
+    if (!isNew) return;
+    let isMounted = true;
+    const loadClasses = async () => {
+      try {
+        const response = await fetch('/api/classes?is_active=true');
+        const result = await response.json();
+        if (isMounted && response.ok && result.success) {
+          const classes = (result.data?.classes || []).map((cls: { id: string; name: string }) => ({
+            id: cls.id,
+            name: cls.name,
+          }));
+          setClassList(classes);
+        }
+      } catch {
+        // クラス取得失敗は無視（全児童表示にフォールバック）
+      }
+    };
+    loadClasses();
+    return () => { isMounted = false; };
+  }, [isNew]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -538,7 +605,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setChildOptionsLoading(true);
       setChildOptionsError('');
       try {
-        const response = await fetch('/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200');
+        const classFilter = isNew && classList.length > 0 && selectedClassId
+          ? `&class_id=${encodeURIComponent(selectedClassId)}`
+          : '';
+        const response = await fetch(`/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200${classFilter}`);
         const result = (await response.json()) as ChildListResponse;
         if (!response.ok || result.error) {
           throw new Error(result.error || '児童一覧の取得に失敗しました');
@@ -580,7 +650,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isNew, classList, selectedClassId]);
 
   useEffect(() => {
     if (!isNew || !draftId) return;
@@ -1500,6 +1570,30 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   <FileText className="h-5 w-5" /> 観察内容
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                  {isNew && !isChildLocked && classList.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Select
+                        value={selectedClassId}
+                        onValueChange={(v) => {
+                          setSelectedClassId(v);
+                          setSelectedChildId('');
+                        }}
+                        disabled={savingEdit}
+                      >
+                        <SelectTrigger className="h-8 w-[160px]" aria-label="クラスを選択">
+                          <SelectValue placeholder="クラスを選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">全クラス</SelectItem>
+                          {classList.map((cls) => (
+                            <SelectItem key={cls.id} value={cls.id}>
+                              {cls.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1">
                     <User className="h-4 w-4" />
                     {isNew ? (
@@ -2057,9 +2151,21 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </Button>
                 )}
 
-                <Button variant="outline" className="w-full border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
-                  <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
-                </Button>
+                {isNew && (
+                  <Button variant="outline" className="w-full border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
+                  </Button>
+                )}
+
+                {!isNew && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-blue-200 text-blue-600 hover:bg-blue-50"
+                    onClick={() => observation && load(observation.id)}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" /> データを元に戻す
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>

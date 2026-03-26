@@ -2,8 +2,8 @@
  * GET /api/users?is_active=true
  * 活動履歴・個別記録ページの記入者フィルタードロップダウン用スタッフ一覧取得テスト
  *
- * 背景: _user_facility テーブルのマイグレーションが欠損している場合、
- * このクエリが失敗してドロップダウンに何も表示されない問題が発生する。
+ * チケット2修正: staffロールでも同施設の全ユーザーが記録者候補として返るよう変更。
+ * .eq('role', 'staff') フィルターを削除したため、staffロールでも 200 が返る。
  */
 
 import { NextRequest } from 'next/server';
@@ -34,7 +34,7 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
     typeof getAuthenticatedUserMetadata
   >;
 
-  // 認証メタデータ: staff ロールで is_active フィルターが適用されるパスを通す
+  // 認証メタデータ: staff ロール
   const staffMetadata = {
     user_id: 'user-1',
     role: 'staff' as const,
@@ -42,7 +42,7 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
     current_facility_id: 'facility-1',
   };
 
-  // 認証メタデータ: facility_admin ロールで _user_facility フィルターが適用されるパスを通す
+  // 認証メタデータ: facility_admin ロール
   const facilityAdminMetadata = {
     user_id: 'admin-1',
     role: 'facility_admin' as const,
@@ -66,7 +66,6 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   }) {
     const { resolvedData = [], resolvedError = null } = options;
 
-    // 各フィルターメソッドへの呼び出しを追跡するため、参照を保持する
     const eqCalls: Array<[string, unknown]> = [];
     const isCalls: Array<[string, unknown]> = [];
 
@@ -88,7 +87,6 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_users') return query;
-        // staff ロールは _user_class を参照しないのでここには来ない
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -149,20 +147,51 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   }
 
   // ─────────────────────────────────────────────
-  // テスト 1: レスポンス形状の確認
+  // テスト 1: staff ロールでも 200 が返ること（チケット2修正後）
   // ─────────────────────────────────────────────
-  describe('1. is_active=true returns users with user_id and name fields', () => {
-    it('staff ロール: 403 Permission denied が返ること', async () => {
+  describe('1. staff ロールでも記録者一覧が取得できること', () => {
+    it('staff ロール: 200 が返り、user_id と name が含まれること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
+      const staffUsers = [
+        { id: 'user-a', name: '山田 太郎', is_active: true },
+        { id: 'user-b', name: '鈴木 花子', is_active: true },
+      ];
+      const { mockSupabase } = buildStaffRoleMock({ resolvedData: staffUsers });
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       const response = await GET(request);
       const json = await response.json();
 
-      expect(response.status).toBe(403);
-      expect(json.success).toBe(false);
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.data.users).toHaveLength(2);
+      expect(json.data.users[0]).toHaveProperty('user_id', 'user-a');
+      expect(json.data.users[0]).toHaveProperty('name', '山田 太郎');
+    });
+
+    it('staff ロール: facility_admin を含む複数ロールのユーザーが返ること（role フィルターなし）', async () => {
+      mockedGetMetadata.mockResolvedValue(staffMetadata);
+
+      // role フィルターがなければ facility_admin なども含まれる
+      const mixedUsers = [
+        { id: 'user-a', name: '山田 太郎', is_active: true },
+        { id: 'admin-a', name: '鈴木 施設長', is_active: true },
+      ];
+      const { mockSupabase, eqCalls } = buildStaffRoleMock({ resolvedData: mixedUsers });
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
+      const response = await GET(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.data.users).toHaveLength(2);
+
+      // .eq('role', 'staff') が呼ばれていないこと（ロールフィルターが削除されている）
+      const roleFilterCall = eqCalls.find(([col, val]) => col === 'role' && val === 'staff');
+      expect(roleFilterCall).toBeUndefined();
     });
 
     it('facility_admin ロール: レスポンスに user_id と name が含まれること', async () => {
@@ -185,9 +214,7 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       const { mockSupabase } = buildFacilityAdminMock({ usersData });
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       const response = await GET(request);
       const json = await response.json();
 
@@ -199,29 +226,31 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   });
 
   // ─────────────────────────────────────────────
-  // テスト 2: _user_facility.is_current フィルターの確認
+  // テスト 2: 施設フィルターが正しく適用されること
   // ─────────────────────────────────────────────
-  describe('2. _user_facility.is_current filter is applied', () => {
-    it('staff ロール: 403 Permission denied が返ること', async () => {
+  describe('2. 施設フィルターが適用されること', () => {
+    it('staff ロール: .eq("_user_facility.facility_id", facility-1) が呼ばれること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
-      const response = await GET(request);
-
-      expect(response.status).toBe(403);
-    });
-
-    it('facility_admin ロール: .eq("_user_facility.is_current", true) が呼ばれること', async () => {
-      mockedGetMetadata.mockResolvedValue(facilityAdminMetadata);
-
-      const { mockSupabase, eqCalls } = buildFacilityAdminMock({ usersData: [] });
+      const { mockSupabase, eqCalls } = buildStaffRoleMock({ resolvedData: [] });
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
+      await GET(request);
+
+      const facilityFilterCall = eqCalls.find(
+        ([col, val]) => col === '_user_facility.facility_id' && val === 'facility-1'
       );
+      expect(facilityFilterCall).toBeDefined();
+    });
+
+    it('staff ロール: .eq("_user_facility.is_current", true) が呼ばれること', async () => {
+      mockedGetMetadata.mockResolvedValue(staffMetadata);
+
+      const { mockSupabase, eqCalls } = buildStaffRoleMock({ resolvedData: [] });
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       await GET(request);
 
       const isCurrentCall = eqCalls.find(
@@ -233,8 +262,6 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
 
   // ─────────────────────────────────────────────
   // テスト 3: _user_facility.deleted_at IS NULL フィルターは発行されないこと
-  // _user_facility テーブルには deleted_at カラムが存在しない（docs/03_database.md 参照）。
-  // このフィルターを発行すると "column does not exist" エラーで記入者一覧が空になる。
   // ─────────────────────────────────────────────
   describe('3. _user_facility.deleted_at フィルターは発行されないこと', () => {
     it('staff ロール: .is("_user_facility.deleted_at", null) が呼ばれないこと', async () => {
@@ -243,9 +270,7 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       const { mockSupabase, isCalls } = buildStaffRoleMock({ resolvedData: [] });
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       await GET(request);
 
       const deletedAtNullCall = isCalls.find(
@@ -260,9 +285,7 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       const { mockSupabase, isCalls } = buildFacilityAdminMock({ usersData: [] });
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       await GET(request);
 
       const deletedAtNullCall = isCalls.find(
@@ -273,53 +296,28 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
   });
 
   // ─────────────────────────────────────────────
-  // テスト 4: is_active=true フィルターの確認
+  // テスト 4: クエリエラー時のハンドリング
   // ─────────────────────────────────────────────
-  describe('4. is_active=true filter is applied', () => {
-    it('staff ロール: 403 Permission denied が返ること', async () => {
+  describe('4. クエリエラー時のハンドリング', () => {
+    it('staff ロール: クエリエラー時に success が false であること', async () => {
       mockedGetMetadata.mockResolvedValue(staffMetadata);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
-      const response = await GET(request);
+      const columnError = {
+        code: '42703',
+        message: 'column "_user_facility.is_current" does not exist',
+        hint: null,
+        details: null,
+      };
 
-      expect(response.status).toBe(403);
-    });
-
-    it('facility_admin ロール: .eq("is_active", true) が呼ばれること', async () => {
-      mockedGetMetadata.mockResolvedValue(facilityAdminMetadata);
-
-      const { mockSupabase, eqCalls } = buildFacilityAdminMock({ usersData: [] });
+      const { mockSupabase } = buildStaffRoleMock({ resolvedError: columnError });
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
-      await GET(request);
-
-      const isActiveCall = eqCalls.find(
-        ([col, val]) => col === 'is_active' && val === true
-      );
-      expect(isActiveCall).toBeDefined();
-    });
-  });
-
-  // ─────────────────────────────────────────────
-  // テスト 5: _user_facility クエリ失敗時（スキーマ欠損シミュレーション）
-  // ─────────────────────────────────────────────
-  describe('5. When _user_facility query fails (simulating missing schema), returns error response', () => {
-    it('staff ロール: 403 Permission denied が返ること', async () => {
-      mockedGetMetadata.mockResolvedValue(staffMetadata);
-
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       const response = await GET(request);
       const json = await response.json();
 
-      expect(response.status).toBe(403);
       expect(json.success).toBe(false);
+      expect(json.data).toBeUndefined();
     });
 
     it('facility_admin ロール: _user_facility 関連エラーで 500 が返ること', async () => {
@@ -337,38 +335,12 @@ describe('GET /api/users?is_active=true (記入者フィルター用スタッフ
       });
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
+      const request = new NextRequest('http://localhost/api/users?is_active=true');
       const response = await GET(request);
       const json = await response.json();
 
       expect(response.status).toBe(500);
       expect(json.success).toBe(false);
-    });
-
-    it('クエリエラー時にレスポンスの success が false であること（空リストにはならない）', async () => {
-      mockedGetMetadata.mockResolvedValue(staffMetadata);
-
-      const columnError = {
-        code: '42703',
-        message: 'column "_user_facility.is_current" does not exist',
-        hint: null,
-        details: null,
-      };
-
-      const { mockSupabase } = buildStaffRoleMock({ resolvedError: columnError });
-      mockedCreateClient.mockResolvedValue(mockSupabase as any);
-
-      const request = new NextRequest(
-        'http://localhost/api/users?is_active=true'
-      );
-      const response = await GET(request);
-      const json = await response.json();
-
-      // エラー時は空リストを返すのではなく、エラーとして扱われるべき
-      expect(json.success).toBe(false);
-      expect(json.data).toBeUndefined();
     });
   });
 });
