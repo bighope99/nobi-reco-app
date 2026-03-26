@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { createClient } from '@/utils/supabase/server'
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 import { validateFile, uploadToStorage, getExtension } from '@/lib/storage/upload'
@@ -24,13 +25,9 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file')
-    const childId = formData.get('child_id')
 
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: 'file is required' }, { status: 400 })
-    }
-    if (typeof childId !== 'string' || childId.trim() === '') {
-      return NextResponse.json({ success: false, error: 'child_id is required' }, { status: 400 })
     }
 
     try {
@@ -41,16 +38,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: message }, { status })
     }
 
+    const fileId = randomUUID()
     const extension = getExtension(file.type)
-    // child_id をパスに使うことで更新時に同じパスへ upsert される
-    const filePath = `${current_facility_id}/children/${childId.trim()}.${extension}`
+    // UUIDをパスに使うことで新規/編集どちらでもパス衝突が発生しない
+    const filePath = `${current_facility_id}/children/${fileId}.${extension}`
 
     try {
       const result = await uploadToStorage(supabase, {
         bucketName: BUCKET_NAME,
         filePath,
         file,
-      })
+      }, fileId)
 
       return NextResponse.json({ success: true, data: result })
     } catch (err) {

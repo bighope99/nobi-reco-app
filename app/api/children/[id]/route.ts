@@ -143,7 +143,7 @@ export async function GET(
     if (childData.photo_url) {
       const { data: signedData } = await supabase.storage
         .from('private-child-photos')
-        .createSignedUrl(childData.photo_url, 300)
+        .createSignedUrl(childData.photo_url, 3600)
       photoSignedUrl = signedData?.signedUrl ?? null
     }
 

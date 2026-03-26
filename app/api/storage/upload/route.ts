@@ -56,10 +56,8 @@ export async function POST(request: NextRequest) {
         filePath,
         file,
         caption: captionValue,
-      })
-      // activity photos route returns the file_id generated in uploadToStorage,
-      // but callers expect the uuid in the path. Override file_id with our local fileId.
-      return NextResponse.json({ success: true, data: { ...result, file_id: fileId } })
+      }, fileId)
+      return NextResponse.json({ success: true, data: result })
     } catch (err) {
       const message = err instanceof Error ? err.message : '写真のアップロードに失敗しました'
       return NextResponse.json({ success: false, error: message }, { status: 500 })

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const SIGNED_URL_EXPIRES_IN = 300
+const SIGNED_URL_EXPIRES_IN = 3600
 
 export interface UploadOptions {
   bucketName: string
@@ -58,10 +58,11 @@ export function validateFile(file: File): void {
  */
 export async function uploadToStorage(
   supabase: SupabaseClient,
-  options: UploadOptions
+  options: UploadOptions,
+  fileId?: string
 ): Promise<UploadResult> {
   const { bucketName, filePath, file, caption } = options
-  const fileId = randomUUID()
+  const resolvedFileId = fileId ?? randomUUID()
   const buffer = Buffer.from(await file.arrayBuffer())
 
   const { data: signedUpload, error: signedUploadError } = await supabase.storage
@@ -95,7 +96,7 @@ export async function uploadToStorage(
   }
 
   return {
-    file_id: fileId,
+    file_id: resolvedFileId,
     file_path: filePath,
     url: signedAccess.signedUrl,
     thumbnail_url: signedAccess.signedUrl,

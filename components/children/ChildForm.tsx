@@ -494,14 +494,11 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
       setError(null);
 
       // 写真ファイルがある場合はアップロードしてパスを取得
-      // 新規登録時は child_id がまだ存在しないため、一時的に 'new' を使う
-      // 保存後の child_id で再アップロードは不要（パスは後から変更可能）
+      // サーバー側でUUIDを生成するため child_id は不要
       let uploadedPhotoPath: string | undefined = undefined;
       if (photoFile) {
-        const uploadTargetId = isEditMode && childId ? childId : 'new';
         const photoFormData = new FormData();
         photoFormData.append('file', photoFile);
-        photoFormData.append('child_id', uploadTargetId);
 
         const uploadResponse = await fetch('/api/storage/upload/child-photo', {
           method: 'POST',

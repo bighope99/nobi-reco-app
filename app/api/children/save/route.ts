@@ -151,7 +151,13 @@ export async function saveChild(
     photo_permission_public: permissions?.photo_permission_public !== false,
     photo_permission_share: permissions?.photo_permission_share !== false,
     // photo_url: 送信された場合のみ更新（undefined の場合はキー削除パターンで上書きしない）
-    photo_url: isUpdate ? basic_info.photo_url : (basic_info.photo_url || null),
+    // 署名URL（https://で始まる）は受け付けない（パスのみ保存する）
+    photo_url: (() => {
+      const url = basic_info.photo_url;
+      if (url === undefined) return isUpdate ? undefined : null;
+      if (url.startsWith('https://')) return isUpdate ? undefined : null;
+      return url || null;
+    })(),
   };
 
   let result;
