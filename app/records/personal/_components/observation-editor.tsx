@@ -4,6 +4,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import { DatePicker } from '@/components/ui/date-picker';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +30,6 @@ import {
   User,
   Clock,
   RefreshCw,
-  SwitchCamera,
   Loader2,
   CheckCircle,
   Brain,
@@ -306,14 +306,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const paramActivityId = searchParams?.get('activityId')?.trim() || '';
   const paramClassId = searchParams?.get('classId')?.trim() || '';
   const { user } = useAuth();
-  const { reassignChild } = useObservations();
   const [observation, setObservation] = useState<Observation | null>(null);
-  const [showReassignDialog, setShowReassignDialog] = useState(false);
-  const [selectedNewChild, setSelectedNewChild] = useState('');
   const [selectedChildId, setSelectedChildId] = useState('');
   const [activityId, setActivityId] = useState<string | null>(null);
   const [lockedChildName, setLockedChildName] = useState('');
-  const [reassignReason, setReassignReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -348,6 +344,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
   const [isDateEditing, setIsDateEditing] = useState(false);
   const [isRecorderEditing, setIsRecorderEditing] = useState(false);
+  const [isChildEditing, setIsChildEditing] = useState(false);
   const autoAiTriggeredRef = useRef(false);
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
@@ -959,22 +956,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     };
   }, [isNew, selectedChildId]);
 
-  const handleReassign = async () => {
-    if (!selectedNewChild || !reassignReason.trim() || !observation) return;
-    setLoading(true);
-    try {
-      const res = await reassignChild(observation.id, selectedNewChild, reassignReason.trim());
-      if (!res.success) throw new Error('付け替えに失敗しました');
-      const newChildName = childOptions.find((child) => child.id === selectedNewChild)?.name || '児童';
-      setObservation((prev) => (prev ? { ...prev, child_id: selectedNewChild, child_name: newChildName } : prev));
-      setSelectedNewChild('');
-      setReassignReason('');
-      setShowReassignDialog(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleAiFieldChange = (field: 'ai_action' | 'ai_opinion', value: string) => {
     setAiEditForm((prev) => ({
       ...prev,
@@ -1093,6 +1074,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           content: text,
           observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
           recorded_by: selectedRecorder || null,
+          child_id: selectedChildId || undefined,
         }),
       });
 
@@ -1105,6 +1087,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       const nextObservationDate = format(observationDate ?? new Date(), 'yyyy-MM-dd');
       const nextRecorderName =
         staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
+      const nextChildName = childOptions.find((c) => c.id === selectedChildId)?.name;
       setObservation((prev) =>
         prev
           ? {
@@ -1112,6 +1095,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               body_text: displayText,
               observed_at: nextObservationDate,
               recorded_by_name: nextRecorderName || prev.recorded_by_name,
+              child_name: nextChildName || prev.child_name,
               updated_at: new Date().toISOString(),
             }
           : prev,
@@ -1796,30 +1780,39 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {isNew && showContinueButton && observation && (
+                  {((isNew && showContinueButton && observation) || (mode === 'edit' && hasAiOutput)) && (
                     <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
+                      {/* 児童名 */}
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-blue-600" />
                         <span className="text-gray-600">児童名</span>
-                        <span className="font-medium">{childDisplayName}</span>
+                        {isChildEditing ? (
+                          <div className="flex items-center gap-1">
+                            <div className="min-w-[220px]">
+                              <ChildSelect
+                                value={selectedChildId}
+                                onChange={setSelectedChildId}
+                                placeholder="対象児童を選択"
+                                options={childOptions}
+                              />
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsChildEditing(false)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="font-medium">{childDisplayName}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsChildEditing(true)}>
+                              <Pencil className="h-3 w-3 mr-1" /> 変更
+                            </Button>
+                          </>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-orange-600" />
-                        <span className="text-gray-600">記録者</span>
-                        <span className="font-medium">{observation.recorded_by_name || user?.display_name || user?.email || '不明'}</span>
-                      </div>
+                      {/* 観察日 */}
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-green-600" />
                         <span className="text-gray-600">日付</span>
-                        <span className="font-medium">{observation.observed_at ? formatDate(observation.observed_at) : '不明'}</span>
-                      </div>
-                    </div>
-                  )}
-                  {mode === 'edit' && hasAiOutput && (
-                    <div className="flex flex-wrap items-center gap-4 text-sm border-b pb-4">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-green-600" />
-                        <span className="text-gray-600">観察日</span>
                         {isDateEditing ? (
                           <div className="flex items-center gap-1">
                             <div className="min-w-[180px]">
@@ -1835,11 +1828,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                             </Button>
                           </div>
                         ) : (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(true)}>
-                            <Pencil className="h-3 w-3 mr-1" /> 変更
-                          </Button>
+                          <>
+                            <span className="font-medium">
+                              {observationDate ? format(observationDate, 'yyyy/M/d(E)', { locale: ja }) : (observation?.observed_at ? formatDate(observation.observed_at) : '不明')}
+                            </span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsDateEditing(true)}>
+                              <Pencil className="h-3 w-3 mr-1" /> 変更
+                            </Button>
+                          </>
                         )}
                       </div>
+                      {/* 記録者 */}
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-orange-600" />
                         <span className="text-gray-600">記録者</span>
@@ -1868,18 +1867,24 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                             </Button>
                           </div>
                         ) : (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(true)}>
-                            <Pencil className="h-3 w-3 mr-1" /> 変更
-                          </Button>
+                          <>
+                            <span className="font-medium">
+                              {observation?.recorded_by_name || staffList.find((s) => s.user_id === selectedRecorder)?.name || user?.display_name || user?.email || '不明'}
+                            </span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsRecorderEditing(true)}>
+                              <Pencil className="h-3 w-3 mr-1" /> 変更
+                            </Button>
+                          </>
                         )}
                       </div>
+                      {/* 保存・編集終了ボタン */}
                       <div className="ml-auto flex items-center gap-2">
                         {isEditing && (
-                          <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditing(false); setIsDateEditing(false); setIsRecorderEditing(false); }}>
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditing(false); setIsDateEditing(false); setIsRecorderEditing(false); setIsChildEditing(false); }}>
                             <X className="h-3 w-3 mr-1" /> 編集終了
                           </Button>
                         )}
-                        {(isDateEditing || isRecorderEditing) && (
+                        {(isDateEditing || isRecorderEditing || isChildEditing) && (
                           <Button
                             type="button"
                             size="sm"
@@ -2124,54 +2129,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
               </Card>
             )}
 
-            {!isNew && (
-              <div className="flex justify-start">
-                <Button
-                  variant="outline"
-                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
-                  onClick={() => setShowReassignDialog(true)}
-                >
-                  <SwitchCamera className="h-4 w-4 mr-2" /> 児童付け替え
-                </Button>
-              </div>
-            )}
           </div>
 
         </div>
-
-        {!isNew && (
-          <Dialog open={showReassignDialog} onOpenChange={setShowReassignDialog}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>児童付け替え</DialogTitle>
-                <DialogDescription>誤登録などの場合に対象児童を変更します。</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Label>新しい児童</Label>
-                <ChildSelect
-                  value={selectedNewChild}
-                  onChange={setSelectedNewChild}
-                  placeholder="新しい児童を選択"
-                  options={childOptions}
-                />
-                <Label>理由</Label>
-                <Textarea value={reassignReason} onChange={(e) => setReassignReason(e.target.value)} className="min-h-[80px]" />
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowReassignDialog(false)}>
-                    キャンセル
-                  </Button>
-                  <Button
-                    onClick={handleReassign}
-                    disabled={loading || !selectedNewChild || !reassignReason.trim()}
-                    className="bg-orange-600 hover:bg-orange-700"
-                  >
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SwitchCamera className="mr-2 h-4 w-4" />} 付け替え実行
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
 
         {/* 削除確認ダイアログ */}
         <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
