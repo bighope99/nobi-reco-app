@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     // チケット3: 児童名フィールドは暗号化されているため、サーバー側のilike検索は機能しない。
     // 検索はクライアント側で復号化済みデータに対して行う。
     const warning_only = searchParams.get('warning_only') === 'true';
+    const mode = searchParams.get('mode') || 'monthly'; // 'recent30' | 'monthly'
 
     // バリデーション
     if (year < 1900 || year > 2100 || month < 1 || month > 12) {
@@ -33,15 +34,33 @@ export async function GET(request: NextRequest) {
     }
 
     // 期間計算（JSTベース）
+    const today = getCurrentDateJST();
+
+    // ヒートマップ用の期間（直近30日 or 月間）
+    let heatmapStartDateStr: string;
+    let heatmapEndDateStr: string;
+    let heatmapDays: number;
+    if (mode === 'recent30') {
+      const startDate = new Date(`${today}T00:00:00+09:00`);
+      startDate.setDate(startDate.getDate() - 29); // 今日を含む30日間
+      heatmapStartDateStr = toDateStringJST(startDate);
+      heatmapEndDateStr = today;
+      heatmapDays = 30;
+    } else {
+      heatmapStartDateStr = getFirstDayOfMonthJST(year, month);
+      heatmapEndDateStr = getLastDayOfMonthJST(year, month);
+      heatmapDays = new Date(year, month, 0).getDate();
+    }
+
+    // 月間統計用の期間（常に月ベース）
     const startDateStr = getFirstDayOfMonthJST(year, month);
     const endDateStr = getLastDayOfMonthJST(year, month);
     const daysInMonth = new Date(year, month, 0).getDate();
 
     // 今日から過去365日（1年間）の開始日（JSTベースで一貫して計算）
-    const today = getCurrentDateJST();
-    const todayDate = new Date(`${today}T00:00:00+09:00`);
-    todayDate.setDate(todayDate.getDate() - 365);
-    const yearStartStr = toDateStringJST(todayDate);
+    const yearStartDate = new Date(`${today}T00:00:00+09:00`);
+    yearStartDate.setDate(yearStartDate.getDate() - 365);
+    const yearStartStr = toDateStringJST(yearStartDate);
 
     // 1. 子ども一覧取得
     let childrenQuery = supabase
@@ -87,6 +106,12 @@ export async function GET(request: NextRequest) {
             end_date: endDateStr,
             days_in_month: daysInMonth,
           },
+          heatmap: {
+            mode,
+            start_date: heatmapStartDateStr,
+            end_date: heatmapEndDateStr,
+            days: heatmapDays,
+          },
           children: [],
           summary: {
             total_children: 0,
@@ -103,13 +128,7 @@ export async function GET(request: NextRequest) {
     const childIds = childrenData.map((c: any) => c.id);
 
     // 2-6. データ取得（並列実行で高速化）
-    const [
-      { data: monthlyAttendanceData, error: monthlyAttError },
-      { data: monthlyObservationsData, error: monthlyObsError },
-      { data: yearlyAttendanceData, error: yearlyAttError },
-      { data: yearlyObservationsData, error: yearlyObsError },
-      { data: allTimeLastRecordsData, error: allTimeLastRecordsError },
-    ] = await Promise.all([
+    const queries: Promise<any>[] = [
       // 月間出席ログ
       supabase
         .from('h_attendance')
@@ -151,16 +170,53 @@ export async function GET(request: NextRequest) {
         .in('child_id', childIds)
         .is('deleted_at', null)
         .order('observation_date', { ascending: false }),
-    ]);
+    ];
+
+    // 直近30日モードの場合、ヒートマップ用に追加クエリ
+    if (mode === 'recent30') {
+      queries.push(
+        // ヒートマップ用出席ログ（直近30日）
+        supabase
+          .from('h_attendance')
+          .select('child_id, checked_in_at')
+          .in('child_id', childIds)
+          .gte('checked_in_at', `${heatmapStartDateStr}T00:00:00+09:00`)
+          .lte('checked_in_at', `${heatmapEndDateStr}T23:59:59.999+09:00`),
+        // ヒートマップ用記録（直近30日）
+        supabase
+          .from('r_observation')
+          .select('child_id, observation_date')
+          .in('child_id', childIds)
+          .gte('observation_date', heatmapStartDateStr)
+          .lte('observation_date', heatmapEndDateStr)
+          .is('deleted_at', null),
+      );
+    }
+
+    const results = await Promise.all(queries);
+
+    const { data: monthlyAttendanceData, error: monthlyAttError } = results[0];
+    const { data: monthlyObservationsData, error: monthlyObsError } = results[1];
+    const { data: yearlyAttendanceData, error: yearlyAttError } = results[2];
+    const { data: yearlyObservationsData, error: yearlyObsError } = results[3];
+    const { data: allTimeLastRecordsData, error: allTimeLastRecordsError } = results[4];
+
+    // 直近30日モード用のデータ
+    const heatmapAttendanceData = mode === 'recent30' ? results[5]?.data : monthlyAttendanceData;
+    const heatmapObservationsData = mode === 'recent30' ? results[6]?.data : monthlyObservationsData;
+    const heatmapAttError = mode === 'recent30' ? results[5]?.error : null;
+    const heatmapObsError = mode === 'recent30' ? results[6]?.error : null;
 
     // エラーチェック
-    if (monthlyAttError || monthlyObsError || yearlyAttError || yearlyObsError || allTimeLastRecordsError) {
+    if (monthlyAttError || monthlyObsError || yearlyAttError || yearlyObsError || allTimeLastRecordsError || heatmapAttError || heatmapObsError) {
       console.error('Data fetch errors:', {
         monthlyAttError,
         monthlyObsError,
         yearlyAttError,
         yearlyObsError,
         allTimeLastRecordsError,
+        heatmapAttError,
+        heatmapObsError,
       });
       return NextResponse.json(
         { error: 'Failed to fetch status data' },
@@ -210,6 +266,23 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // ヒートマップ用データのグループ化
+    const heatmapAttendancesByChild = new Map<string, any[]>();
+    (heatmapAttendanceData || []).forEach((a: any) => {
+      if (!heatmapAttendancesByChild.has(a.child_id)) {
+        heatmapAttendancesByChild.set(a.child_id, []);
+      }
+      heatmapAttendancesByChild.get(a.child_id)!.push(a);
+    });
+
+    const heatmapObservationsByChild = new Map<string, any[]>();
+    (heatmapObservationsData || []).forEach((o: any) => {
+      if (!heatmapObservationsByChild.has(o.child_id)) {
+        heatmapObservationsByChild.set(o.child_id, []);
+      }
+      heatmapObservationsByChild.get(o.child_id)!.push(o);
+    });
+
     // データ整形
     const children = childrenData.map((child: any) => {
       // 現在所属中のクラスのみを取得
@@ -245,19 +318,31 @@ export async function GET(request: NextRequest) {
 
       const isRecordedToday = lastRecordDate === today;
 
-      // 日別記録ステータス（1日〜月末）
+      // ヒートマップ用の日別記録ステータス
+      const hmAttendances = heatmapAttendancesByChild.get(child.id) || [];
+      const hmAttendanceDates = new Set(
+        hmAttendances.map((a: any) => isoToDateJST(a.checked_in_at))
+      );
+      const hmObservations = heatmapObservationsByChild.get(child.id) || [];
+      const hmObservationDates = new Set(hmObservations.map((o: any) => o.observation_date));
+
       const dailyStatus: string[] = [];
-      const monthStr = String(month).padStart(2, '0');
-      for (let day = 1; day <= daysInMonth; day++) {
-        // 文字列を直接構築（サーバータイムゾーン非依存）
-        const dateStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`;
-        const isAttended = monthlyAttendanceDates.has(dateStr);
-        const isRecorded = monthlyObservationDates.has(dateStr);
+      for (let i = 0; i < heatmapDays; i++) {
+        let dateStr: string;
+        if (mode === 'recent30') {
+          const d = new Date(`${heatmapStartDateStr}T00:00:00+09:00`);
+          d.setDate(d.getDate() + i);
+          dateStr = toDateStringJST(d);
+        } else {
+          const monthStr = String(month).padStart(2, '0');
+          dateStr = `${year}-${monthStr}-${String(i + 1).padStart(2, '0')}`;
+        }
+        const isAttended = hmAttendanceDates.has(dateStr);
+        const isRecorded = hmObservationDates.has(dateStr);
 
         if (isRecorded && isAttended) {
           dailyStatus.push('present');
         } else if (isRecorded && !isAttended) {
-          // 来所なし（出欠なし）でも記録を書いた日
           dailyStatus.push('recorded_absent');
         } else if (isAttended && !isRecorded) {
           dailyStatus.push('late');
@@ -359,6 +444,12 @@ export async function GET(request: NextRequest) {
           start_date: startDateStr,
           end_date: endDateStr,
           days_in_month: daysInMonth,
+        },
+        heatmap: {
+          mode,
+          start_date: heatmapStartDateStr,
+          end_date: heatmapEndDateStr,
+          days: heatmapDays,
         },
         children: filteredChildren,
         summary: {

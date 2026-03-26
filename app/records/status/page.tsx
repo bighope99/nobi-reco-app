@@ -45,6 +45,12 @@ interface RecordsData {
         end_date: string;
         days_in_month: number;
     };
+    heatmap: {
+        mode: string;
+        start_date: string;
+        end_date: string;
+        days: number;
+    };
     children: Child[];
     summary: {
         total_children: number;
@@ -110,22 +116,21 @@ const DAILY_STATUS_LABEL: Record<string, string> = {
     absent: '休み',
 }
 
+const HEATMAP_COLORS: Record<string, string> = {
+    present: '#2d895a',         // 記録済（来所）
+    recorded_absent: '#55cb9a', // 記録済（来所なし）
+    late: '#bccd5d',            // 記録なし（来所）
+    absent: '#E0E7FF',          // 休み
+}
+
 const MonthlyHeatmap = ({ history }: { history: string[] }) => {
     return (
         <div className="flex flex-wrap gap-0.5">
             {history.map((status, i) => {
-                let color = 'bg-slate-100'
-                // チケット5: ヒートマップの色定義
-                // 'present' = 出席かつ記録済み（月間記録率の分子に含まれる）
-                // 'late'    = 出席だが記録なし（出席はカウントされるが記録率に貢献しない）
-                // 'absent'  = 欠席（出席カウント・記録率ともに対象外）
-                if (status === 'present') color = 'bg-indigo-600'
-                else if (status === 'recorded_absent') color = 'bg-teal-400'
-                else if (status === 'absent') color = 'bg-slate-200'
-                else if (status === 'late') color = 'bg-amber-400'
+                const bgColor = HEATMAP_COLORS[status]
 
                 return (
-                    <div key={i} className={`w-2 h-4 rounded-sm ${color}`} title={`Day ${i + 1}: ${DAILY_STATUS_LABEL[status] ?? status}`} />
+                    <div key={i} className="w-2 h-4 rounded-sm" style={{ backgroundColor: bgColor ?? '#f1f5f9' }} title={`Day ${i + 1}: ${DAILY_STATUS_LABEL[status] ?? status}`} />
                 )
             })}
         </div>
@@ -149,6 +154,8 @@ export default function StatusPage() {
     const [committedSearchTerm, setCommittedSearchTerm] = useState('')
     const [warningOnly, setWarningOnly] = useState(false)
     const [sortConfig, setSortConfig] = useState<{ key: string, order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
+    // ヒートマップモード: 初期状態は直近30日、月を手動変更したら月間モードに切り替え
+    const [heatmapMode, setHeatmapMode] = useState<'recent30' | 'monthly'>('recent30')
 
     // 日付の初期化（クライアント側でのみ実行）
     useEffect(() => {
@@ -176,6 +183,7 @@ export default function StatusPage() {
                     year: year.toString(),
                     month: month.toString(),
                     warning_only: warningOnly.toString(),
+                    mode: heatmapMode,
                 })
 
                 if (selectedClass !== 'all') {
@@ -203,7 +211,7 @@ export default function StatusPage() {
         }
 
         fetchRecordsData()
-    }, [year, month, selectedClass, warningOnly])
+    }, [year, month, selectedClass, warningOnly, heatmapMode])
 
     // チケット1: 検索ボタン押下時のみ検索を実行
     const handleSearch = () => {
@@ -218,7 +226,7 @@ export default function StatusPage() {
         }
     }
 
-    // 月の変更
+    // 月の変更（手動変更時はヒートマップを月間モードに切り替え）
     const changeMonth = (delta: number) => {
         let newMonth = month + delta
         let newYear = year
@@ -233,6 +241,7 @@ export default function StatusPage() {
 
         setYear(newYear)
         setMonth(newMonth)
+        setHeatmapMode('monthly')
     }
 
     type SortValue = string | number;
@@ -411,7 +420,7 @@ export default function StatusPage() {
                             <select
                                 className="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
                                 value={year}
-                                onChange={(e) => setYear(Number(e.target.value))}
+                                onChange={(e) => { setYear(Number(e.target.value)); setHeatmapMode('monthly') }}
                                 aria-label="年を選択"
                             >
                                 {yearOptions.map(y => (
@@ -421,7 +430,7 @@ export default function StatusPage() {
                             <select
                                 className="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
                                 value={month}
-                                onChange={(e) => setMonth(Number(e.target.value))}
+                                onChange={(e) => { setMonth(Number(e.target.value)); setHeatmapMode('monthly') }}
                                 aria-label="月を選択"
                             >
                                 {monthOptions.map(m => (
@@ -510,10 +519,10 @@ export default function StatusPage() {
                         {warningOnly && <span className="ml-2 text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-xs font-bold">要確認対象</span>}
                     </div>
                     <div className="flex items-center gap-4 text-xs">
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-600 rounded-sm"></div> 記録済（来所）</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-teal-400 rounded-sm"></div> 記録済（来所なし）</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-400 rounded-sm"></div> 記録なし（来所）</div>
-                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm"></div> 休み</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#2d895a' }}></div> 記録済（来所）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#55cb9a' }}></div> 記録済（来所なし）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#bccd5d' }}></div> 記録なし（来所）</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#E0E7FF' }}></div> 休み</div>
                     </div>
                 </div>
 
@@ -557,7 +566,10 @@ export default function StatusPage() {
                                     </th>
 
                                     <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-[200px]">
-                                        月間ヒートマップ(1日〜{recordsData.period.days_in_month}日)
+                                        {recordsData.heatmap.mode === 'recent30'
+                                            ? `ヒートマップ(直近30日)`
+                                            : `月間ヒートマップ(1日〜${recordsData.period.days_in_month}日)`
+                                        }
                                     </th>
 
                                     <th
