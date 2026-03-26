@@ -28,7 +28,7 @@
 
 |接頭辞|分類|説明|テーブル数|
 |---|---|---|---|
-|`m_`|マスタ|会社、施設、職員、子ども、学校など基本エンティティ|7|
+|`m_`|マスタ|会社、施設、職員、子ども、学校など基本エンティティ|8|
 |`r_`|記録|日々の業務記録|4|
 |`s_`|設定|施設設定、スケジュールパターンなど|4|
 |`h_`|履歴・ログ|システムログ、監査用データ|1|
@@ -586,6 +586,29 @@ CREATE INDEX idx_guardians_name_search ON m_guardians
 **移行方針**:
 - `m_children`テーブルの保護者関連カラム（`parent_name`, `parent_email`, `parent_phone`, `emergency_contact_name`, `emergency_contact_phone`）は非推奨（2026年1月移行済み）
 - 新規登録・更新は必ず`m_guardians` + `_child_guardian`を使用すること
+
+---
+
+### 4.8 役割プリセットマスタ（`m_role_presets`）
+
+```sql
+CREATE TABLE m_role_presets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,  -- 施設
+  role_name VARCHAR(50) NOT NULL,   -- 役割名（例: 見守り、おやつ、連絡帳）
+  sort_order INTEGER NOT NULL DEFAULT 0,  -- 表示順序
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_role_presets_facility_id ON m_role_presets(facility_id) WHERE deleted_at IS NULL;
+```
+
+**用途**: 活動記録の「役割分担」欄に対する施設単位のプリセット管理。
+固定ボタンを押すと役割テキストがここに保存され、次回作成時に自動プリセット表示される。
+`facility_admin` 以上が管理可能。RLS により他施設からの参照を防止。
 
 ---
 

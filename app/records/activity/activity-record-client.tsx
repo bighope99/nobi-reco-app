@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useActivityTemplates } from "@/hooks/useActivityTemplates"
 import { useRole } from "@/hooks/useRole"
+import { useSession } from "@/hooks/useSession"
 import { getCurrentDateJST } from "@/lib/utils/timezone"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical, Clipboard, CheckCircle2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical, Clipboard, CheckCircle2, Pin } from "lucide-react"
 import {
   DndContext,
   closestCenter,
@@ -208,7 +209,11 @@ export default function ActivityRecordClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isFacilityAdmin, isAdmin } = useRole()
-  const canDeleteTemplate = isFacilityAdmin || isAdmin
+  const canManageAsAdmin = isFacilityAdmin || isAdmin
+  const session = useSession()
+
+  // 役割プリセット
+  const [rolePresets, setRolePresets] = useState<{ id: string; role_name: string; sort_order: number }[]>([])
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -307,6 +312,19 @@ export default function ActivityRecordClient() {
     { user_id: "", user_name: "", role: "" },
     { user_id: "", user_name: "", role: "" },
   ]
+  const getPresetOrDefault = useCallback((): RoleAssignment[] => {
+    if (rolePresets.length > 0) {
+      const initial = rolePresets.map(p => ({ user_id: "", user_name: "", role: p.role_name }))
+      // プリセットが埋まっていても必ず末尾に空白行を1つ追加
+      initial.push({ user_id: "", user_name: "", role: "" })
+      return initial
+    }
+    return DEFAULT_ROLE_ASSIGNMENTS
+  }, [rolePresets])
+  const presetRoleSet = useMemo(
+    () => new Set(rolePresets.map((p) => p.role_name)),
+    [rolePresets]
+  )
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>(DEFAULT_ROLE_ASSIGNMENTS)
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
@@ -434,6 +452,108 @@ export default function ActivityRecordClient() {
     fetchStaff()
   }, [])
 
+  // 役割プリセットを取得し、フォーム初期値に反映
+  useEffect(() => {
+    const facilityId = session?.current_facility_id
+    if (!facilityId) return
+
+    const fetchPresets = async () => {
+      try {
+        const response = await fetch(`/api/facilities/${facilityId}/role-presets`)
+        if (!response.ok) return
+        const result = await response.json()
+        const presets: { id: string; role_name: string; sort_order: number }[] = result.presets || []
+        setRolePresets(presets)
+
+        if (presets.length > 0) {
+          setRoleAssignments((prev) => {
+            const isPristine = prev.every((r) => !r.user_id && !r.role)
+            if (!isPristine) return prev
+            const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
+            initial.push({ user_id: "", user_name: "", role: "" })
+            // プリセット適用後のフィンガープリントを更新して「未保存の変更あり」にならないようにする
+            savedFingerprintRef.current = JSON.stringify({
+              activityContent: activityContent.trim(),
+              eventName: eventName.trim(),
+              specialNotes: specialNotes.trim(),
+              handover: handover.trim(),
+              snack: snack.trim(),
+              dailySchedule: dailySchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+              roleAssignments: initial.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+              meal: {
+                menu: meal?.menu?.trim() ?? "",
+                items_to_bring: meal?.items_to_bring?.trim() ?? "",
+                notes: meal?.notes?.trim() ?? "",
+              },
+            })
+            return initial
+          })
+        }
+      } catch (err) {
+        console.error('Failed to fetch role presets:', err)
+      }
+    }
+
+    fetchPresets()
+  }, [session?.current_facility_id])
+
+  // 役割固定ボタンの toggle（保存/解除）
+  const handleTogglePreset = async (roleName: string) => {
+    const facilityId = session?.current_facility_id
+    if (!facilityId || !roleName.trim()) return
+
+    const existing = rolePresets.find((p) => p.role_name === roleName.trim())
+    const tempId = crypto.randomUUID()
+
+    // 楽観的更新：APIレスポンスを待たずに先にUIを変える
+    if (existing) {
+      setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+    } else {
+      setRolePresets((prev) => [...prev, { id: tempId, role_name: roleName.trim(), sort_order: prev.length }])
+    }
+
+    try {
+      if (existing) {
+        // 解除: soft delete
+        const res = await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
+        if (!res.ok) {
+          // ロールバック
+          setRolePresets((prev) => [...prev, existing])
+          setSaveError('役割プリセットの解除に失敗しました')
+        }
+      } else {
+        // 追加
+        const response = await fetch(`/api/facilities/${facilityId}/role-presets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role_name: roleName.trim() }),
+        })
+        if (response.ok) {
+          const result = await response.json()
+          // 仮IDを正式なレスポンスデータで置換
+          setRolePresets((prev) =>
+            result.skipped
+              ? prev.filter((p) => p.id !== tempId)
+              : prev.map((p) => (p.id === tempId ? result.preset : p))
+          )
+        } else {
+          // ロールバック
+          setRolePresets((prev) => prev.filter((p) => p.id !== tempId))
+          setSaveError('役割プリセットの保存に失敗しました')
+        }
+      }
+    } catch (err) {
+      // ロールバック
+      if (existing) {
+        setRolePresets((prev) => [...prev, existing])
+      } else {
+        setRolePresets((prev) => prev.filter((p) => p.id !== tempId))
+      }
+      console.error('Failed to toggle role preset:', err)
+      setSaveError('役割プリセットの更新に失敗しました')
+    }
+  }
+
   const fetchActivities = useCallback(async () => {
     try {
       setLoading(true)
@@ -502,7 +622,7 @@ export default function ActivityRecordClient() {
         setDailySchedule(restoredSchedule)
         setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
           ? activity.role_assignments
-          : DEFAULT_ROLE_ASSIGNMENTS)
+          : getPresetOrDefault())
         setSnack(activity.snack || '')
         setMeal(activity.meal || null)
         setSpecialNotes(activity.special_notes || '')
@@ -686,7 +806,7 @@ export default function ActivityRecordClient() {
     setEventName("")
     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -699,7 +819,7 @@ export default function ActivityRecordClient() {
       handover: "",
       snack: "",
       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
       meal: { menu: "", items_to_bring: "", notes: "" },
     })
   }
@@ -935,10 +1055,10 @@ export default function ActivityRecordClient() {
         const updateResult = await updateResponse.json()
 
         if (!updateResponse.ok || !updateResult.success) {
-          throw new Error(updateResult.error || '活動記録の更新に失敗しました')
+          throw new Error(updateResult.error || '保育日誌の更新に失敗しました')
         }
 
-        setSaveMessage('活動記録を更新しました')
+        setSaveMessage('保育日誌を更新しました')
       } else {
         // 新規保存
         const saveResponse = await fetch('/api/activities', {
@@ -966,11 +1086,11 @@ export default function ActivityRecordClient() {
         const saveResult = await saveResponse.json()
 
         if (!saveResponse.ok || !saveResult.success) {
-          throw new Error(saveResult.error || '活動記録の保存に失敗しました')
+          throw new Error(saveResult.error || '保育日誌の保存に失敗しました')
         }
 
         savedActivityId = saveResult.data?.activity_id
-        setSaveMessage('活動記録を保存しました')
+        setSaveMessage('保育日誌を保存しました')
 
         // 新規保存後は編集モードに切り替え
         setEditingActivityId(savedActivityId)
@@ -1278,7 +1398,7 @@ export default function ActivityRecordClient() {
     setDailySchedule(restoredSchedule)
     const restoredRoleAssignments = activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
-      : DEFAULT_ROLE_ASSIGNMENTS
+      : getPresetOrDefault()
     setRoleAssignments(restoredRoleAssignments)
     const restoredSnack = activity.snack || ""
     const restoredMeal = activity.meal || null
@@ -1496,7 +1616,7 @@ export default function ActivityRecordClient() {
     setEventName("")
     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -1508,7 +1628,7 @@ export default function ActivityRecordClient() {
       handover: "",
       snack: "",
       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
       meal: { menu: "", items_to_bring: "", notes: "" },
     })
   }
@@ -1523,7 +1643,7 @@ export default function ActivityRecordClient() {
     setEventName("")
     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
@@ -1537,7 +1657,7 @@ export default function ActivityRecordClient() {
       handover: "",
       snack: "",
       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
       meal: { menu: "", items_to_bring: "", notes: "" },
     })
   }
@@ -1765,12 +1885,12 @@ export default function ActivityRecordClient() {
   const scheduleIds = getScheduleIds()
 
   return (
-    <StaffLayout title="活動記録" subtitle="1日の活動のまとめを記録">
+    <StaffLayout title="保育日誌" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
         <PreviousHandoverBanner activityDate={activityDate} selectedClass={selectedClass} />
         <Card>
           <CardHeader>
-            <CardTitle>活動記録の入力</CardTitle>
+            <CardTitle>保育日誌の入力</CardTitle>
             {isEditMode && lastUpdatedAt && (
               <p className="text-sm text-gray-500">
                 {(() => {
@@ -1821,7 +1941,7 @@ export default function ActivityRecordClient() {
                     setEventName("")
                     scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
                     setDailySchedule([...DEFAULT_SCHEDULE])
-                    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+                    setRoleAssignments(getPresetOrDefault())
                     setSnack("")
                     setMeal(null)
                     setSpecialNotes("")
@@ -1834,7 +1954,7 @@ export default function ActivityRecordClient() {
                       handover: "",
                       snack: "",
                       dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
-                      roleAssignments: DEFAULT_ROLE_ASSIGNMENTS.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+                      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
                       meal: { menu: "", items_to_bring: "", notes: "" },
                     })
                   }}
@@ -1918,7 +2038,7 @@ export default function ActivityRecordClient() {
                       編集
                     </Button>
                   )}
-                  {canDeleteTemplate && selectedTemplateId && (
+                  {canManageAsAdmin && selectedTemplateId && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -2025,11 +2145,19 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {roleAssignments.map((assignment, index) => (
+                {roleAssignments.map((assignment, index) => {
+                  const isPinned = presetRoleSet.has(assignment.role?.trim() ?? "")
+                  return (
                   <div key={index} className="flex items-center gap-2">
                     <Select
-                      value={assignment.user_id}
+                      value={assignment.user_id || "__none__"}
                       onValueChange={(value) => {
+                        if (value === "__none__") {
+                          const newAssignments = [...roleAssignments]
+                          newAssignments[index] = { ...assignment, user_id: "", user_name: "" }
+                          setRoleAssignments(newAssignments)
+                          return
+                        }
                         const staff = staffList.find((s) => s.user_id === value)
                         const newAssignments = [...roleAssignments]
                         newAssignments[index] = {
@@ -2044,6 +2172,7 @@ export default function ActivityRecordClient() {
                         <SelectValue placeholder="職員を選択" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">（未選択）</SelectItem>
                         {staffList.map((staff) => (
                           <SelectItem key={staff.user_id} value={staff.user_id}>
                             {staff.name}
@@ -2062,6 +2191,29 @@ export default function ActivityRecordClient() {
                       placeholder="役割を入力"
                       maxLength={MAX_ROLE_LENGTH}
                     />
+                    {canManageAsAdmin && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={isPinned ? "プリセットから解除" : "プリセットに固定"}
+                        aria-pressed={isPinned}
+                        onClick={() => handleTogglePreset(assignment.role || "")}
+                        disabled={!assignment.role?.trim()}
+                        className={cn(
+                          "h-8 w-8",
+                          isPinned
+                            ? "text-primary hover:text-primary/80"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title={isPinned ? "プリセットから解除" : "プリセットに固定"}
+                      >
+                        <Pin
+                          className="h-4 w-4"
+                          fill={isPinned ? "currentColor" : "none"}
+                        />
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       size="icon"
@@ -2074,7 +2226,8 @@ export default function ActivityRecordClient() {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
