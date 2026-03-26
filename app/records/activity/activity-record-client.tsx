@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
@@ -321,6 +321,10 @@ export default function ActivityRecordClient() {
     }
     return DEFAULT_ROLE_ASSIGNMENTS
   }, [rolePresets])
+  const presetRoleSet = useMemo(
+    () => new Set(rolePresets.map((p) => p.role_name)),
+    [rolePresets]
+  )
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>(DEFAULT_ROLE_ASSIGNMENTS)
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
@@ -463,11 +467,8 @@ export default function ActivityRecordClient() {
 
         if (presets.length > 0) {
           const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
-          // デフォルト行数より少ない場合は残りを空行で補完
-          const MIN_ROWS = 2
-          while (initial.length < MIN_ROWS) {
-            initial.push({ user_id: "", user_name: "", role: "" })
-          }
+          // プリセットが埋まっていても必ず末尾に空白行を1つ追加（getPresetOrDefault と同じロジック）
+          initial.push({ user_id: "", user_name: "", role: "" })
           setRoleAssignments(initial)
         }
       } catch (err) {
@@ -2125,7 +2126,9 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {roleAssignments.map((assignment, index) => (
+                {roleAssignments.map((assignment, index) => {
+                  const isPinned = presetRoleSet.has(assignment.role?.trim() ?? "")
+                  return (
                   <div key={index} className="flex items-center gap-2">
                     <Select
                       value={assignment.user_id || "__none__"}
@@ -2178,15 +2181,15 @@ export default function ActivityRecordClient() {
                         disabled={!assignment.role?.trim()}
                         className={cn(
                           "h-8 w-8",
-                          rolePresets.some((p) => p.role_name === assignment.role?.trim())
+                          isPinned
                             ? "text-primary hover:text-primary/80"
                             : "text-muted-foreground hover:text-foreground"
                         )}
-                        title={rolePresets.some((p) => p.role_name === assignment.role?.trim()) ? "プリセットから解除" : "プリセットに固定"}
+                        title={isPinned ? "プリセットから解除" : "プリセットに固定"}
                       >
                         <Pin
                           className="h-4 w-4"
-                          fill={rolePresets.some((p) => p.role_name === assignment.role?.trim()) ? "currentColor" : "none"}
+                          fill={isPinned ? "currentColor" : "none"}
                         />
                       </Button>
                     )}
@@ -2202,7 +2205,8 @@ export default function ActivityRecordClient() {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 

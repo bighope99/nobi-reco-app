@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt';
+import { checkFacilityAccess } from '../_access';
 
 /**
  * DELETE /api/facilities/:facility_id/role-presets/:preset_id
@@ -23,22 +24,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // site_admin・company_admin は全施設にアクセス可、それ以外は自施設のみ
-    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
-      if (metadata.current_facility_id !== facilityId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-    } else if (metadata.role === 'company_admin') {
-      // company_admin は自社施設のみに制限
-      const { data: facility } = await supabase
-        .from('m_facilities')
-        .select('company_id')
-        .eq('id', facilityId)
-        .is('deleted_at', null)
-        .single();
-      if (facility?.company_id !== metadata.company_id) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+    if (!await checkFacilityAccess(supabase, metadata, facilityId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { data, error } = await supabase
