@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useDebounce } from "@/hooks/useDebounce"
+import { useRouter } from "next/navigation"
+import { useHistoryFilters } from "@/hooks/useHistoryFilters"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
 import { Search, ChevronDown, User } from "lucide-react"
@@ -35,24 +35,20 @@ interface PersonalItem {
   staffName: string
 }
 
-interface ClassOption {
-  class_id: string
-  name: string
-}
-
 export default function PersonalHistoryClient() {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
-  const [fromDate, setFromDate] = useState(() => searchParams.get("from_date") ?? "")
-  const [toDate, setToDate] = useState(() => searchParams.get("to_date") ?? "")
-  const [selectedClass, setSelectedClass] = useState(() => searchParams.get("class_id") ?? "all")
-  const [selectedStaff, setSelectedStaff] = useState("all")
-  const [childName, setChildName] = useState("")
-  const [selectedGrade, setSelectedGrade] = useState("")
-  const [keyword, setKeyword] = useState("")
-  const debouncedKeyword = useDebounce(keyword, 500)
+  const {
+    searchParams,
+    fromDate, setFromDate,
+    toDate, setToDate,
+    selectedClass, setSelectedClass,
+    selectedStaff, setSelectedStaff,
+    keyword, setKeyword,
+    debouncedKeyword,
+    classes, staffList,
+    childName, setChildName,
+    selectedGrade, setSelectedGrade,
+  } = useHistoryFilters({ enableChildName: true, enableGrade: true })
 
   const [items, setItems] = useState<PersonalItem[]>([])
   const [total, setTotal] = useState(0)
@@ -60,48 +56,7 @@ export default function PersonalHistoryClient() {
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  const [classes, setClasses] = useState<ClassOption[]>([])
-  const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([])
-
   const latestRequestRef = useRef(0)
-
-  useEffect(() => {
-    const nextFromDate = searchParams.get("from_date") ?? ""
-    const nextToDate = searchParams.get("to_date") ?? ""
-    const nextClassId = searchParams.get("class_id") ?? "all"
-
-    setFromDate((current) => (current === nextFromDate ? current : nextFromDate))
-    setToDate((current) => (current === nextToDate ? current : nextToDate))
-    setSelectedClass((current) => (current === nextClassId ? current : nextClassId))
-  }, [searchParams])
-
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString())
-
-    if (fromDate) {
-      params.set("from_date", fromDate)
-    } else {
-      params.delete("from_date")
-    }
-
-    if (toDate) {
-      params.set("to_date", toDate)
-    } else {
-      params.delete("to_date")
-    }
-
-    if (selectedClass !== "all") {
-      params.set("class_id", selectedClass)
-    } else {
-      params.delete("class_id")
-    }
-
-    const nextQuery = params.toString()
-    const currentQuery = searchParams.toString()
-    if (nextQuery !== currentQuery) {
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
-    }
-  }, [fromDate, toDate, selectedClass, pathname, router, searchParams])
 
   const fetchObservations = useCallback(async (newOffset: number, append: boolean) => {
     const requestId = ++latestRequestRef.current
@@ -173,31 +128,6 @@ export default function PersonalHistoryClient() {
   useEffect(() => {
     fetchObservations(0, false)
   }, [fetchObservations])
-
-  useEffect(() => {
-    const fetchMeta = async () => {
-      const classRes = await fetch('/api/classes')
-      if (classRes.ok) {
-        const classJson = await classRes.json()
-        if (classJson.success) setClasses(classJson.data?.classes || [])
-        else console.error('Class fetch error:', classJson)
-      } else {
-        console.error('Class fetch failed:', classRes.status, await classRes.text())
-      }
-
-      const staffRes = await fetch('/api/users?is_active=true')
-      if (staffRes.ok) {
-        const staffJson = await staffRes.json()
-        if (staffJson.success) setStaffList(
-          (staffJson.data?.users || []).map((u: { user_id: string; name: string }) => ({ id: u.user_id, name: u.name }))
-        )
-        else console.error('Staff fetch error:', staffJson)
-      } else {
-        console.error('Staff fetch failed:', staffRes.status, await staffRes.text())
-      }
-    }
-    fetchMeta()
-  }, [])
 
   const handleLoadMore = () => {
     fetchObservations(offset + 20, true)
