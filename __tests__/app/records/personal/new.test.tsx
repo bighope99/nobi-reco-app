@@ -227,7 +227,7 @@ describe('ObservationEditor edit', () => {
       expect(screen.getByText('テスト本文')).toBeInTheDocument();
     });
 
-    // 「データを元に戻す」ボタンが存在しないことを確認
-    expect(screen.queryByText('データを元に戻す')).not.toBeInTheDocument();
+    // editモードでは「データを元に戻す」ボタンが表示されることを確認
+    expect(screen.queryByText('データを元に戻す')).toBeInTheDocument();
   });
 });
