@@ -66,8 +66,8 @@ export default function AttendanceSchedulePage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterClass, setFilterClass] = useState('all')
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [sortKey, setSortKey] = useState<SortKey>('grade')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [editMode, setEditMode] = useState(false)
   const [modifiedSchedules, setModifiedSchedules] = useState<Map<string, ChildSchedule['schedule']>>(new Map())
   const [saving, setSaving] = useState(false)
@@ -441,15 +441,17 @@ export default function AttendanceSchedulePage() {
                           <SortIcon columnKey="grade" />
                         </div>
                       </th>
-                      <th
-                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                        onClick={() => handleSort('class')}
-                      >
-                        <div className="flex items-center gap-1">
-                          クラス
-                          <SortIcon columnKey="class" />
-                        </div>
-                      </th>
+                      {hasClasses && (
+                        <th
+                          className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                          onClick={() => handleSort('class')}
+                        >
+                          <div className="flex items-center gap-1">
+                            クラス
+                            <SortIcon columnKey="class" />
+                          </div>
+                        </th>
+                      )}
                       {weekdays.map((day) => (
                         <th key={day.key} className="px-4 py-3 text-center font-semibold text-slate-600 text-sm">
                           {day.label}
@@ -480,9 +482,11 @@ export default function AttendanceSchedulePage() {
                           <td className="px-2 py-4">
                             <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
                           </td>
-                          <td className="px-3 py-4">
-                            <span className="text-sm text-slate-600">{child.class_name}</span>
-                          </td>
+                          {hasClasses && (
+                            <td className="px-3 py-4">
+                              <span className="text-sm text-slate-600">{child.class_name}</span>
+                            </td>
+                          )}
                           {weekdays.map((day) => (
                             <td key={day.key} className="px-4 py-4 text-center">
                               <div className="flex justify-center">
