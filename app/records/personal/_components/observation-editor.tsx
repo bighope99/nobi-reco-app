@@ -974,7 +974,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }));
   };
 
-
   const handleAiEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (aiEditSaving) return;
