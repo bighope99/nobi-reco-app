@@ -88,10 +88,6 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ action: 'check_in', time: now, attendance_id: insertData.id })
   } else {
-    // Fix 4: 既にチェックアウト済みの場合は 409
-    if (existing.checked_out_at) {
-      return NextResponse.json({ error: 'Already checked out' }, { status: 409 })
-    }
     // 2回目以降: チェックアウト（上書き含む）
     const { error } = await supabase
       .from('h_attendance')

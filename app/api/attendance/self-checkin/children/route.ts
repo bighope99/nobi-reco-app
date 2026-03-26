@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 import { createClient } from '@/utils/supabase/server'
-import { toKatakana, getKanaRow } from '@/lib/utils/kana'
+import { toKatakana, toHiragana, getKanaRow } from '@/lib/utils/kana'
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
 import { getCurrentDateJST } from '@/lib/utils/timezone'
 import { calculateGrade, formatGradeLabel } from '@/utils/grade'
@@ -84,7 +84,7 @@ export async function GET() {
     if (!groups[row]) groups[row] = []
     groups[row].push({
       id: child.id,
-      kanaName: `${familyKana} ${givenKana}`.trim(),
+      kanaName: toHiragana(`${familyKana} ${givenKana}`.trim()),
       kanjiName: `${familyKanji} ${givenKanji}`.trim(),
       gradeLabel: gradeLabel !== '-' ? gradeLabel : undefined,
       status,

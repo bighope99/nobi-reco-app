@@ -98,6 +98,7 @@ export default function SelfCheckInPage() {
   const [groups, setGroups] = useState<Record<string, ChildRecord[]>>({})
   const [loading, setLoading] = useState(true)
   const optimisticIdsRef = useRef<Set<string>>(new Set())
+  const pendingPostRef = useRef<Promise<{ attendance_id: string }> | null>(null)
 
   const [view, setView] = useState<View>('kana-select')
   const [selectedKana, setSelectedKana] = useState<string>('')
@@ -177,21 +178,27 @@ export default function SelfCheckInPage() {
     setCountdown(3)
     setView('feedback')
 
-    // Fire-and-forget API call
-    fetch('/api/attendance/self-checkin', {
+    // Fire-and-forget API call（Promiseをrefに保持してundo時に利用）
+    const postPromise = fetch('/api/attendance/self-checkin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ child_id: child.id }),
     })
       .then(res => res.json())
       .then(data => {
-        setAttendanceId(data.attendance_id ?? null)
+        const id = (data.attendance_id as string) ?? ''
+        setAttendanceId(id || null)
         optimisticIdsRef.current.delete(child.id)
+        pendingPostRef.current = null
+        return { attendance_id: id }
       })
       .catch(() => {
         console.error('出席登録に失敗しました')
         optimisticIdsRef.current.delete(child.id)
+        pendingPostRef.current = null
+        return { attendance_id: '' }
       })
+    pendingPostRef.current = postPromise
   }
 
   const handleUndo = () => {
@@ -209,19 +216,33 @@ export default function SelfCheckInPage() {
 
       setView('child-select')
 
-      // Fire-and-forget DELETE
-      if (attendanceId) {
+      // サーバー側の取り消し
+      const sendDelete = (id: string) => {
         fetch('/api/attendance/self-checkin', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendance_id: attendanceId, action: checkinAction }),
+          body: JSON.stringify({ attendance_id: id, action: checkinAction }),
         })
-          .then(() => {
+          .finally(() => {
             optimisticIdsRef.current.delete(childId)
           })
-          .catch(() => {
+      }
+
+      const currentPendingPost = pendingPostRef.current
+      pendingPostRef.current = null
+
+      if (attendanceId) {
+        // POSTレスポンス済み → すぐDELETE
+        sendDelete(attendanceId)
+      } else if (currentPendingPost) {
+        // POST応答待ち → 完了後にDELETE
+        currentPendingPost.then(({ attendance_id }) => {
+          if (attendance_id) {
+            sendDelete(attendance_id)
+          } else {
             optimisticIdsRef.current.delete(childId)
-          })
+          }
+        })
       } else {
         optimisticIdsRef.current.delete(childId)
       }
