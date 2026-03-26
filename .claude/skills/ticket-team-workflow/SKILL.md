@@ -399,7 +399,7 @@ Phase 3:
   Planner → PR URL受信直後に全チケットのNotionステータスを「レビュー依頼」に更新（CodeRabbitループを待たない）
   Coder → CodeRabbitループ実行
   Planner → SendMessage(to: "Leader") で全完了を報告
-  Leader → 各メンバーに SendMessage({type: "shutdown_request"}) でチームを解散
+  Leader → ユーザーに完了報告（チームはそのまま待機。解散はユーザーが「終了」と言うまでしない）
 ```
 
 ### 4. チーム操作
@@ -419,10 +419,14 @@ Phase 3:
 - **エスカレーション**: PM → Leader → ユーザーの順
 - **Leaderは実装しない**: 判断と承認のみ
 - **PMは実装しない**: 計画と指示出しのみ
+- **LeaderはPR修正を直接行わない**: チーム稼働中にユーザーがPR番号（`/pull/123` など）を言っても、Leaderが `/fix-pr` を自分で実行してはいけない。必ずCoderに `SendMessage` で委譲する。LeaderはPR URLとユーザーの指示をCoderに伝え、Coderが `/fix-pr` を実行する。
 
-## クリーンアップ（チーム解散時に必ず実行）
+## クリーンアップ（ユーザーが「終了」と言ったときのみ実行）
 
-全Phase完了後、**チーム解散前にPMが必ず実行する**:
+> ⚠️ **全Phase完了しても、ユーザーが「終了」「解散して」と明示するまでチームを解散しない。**
+> Leaderが自判断で解散・worktree削除を行ってはいけない。
+
+ユーザーから解散指示を受けたら、**PMが必ず実行する**:
 
 ```bash
 # 使用した全worktreeを削除
