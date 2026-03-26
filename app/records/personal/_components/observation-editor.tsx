@@ -2099,10 +2099,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                       </div>
                     );
                   })()}
-                  {selectedChildId && (
+                  {(selectedChildId || observation?.child_id) && (
                     <div className="mt-3 text-center">
                       <Button variant="outline" size="sm" className="text-xs" asChild>
-                        <Link href={`/records/personal/history?childId=${selectedChildId}`}>さらに見る</Link>
+                        <Link href={`/records/personal/history?childId=${selectedChildId || observation?.child_id}`}>さらに見る</Link>
                       </Button>
                     </div>
                   )}
