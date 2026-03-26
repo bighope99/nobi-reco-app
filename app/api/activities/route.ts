@@ -332,6 +332,7 @@ export async function GET(request: NextRequest) {
         recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name ?? null,
         created_by: (activity.m_users as { id: string; name: string } | null)?.name ?? null,
         created_at: activity.created_at,
+        updated_at: activity.updated_at ?? null,
         individual_record_count: individualRecords.length,
         individual_records: individualRecords,
       };

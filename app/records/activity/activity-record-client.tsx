@@ -94,6 +94,7 @@ interface Activity {
   created_by: string
   recorded_by_name?: string | null
   created_at: string
+  updated_at?: string | null
   individual_record_count: number
   individual_records: IndividualRecord[]
   mentioned_children?: string[]
@@ -251,6 +252,7 @@ export default function ActivityRecordClient() {
   // 編集モードの状態
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -484,6 +486,7 @@ export default function ActivityRecordClient() {
         const activity = activities[0]
         setEditingActivityId(activity.activity_id)
         setIsEditMode(true)
+        setLastUpdatedAt(activity.updated_at ?? null)
         setActivityContent(activity.content || '')
         setSelectedRecorder(activity.recorded_by || '')
         setOriginalContent(activity.content || '')
@@ -1220,6 +1223,7 @@ export default function ActivityRecordClient() {
 
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
+    setLastUpdatedAt(activity.updated_at ?? null)
     // @[child_id] 形式を @表示名 形式に変換して表示
     const idToNameMap = new Map(Object.entries(activity.mentioned_children_names || {}))
     const displayContent = convertToDisplayNames(activity.content, idToNameMap)
@@ -1735,6 +1739,18 @@ export default function ActivityRecordClient() {
         <Card>
           <CardHeader>
             <CardTitle>活動記録の入力</CardTitle>
+            {isEditMode && lastUpdatedAt && (
+              <p className="text-sm text-gray-500">
+                {(() => {
+                  const d = new Date(lastUpdatedAt)
+                  const m = d.getMonth() + 1
+                  const day = d.getDate()
+                  const hh = String(d.getHours()).padStart(2, '0')
+                  const mm = String(d.getMinutes()).padStart(2, '0')
+                  return `${m}/${day} ${hh}時${mm}分に更新`
+                })()}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
