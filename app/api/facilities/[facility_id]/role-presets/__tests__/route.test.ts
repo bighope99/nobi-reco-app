@@ -104,16 +104,45 @@ describe('POST /api/facilities/:facility_id/role-presets', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSupabase = { from: jest.fn(), rpc: jest.fn() };
+    mockSupabase = { from: jest.fn() };
     mockCreateClient.mockResolvedValue(mockSupabase);
     mockGetMetadata.mockResolvedValue(ADMIN_METADATA);
     mockHasPermission.mockReturnValue(true);
   });
 
   it('プリセットを正常に追加できる', async () => {
-    const newPreset = { id: PRESET_ID, role_name: '司会', sort_order: 0, skipped: false };
+    const newPreset = { id: PRESET_ID, role_name: '司会', sort_order: 0 };
 
-    mockSupabase.rpc.mockResolvedValue({ data: [newPreset], error: null });
+    // 重複チェック: 既存なし
+    const existCheckChain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    // sort_order取得: 既存なし
+    const sortOrderChain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    // INSERT
+    const insertChain = {
+      insert: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: newPreset, error: null }),
+    };
+
+    let callCount = 0;
+    mockSupabase.from.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return existCheckChain;
+      if (callCount === 2) return sortOrderChain;
+      return insertChain;
+    });
 
     const response = await POST(makeRequest('POST', { role_name: '司会' }), { params: makeParams() });
     const body = await response.json();
@@ -123,9 +152,17 @@ describe('POST /api/facilities/:facility_id/role-presets', () => {
   });
 
   it('重複 role_name の場合はスキップして既存を返す', async () => {
-    const existingPreset = { id: PRESET_ID, role_name: '司会', sort_order: 0, skipped: true };
+    const existingPreset = { id: PRESET_ID, role_name: '司会', sort_order: 0 };
 
-    mockSupabase.rpc.mockResolvedValue({ data: [existingPreset], error: null });
+    // 重複チェック: 既存あり
+    const existCheckChain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: existingPreset, error: null }),
+    };
+
+    mockSupabase.from.mockReturnValue(existCheckChain);
 
     const response = await POST(makeRequest('POST', { role_name: '司会' }), { params: makeParams() });
     const body = await response.json();
