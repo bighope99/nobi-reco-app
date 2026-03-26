@@ -259,17 +259,17 @@ const ChildSelect = ({
       existing.push(child);
       map.set(key, existing);
     });
-    // 学年昇順、その他は末尾
+    // 学年降順（高学年→低学年）、未就学児・その他は末尾
     const sorted: Array<{ key: string; label: string; children: ChildOption[] }> = [];
     Array.from(map.entries())
       .sort(([a], [b]) => {
         if (a === 'other') return 1;
         if (b === 'other') return -1;
-        return Number(a) - Number(b);
+        return Number(b) - Number(a);
       })
       .forEach(([key, children]) => {
         const grade = Number(key);
-        const label = GRADE_LABELS[grade] ?? 'その他';
+        const label = key === 'other' ? '未就学児' : (GRADE_LABELS[grade] ?? 'その他');
         sorted.push({ key, label, children });
       });
     return sorted;
@@ -1563,7 +1563,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         {/* メインコンテンツ */}
         <div className="max-w-6xl mx-auto">
           <div className="space-y-6">
-            {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton) && (
+            {!(mode === 'edit' && hasAiOutput) && !(isNew && showContinueButton && !isEditing) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1653,6 +1653,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                     <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
                       {toDisplayText(observation?.body_text || '')}
                     </div>
+                    {(observation?.updated_at || observation?.created_at) && (
+                      <div className="flex justify-end mt-2">
+                        <span className="text-xs text-gray-400">
+                          {formatDateTime(observation.updated_at || observation.created_at)}に更新
+                        </span>
+                      </div>
+                    )}
                     <div className="mt-4 flex justify-end gap-2">
                       {isNew && !draftId && showContinueButton && (
                         <Button
@@ -1764,6 +1771,52 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                 )}
               </CardContent>
             </Card>
+            )}
+
+            {isNew && showContinueButton && !isEditing && observation && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" /> 観察内容
+                    </CardTitle>
+                    <div className="flex items-center gap-3">
+                      {(observation.updated_at || observation.created_at) && (
+                        <span className="text-xs text-gray-400">
+                          {formatDateTime(observation.updated_at || observation.created_at)}に更新
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditText(toDisplayText(observation.body_text || ''));
+                          setIsEditing(true);
+                        }}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" /> 編集
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
+                    {toDisplayText(observation.body_text || '')}
+                  </div>
+                  {!draftId && (
+                    <div className="mt-4 flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        className="border-green-200 text-green-600 hover:bg-green-50"
+                        onClick={handleContinueInput}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" /> 続けて入力
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
             {hasAiOutput && (
