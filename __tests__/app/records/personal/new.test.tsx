@@ -114,9 +114,8 @@ describe('ObservationEditor new', () => {
 
     fireEvent.click(screen.getByTestId('observation-save'));
 
-    const aiAction = await screen.findByLabelText('抽出された事実');
-    await screen.findByDisplayValue('今日は積み木で高い塔を作っていました。');
-    expect((aiAction as HTMLTextAreaElement).value).toContain('積み木で高い塔');
+    // 保存後、AI解析結果が読み取り専用表示で確認できる（テキストエリアではなくdivに表示）
+    await screen.findByText(/積み木で高い塔/, { exact: false });
   });
 
   it('loads observation tags from m_observation_tags', async () => {
