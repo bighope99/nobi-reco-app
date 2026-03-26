@@ -1106,6 +1106,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           ? {
               ...prev,
               ...(contentToSave !== undefined ? { body_text: contentToSave } : {}),
+              ...(selectedChildId ? { child_id: selectedChildId } : {}),
               observed_at: nextObservationDate,
               recorded_by_name: nextRecorderName || prev.recorded_by_name,
               child_name: nextChildName || prev.child_name,
@@ -1441,7 +1442,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const childDisplayName = useMemo(() => {
     if (isNew) return lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択');
-    return childOptions.find((c) => c.id === observation?.child_id)?.name || observation?.child_name || observation?.child_id;
+    return observation?.child_name || observation?.child_id;
   }, [isNew, lockedChildName, selectedChild, selectedChildId, childOptions, observation]);
   const recorderDisplayName =
     observation?.recorded_by_name ||
