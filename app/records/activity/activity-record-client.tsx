@@ -492,9 +492,11 @@ export default function ActivityRecordClient() {
           .filter(Boolean) as ActivityPhoto[]
         setPhotos(mappedPhotos)
         setEventName(activity.event_name || '')
-        setDailySchedule(activity.daily_schedule && activity.daily_schedule.length > 0
+        const restoredSchedule = activity.daily_schedule && activity.daily_schedule.length > 0
           ? activity.daily_schedule
-          : DEFAULT_SCHEDULE)
+          : DEFAULT_SCHEDULE
+        scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
+        setDailySchedule(restoredSchedule)
         setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
           ? activity.role_assignments
           : DEFAULT_ROLE_ASSIGNMENTS)
@@ -661,6 +663,7 @@ export default function ActivityRecordClient() {
     setMentionTokens(new Map())
     setPhotos([])
     setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
     setDailySchedule([...DEFAULT_SCHEDULE])
     setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
     setSnack("")

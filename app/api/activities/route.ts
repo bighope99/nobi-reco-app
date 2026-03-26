@@ -567,8 +567,20 @@ export async function POST(request: NextRequest) {
       console.error('Activity insert error:', activityError);
       // PostgreSQL unique violation (23505) → 409
       if (activityError.code === '23505') {
+        // レースコンディションで挿入が衝突した場合、既存レコードのIDを取得して返す
+        const existingQueryBuilder = supabase
+          .from('r_activity')
+          .select('id')
+          .eq('facility_id', facility_id)
+          .eq('activity_date', activity_date)
+          .is('deleted_at', null)
+          .limit(1);
+        const existingQuery = class_id
+          ? existingQueryBuilder.eq('class_id', class_id)
+          : existingQueryBuilder.is('class_id', null);
+        const { data: existing } = await existingQuery.maybeSingle();
         return NextResponse.json(
-          { success: false, error: '同日同クラスの活動記録が既に存在します' },
+          { success: false, error: '同日同クラスの活動記録が既に存在します', existing_activity_id: existing?.id },
           { status: 409 }
         );
       }
