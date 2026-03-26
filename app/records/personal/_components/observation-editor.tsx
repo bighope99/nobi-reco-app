@@ -890,6 +890,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setObservation(observationRecord);
       savedBodyRef.current = displayContent;
 
+      // 既存の児童IDを復元（「変更」クリック時にSelectが正しい値を表示するため）
+      if (data.child_id) {
+        setSelectedChildId(data.child_id);
+      }
+
       // 既存の記録者を復元
       if (data.recorded_by) {
         setSelectedRecorder(data.recorded_by);
