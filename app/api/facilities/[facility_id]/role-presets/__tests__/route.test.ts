@@ -113,13 +113,6 @@ describe('POST /api/facilities/:facility_id/role-presets', () => {
   it('プリセットを正常に追加できる', async () => {
     const newPreset = { id: PRESET_ID, role_name: '司会', sort_order: 0 };
 
-    // 重複チェック: 既存なし
-    const checkChain = {
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      is: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({ data: null, error: null }),
-    };
     // sort_order 最大値取得
     const maxOrderChain = {
       select: jest.fn().mockReturnThis(),
@@ -137,7 +130,6 @@ describe('POST /api/facilities/:facility_id/role-presets', () => {
     };
 
     mockSupabase.from
-      .mockReturnValueOnce(checkChain)
       .mockReturnValueOnce(maxOrderChain)
       .mockReturnValueOnce(insertChain);
 
@@ -149,15 +141,35 @@ describe('POST /api/facilities/:facility_id/role-presets', () => {
   });
 
   it('重複 role_name の場合はスキップして既存を返す', async () => {
-    const existingPreset = { id: PRESET_ID };
+    const existingPreset = { id: PRESET_ID, role_name: '司会', sort_order: 0 };
 
-    const checkChain = {
+    // sort_order 最大値取得
+    const maxOrderChain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: { sort_order: 0 }, error: null }),
+    };
+    // INSERT → 一意制約違反エラー
+    const insertChain = {
+      insert: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate key' } }),
+    };
+    // 既存レコード取得
+    const existingChain = {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       is: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({ data: existingPreset, error: null }),
     };
-    mockSupabase.from.mockReturnValue(checkChain);
+
+    mockSupabase.from
+      .mockReturnValueOnce(maxOrderChain)
+      .mockReturnValueOnce(insertChain)
+      .mockReturnValueOnce(existingChain);
 
     const response = await POST(makeRequest('POST', { role_name: '司会' }), { params: makeParams() });
     const body = await response.json();
