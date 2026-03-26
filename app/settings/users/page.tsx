@@ -84,6 +84,9 @@ const FieldGroup = ({ label, required, children }: any) => (
   </div>
 );
 
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+
 export default function UsersSettingsPage() {
   const { isStaff, isFacilityAdmin } = useRole();
   const router = useRouter();
@@ -92,7 +95,7 @@ export default function UsersSettingsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff', hire_date: '' });
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff', hire_year: '', hire_month: '', hire_day: '' });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resendingUserId, setResendingUserId] = useState<string | null>(null);
@@ -104,7 +107,9 @@ export default function UsersSettingsPage() {
     email: '',
     phone: '',
     role: 'staff',
-    hire_date: '',
+    hire_year: '',
+    hire_month: '',
+    hire_day: '',
   });
 
   // 初期ロード
@@ -157,12 +162,16 @@ export default function UsersSettingsPage() {
   })();
 
   const isEmailRequired = newUser.role !== 'staff';
+  const newUserHireDateComplete = !!(newUser.hire_year && newUser.hire_month && newUser.hire_day);
+  const newUserHireDate = newUserHireDateComplete
+    ? `${newUser.hire_year}-${newUser.hire_month.padStart(2, '0')}-${newUser.hire_day.padStart(2, '0')}`
+    : '';
 
   const handleAddUser = async () => {
     const normalizedName = newUser.name.trim();
     const normalizedEmail = newUser.email.trim();
     const normalizedPhone = (newUser.phone || '').trim() || null;
-    if (!normalizedName || (isEmailRequired && !normalizedEmail) || !newUser.hire_date) return;
+    if (!normalizedName || (isEmailRequired && !normalizedEmail) || !newUserHireDate) return;
     if (submitting) return;
 
     setSubmitting(true);
@@ -171,11 +180,11 @@ export default function UsersSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...newUser,
           name: normalizedName,
           email: normalizedEmail || null,
           phone: normalizedPhone,
-          hire_date: `${newUser.hire_date}-04-01`,
+          role: newUser.role,
+          hire_date: newUserHireDate,
         }),
       });
 
@@ -186,7 +195,7 @@ export default function UsersSettingsPage() {
       }
 
       alert(data.message || '職員を追加しました。');
-      setNewUser({ name: '', email: '', phone: '', role: 'staff', hire_date: '' });
+      setNewUser({ name: '', email: '', phone: '', role: 'staff', hire_year: '', hire_month: '', hire_day: '' });
       setShowAddModal(false);
       fetchUsers();
     } catch (err) {
@@ -199,12 +208,26 @@ export default function UsersSettingsPage() {
 
   const handleEditStart = (user: User) => {
     setEditingUser(user);
-    setEditForm({ name: user.name, email: user.email || '', phone: user.phone || '', role: user.role, hire_date: user.hire_date ? user.hire_date.substring(0, 4) : '' });
+    const hireDate = user.hire_date || '';
+    const [hireYear = '', hireMonth = '', hireDay = ''] = hireDate ? hireDate.split('-') : [];
+    setEditForm({
+      name: user.name,
+      email: user.email || '',
+      phone: user.phone || '',
+      role: user.role,
+      hire_year: hireYear,
+      hire_month: hireMonth ? String(Number(hireMonth)) : '',
+      hire_day: hireDay ? String(Number(hireDay)) : '',
+    });
     setShowEditModal(true);
   };
 
   const handleSaveUser = async () => {
     if (!editingUser) return;
+    const editHireDateComplete = !!(editForm.hire_year && editForm.hire_month && editForm.hire_day);
+    const editHireDate = editHireDateComplete
+      ? `${editForm.hire_year}-${editForm.hire_month.padStart(2, '0')}-${editForm.hire_day.padStart(2, '0')}`
+      : '';
     setSubmitting(true);
     try {
       const response = await fetch(`/api/users/${editingUser.user_id}`, {
@@ -215,7 +238,7 @@ export default function UsersSettingsPage() {
           email: editForm.email.trim() || null,
           phone: editForm.phone.trim() || null,
           role: editForm.role,
-          hire_date: editForm.hire_date ? `${editForm.hire_date}-04-01` : undefined,
+          hire_date: editHireDate || undefined,
         }),
       });
       const data = await response.json();
@@ -396,7 +419,7 @@ export default function UsersSettingsPage() {
                           電話番号
                         </th>
                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                          入社年
+                          入社年月日
                         </th>
                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                           権限
@@ -410,7 +433,7 @@ export default function UsersSettingsPage() {
                       {filteredUsers.map((user) => (
                         <tr
                           key={user.user_id}
-                          className="group hover:bg-indigo-50/30 transition-colors"
+                          className="hover:bg-indigo-50/30 transition-colors"
                         >
                           {/* Name */}
                           <td className="px-6 py-4">
@@ -441,11 +464,11 @@ export default function UsersSettingsPage() {
                             </div>
                           </td>
 
-                          {/* Hire Year */}
+                          {/* Hire Date */}
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 text-sm text-slate-600">
                               <Calendar size={14} className="text-slate-400" />
-                              <span>{user.hire_date ? `${user.hire_date.substring(0, 4)}年` : '-'}</span>
+                              <span>{user.hire_date || '-'}</span>
                             </div>
                           </td>
 
@@ -474,7 +497,7 @@ export default function UsersSettingsPage() {
                               {isFacilityAdmin && (
                                 <button
                                   onClick={() => handleEditStart(user)}
-                                  className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                  className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
                                   title="編集"
                                 >
                                   <Edit2 size={18} />
@@ -484,7 +507,7 @@ export default function UsersSettingsPage() {
                                 <button
                                   onClick={() => handleResendInvitation(user.user_id)}
                                   disabled={resendingUserId === user.user_id}
-                                  className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                                  className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
                                   title="認証メール再送"
                                 >
                                   {resendingUserId === user.user_id ? (
@@ -496,7 +519,7 @@ export default function UsersSettingsPage() {
                               )}
                               <button
                                 onClick={() => handleDeleteUser(user.user_id)}
-                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                 title="削除"
                               >
                                 <Trash2 size={18} />
@@ -575,18 +598,45 @@ export default function UsersSettingsPage() {
                   />
                 </FieldGroup>
 
-                <FieldGroup label="入社年" required>
-                  <Select
-                    value={newUser.hire_date}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_date: e.target.value })}
-                  >
-                    <option value="">選択してください</option>
-                    {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                      <option key={year} value={String(year)}>
-                        {year}年
-                      </option>
-                    ))}
-                  </Select>
+                <FieldGroup label="入社年月日" required>
+                  <div className="flex gap-2">
+                    <Select
+                      value={newUser.hire_year}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_year: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">年</option>
+                      {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <option key={year} value={String(year)}>
+                          {year}年
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={newUser.hire_month}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_month: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">月</option>
+                      {MONTHS.map(month => (
+                        <option key={month} value={String(month)}>
+                          {month}月
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={newUser.hire_day}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_day: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">日</option>
+                      {DAYS.map(day => (
+                        <option key={day} value={String(day)}>
+                          {day}日
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                 </FieldGroup>
 
                 <FieldGroup label="権限" required>
@@ -616,7 +666,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim()) || !newUser.hire_date}
+                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim()) || !newUserHireDate}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? (
@@ -684,18 +734,45 @@ export default function UsersSettingsPage() {
                   />
                 </FieldGroup>
 
-                <FieldGroup label="入社年" required>
-                  <Select
-                    value={editForm.hire_date}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_date: e.target.value })}
-                  >
-                    <option value="">選択してください</option>
-                    {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                      <option key={year} value={String(year)}>
-                        {year}年
-                      </option>
-                    ))}
-                  </Select>
+                <FieldGroup label="入社年月日" required>
+                  <div className="flex gap-2">
+                    <Select
+                      value={editForm.hire_year}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_year: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">年</option>
+                      {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <option key={year} value={String(year)}>
+                          {year}年
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={editForm.hire_month}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_month: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">月</option>
+                      {MONTHS.map(month => (
+                        <option key={month} value={String(month)}>
+                          {month}月
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={editForm.hire_day}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_day: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">日</option>
+                      {DAYS.map(day => (
+                        <option key={day} value={String(day)}>
+                          {day}日
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                 </FieldGroup>
 
                 <FieldGroup label="権限" required>
@@ -725,7 +802,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleSaveUser}
-                  disabled={submitting || !editForm.name.trim() || !editForm.hire_date}
+                  disabled={submitting || !editForm.name.trim() || !(editForm.hire_year && editForm.hire_month && editForm.hire_day)}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? (
