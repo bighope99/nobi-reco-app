@@ -890,6 +890,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setObservation(observationRecord);
       savedBodyRef.current = displayContent;
 
+      // 既存の児童IDを復元（「変更」クリック時にSelectが正しい値を表示するため）
+      if (data.child_id) {
+        setSelectedChildId(data.child_id);
+      }
+
       // 既存の記録者を復元
       if (data.recorded_by) {
         setSelectedRecorder(data.recorded_by);
@@ -1055,12 +1060,19 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const handleUpdateObservation = async () => {
     if (!observation) return;
-    const displayText = editText.trim();
-    const text = toIdText(displayText).trim();
-    if (!text) {
-      setError('本文を入力してください');
-      return;
+
+    // isEditing（本文編集中）の場合のみ content を送信
+    let contentToSave: string | undefined;
+    if (isEditing) {
+      const displayText = editText.trim();
+      const text = toIdText(displayText).trim();
+      if (!text) {
+        setError('本文を入力してください');
+        return;
+      }
+      contentToSave = text;
     }
+
     if (!selectedRecorder && !staffLoadError) {
       setError('記録者を選択してください');
       return;
@@ -1072,7 +1084,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: text,
+          ...(contentToSave !== undefined ? { content: contentToSave } : {}),
           observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
           recorded_by: selectedRecorder || null,
           child_id: selectedChildId || undefined,
@@ -1093,7 +1105,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         prev
           ? {
               ...prev,
-              body_text: displayText,
+              ...(contentToSave !== undefined ? { body_text: contentToSave } : {}),
+              ...(selectedChildId ? { child_id: selectedChildId } : {}),
               observed_at: nextObservationDate,
               recorded_by_name: nextRecorderName || prev.recorded_by_name,
               child_name: nextChildName || prev.child_name,
@@ -1101,12 +1114,14 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
             }
           : prev,
       );
-      // 過去記録リスト内の該当レコードも更新
-      setRecentObservations((prev) =>
-        prev.map((item) =>
-          item.id === observation.id ? { ...item, content: text } : item,
-        ),
-      );
+      // 過去記録リスト内の該当レコードも更新（本文が変わった場合のみ）
+      if (contentToSave !== undefined) {
+        setRecentObservations((prev) =>
+          prev.map((item) =>
+            item.id === observation.id ? { ...item, content: contentToSave } : item,
+          ),
+        );
+      }
       setIsEditing(false);
       setIsDateEditing(false);
       setIsRecorderEditing(false);
@@ -1427,7 +1442,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const childDisplayName = useMemo(() => {
     if (isNew) return lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択');
-    return childOptions.find((c) => c.id === observation?.child_id)?.name || observation?.child_name || observation?.child_id;
+    return observation?.child_name || observation?.child_id;
   }, [isNew, lockedChildName, selectedChild, selectedChildId, childOptions, observation]);
   const recorderDisplayName =
     observation?.recorded_by_name ||

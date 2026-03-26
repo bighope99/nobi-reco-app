@@ -302,8 +302,8 @@ export async function PATCH(
       );
     }
 
-    // AI解析済みでない場合は本文が必須
-    if (!existing.is_ai_analyzed && !rawContent) {
+    // AI解析済みでない場合、content が送信されたなら空でないことを確認
+    if (!existing.is_ai_analyzed && rawContent !== undefined && !rawContent) {
       return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
     }
 
