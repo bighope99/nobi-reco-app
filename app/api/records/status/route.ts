@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     const childIds = childrenData.map((c: any) => c.id);
 
     // 2-6. データ取得（並列実行で高速化）
-    const queries: Promise<any>[] = [
+    const queries: any[] = [
       // 月間出席ログ
       supabase
         .from('h_attendance')
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
 
     // データをchild_idでグループ化（O(n²) → O(n)への最適化）
     const monthlyAttendancesByChild = new Map<string, any[]>();
-    (monthlyAttendanceData || []).forEach((a) => {
+    (monthlyAttendanceData || []).forEach((a: any) => {
       if (!monthlyAttendancesByChild.has(a.child_id)) {
         monthlyAttendancesByChild.set(a.child_id, []);
       }
@@ -235,7 +235,7 @@ export async function GET(request: NextRequest) {
     });
 
     const monthlyObservationsByChild = new Map<string, any[]>();
-    (monthlyObservationsData || []).forEach((o) => {
+    (monthlyObservationsData || []).forEach((o: any) => {
       if (!monthlyObservationsByChild.has(o.child_id)) {
         monthlyObservationsByChild.set(o.child_id, []);
       }
@@ -243,7 +243,7 @@ export async function GET(request: NextRequest) {
     });
 
     const yearlyAttendancesByChild = new Map<string, any[]>();
-    (yearlyAttendanceData || []).forEach((a) => {
+    (yearlyAttendanceData || []).forEach((a: any) => {
       if (!yearlyAttendancesByChild.has(a.child_id)) {
         yearlyAttendancesByChild.set(a.child_id, []);
       }
@@ -251,7 +251,7 @@ export async function GET(request: NextRequest) {
     });
 
     const yearlyObservationsByChild = new Map<string, any[]>();
-    (yearlyObservationsData || []).forEach((o) => {
+    (yearlyObservationsData || []).forEach((o: any) => {
       if (!yearlyObservationsByChild.has(o.child_id)) {
         yearlyObservationsByChild.set(o.child_id, []);
       }
@@ -261,7 +261,7 @@ export async function GET(request: NextRequest) {
     // 全期間の最終記録日（child_id -> 最新の observation_date）
     // データは observation_date 降順でソート済みなので、最初の1件が最新
     const allTimeLastRecordByChild = new Map<string, string>();
-    (allTimeLastRecordsData || []).forEach((o) => {
+    (allTimeLastRecordsData || []).forEach((o: any) => {
       if (!allTimeLastRecordByChild.has(o.child_id)) {
         allTimeLastRecordByChild.set(o.child_id, o.observation_date);
       }
