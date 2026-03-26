@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 
-type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out' | 'undo_check_in' | 'undo_check_out';
+type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'child_id and action are required' }, { status: 400 });
     }
 
-    if (!['check_in', 'mark_absent', 'confirm_unexpected', 'add_schedule', 'check_out', 'undo_check_in', 'undo_check_out'].includes(action)) {
+    if (!['check_in', 'mark_absent', 'confirm_unexpected', 'add_schedule', 'check_out'].includes(action)) {
       return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
     }
     const attendanceDate = getCurrentDateJST(); // JST日付 (YYYY-MM-DD)
@@ -196,77 +196,6 @@ export async function POST(request: NextRequest) {
       }
 
       await upsertDailyAttendance('irregular');
-      return NextResponse.json({ success: true });
-    }
-
-    if (actionType === 'undo_check_in') {
-      // 今日のチェックイン記録を取得（checked_out_at有無問わず）
-      const { data: todayAttendance, error: fetchErr } = await supabase
-        .from('h_attendance')
-        .select('id, checked_in_at')
-        .eq('child_id', child_id)
-        .eq('facility_id', facility_id)
-        .gte('checked_in_at', startOfDayUTC)
-        .lte('checked_in_at', endOfDayUTC)
-        .maybeSingle();
-
-      if (fetchErr || !todayAttendance) {
-        return NextResponse.json({ success: false, error: 'No check-in record to undo' }, { status: 404 });
-      }
-
-      // h_attendanceレコードを削除
-      const { error: deleteError } = await supabase
-        .from('h_attendance')
-        .delete()
-        .eq('id', todayAttendance.id);
-
-      if (deleteError) {
-        console.error('Undo check-in delete error:', deleteError);
-        return NextResponse.json({ success: false, error: 'Failed to undo check-in' }, { status: 500 });
-      }
-
-      // r_daily_attendanceをscheduledにリセット（予定ありの場合）
-      if (dailyRecord) {
-        await supabase
-          .from('r_daily_attendance')
-          .update({ status: 'scheduled', updated_by: user_id })
-          .eq('id', dailyRecord.id);
-      }
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (actionType === 'undo_check_out') {
-      // 今日のチェックアウト済みレコードを取得
-      const { data: checkedOutAttendance, error: fetchErr } = await supabase
-        .from('h_attendance')
-        .select('id')
-        .eq('child_id', child_id)
-        .eq('facility_id', facility_id)
-        .gte('checked_in_at', startOfDayUTC)
-        .lte('checked_in_at', endOfDayUTC)
-        .not('checked_out_at', 'is', null)
-        .maybeSingle();
-
-      if (fetchErr || !checkedOutAttendance) {
-        return NextResponse.json({ success: false, error: 'No check-out record to undo' }, { status: 404 });
-      }
-
-      // checked_out_atをnullに戻す
-      const { error: updateError } = await supabase
-        .from('h_attendance')
-        .update({
-          checked_out_at: null,
-          check_out_method: null,
-          checked_out_by: null,
-        })
-        .eq('id', checkedOutAttendance.id);
-
-      if (updateError) {
-        console.error('Undo check-out update error:', updateError);
-        return NextResponse.json({ success: false, error: 'Failed to undo check-out' }, { status: 500 });
-      }
-
       return NextResponse.json({ success: true });
     }
 

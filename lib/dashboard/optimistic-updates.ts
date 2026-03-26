@@ -44,16 +44,6 @@ export function updateAlertsAndKpi(
     case 'confirm_unexpected':
       updatedAlerts.unexpected = alerts.unexpected.filter((a) => a.child_id !== childId);
       break;
-    case 'undo_check_in': {
-      updatedKpi.present_now = Math.max(0, updatedKpi.present_now - 1);
-      updatedKpi.not_arrived += 1;
-      break;
-    }
-    case 'undo_check_out': {
-      updatedKpi.present_now += 1;
-      updatedKpi.checked_out = Math.max(0, updatedKpi.checked_out - 1);
-      break;
-    }
   }
 
   return { alerts: updatedAlerts, kpi: updatedKpi };
