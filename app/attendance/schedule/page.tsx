@@ -62,6 +62,7 @@ export default function AttendanceSchedulePage() {
   const router = useRouter()
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasClasses, setHasClasses] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterClass, setFilterClass] = useState('all')
@@ -102,6 +103,21 @@ export default function AttendanceSchedulePage() {
     }
 
     fetchSchedules()
+  }, [])
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const res = await fetch('/api/children/classes')
+        const data = await res.json()
+        if (data.success && Array.isArray(data.data?.classes)) {
+          setHasClasses(data.data.classes.length > 0)
+        }
+      } catch {
+        // クラス取得失敗時は非表示のまま
+      }
+    }
+    fetchClasses()
   }, [])
 
   // O(1) child lookup map
@@ -354,7 +370,7 @@ export default function AttendanceSchedulePage() {
 
             <div className="flex items-center gap-3 flex-wrap">
               {/* Class Filter - クラスが登録されている場合のみ表示 */}
-              {classOptions.length > 0 && (
+              {hasClasses && (
                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 md:flex-none">
                   <Filter size={16} className="text-slate-400" />
                   <select
