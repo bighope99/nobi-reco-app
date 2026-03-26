@@ -9,7 +9,6 @@ import {
   ChevronRight,
   User,
   Loader2,
-  Calendar,
 } from 'lucide-react';
 
 interface LinkedChild {
@@ -114,90 +113,133 @@ export default function GuardianListPage() {
           </div>
         )}
 
-        {/* Cards */}
-        {loading ? (
-          <div className="flex items-center justify-center p-12 text-slate-400">
-            <Loader2 size={24} className="animate-spin mr-2" />
-            読み込み中...
-          </div>
-        ) : guardians.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <User size={32} className="mx-auto mb-3 text-slate-300" />
-            <p>該当する保護者は見つかりませんでした</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {guardians.map(guardian => (
-              <div
-                key={guardian.id}
-                className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all group"
-                onClick={() => router.push(`/guardians/${guardian.id}`)}
-              >
-                {/* Photo + Name */}
-                <div className="flex items-center gap-4 mb-4">
-                  {guardian.photo_url ? (
-                    <img
-                      src={guardian.photo_url}
-                      alt={guardian.name}
-                      className="w-14 h-14 rounded-full object-cover border border-slate-200 shrink-0"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 shrink-0">
-                      <User size={22} className="text-slate-400" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800 truncate">{guardian.name}</span>
-                      {guardian.relationship && (
-                        <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded shrink-0">
-                          {guardian.relationship}
-                        </span>
-                      )}
-                    </div>
-                    {guardian.kana && (
-                      <div className="text-xs text-slate-400 mt-0.5 truncate">{guardian.kana}</div>
-                    )}
-                    {guardian.notes && (
-                      <div className="text-xs text-amber-600 mt-0.5 truncate" title={guardian.notes}>
-                        メモ: {guardian.notes}
-                      </div>
-                    )}
-                  </div>
-                  <ChevronRight size={18} className="ml-auto text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" />
+        {/* Table */}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center p-12 text-slate-400">
+              <Loader2 size={24} className="animate-spin mr-2" />
+              読み込み中...
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 text-center">
+                      写真
+                    </th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48">
+                      氏名
+                    </th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">
+                      続柄
+                    </th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-44">
+                      電話番号
+                    </th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      紐づいている子ども
+                    </th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">
+                      最終更新日
+                    </th>
+                    <th className="px-6 py-3 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {guardians.map(guardian => (
+                    <tr
+                      key={guardian.id}
+                      className="group hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/guardians/${guardian.id}`)}
+                    >
+                      {/* Photo */}
+                      <td className="px-6 py-4 text-center">
+                        {guardian.photo_url ? (
+                          <img
+                            src={guardian.photo_url}
+                            alt={guardian.name}
+                            className="w-10 h-10 rounded-full object-cover mx-auto border border-slate-200"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto border border-slate-200">
+                            <User size={18} className="text-slate-400" />
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Name */}
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800">{guardian.name}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{guardian.kana}</div>
+                        {guardian.notes && (
+                          <div className="text-xs text-amber-600 mt-0.5 truncate max-w-[180px]" title={guardian.notes}>
+                            メモ: {guardian.notes}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Relationship */}
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-slate-700">{guardian.relationship ?? '—'}</span>
+                      </td>
+
+                      {/* Phone */}
+                      <td className="px-6 py-4">
+                        {guardian.phone ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="p-1.5 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <Phone size={14} />
+                            </button>
+                            <span className="text-sm font-mono text-slate-700">{guardian.phone}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Linked Children */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {guardian.linked_children.length > 0 ? guardian.linked_children.map(child => (
+                            <span
+                              key={child.id}
+                              className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-xs font-medium"
+                            >
+                              {child.name}
+                            </span>
+                          )) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Updated At */}
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-slate-500">{formatDate(guardian.updated_at)}</span>
+                      </td>
+
+                      {/* Arrow */}
+                      <td className="px-4 py-4 text-right">
+                        <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {guardians.length === 0 && !loading && (
+                <div className="p-12 text-center text-slate-400">
+                  <User size={32} className="mx-auto mb-3 text-slate-300" />
+                  <p>該当する保護者は見つかりませんでした</p>
                 </div>
-
-                {/* Phone */}
-                {guardian.phone && (
-                  <div className="flex items-center gap-2 mb-3">
-                    <Phone size={14} className="text-slate-400 shrink-0" />
-                    <span className="text-sm font-mono text-slate-700">{guardian.phone}</span>
-                  </div>
-                )}
-
-                {/* Linked Children */}
-                {guardian.linked_children.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {guardian.linked_children.map(child => (
-                      <span
-                        key={child.id}
-                        className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-xs font-medium"
-                      >
-                        {child.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Updated At */}
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
-                  <Calendar size={12} />
-                  最終更新: {formatDate(guardian.updated_at)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
 
       </div>
     </StaffLayout>

@@ -5,43 +5,15 @@ import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   User,
   Phone,
-  Camera,
   Save,
   Trash2,
   ArrowLeft,
   Upload,
-  FileText,
-  Users,
   Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 
 // ---- Sub Components ----
-
-const SectionCard = ({
-  title,
-  icon: Icon,
-  description,
-  children,
-}: {
-  title: string;
-  icon: React.ElementType;
-  description?: string;
-  children: React.ReactNode;
-}) => (
-  <section className="bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
-    <div className="px-6 py-5 border-b border-slate-100 flex items-start gap-4">
-      <div className="p-2.5 rounded-lg shrink-0 bg-slate-100 text-slate-500">
-        <Icon size={20} strokeWidth={2} />
-      </div>
-      <div>
-        <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-        {description && <p className="text-sm text-slate-500 mt-1">{description}</p>}
-      </div>
-    </div>
-    <div className="p-6 md:p-8 space-y-6">{children}</div>
-  </section>
-);
 
 const FieldGroup = ({
   label,
@@ -52,7 +24,7 @@ const FieldGroup = ({
   required?: boolean;
   children: React.ReactNode;
 }) => (
-  <div className="flex flex-col gap-2">
+  <div className="flex flex-col gap-1.5">
     <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
       {label}
       {required && (
@@ -171,12 +143,10 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // プレビュー表示
     const reader = new FileReader();
     reader.onload = ev => setPhotoPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
 
-    // アップロード
     setUploadingPhoto(true);
     try {
       const formData = new FormData();
@@ -278,7 +248,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
 
   return (
     <StaffLayout title={isNew ? '保護者新規登録' : '保護者詳細・編集'}>
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-2xl mx-auto">
 
         {/* Back link */}
         <div className="mb-6">
@@ -298,53 +268,55 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           </div>
         )}
 
-        {/* 1. 顔写真 */}
-        <SectionCard title="顔写真" icon={Camera} description="施設スタッフが登録・管理します">
-          <div className="flex items-start gap-6">
-            <div className="shrink-0">
+        {/* 1枚カード */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 md:p-8 space-y-6">
+
+          {/* 顔写真 + 基本情報ヘッダー */}
+          <div className="flex items-start gap-5">
+            {/* Photo */}
+            <div className="shrink-0 flex flex-col items-center gap-2">
               {displayPhoto ? (
                 <img
                   src={displayPhoto}
                   alt="顔写真"
-                  className="w-32 h-32 rounded-xl object-cover border-2 border-slate-200"
+                  className="w-24 h-24 rounded-xl object-cover border-2 border-slate-200"
                 />
               ) : (
-                <div className="w-32 h-32 rounded-xl bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-2">
-                  <User size={32} className="text-slate-300" />
+                <div className="w-24 h-24 rounded-xl bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1">
+                  <User size={28} className="text-slate-300" />
                   <span className="text-xs text-slate-400">未登録</span>
                 </div>
               )}
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <label className={`flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-bold cursor-pointer transition-colors ${uploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
-                {uploadingPhoto ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                {uploadingPhoto ? 'アップロード中...' : '写真をアップロード'}
+              <label className={`flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold cursor-pointer transition-colors ${uploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
+                {uploadingPhoto ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                {uploadingPhoto ? '...' : '写真変更'}
                 <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={uploadingPhoto} />
               </label>
               {displayPhoto && !uploadingPhoto && (
                 <button
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-red-50 text-slate-500 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg text-sm font-bold transition-colors"
+                  className="text-xs text-slate-400 hover:text-red-500 transition-colors"
                   onClick={() => { setPhotoPreview(null); setPhotoUrl(null); setPhotoPath(null); }}
                 >
-                  <Trash2 size={16} />
                   写真を削除
                 </button>
               )}
-              <p className="text-xs text-slate-400">JPG・PNG・WebP 対応 / 最大 5MB</p>
+            </div>
+
+            {/* 氏名・ふりがな */}
+            <div className="flex-1 space-y-3">
+              <FieldGroup label="氏名" required>
+                <TextInput value={name} onChange={setName} placeholder="例: 山田 花子" icon={User} />
+              </FieldGroup>
+              <FieldGroup label="氏名（ふりがな）">
+                <TextInput value={kana} onChange={setKana} placeholder="例: やまだ はなこ" />
+              </FieldGroup>
             </div>
           </div>
-        </SectionCard>
 
-        {/* 2. 基本情報 */}
-        <SectionCard title="基本情報" icon={User} description="保護者の氏名・連絡先を入力してください">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <FieldGroup label="氏名" required>
-              <TextInput value={name} onChange={setName} placeholder="例: 山田 花子" icon={User} />
-            </FieldGroup>
-            <FieldGroup label="氏名（ふりがな）">
-              <TextInput value={kana} onChange={setKana} placeholder="例: やまだ はなこ" />
-            </FieldGroup>
+          <div className="border-t border-slate-100" />
+
+          {/* 電話番号・続柄 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <FieldGroup label="電話番号">
               <TextInput value={phone} onChange={setPhone} placeholder="例: 090-1234-5678" icon={Phone} />
             </FieldGroup>
@@ -362,67 +334,56 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
               </select>
             </FieldGroup>
           </div>
-        </SectionCard>
 
-        {/* 3. メモ */}
-        <SectionCard
-          title="メモ・特記事項"
-          icon={FileText}
-          description="印象・対応時の注意点など、スタッフ間で共有するメモを記録できます"
-        >
-          <div className="flex flex-col gap-2">
+          {/* メモ */}
+          <FieldGroup label="メモ・特記事項">
             <textarea
               className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-3 resize-none"
-              rows={5}
+              rows={4}
               placeholder="例：お迎え時に本人確認済み。要望が多い場合は必ず記録すること。"
               value={memo}
               onChange={e => setMemo(e.target.value)}
             />
             <p className="text-xs text-slate-400 text-right">{memo.length} 文字</p>
-          </div>
-        </SectionCard>
+          </FieldGroup>
 
-        {/* 4. 紐づいている子ども（新規登録時は非表示） */}
-        {!isNew && (
-          <SectionCard
-            title="紐づいている子ども"
-            icon={Users}
-            description="この保護者に紐づけられた子どもが表示されます"
-          >
-            {linkedChildren.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center">紐づいている子どもはいません</p>
-            ) : (
-              <div className="space-y-2">
-                {linkedChildren.map(child => (
-                  <div
-                    key={child.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50 transition-colors"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-800 text-sm">{child.name}</span>
-                      {child.class_name && (
-                        <span className="ml-2 text-xs text-slate-500">{child.class_name}</span>
-                      )}
-                      {child.relationship && (
-                        <span className="ml-2 text-xs text-slate-400">({child.relationship})</span>
-                      )}
-                    </div>
-                    <Link
-                      href={`/children/${child.id}`}
-                      className="text-xs text-indigo-600 hover:underline"
-                      onClick={e => e.stopPropagation()}
+          {/* 紐づいている子ども（新規登録時は非表示） */}
+          {!isNew && linkedChildren.length > 0 && (
+            <>
+              <div className="border-t border-slate-100" />
+              <div>
+                <p className="text-sm font-bold text-slate-700 mb-2">紐づいている子ども</p>
+                <div className="space-y-2">
+                  {linkedChildren.map(child => (
+                    <div
+                      key={child.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-2.5 hover:bg-slate-50 transition-colors"
                     >
-                      詳細を見る
-                    </Link>
-                  </div>
-                ))}
+                      <div>
+                        <span className="font-bold text-slate-800 text-sm">{child.name}</span>
+                        {child.class_name && (
+                          <span className="ml-2 text-xs text-slate-500">{child.class_name}</span>
+                        )}
+                        {child.relationship && (
+                          <span className="ml-2 text-xs text-slate-400">({child.relationship})</span>
+                        )}
+                      </div>
+                      <Link
+                        href={`/children/${child.id}`}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        詳細を見る
+                      </Link>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
-          </SectionCard>
-        )}
+            </>
+          )}
+        </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-2 pb-8">
+        <div className="flex items-center justify-between pt-4 pb-8">
           {!isNew ? (
             <button
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
