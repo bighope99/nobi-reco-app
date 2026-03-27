@@ -765,3 +765,4 @@ COMMIT;
 - `04_api.md` - API基本設計
 - `16_children_list_api.md` - 子ども一覧API
 - `17_child_registration_api.md` - 子ども登録API
+- `27_guardian_info_api.md` - 保護者情報API仕様書（保護者管理の集約リファレンス）

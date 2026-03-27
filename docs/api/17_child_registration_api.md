@@ -790,3 +790,4 @@ COMMIT;
 - `04_api.md` - API基本設計
 - `16_children_list_api.md` - 子ども一覧API
 - `18_child_edit_api.md` - 子ども編集API
+- `27_guardian_info_api.md` - 保護者情報API仕様書（保護者管理の集約リファレンス）
