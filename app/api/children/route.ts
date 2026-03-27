@@ -283,13 +283,7 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
-    if (has_sibling !== null) {
-      if (has_sibling === 'true') {
-        childrenQuery = (childrenQuery as any).not('_child_sibling', 'is', null);
-      } else {
-        childrenQuery = (childrenQuery as any).is('_child_sibling', null);
-      }
-    }
+    // has_sibling フィルターは取得後の後処理で行う（PostgREST のリレーション集計フィルターは非互換のため）
 
     // ソートはクライアント側で処理するため、デフォルトのカナ順で返す
     childrenQuery = childrenQuery.order('family_name_kana', { ascending: true });
@@ -404,6 +398,14 @@ export async function GET(request: NextRequest) {
     let filteredChildren = class_id === 'none'
       ? children.filter(c => c.class_id === null)
       : children;
+
+    // has_sibling 後処理フィルター（sibling_count を使用）
+    if (has_sibling !== null) {
+      filteredChildren = filteredChildren.filter(child => {
+        const count = child.sibling_count ?? 0;
+        return has_sibling === 'true' ? count > 0 : count === 0;
+      });
+    }
 
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
     summary.has_sibling_count = hasSiblingCount;

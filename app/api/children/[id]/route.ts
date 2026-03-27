@@ -128,7 +128,11 @@ export async function GET(
         : Promise.resolve({ data: null }),
     ]);
 
-    const photoSignedUrl: string | null = (signedUrlResult as { data: { signedUrl: string } | null }).data?.signedUrl ?? null;
+    const signedUrlData = signedUrlResult as { data: { signedUrl: string } | null; error?: { message: string } | null };
+    if (signedUrlData?.error) {
+      console.error('Signed URL generation error:', signedUrlData.error);
+    }
+    const photoSignedUrl: string | null = signedUrlData?.data?.signedUrl ?? null;
 
     // 保護者情報の整形
     const guardians: GuardianRelation[] = childData._child_guardian || [];

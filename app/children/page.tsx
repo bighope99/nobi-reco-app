@@ -47,7 +47,7 @@ interface APIChild {
     report_allowed: boolean;
     parent_name: string | null;
     parent_phone: string | null;
-    siblings: Array<{ child_id: string; name: string; relationship: string }>;
+    sibling_count: number;
     created_at: string;
     updated_at: string;
 }
@@ -106,8 +106,9 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
     // Map enrollment_status to status
     const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
 
-    // Format siblings array
-    const siblings = apiChild.siblings.map(s => s.name);
+    // Format siblings as count-based display array
+    const siblingCount = apiChild.sibling_count ?? 0;
+    const siblings = siblingCount > 0 ? [`兄弟 ${siblingCount}人`] : [];
 
     return {
         id: apiChild.child_id,
