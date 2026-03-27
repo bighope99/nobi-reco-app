@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
         id,
         family_name,
         family_name_kana,
+        phone,
         photo_path,
         notes,
         updated_at,
@@ -114,6 +115,7 @@ export async function GET(request: NextRequest) {
       (guardians ?? []).map(async (g: any) => {
         const name = decryptOrFallback(g.family_name) ?? '';
         const kana = decryptOrFallback(g.family_name_kana) ?? '';
+        const phone = decryptOrFallback(g.phone) ?? '';
         const photoUrl = await getSignedPhotoUrl(supabase, g.photo_path);
 
         const linkedChildren = (g._child_guardian ?? [])
@@ -141,6 +143,7 @@ export async function GET(request: NextRequest) {
           id: g.id,
           name,
           kana,
+          phone,
           relationship,
           photo_url: photoUrl,
           linked_children: linkedChildren,
@@ -172,7 +175,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, kana, phone, relationship, notes, child_id } = body;
+    const { name, kana, phone, relationship, notes, child_id, photo_path } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
@@ -189,6 +192,7 @@ export async function POST(request: NextRequest) {
         family_name_kana: kana?.trim() ? encryptPII(kana.trim()) : null,
         phone: normalizedPhone ? encryptPII(normalizedPhone) : null,
         notes: notes?.trim() || null,
+        photo_path: photo_path || null,
       })
       .select('id')
       .single();

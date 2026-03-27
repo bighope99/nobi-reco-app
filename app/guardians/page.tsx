@@ -190,7 +190,8 @@ export default function GuardianListPage() {
                           <div className="flex items-center gap-2">
                             <button
                               className="p-1.5 rounded-full bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 shrink-0"
-                              onClick={e => e.stopPropagation()}
+                              title="電話をかける"
+                              onClick={e => { e.stopPropagation(); window.open(`tel:${guardian.phone}`, '_self'); }}
                             >
                               <Phone size={14} />
                             </button>

@@ -238,6 +238,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
+    // 写真パスを取得しておく（削除後にStorageからも削除するため）
+    const { data: guardianData } = await supabase
+      .from('m_guardians')
+      .select('photo_path')
+      .eq('id', id)
+      .eq('facility_id', current_facility_id)
+      .is('deleted_at', null)
+      .single();
+
     const { error } = await supabase
       .from('m_guardians')
       .update({ deleted_at: new Date().toISOString() })
@@ -251,6 +260,16 @@ export async function DELETE(
     }
 
     await deleteSearchIndex(supabase, 'guardian', id);
+
+    // Storageの写真ファイルを削除（失敗しても削除操作自体は成功扱い）
+    if (guardianData?.photo_path) {
+      const { error: storageError } = await supabase.storage
+        .from(GUARDIAN_PHOTO_BUCKET)
+        .remove([guardianData.photo_path]);
+      if (storageError) {
+        console.error('Failed to delete guardian photo from storage:', storageError.message);
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

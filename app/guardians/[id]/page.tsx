@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, use, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   User,
@@ -197,6 +198,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           throw new Error(err.error ?? '登録に失敗しました');
         }
         const json = await res.json();
+        toast.success('保護者を登録しました');
         router.replace(`/guardians/${json.data.id}`);
       } else {
         const res = await fetch(`/api/guardians/${id}`, {
@@ -208,6 +210,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           const err = await res.json();
           throw new Error(err.error ?? '更新に失敗しました');
         }
+        toast.success('保存しました');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存に失敗しました');
@@ -226,6 +229,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         const err = await res.json();
         throw new Error(err.error ?? '削除に失敗しました');
       }
+      toast.success('保護者情報を削除しました');
       router.push('/guardians');
     } catch (e) {
       setError(e instanceof Error ? e.message : '削除に失敗しました');
@@ -322,9 +326,10 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
             </FieldGroup>
             <FieldGroup label="続柄" required>
               <select
-                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5"
+                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                 value={relationship}
                 onChange={e => setRelationship(e.target.value)}
+                disabled={!isNew}
               >
                 <option value="母">母</option>
                 <option value="父">父</option>
@@ -332,6 +337,9 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
                 <option value="祖父">祖父</option>
                 <option value="その他">その他</option>
               </select>
+              {!isNew && (
+                <p className="text-xs text-slate-400">続柄は子ども画面から変更できます</p>
+              )}
             </FieldGroup>
           </div>
 
