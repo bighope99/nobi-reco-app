@@ -263,6 +263,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '無効な写真パスです' }, { status: 400 });
     }
 
+    // child_id が自施設に属するか確認（INSERT前に検証してレコード孤立を防ぐ）
+    if (child_id && relationship) {
+      const { data: childCheck } = await supabase
+        .from('m_children')
+        .select('id')
+        .eq('id', child_id)
+        .eq('facility_id', current_facility_id)
+        .is('deleted_at', null)
+        .single();
+      if (!childCheck) {
+        return NextResponse.json({ error: '指定された子どもが見つかりません' }, { status: 400 });
+      }
+    }
+
     const normalizedPhone = phone ? normalizePhone(phone) : null;
 
     const { data: guardian, error } = await supabase
@@ -301,18 +315,6 @@ export async function POST(request: NextRequest) {
 
     // 子どもと紐づけ
     if (child_id && relationship) {
-      // 子どもが同じ施設に属することを確認
-      const { data: childCheck } = await supabase
-        .from('m_children')
-        .select('id')
-        .eq('id', child_id)
-        .eq('facility_id', current_facility_id)
-        .is('deleted_at', null)
-        .single();
-      if (!childCheck) {
-        return NextResponse.json({ error: '指定された子どもが見つかりません' }, { status: 400 });
-      }
-
       const { error: linkError } = await supabase
         .from('_child_guardian')
         .upsert({

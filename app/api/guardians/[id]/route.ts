@@ -178,7 +178,8 @@ export async function PATCH(
       }
     }
 
-    // photo_pathが変更される場合、旧写真をStorageから削除
+    // photo_pathが変更される場合、旧パスを保持しておく（UPDATE成功後にStorageから削除）
+    let oldPhotoPath: string | null = null;
     if (photo_path !== undefined) {
       const { data: current } = await supabase
         .from('m_guardians')
@@ -187,12 +188,7 @@ export async function PATCH(
         .eq('facility_id', current_facility_id)
         .single();
       if (current?.photo_path && current.photo_path !== photo_path) {
-        const { error: removeErr } = await supabase.storage
-          .from(GUARDIAN_PHOTO_BUCKET)
-          .remove([current.photo_path]);
-        if (removeErr) {
-          console.error('Failed to remove old guardian photo:', removeErr.message);
-        }
+        oldPhotoPath = current.photo_path;
       }
     }
 
@@ -229,6 +225,16 @@ export async function PATCH(
     if (updateError) {
       console.error('Guardian update error:', updateError.message);
       return NextResponse.json({ error: '保護者の更新に失敗しました' }, { status: 500 });
+    }
+
+    // UPDATE成功後、旧写真をStorageから削除（best-effort: 失敗はログのみ）
+    if (oldPhotoPath) {
+      const { error: removeErr } = await supabase.storage
+        .from(GUARDIAN_PHOTO_BUCKET)
+        .remove([oldPhotoPath]);
+      if (removeErr) {
+        console.error('Failed to remove old guardian photo:', removeErr.message);
+      }
     }
 
     // 検索インデックス更新
