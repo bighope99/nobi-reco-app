@@ -579,9 +579,6 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
                         {child.grade_label && child.grade_label !== '-' && (
                           <span className="ml-1 text-xs text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">{child.grade_label}</span>
                         )}
-                        {child.relationship && (
-                          <span className="ml-2 text-xs text-slate-400">({child.relationship})</span>
-                        )}
                       </div>
                       <Link
                         href={`/children/${child.id}/edit`}

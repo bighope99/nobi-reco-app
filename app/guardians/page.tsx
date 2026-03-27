@@ -247,9 +247,6 @@ export default function GuardianListPage() {
                               className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-xs font-medium"
                             >
                               {child.name}
-                              {child.grade_label && child.grade_label !== '-' && (
-                                <span className="ml-1 text-indigo-400">({child.grade_label})</span>
-                              )}
                             </span>
                           )) : (
                             <span className="text-xs text-slate-400">—</span>
