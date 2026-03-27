@@ -481,6 +481,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   useEffect(() => {
     if (!isNew) return;
 
+    // 別の児童へのクライアントサイドナビゲーション時はrefをリセット
+    if (lockedChildId && childIdInitializedRef.current && selectedChildId !== lockedChildId) {
+      childIdInitializedRef.current = false;
+    }
+
     // lockedChildIdがある場合は初回のみ初期値として設定（ユーザーによる変更は妨げない）
     if (lockedChildId && !childIdInitializedRef.current) {
       setSelectedChildId(lockedChildId);
