@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
     const class_id = searchParams.get('class_id') || null;
     const search = searchParams.get('search') || null;
     const has_allergy = searchParams.get('has_allergy');
-    const has_sibling = searchParams.get('has_sibling');
     const enrollment_type = searchParams.get('enrollment_type') || null;
     const limit = parseInt(searchParams.get('limit') || '200');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -131,7 +130,6 @@ export async function GET(request: NextRequest) {
           enrolled_count: enrolledCount,
           withdrawn_count: withdrawnCount,
           has_allergy_count: hasAllergyCount,
-          has_sibling_count: 0, // 兄弟数は結果に依存するため呼び出し側で上書き
         },
         filters: {
           classes: (classesData || []).map((cls: any) => ({
@@ -200,8 +198,7 @@ export async function GET(request: NextRequest) {
             phone,
             email
           )
-        ),
-        _child_sibling!_child_sibling_child_id_fkey (sibling_id)
+        )
       `)
       .eq('enrollment_status', status)
       .is('deleted_at', null);
@@ -283,38 +280,6 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
-    // has_sibling フィルター: ページネーション前にサブクエリでIDセットを取得してフィルタリング
-    // （PostgREST のリレーション集計フィルターは非互換のため、サブクエリ方式で実装）
-    if (has_sibling !== null) {
-      const siblingQuery = supabase
-        .from('_child_sibling')
-        .select('child_id');
-      const { data: siblingRows, error: siblingError } = await siblingQuery;
-      if (siblingError) {
-        console.error('Sibling subquery error:', siblingError);
-        return NextResponse.json({ error: 'Failed to fetch sibling data' }, { status: 500 });
-      }
-      const childIdsWithSibling = [...new Set((siblingRows || []).map((r: { child_id: string }) => r.child_id))];
-
-      if (has_sibling === 'true') {
-        if (childIdsWithSibling.length === 0) {
-          // 兄弟がいる子が1人もいない場合は空を返す
-          const { summary, filters } = await fetchSummaryAndFilters();
-          return NextResponse.json({
-            success: true,
-            data: { summary, children: [], filters, total: 0, has_more: false },
-          });
-        }
-        childrenQuery = childrenQuery.in('id', childIdsWithSibling);
-      } else {
-        // has_sibling=false: 兄弟がいない子のみ（兄弟ありIDを除外）
-        if (childIdsWithSibling.length > 0) {
-          childrenQuery = childrenQuery.not('id', 'in', `(${childIdsWithSibling.map(id => `"${id}"`).join(',')})`);
-        }
-        // childIdsWithSibling が空なら全員が兄弟なし → フィルター不要
-      }
-    }
-
     // ソートはクライアント側で処理するため、デフォルトのカナ順で返す
     childrenQuery = childrenQuery.order('family_name_kana', { ascending: true });
 
@@ -374,9 +339,6 @@ export async function GET(request: NextRequest) {
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
 
-      // 兄弟数（詳細は遅延ロード）
-      const siblingCount = (child._child_sibling as Array<unknown> | null)?.length ?? 0;
-
       // 児童情報を復号化
       const decryptedFamilyName = decryptOrFallback(child.family_name);
       const decryptedGivenName = decryptOrFallback(child.given_name);
@@ -413,8 +375,6 @@ export async function GET(request: NextRequest) {
           : null,
         parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(child.parent_phone) || null,
         parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(child.parent_email) || null,
-        sibling_count: siblingCount,
-        has_sibling: siblingCount > 0,
         has_allergy: !!decryptedAllergies,
         allergy_detail: decryptedAllergies,
         photo_allowed: child.photo_permission_public,
@@ -428,9 +388,6 @@ export async function GET(request: NextRequest) {
     let filteredChildren = class_id === 'none'
       ? children.filter(c => c.class_id === null)
       : children;
-
-    const hasSiblingCount = children.filter(c => c.has_sibling).length;
-    summary.has_sibling_count = hasSiblingCount;
 
     filters.enrollment_types = [
       { type: 'regular', label: '通年', count: children.filter(c => c.enrollment_type === 'regular').length },
