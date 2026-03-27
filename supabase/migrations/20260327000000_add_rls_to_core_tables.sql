@@ -141,7 +141,7 @@ CREATE POLICY "observation_tags_service_role" ON m_observation_tags
 -- ============================================================
 ALTER TABLE r_observation ENABLE ROW LEVEL SECURITY;
 
--- SELECT: 自施設の子どものレコードのみ（論理削除済みを除く）
+-- SELECT: 自施設の子どものレコードのみ
 CREATE POLICY "observation_select" ON r_observation
   FOR SELECT TO authenticated
   USING (
@@ -150,7 +150,6 @@ CREATE POLICY "observation_select" ON r_observation
       WHERE c.id = r_observation.child_id
         AND c.facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
     )
-    AND deleted_at IS NULL
   );
 
 -- INSERT: staff 以上が自施設の子どものレコードのみ
@@ -190,12 +189,11 @@ CREATE POLICY "observation_service_role" ON r_observation
 -- ============================================================
 ALTER TABLE r_daily_attendance ENABLE ROW LEVEL SECURITY;
 
--- SELECT: 自施設のレコードのみ（論理削除済みを除く）
+-- SELECT: 自施設のレコードのみ
 CREATE POLICY "daily_attendance_select" ON r_daily_attendance
   FOR SELECT TO authenticated
   USING (
     facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
-    AND deleted_at IS NULL
   );
 
 -- INSERT: staff 以上が自施設のみ
@@ -206,13 +204,12 @@ CREATE POLICY "daily_attendance_insert" ON r_daily_attendance
     AND facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
   );
 
--- UPDATE: staff 以上が自施設のみ（論理削除済みを除く）
+-- UPDATE: staff 以上が自施設のみ
 CREATE POLICY "daily_attendance_update" ON r_daily_attendance
   FOR UPDATE TO authenticated
   USING (
     (auth.jwt()->'app_metadata'->>'role') IN ('staff', 'facility_admin', 'company_admin', 'site_admin')
     AND facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
-    AND deleted_at IS NULL
   );
 
 -- service_role: 全アクセス許可
