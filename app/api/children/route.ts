@@ -169,6 +169,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         facility_id,
+        school_id,
         family_name,
         given_name,
         family_name_kana,
@@ -186,6 +187,10 @@ export async function GET(request: NextRequest) {
         allergies,
         photo_permission_public,
         report_name_permission,
+        m_schools (
+          id,
+          name
+        ),
         ${childClassJoin},
         _child_guardian (
           relationship,
@@ -358,6 +363,8 @@ export async function GET(request: NextRequest) {
         age_group: classInfo?.age_group || '',
         class_id: classInfo?.id || null,
         class_name: classInfo?.name || '',
+        school_id: child.school_id || null,
+        school_name: (child.m_schools as { id: string; name: string } | null)?.name || null,
         facility_name: facilityNameMap.get(child.facility_id) || '',
         photo_url: child.photo_url,
         enrollment_status: child.enrollment_status,

@@ -17,7 +17,8 @@ import {
     Upload,
     Loader2,
     CameraOff,
-    Building2
+    Building2,
+    ArrowLeftRight
 } from 'lucide-react';
 
 // --- Types ---
@@ -127,7 +128,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
 // --- Components ---
 
 export default function StudentList() {
-    const { hasRole } = useRole();
+    const { hasRole, isAdmin, isFacilityAdmin } = useRole();
     const isCompanyAdmin = hasRole('company_admin');
 
     // State
@@ -569,6 +570,15 @@ export default function StudentList() {
                                 <Upload size={16} />
                                 インポート
                             </button>
+                            {(isAdmin || isFacilityAdmin) && (
+                                <button
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100"
+                                    onClick={() => window.location.href = '/children/transfer'}
+                                >
+                                    <ArrowLeftRight size={16} />
+                                    一括付け替え
+                                </button>
+                            )}
                             <button
                                 className={`flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg border transition-colors shadow-sm ${batchGenerating || processedStudents.length === 0
                                     ? 'bg-gray-100 text-slate-400 border-gray-200 cursor-not-allowed'
