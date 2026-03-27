@@ -26,7 +26,10 @@ async function getSignedPhotoUrl(
   const { data, error } = await supabase.storage
     .from(GUARDIAN_PHOTO_BUCKET)
     .createSignedUrl(photoPath, SIGNED_URL_EXPIRES_IN);
-  if (error || !data) return null;
+  if (error || !data) {
+    if (error) console.error('Failed to create signed URL for photo:', photoPath, error.message);
+    return null;
+  }
   return data.signedUrl;
 }
 
@@ -53,6 +56,18 @@ export async function GET(request: NextRequest) {
 
     // 子どもIDでフィルター
     if (childId) {
+      // child_id が自施設に属するか確認
+      const { data: childCheck } = await supabase
+        .from('m_children')
+        .select('id')
+        .eq('id', childId)
+        .eq('facility_id', current_facility_id)
+        .is('deleted_at', null)
+        .single();
+      if (!childCheck) {
+        return NextResponse.json({ error: '指定された子どもが見つかりません' }, { status: 400 });
+      }
+
       const { data: links, error: linkError } = await supabase
         .from('_child_guardian')
         .select('guardian_id')
@@ -79,20 +94,26 @@ export async function GET(request: NextRequest) {
         s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
       const escapedKatakana = escapeForIlike(katakanaChildName);
       const escapedHiragana = escapeForIlike(hiraganaChildName);
-      const { data: kanaChildMatches } = await supabase
+      const { data: kanaChildMatches, error: kanaError } = await supabase
         .from('m_children')
         .select('id')
         .eq('facility_id', current_facility_id)
         .is('deleted_at', null)
         .or(`family_name_kana.ilike.%${escapedKatakana}%,given_name_kana.ilike.%${escapedKatakana}%,family_name_kana.ilike.%${escapedHiragana}%,given_name_kana.ilike.%${escapedHiragana}%`);
+      if (kanaError) {
+        console.error('Kana child search error:', kanaError.message);
+      }
 
       const allChildIds = [...new Set([...nameChildIds, ...(kanaChildMatches ?? []).map((c: { id: string }) => c.id)])];
 
       if (allChildIds.length > 0) {
-        const { data: links } = await supabase
+        const { data: links, error: linksError } = await supabase
           .from('_child_guardian')
           .select('guardian_id')
           .in('child_id', allChildIds);
+        if (linksError) {
+          console.error('Child-guardian link search error:', linksError.message);
+        }
         const ids = [...new Set((links ?? []).map((l: { guardian_id: string }) => l.guardian_id))];
         guardianIds = guardianIds !== null ? guardianIds.filter(id => ids.includes(id)) : ids;
       } else {
@@ -304,6 +325,7 @@ export async function POST(request: NextRequest) {
 
       if (linkError) {
         console.error('Child-guardian link error:', linkError.message);
+        return NextResponse.json({ error: '子どもとの紐づけに失敗しました' }, { status: 500 });
       }
 
       // 兄弟がいれば自動的に紐づけ
@@ -315,12 +337,16 @@ export async function POST(request: NextRequest) {
       if (siblingLinks && siblingLinks.length > 0) {
         const siblingIds = siblingLinks.map((s: { sibling_id: string }) => s.sibling_id);
 
-        const { data: validSiblings } = await supabase
+        const { data: validSiblings, error: validSiblingsError } = await supabase
           .from('m_children')
           .select('id')
           .in('id', siblingIds)
           .eq('facility_id', current_facility_id)
           .is('deleted_at', null);
+
+        if (validSiblingsError) {
+          console.error('Sibling fetch error:', validSiblingsError.message);
+        }
 
         if (validSiblings && validSiblings.length > 0) {
           const siblingUpserts = validSiblings.map((s: { id: string }) => ({

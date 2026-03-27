@@ -20,7 +20,10 @@ async function getSignedPhotoUrl(
   const { data, error } = await supabase.storage
     .from(GUARDIAN_PHOTO_BUCKET)
     .createSignedUrl(photoPath, SIGNED_URL_EXPIRES_IN);
-  if (error || !data) return null;
+  if (error || !data) {
+    if (error) console.error('Failed to create signed URL for photo:', photoPath, error.message);
+    return null;
+  }
   return data.signedUrl;
 }
 
@@ -168,6 +171,13 @@ export async function PATCH(
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
     }
 
+    // photo_path が渡された場合、施設プレフィックスを検証
+    if (photo_path !== undefined && photo_path !== null && photo_path !== '') {
+      if (!photo_path.startsWith(`${current_facility_id}/`)) {
+        return NextResponse.json({ error: '無効な写真パスです' }, { status: 400 });
+      }
+    }
+
     // photo_pathが変更される場合、旧写真をStorageから削除
     if (photo_path !== undefined) {
       const { data: current } = await supabase
@@ -229,7 +239,7 @@ export async function PATCH(
     if (kana !== undefined) {
       indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'name_kana', kana?.trim() || ''));
     }
-    if (normalizedPhone !== undefined) {
+    if (normalizedPhone) {
       indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'phone', normalizedPhone));
     }
     await Promise.all(indexUpdates);

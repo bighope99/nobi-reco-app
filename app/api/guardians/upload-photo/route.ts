@@ -153,7 +153,22 @@ export async function DELETE(request: NextRequest) {
     if (!filePath || !filePath.startsWith(`${current_facility_id}/`)) {
       return NextResponse.json({ success: false, error: '無効なパスです' }, { status: 400 });
     }
-    await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+    // DB に保存済みの写真は削除不可
+    const { data: inUse } = await supabase
+      .from('m_guardians')
+      .select('id')
+      .eq('photo_path', filePath)
+      .eq('facility_id', current_facility_id)
+      .limit(1)
+      .single();
+    if (inUse) {
+      return NextResponse.json({ success: false, error: '使用中の写真は削除できません' }, { status: 409 });
+    }
+    const { error: removeError } = await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+    if (removeError) {
+      console.error('Guardian photo delete error:', removeError.message);
+      return NextResponse.json({ success: false, error: '写真の削除に失敗しました' }, { status: 500 });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Guardian photo delete error:', error);

@@ -199,7 +199,12 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         setChildSearchResults(results);
         setShowChildDropdown(results.length > 0);
       })
-      .catch((e: Error) => { if (e.name !== 'AbortError') console.error(e); })
+      .catch((e: Error) => {
+        if (e.name !== 'AbortError') {
+          console.error('Child search error:', e);
+          setError('子どもの検索に失敗しました');
+        }
+      })
       .finally(() => setChildSearchLoading(false));
     return () => controller.abort();
   }, [isNew, debouncedChildQuery]);
@@ -257,7 +262,11 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         const siblings = (json.data?.siblings ?? []).map((s: { child_id: string; name: string }) => ({ child_id: s.child_id, name: s.name }));
         setSiblingInfo(siblings);
       }
-    } catch { /* 非致命的 */ }
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        console.error('Failed to fetch sibling info:', e.message);
+      }
+    }
   };
 
   const handleDeselectChild = () => {
