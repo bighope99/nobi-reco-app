@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus, Mail, UserPlus } from "lucide-react"
+import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus, Mail, UserPlus, Trash2 } from "lucide-react"
 
 interface Facility {
   id: string
@@ -71,6 +71,8 @@ export default function CompanyDetailPage(props: {
   const [error, setError] = useState<string | null>(null)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [resendMessage, setResendMessage] = useState<string | null>(null)
+
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // 管理者追加モーダル
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
@@ -143,6 +145,26 @@ export default function CompanyDetailPage(props: {
       setResendMessage(err instanceof Error ? err.message : "再送信に失敗しました")
     } finally {
       setResendingId(null)
+    }
+  }
+
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!confirm('このユーザーを削除しますか？')) return
+
+    setDeletingId(accountId)
+    try {
+      const response = await fetch(`/api/users/${accountId}`, {
+        method: 'DELETE',
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'ユーザーの削除に失敗しました')
+      }
+      await fetchCompanyDetail()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'ユーザーの削除に失敗しました')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -241,8 +263,8 @@ export default function CompanyDetailPage(props: {
         </div>
 
         {/* Company Information Card */}
-        <Card>
-          <CardHeader className="border-b bg-muted/30">
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">会社情報</CardTitle>
@@ -283,8 +305,8 @@ export default function CompanyDetailPage(props: {
         </Card>
 
         {/* Accounts List Card */}
-        <Card>
-          <CardHeader className="border-b bg-muted/30">
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">アカウント一覧</CardTitle>
@@ -340,25 +362,25 @@ export default function CompanyDetailPage(props: {
                   <tbody className="divide-y divide-gray-100">
                     {accounts.map((account) => (
                       <tr key={account.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="font-medium text-slate-900">{account.name}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-slate-600">{account.email || "-"}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant={getRoleBadgeVariant(account.role)}>
                             {getRoleLabel(account.role)}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 min-w-[120px]">
                           <span className="text-sm text-slate-600">
                             {account.facilities.length > 0
                               ? account.facilities.map((f) => f.facility_name).join(", ")
                               : "-"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           {account.email_confirmed ? (
                             <Badge variant={account.is_active ? "default" : "destructive"}>
                               {account.is_active ? "有効" : "無効"}
@@ -369,23 +391,39 @@ export default function CompanyDetailPage(props: {
                             </Badge>
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          {!account.email_confirmed && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {!account.email_confirmed && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1 text-xs"
+                                disabled={resendingId === account.id}
+                                onClick={() => handleResendInvite(account.id)}
+                              >
+                                {resendingId === account.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Mail className="h-3 w-3" />
+                                )}
+                                招待再送
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
-                              className="gap-1 text-xs"
-                              disabled={resendingId === account.id}
-                              onClick={() => handleResendInvite(account.id)}
+                              className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={deletingId === account.id}
+                              onClick={() => handleDeleteAccount(account.id)}
                             >
-                              {resendingId === account.id ? (
+                              {deletingId === account.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <Mail className="h-3 w-3" />
+                                <Trash2 className="h-3 w-3" />
                               )}
-                              招待再送
+                              削除
                             </Button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -397,8 +435,8 @@ export default function CompanyDetailPage(props: {
         </Card>
 
         {/* Facilities List Card */}
-        <Card>
-          <CardHeader className="border-b bg-muted/30">
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">施設一覧</CardTitle>
@@ -443,21 +481,21 @@ export default function CompanyDetailPage(props: {
                   <tbody className="divide-y divide-gray-100">
                     {facilities.map((facility) => (
                       <tr key={facility.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="font-medium text-slate-900">{facility.name}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 min-w-[120px]">
                           <span className="text-sm text-slate-600">{facility.address || "-"}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-slate-600">{facility.phone || "-"}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-slate-600">
                             {facility.capacity !== null ? `${facility.capacity}名` : "-"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant={facility.is_active ? "default" : "destructive"}>
                             {facility.is_active ? "有効" : "無効"}
                           </Badge>
