@@ -84,7 +84,7 @@ describe("Sidebar", () => {
 
     it("does not highlight '会社一覧' when pathname is /admin/companies/new", () => {
       mockPathname.mockReturnValue("/admin/companies/new")
-      render(<Sidebar type="admin" />)
+      render(<Sidebar type="admin" role="site_admin" />)
 
       const companiesLink = screen.getByRole("link", { name: "会社一覧" })
       expect(companiesLink).not.toHaveClass("bg-sidebar-accent")
