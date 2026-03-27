@@ -195,6 +195,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         kana: kana.trim(),
         phone: phone.trim(),
         notes: memo.trim(),
+        relationship,
         ...(photoPath !== undefined ? { photo_path: photoPath } : {}),
       };
 
@@ -338,10 +339,9 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
             </FieldGroup>
             <FieldGroup label="続柄" required>
               <select
-                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
-                value={relationship}
+                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5"
+                value={relationship ?? ''}
                 onChange={e => setRelationship(e.target.value)}
-                disabled={!isNew}
               >
                 <option value="母">母</option>
                 <option value="父">父</option>
@@ -349,9 +349,6 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
                 <option value="祖父">祖父</option>
                 <option value="その他">その他</option>
               </select>
-              {!isNew && (
-                <p className="text-xs text-slate-400">続柄は子ども画面から変更できます</p>
-              )}
             </FieldGroup>
           </div>
 
