@@ -1952,10 +1952,12 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           {aiEditForm.ai_opinion.length}/{AI_RESULT_MAX}文字
                         </span>
                       </div>
+                      <p className="text-sm text-gray-400 mt-1">
+                        今日この子の行動を見て感じたこと・発見したことは？
+                      </p>
                       <MentionTextarea
                         id="ai_opinion"
                         className="min-h-[120px]"
-                        placeholder="今日この子の行動を見て感じたこと・発見したことは？"
                         value={aiEditForm.ai_opinion}
                         onChange={(e) => handleAiFieldChange('ai_opinion', e.target.value)}
                         disabled={aiEditSaving}
