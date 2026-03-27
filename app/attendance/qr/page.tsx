@@ -41,6 +41,7 @@ export default function QRAttendanceScannerPage() {
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [facingMode, setFacingMode] = useState<CameraFacingMode>("environment")
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false)
+  const [countdown, setCountdown] = useState(3)
 
   const stopScanner = useCallback(async () => {
     if (controlsRef.current) {
@@ -104,6 +105,16 @@ export default function QRAttendanceScannerPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!checkInResult) return
+    if (countdown <= 0) {
+      setCheckInResult(null)
+      return
+    }
+    const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [checkInResult, countdown])
+
   const parsePayload = (raw: string): AttendanceQrPayload | null => {
     try {
       const parsed = JSON.parse(raw) as AttendanceQrPayload
@@ -134,9 +145,11 @@ export default function QRAttendanceScannerPage() {
       })
 
       const result: CheckInResult = await response.json()
+      setCountdown(3)
       setCheckInResult(result)
     } catch (error) {
       console.error('Check-in error:', error)
+      setCountdown(3)
       setCheckInResult({
         success: false,
         error: 'チェックイン処理中にエラーが発生しました',
@@ -152,6 +165,7 @@ export default function QRAttendanceScannerPage() {
       // QR読取り後、自動的に出席記録を行う
       handleCheckIn(payload)
     } else {
+      setCountdown(3)
       setCheckInResult({
         success: false,
         error: 'QRコードの形式が正しくありません',
@@ -267,6 +281,58 @@ export default function QRAttendanceScannerPage() {
               <SwitchCamera className="h-6 w-6" />
             </button>
           )}
+          {checkInResult && (
+            <div className={`absolute inset-0 z-30 flex flex-col items-center justify-center text-center p-6 ${
+              checkInResult.success
+                ? (checkInResult.data?.action_type === 'check_out' ? 'bg-blue-900/85' : 'bg-green-900/85')
+                : 'bg-red-900/85'
+            }`}>
+              {checkInResult.success ? (
+                (() => {
+                  const isCheckOut = checkInResult.data?.action_type === 'check_out'
+                  const displayTime = isCheckOut && checkInResult.data?.checked_out_at
+                    ? checkInResult.data.checked_out_at
+                    : checkInResult.data?.checked_in_at
+                  return (
+                    <>
+                      <div className={`rounded-full ${isCheckOut ? 'bg-blue-500' : 'bg-green-500'} p-5 mb-4`}>
+                        {isCheckOut ? (
+                          <Home className="h-12 w-12 text-white" />
+                        ) : (
+                          <Check className="h-12 w-12 text-white" />
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold text-white mb-2">
+                        {isCheckOut ? 'おかえり！ きをつけてね' : 'しゅっせき かんりょう！'}
+                      </p>
+                      {checkInResult.data && (
+                        <div className="space-y-1 mt-2">
+                          <p className="text-3xl font-bold text-white">{checkInResult.data.child_name}</p>
+                          <p className="text-xl font-semibold text-white/90">{checkInResult.data.class_name}</p>
+                          <p className="text-lg text-white/80">
+                            {displayTime && new Date(displayTime).toLocaleTimeString('ja-JP', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-xl text-white/70 mt-4">{countdown}びょうで もどります</p>
+                    </>
+                  )
+                })()
+              ) : (
+                <>
+                  <div className="rounded-full bg-red-500 p-5 mb-4">
+                    <TriangleAlert className="h-12 w-12 text-white" />
+                  </div>
+                  <p className="text-2xl font-bold text-white mb-2">エラーが はっせい しました</p>
+                  <p className="text-lg text-white/90">{checkInResult.error}</p>
+                  <p className="text-xl text-white/70 mt-4">{countdown}びょうで もどります</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* コントロールボタン */}
@@ -305,88 +371,6 @@ export default function QRAttendanceScannerPage() {
           <div className="flex items-start gap-3 rounded-lg border-2 border-destructive/30 bg-destructive/10 p-4 text-destructive">
             <TriangleAlert className="mt-1 h-6 w-6" />
             <p className="text-lg font-medium">{errorMessage}</p>
-          </div>
-        )}
-
-        {/* 出席記録結果 */}
-        {checkInResult && (
-          <div className="space-y-4">
-            {checkInResult.success ? (
-              (() => {
-                const isCheckOut = checkInResult.data?.action_type === 'check_out'
-                const borderColor = isCheckOut ? 'border-blue-500' : 'border-green-500'
-                const bgColor = isCheckOut ? 'bg-blue-50 dark:bg-blue-950' : 'bg-green-50 dark:bg-green-950'
-                const iconBg = isCheckOut ? 'bg-blue-500' : 'bg-green-500'
-                const titleColor = isCheckOut ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200'
-                const nameColor = isCheckOut ? 'text-blue-900 dark:text-blue-100' : 'text-green-900 dark:text-green-100'
-                const classColor = isCheckOut ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200'
-                const timeColor = isCheckOut ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300'
-                const displayTime = isCheckOut && checkInResult.data?.checked_out_at
-                  ? checkInResult.data.checked_out_at
-                  : checkInResult.data?.checked_in_at
-                return (
-                  <div className={`rounded-2xl border-4 ${borderColor} ${bgColor} p-8 text-center`}>
-                    <div className="mb-6 flex justify-center">
-                      <div className={`rounded-full ${iconBg} p-6`}>
-                        {isCheckOut ? (
-                          <Home className="h-16 w-16 text-white" />
-                        ) : (
-                          <Check className="h-16 w-16 text-white" />
-                        )}
-                      </div>
-                    </div>
-                    <p className={`mb-2 text-2xl font-bold ${titleColor}`}>
-                      {isCheckOut ? 'おかえり！ きをつけてね' : 'しゅっせき かんりょう！'}
-                    </p>
-                    {checkInResult.data && (
-                      <div className="mt-6 space-y-3">
-                        <p className={`text-4xl font-bold ${nameColor}`}>
-                          {checkInResult.data.child_name}
-                        </p>
-                        <p className={`text-2xl font-semibold ${classColor}`}>
-                          {checkInResult.data.class_name}
-                        </p>
-                        <p className={`text-xl ${timeColor}`}>
-                          {displayTime && new Date(displayTime).toLocaleTimeString('ja-JP', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                      </div>
-                    )}
-                    <Button
-                      onClick={() => setCheckInResult(null)}
-                      size="lg"
-                      className="mt-6 text-lg"
-                    >
-                      つぎのおともだち
-                    </Button>
-                  </div>
-                )
-              })()
-            ) : (
-              <div className="rounded-2xl border-4 border-red-500 bg-red-50 p-8 text-center dark:bg-red-950">
-                <div className="mb-6 flex justify-center">
-                  <div className="rounded-full bg-red-500 p-6">
-                    <TriangleAlert className="h-16 w-16 text-white" />
-                  </div>
-                </div>
-                <p className="mb-4 text-2xl font-bold text-red-800 dark:text-red-200">
-                  エラーが はっせい しました
-                </p>
-                <p className="text-lg text-red-700 dark:text-red-300">
-                  {checkInResult.error}
-                </p>
-                <Button
-                  onClick={() => setCheckInResult(null)}
-                  variant="outline"
-                  size="lg"
-                  className="mt-6 text-lg"
-                >
-                  もういちど やってみる
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </div>
