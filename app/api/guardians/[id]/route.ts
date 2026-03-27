@@ -162,7 +162,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, kana, phone, notes, photo_path, relationship } = body;
+    const { name, kana, phone, notes, photo_path } = body;
 
     if (name !== undefined && !name?.trim()) {
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
@@ -219,17 +219,6 @@ export async function PATCH(
     if (updateError) {
       console.error('Guardian update error:', updateError.message);
       return NextResponse.json({ error: '保護者の更新に失敗しました' }, { status: 500 });
-    }
-
-    // 続柄更新（_child_guardian の全リンクに反映）
-    if (relationship !== undefined) {
-      const { error: relError } = await supabase
-        .from('_child_guardian')
-        .update({ relationship })
-        .eq('guardian_id', id);
-      if (relError) {
-        console.error('Relationship update error:', relError.message);
-      }
     }
 
     // 検索インデックス更新
