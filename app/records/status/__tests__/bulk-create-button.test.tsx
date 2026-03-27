@@ -41,6 +41,7 @@ const mockRecordsData = {
   success: true,
   data: {
     period: { year: 2026, month: 3, start_date: "2026-03-01", end_date: "2026-03-31", days_in_month: 31 },
+    heatmap: { mode: "recent30", start_date: "2026-02-07", end_date: "2026-03-09", days: 30 },
     children: [],
     summary: { total_children: 0, warning_children: 0, average_record_rate: 0 },
     filters: { classes: [] },
