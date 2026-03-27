@@ -26,8 +26,8 @@ export async function GET(
       );
     }
 
-    // site_admin権限チェック
-    if (metadata.role !== 'site_admin') {
+    // site_admin または company_admin のみアクセス可能
+    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -35,6 +35,14 @@ export async function GET(
     }
 
     const { companyId } = await props.params;
+
+    // company_admin は自社のみアクセス可能
+    if (metadata.role === 'company_admin' && metadata.company_id !== companyId) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
 
     const supabase = await createClient();
 
