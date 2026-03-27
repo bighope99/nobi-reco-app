@@ -2558,18 +2558,11 @@ export default function ActivityRecordClient() {
                     <Button type="button" variant="outline" onClick={handleCancelEdit} className="flex-1 sm:flex-none">
                       キャンセル
                     </Button>
-                    <Button type="button" variant="outline" onClick={handleRestart} className="flex-1 sm:flex-none">
-                      <Plus className="mr-2 h-4 w-4" />
-                      新規作成
-                    </Button>
                   </>
                 ) : (
                   <>
                     <Button type="button" onClick={handleSave} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
                       保存
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={handleRestart}>
-                      リセット
                     </Button>
                   </>
                 )}

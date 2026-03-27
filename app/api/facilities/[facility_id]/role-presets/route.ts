@@ -84,23 +84,59 @@ export async function POST(
       return NextResponse.json({ error: 'role_name must be 50 characters or less' }, { status: 400 });
     }
 
-    // DB側でatomicにsort_order採番 + insert（競合時は既存を返す）
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('insert_role_preset', {
-        p_facility_id: facilityId,
-        p_role_name: roleName,
-      });
+    // 同一 role_name が既に存在するかチェック
+    const { data: existing } = await supabase
+      .from('m_role_presets')
+      .select('id, role_name, sort_order')
+      .eq('facility_id', facilityId)
+      .eq('role_name', roleName)
+      .is('deleted_at', null)
+      .maybeSingle();
 
-    if (rpcError) throw rpcError;
-
-    const row = rpcResult?.[0];
-    if (!row) throw new Error('insert_role_preset returned no rows');
-
-    if (row.skipped) {
-      return NextResponse.json({ preset: { id: row.id, role_name: row.role_name, sort_order: row.sort_order }, skipped: true });
+    if (existing) {
+      return NextResponse.json({ preset: existing, skipped: true });
     }
 
-    return NextResponse.json({ preset: { id: row.id, role_name: row.role_name, sort_order: row.sort_order } }, { status: 201 });
+    // sort_order を採番
+    const { data: maxRow } = await supabase
+      .from('m_role_presets')
+      .select('sort_order')
+      .eq('facility_id', facilityId)
+      .is('deleted_at', null)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextSortOrder = (maxRow?.sort_order ?? -1) + 1;
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('m_role_presets')
+      .insert({
+        facility_id: facilityId,
+        role_name: roleName,
+        sort_order: nextSortOrder,
+      })
+      .select('id, role_name, sort_order')
+      .single();
+
+    if (insertError) {
+      // UNIQUE制約違反の場合は既存レコードを返す
+      if (insertError.code === '23505') {
+        const { data: conflict } = await supabase
+          .from('m_role_presets')
+          .select('id, role_name, sort_order')
+          .eq('facility_id', facilityId)
+          .eq('role_name', roleName)
+          .is('deleted_at', null)
+          .single();
+        if (conflict) {
+          return NextResponse.json({ preset: conflict, skipped: true });
+        }
+      }
+      throw insertError;
+    }
+
+    return NextResponse.json({ preset: inserted }, { status: 201 });
   } catch (error) {
     console.error('Error creating role preset:', error);
     return NextResponse.json(
