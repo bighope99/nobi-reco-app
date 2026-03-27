@@ -2564,9 +2564,6 @@ export default function ActivityRecordClient() {
                     <Button type="button" onClick={handleSave} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
                       保存
                     </Button>
-                    <Button type="button" variant="ghost" onClick={handleRestart}>
-                      リセット
-                    </Button>
                   </>
                 )}
               </div>
