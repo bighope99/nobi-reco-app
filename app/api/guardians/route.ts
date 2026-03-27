@@ -8,6 +8,7 @@ import {
   updateSearchIndex,
   searchByName,
 } from '@/utils/pii/searchIndex';
+import { toKatakana, toHiragana, normalizeSearch } from '@/lib/utils/kana';
 
 const SIGNED_URL_EXPIRES_IN = 3600;
 const GUARDIAN_PHOTO_BUCKET = 'guardian-photos';
@@ -69,12 +70,28 @@ export async function GET(request: NextRequest) {
 
     // 子ども名検索
     if (childName) {
-      const childIds = await searchByName(supabase, 'child', 'name', childName);
-      if (childIds.length > 0) {
+      const nameChildIds = await searchByName(supabase, 'child', 'name', childName);
+
+      // カナは平文なので直接DB検索（ひらがな→カタカナ正規化）
+      const normalizedChildName = normalizeSearch(childName);
+      const escapedChildName = normalizedChildName
+        .replace(/\\/g, '\\\\')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
+      const { data: kanaChildMatches } = await supabase
+        .from('m_children')
+        .select('id')
+        .eq('facility_id', current_facility_id)
+        .is('deleted_at', null)
+        .or(`family_name_kana.ilike.%${escapedChildName}%,given_name_kana.ilike.%${escapedChildName}%`);
+
+      const allChildIds = [...new Set([...nameChildIds, ...(kanaChildMatches ?? []).map((c: { id: string }) => c.id)])];
+
+      if (allChildIds.length > 0) {
         const { data: links } = await supabase
           .from('_child_guardian')
           .select('guardian_id')
-          .in('child_id', childIds);
+          .in('child_id', allChildIds);
         const ids = [...new Set((links ?? []).map((l: { guardian_id: string }) => l.guardian_id))];
         guardianIds = guardianIds !== null ? guardianIds.filter(id => ids.includes(id)) : ids;
       } else {
@@ -85,13 +102,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 保護者名検索
+    // 保護者名検索（漢字名 + カナ両方）
     if (query) {
-      const nameIds = await searchByName(supabase, 'guardian', 'name', query);
+      const [nameIds, kanaKatakanaIds, kanaHiraganaIds] = await Promise.all([
+        searchByName(supabase, 'guardian', 'name', query),
+        searchByName(supabase, 'guardian', 'name_kana', toKatakana(query)),
+        searchByName(supabase, 'guardian', 'name_kana', toHiragana(query)),
+      ]);
+      const mergedIds = [...new Set([...nameIds, ...kanaKatakanaIds, ...kanaHiraganaIds])];
+
       if (guardianIds !== null) {
-        guardianIds = guardianIds.filter(id => nameIds.includes(id));
+        guardianIds = guardianIds.filter(id => mergedIds.includes(id));
       } else {
-        guardianIds = nameIds;
+        guardianIds = mergedIds;
       }
       if (guardianIds.length === 0) {
         return NextResponse.json({ data: [] });
@@ -243,6 +266,9 @@ export async function POST(request: NextRequest) {
     try {
       await Promise.all([
         updateSearchIndex(supabase, 'guardian', guardian.id, 'name', name.trim()),
+        kana?.trim()
+          ? updateSearchIndex(supabase, 'guardian', guardian.id, 'name_kana', kana.trim())
+          : Promise.resolve(),
         normalizedPhone
           ? updateSearchIndex(supabase, 'guardian', guardian.id, 'phone', normalizedPhone)
           : Promise.resolve(),
@@ -277,6 +303,41 @@ export async function POST(request: NextRequest) {
 
       if (linkError) {
         console.error('Child-guardian link error:', linkError.message);
+      }
+
+      // 兄弟がいれば自動的に紐づけ
+      const { data: siblingLinks } = await supabase
+        .from('_child_sibling')
+        .select('sibling_id')
+        .eq('child_id', child_id);
+
+      if (siblingLinks && siblingLinks.length > 0) {
+        const siblingIds = siblingLinks.map((s: { sibling_id: string }) => s.sibling_id);
+
+        const { data: validSiblings } = await supabase
+          .from('m_children')
+          .select('id')
+          .in('id', siblingIds)
+          .eq('facility_id', current_facility_id)
+          .is('deleted_at', null);
+
+        if (validSiblings && validSiblings.length > 0) {
+          const siblingUpserts = validSiblings.map((s: { id: string }) => ({
+            child_id: s.id,
+            guardian_id: guardian.id,
+            relationship,
+            is_primary: false,
+            is_emergency_contact: true,
+          }));
+
+          const { error: siblingLinkError } = await supabase
+            .from('_child_guardian')
+            .upsert(siblingUpserts, { onConflict: 'child_id,guardian_id' });
+
+          if (siblingLinkError) {
+            console.error('Sibling-guardian link error:', siblingLinkError.message);
+          }
+        }
       }
     }
 

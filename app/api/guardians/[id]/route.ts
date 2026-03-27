@@ -226,6 +226,9 @@ export async function PATCH(
     if (name !== undefined) {
       indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'name', name.trim()));
     }
+    if (kana !== undefined) {
+      indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'name_kana', kana?.trim() || ''));
+    }
     if (normalizedPhone !== undefined) {
       indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'phone', normalizedPhone));
     }

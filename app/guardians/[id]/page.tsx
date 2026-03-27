@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Upload,
   Loader2,
+  Search,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -110,6 +111,15 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const savedRef = React.useRef(false);
 
+  // 子どもセレクタ（新規登録時のみ）
+  const [childSearchQuery, setChildSearchQuery] = useState('');
+  const [debouncedChildQuery, setDebouncedChildQuery] = useState('');
+  const [childSearchResults, setChildSearchResults] = useState<Array<{ child_id: string; name: string; kana: string; class_name: string | null }>>([]);
+  const [childSearchLoading, setChildSearchLoading] = useState(false);
+  const [selectedChild, setSelectedChild] = useState<{ id: string; name: string } | null>(null);
+  const [siblingInfo, setSiblingInfo] = useState<Array<{ child_id: string; name: string }>>([]);
+  const [showChildDropdown, setShowChildDropdown] = useState(false);
+
   // ブラウザタブを閉じたり更新しようとしたときに確認
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -163,6 +173,37 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
     }
   }, [isNew, fetchGuardian]);
 
+  // 子ども検索デバウンス
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedChildQuery(childSearchQuery), 300);
+    return () => clearTimeout(t);
+  }, [childSearchQuery]);
+
+  // 子ども検索
+  useEffect(() => {
+    if (!isNew || debouncedChildQuery.length < 1) {
+      setChildSearchResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    setChildSearchLoading(true);
+    fetch(`/api/children?search=${encodeURIComponent(debouncedChildQuery)}&status=enrolled&limit=20`, { signal: controller.signal })
+      .then(res => res.json())
+      .then(json => {
+        const results = (json.data?.children ?? []).map((c: { child_id: string; name: string; kana: string; class_name: string | null }) => ({
+          child_id: c.child_id,
+          name: c.name,
+          kana: c.kana,
+          class_name: c.class_name,
+        }));
+        setChildSearchResults(results);
+        setShowChildDropdown(results.length > 0);
+      })
+      .catch((e: Error) => { if (e.name !== 'AbortError') console.error(e); })
+      .finally(() => setChildSearchLoading(false));
+    return () => controller.abort();
+  }, [isNew, debouncedChildQuery]);
+
   const markDirty = () => setIsDirty(true);
 
   const handleNavigateAway = () => {
@@ -202,9 +243,36 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
     }
   };
 
+  const handleSelectChild = async (child: { child_id: string; name: string }) => {
+    setSelectedChild({ id: child.child_id, name: child.name });
+    setChildSearchQuery('');
+    setChildSearchResults([]);
+    setShowChildDropdown(false);
+    markDirty();
+    // 兄弟情報を取得
+    try {
+      const res = await fetch(`/api/children/${child.child_id}`);
+      if (res.ok) {
+        const json = await res.json();
+        const siblings = (json.data?.siblings ?? []).map((s: { child_id: string; name: string }) => ({ child_id: s.child_id, name: s.name }));
+        setSiblingInfo(siblings);
+      }
+    } catch { /* 非致命的 */ }
+  };
+
+  const handleDeselectChild = () => {
+    setSelectedChild(null);
+    setSiblingInfo([]);
+    markDirty();
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       setError('氏名は必須です');
+      return;
+    }
+    if (isNew && !selectedChild) {
+      setError('紐づける子どもは必須です');
       return;
     }
     setSaving(true);
@@ -222,7 +290,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         const res = await fetch('/api/guardians', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, relationship }),
+          body: JSON.stringify({ ...body, relationship, child_id: selectedChild!.id }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -374,6 +442,67 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
               </select>
             </FieldGroup>
           </div>
+
+          {/* 紐づける子ども（新規登録時のみ） */}
+          {isNew && (
+            <>
+              <div className="border-t border-slate-100" />
+              <FieldGroup label="紐づける子ども" required>
+                {selectedChild ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-sm font-medium">
+                      {selectedChild.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleDeselectChild}
+                      className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      変更
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        className="pl-9 pr-4 py-2.5 bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full"
+                        placeholder="子どもの名前を入力して検索..."
+                        value={childSearchQuery}
+                        onChange={e => { setChildSearchQuery(e.target.value); setShowChildDropdown(true); }}
+                      />
+                      {childSearchLoading && (
+                        <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
+                      )}
+                    </div>
+                    {showChildDropdown && childSearchResults.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {childSearchResults.map(c => (
+                          <button
+                            key={c.child_id}
+                            type="button"
+                            className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-sm border-b border-slate-50 last:border-0"
+                            onClick={() => handleSelectChild(c)}
+                          >
+                            <span className="font-medium text-slate-800">{c.name}</span>
+                            {c.kana && <span className="ml-2 text-xs text-slate-400">{c.kana}</span>}
+                            {c.class_name && <span className="ml-2 text-xs text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded">{c.class_name}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* 兄弟注意書き */}
+                {selectedChild && siblingInfo.length > 0 && (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                    兄弟（{siblingInfo.map(s => s.name).join('、')}）にも自動的に紐づけされます
+                  </div>
+                )}
+              </FieldGroup>
+            </>
+          )}
 
           {/* メモ */}
           <FieldGroup label="メモ・特記事項">
