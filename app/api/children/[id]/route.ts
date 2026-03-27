@@ -95,26 +95,7 @@ export async function GET(
       return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
 
-    // 兄弟情報取得
-    const { data: siblingsData } = await supabase
-      .from('_child_sibling')
-      .select(`
-        sibling_id,
-        relationship,
-        m_children!_child_sibling_sibling_id_fkey (
-          id,
-          family_name,
-          given_name
-        )
-      `)
-      .eq('child_id', child_id);
-
     const classInfo = childData._child_class.find((c: ClassRelation) => c.is_current)?.m_classes;
-
-    // 保護者情報の整形
-    const guardians: GuardianRelation[] = childData._child_guardian || [];
-    const primaryGuardian = guardians.find((g: GuardianRelation) => g.is_primary);
-    const emergencyContacts = guardians.filter((g: GuardianRelation) => g.is_emergency_contact && !g.is_primary);
 
     // 保護者情報の復号化
     const decryptGuardian = (guardian: Guardian | null) => {
@@ -128,6 +109,36 @@ export async function GET(
       };
     };
 
+    // 兄弟情報取得と署名URL生成を並列実行
+    const [{ data: siblingsData }, signedUrlResult] = await Promise.all([
+      supabase
+        .from('_child_sibling')
+        .select(`
+          sibling_id,
+          relationship,
+          m_children!_child_sibling_sibling_id_fkey (
+            id,
+            family_name,
+            given_name
+          )
+        `)
+        .eq('child_id', child_id),
+      childData.photo_url
+        ? supabase.storage.from('private-child-photos').createSignedUrl(childData.photo_url, 3600)
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const signedUrlData = signedUrlResult as { data: { signedUrl: string } | null; error?: { message: string } | null };
+    if (signedUrlData?.error) {
+      console.error('Signed URL generation error:', signedUrlData.error);
+    }
+    const photoSignedUrl: string | null = signedUrlData?.data?.signedUrl ?? null;
+
+    // 保護者情報の整形
+    const guardians: GuardianRelation[] = childData._child_guardian || [];
+    const primaryGuardian = guardians.find((g: GuardianRelation) => g.is_primary);
+    const emergencyContacts = guardians.filter((g: GuardianRelation) => g.is_emergency_contact && !g.is_primary);
+
     const decryptedPrimaryGuardian = primaryGuardian ? {
       ...primaryGuardian,
       m_guardians: primaryGuardian.m_guardians ? decryptGuardian(primaryGuardian.m_guardians) : null,
@@ -137,15 +148,6 @@ export async function GET(
       ...ec,
       m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
     }));
-
-    // photo_url（パス）から署名URLを生成
-    let photoSignedUrl: string | null = null
-    if (childData.photo_url) {
-      const { data: signedData } = await supabase.storage
-        .from('private-child-photos')
-        .createSignedUrl(childData.photo_url, 3600)
-      photoSignedUrl = signedData?.signedUrl ?? null
-    }
 
     // データ整形
     const response = {

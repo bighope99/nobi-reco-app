@@ -13,7 +13,6 @@ import {
     ArrowUpDown,
     Power,
     RotateCcw,
-    Users,
     Download,
     Upload,
     Loader2,
@@ -47,7 +46,6 @@ interface APIChild {
     report_allowed: boolean;
     parent_name: string | null;
     parent_phone: string | null;
-    siblings: Array<{ child_id: string; name: string; relationship: string }>;
     created_at: string;
     updated_at: string;
 }
@@ -61,7 +59,6 @@ interface ChildrenAPIResponse {
             enrolled_count: number;
             withdrawn_count: number;
             has_allergy_count: number;
-            has_sibling_count: number;
         };
         filters: {
             classes: Array<{ class_id: string; class_name: string; children_count: number }>;
@@ -85,7 +82,6 @@ interface Student {
     className: string;
     parentName: string;
     parentPhone: string;
-    siblings: string[];
     hasAllergy: boolean;
     allergyDetail?: string;
     photoAllowed: boolean;
@@ -94,7 +90,7 @@ interface Student {
     contractType: ContractType;
 }
 
-type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'siblings' | 'photoAllowed';
+type SortKey = 'name' | 'grade' | 'className' | 'contractType' | 'allergy' | 'photoAllowed';
 type SortOrder = 'asc' | 'desc';
 
 // --- Helper Functions ---
@@ -105,9 +101,6 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
 
     // Map enrollment_status to status
     const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
-
-    // Format siblings array
-    const siblings = apiChild.siblings.map(s => s.name);
 
     return {
         id: apiChild.child_id,
@@ -122,7 +115,6 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         facilityName: apiChild.facility_name || '',
         parentName: apiChild.parent_name || '',
         parentPhone: apiChild.parent_phone || '',
-        siblings,
         hasAllergy: apiChild.has_allergy,
         allergyDetail: apiChild.allergy_detail || undefined,
         photoAllowed: apiChild.photo_allowed,
@@ -328,10 +320,6 @@ export default function StudentList() {
                 case 'allergy':
                     comparison = (a.hasAllergy === b.hasAllergy) ? 0 : a.hasAllergy ? -1 : 1;
                     break;
-                case 'siblings':
-                    // 兄弟の数でソート
-                    comparison = a.siblings.length - b.siblings.length;
-                    break;
                 case 'photoAllowed':
                     comparison = (a.photoAllowed === b.photoAllowed) ? 0 : a.photoAllowed ? 1 : -1;
                     break;
@@ -467,12 +455,8 @@ export default function StudentList() {
 
     return (
         <StaffLayout title="子ども一覧">
-            <div className="min-h-screen text-slate-900 font-sans" >
-                <style>
-                    {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-                </style>
-
-                <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+            <div className="min-h-screen text-slate-900 font-sans">
+                <div className="max-w-7xl mx-auto">
 
                     {/* company_admin向け施設選択 */}
                     {isCompanyAdmin && facilityOptions.length > 0 && (
@@ -680,15 +664,6 @@ export default function StudentList() {
                                                 </div>
                                             </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48" > 保護者連絡先 </th>
-                                            <th
-                                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
-                                                onClick={() => handleSort('siblings')}
-                                            >
-                                                <div className="flex items-center gap-1" >
-                                                    兄弟
-                                                    <SortIcon columnKey="siblings" />
-                                                </div>
-                                            </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32 text-center" > QRコード </th>
                                             <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12" > </th>
                                         </tr>
@@ -813,21 +788,6 @@ export default function StudentList() {
                                                                 <div className="text-xs text-slate-400 font-mono" > {student.parentPhone} </div>
                                                             </div>
                                                         </div>
-                                                    </td>
-
-                                                    {/* Siblings */}
-                                                    <td className="px-3 py-4" >
-                                                        {
-                                                            student.siblings.length > 0 ? (
-                                                                <div className="flex items-center gap-1 text-sm text-slate-600" >
-                                                                    <Users size={14} className="text-indigo-400" />
-                                                                    <span className="truncate" title={student.siblings.join(', ')} >
-                                                                        {student.siblings[0]} {student.siblings.length > 1 && `他${student.siblings.length - 1}名`}
-                                                                    </span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-sm" > -</span>
-                                                            )}
                                                     </td>
 
                                                     {/* QR Download */}

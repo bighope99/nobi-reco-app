@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
     const class_id = searchParams.get('class_id') || null;
     const search = searchParams.get('search') || null;
     const has_allergy = searchParams.get('has_allergy');
-    const has_sibling = searchParams.get('has_sibling');
     const enrollment_type = searchParams.get('enrollment_type') || null;
     const limit = parseInt(searchParams.get('limit') || '200');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -131,7 +130,6 @@ export async function GET(request: NextRequest) {
           enrolled_count: enrolledCount,
           withdrawn_count: withdrawnCount,
           has_allergy_count: hasAllergyCount,
-          has_sibling_count: 0, // 兄弟数は結果に依存するため呼び出し側で上書き
         },
         filters: {
           classes: (classesData || []).map((cls: any) => ({
@@ -310,31 +308,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const childIds = childrenData.map((c: any) => c.id);
-
-    // 2. 兄弟情報とサマリー・フィルターを並列取得
-    const [{ data: siblingsData }, { summary, filters }] = await Promise.all([
-      supabase
-        .from('_child_sibling')
-        .select(`
-          child_id,
-          sibling_id,
-          relationship,
-          m_children!_child_sibling_sibling_id_fkey (
-            id,
-            family_name,
-            given_name,
-            _child_class (
-              m_classes (
-                name,
-                age_group
-              )
-            )
-          )
-        `)
-        .in('child_id', childIds),
-      fetchSummaryAndFilters(),
-    ]);
+    // 2. サマリー・フィルターを取得（兄弟詳細クエリは廃止）
+    const { summary, filters } = await fetchSummaryAndFilters();
 
     // データ整形
     const children = childrenData.map((child: any) => {
@@ -345,7 +320,7 @@ export async function GET(request: NextRequest) {
       // 保護者情報の整形（復号化）
       const guardians = child._child_guardian || [];
       const primaryGuardian = guardians.find((g: any) => g.is_primary);
-      const decryptedPrimaryGuardian = primaryGuardian ? {
+      const decryptedPrimaryGuardian = primaryGuardian?.m_guardians ? {
         ...primaryGuardian,
         m_guardians: {
           ...primaryGuardian.m_guardians,
@@ -363,23 +338,6 @@ export async function GET(request: NextRequest) {
 
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
-
-      // 兄弟情報（復号化）
-      const childSiblings = (siblingsData || [])
-        .filter((s: any) => s.child_id === child.id)
-        .map((s: any) => {
-          const siblingInfo = s.m_children;
-          const siblingCurrentClass = siblingInfo?._child_class?.find((cc: any) => cc.is_current);
-          const siblingClass = siblingCurrentClass?.m_classes;
-          const decryptedFamilyName = decryptOrFallback(siblingInfo?.family_name);
-          const decryptedGivenName = decryptOrFallback(siblingInfo?.given_name);
-          return {
-            child_id: siblingInfo?.id,
-            name: formatName([decryptedFamilyName, decryptedGivenName], ''),
-            age_group: siblingClass?.age_group || '',
-            relationship: s.relationship,
-          };
-        });
 
       // 児童情報を復号化
       const decryptedFamilyName = decryptOrFallback(child.family_name);
@@ -417,8 +375,6 @@ export async function GET(request: NextRequest) {
           : null,
         parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(child.parent_phone) || null,
         parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(child.parent_email) || null,
-        siblings: childSiblings,
-        has_sibling: childSiblings.length > 0,
         has_allergy: !!decryptedAllergies,
         allergy_detail: decryptedAllergies,
         photo_allowed: child.photo_permission_public,
@@ -428,18 +384,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // has_siblingフィルター適用（兄弟データ取得後）
-    let filteredChildren = has_sibling !== null
-      ? children.filter(c => c.has_sibling === (has_sibling === 'true'))
-      : children;
-
     // 「クラスなし」フィルター: is_current=trueのクラス所属がない子のみ
-    if (class_id === 'none') {
-      filteredChildren = filteredChildren.filter(c => c.class_id === null);
-    }
-
-    const hasSiblingCount = children.filter(c => c.has_sibling).length;
-    summary.has_sibling_count = hasSiblingCount;
+    let filteredChildren = class_id === 'none'
+      ? children.filter(c => c.class_id === null)
+      : children;
 
     filters.enrollment_types = [
       { type: 'regular', label: '通年', count: children.filter(c => c.enrollment_type === 'regular').length },
@@ -454,8 +402,8 @@ export async function GET(request: NextRequest) {
         summary,
         children: filteredChildren,
         filters,
-        total: count || filteredChildren.length,
-        has_more: (count || 0) > offset + limit,
+        total: count ?? filteredChildren.length,
+        has_more: (count ?? 0) > offset + limit,
       },
     };
 

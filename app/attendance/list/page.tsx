@@ -387,11 +387,7 @@ export default function AttendanceListPage() {
   return (
     <StaffLayout title="出席予定一覧">
       <div className="min-h-screen text-slate-900 font-sans">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto">
 
           {actionError && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

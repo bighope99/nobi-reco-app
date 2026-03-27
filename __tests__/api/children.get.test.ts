@@ -293,13 +293,6 @@ describe('GET /api/children', () => {
         }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
 
       let callCount = 0;
       const mockSupabase = {
@@ -329,8 +322,7 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table} (call ${callCount})`);
@@ -513,14 +505,6 @@ describe('GET /api/children', () => {
         }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
-
       let callCount = 0;
       const mockSupabase = {
         auth: {
@@ -549,8 +533,7 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -960,13 +943,6 @@ describe('GET /api/children', () => {
         }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
 
       let callCount = 0;
       const mockSupabase = {
@@ -996,8 +972,7 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -1093,10 +1068,6 @@ describe('GET /api/children', () => {
         in: jest.fn().mockResolvedValue({ data: [], error: null }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({ data: [], error: null }),
-      };
 
       return {
         auth: {
@@ -1121,7 +1092,6 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           if (table === 'm_facilities') return facilityScopeQuery;
           if (table === 'm_children') return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
