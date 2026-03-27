@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q')?.trim() ?? '';
     const childId = searchParams.get('child_id')?.trim() ?? '';
+    const childName = searchParams.get('child_name')?.trim() ?? '';
 
     let guardianIds: string[] | null = null;
 
@@ -66,7 +67,25 @@ export async function GET(request: NextRequest) {
       guardianIds = ids;
     }
 
-    // 名前検索
+    // 子ども名検索
+    if (childName) {
+      const childIds = await searchByName(supabase, 'child', 'name', childName);
+      if (childIds.length > 0) {
+        const { data: links } = await supabase
+          .from('_child_guardian')
+          .select('guardian_id')
+          .in('child_id', childIds);
+        const ids = [...new Set((links ?? []).map((l: { guardian_id: string }) => l.guardian_id))];
+        guardianIds = guardianIds !== null ? guardianIds.filter(id => ids.includes(id)) : ids;
+      } else {
+        return NextResponse.json({ data: [] });
+      }
+      if (guardianIds.length === 0) {
+        return NextResponse.json({ data: [] });
+      }
+    }
+
+    // 保護者名検索
     if (query) {
       const nameIds = await searchByName(supabase, 'guardian', 'name', query);
       if (guardianIds !== null) {
@@ -96,7 +115,8 @@ export async function GET(request: NextRequest) {
           m_children (
             id,
             family_name,
-            given_name
+            given_name,
+            enrollment_status
           )
         )
       `)
@@ -115,7 +135,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    const result = await Promise.all(
+    const resultRaw = await Promise.all(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (guardians ?? []).map(async (g: any) => {
         const name = decryptOrFallback(g.family_name) ?? '';
@@ -137,7 +157,14 @@ export async function GET(request: NextRequest) {
               .join(' '),
             relationship: link.relationship,
             is_primary: link.is_primary,
+            enrollment_status: link.m_children.enrollment_status,
           }));
+
+        // 紐づき無し、または全員退所済みの保護者は非表示
+        if (linkedChildren.length === 0) return null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hasActiveChild = linkedChildren.some((c: any) => c.enrollment_status === 'enrolled');
+        if (!hasActiveChild) return null;
 
         // 続柄は_child_guardianのrelationshipから取得（is_primaryのものを優先）
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -158,6 +185,7 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    const result = resultRaw.filter(Boolean);
     return NextResponse.json({ data: result });
   } catch (error) {
     console.error('Guardians GET error:', error);

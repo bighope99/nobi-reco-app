@@ -34,6 +34,8 @@ export default function GuardianListPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [childSearchTerm, setChildSearchTerm] = useState('');
+  const [debouncedChildSearch, setDebouncedChildSearch] = useState('');
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -45,12 +47,18 @@ export default function GuardianListPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  const fetchGuardians = useCallback(async (query: string, signal?: AbortSignal) => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedChildSearch(childSearchTerm), 300);
+    return () => clearTimeout(t);
+  }, [childSearchTerm]);
+
+  const fetchGuardians = useCallback(async (query: string, childQuery: string, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       if (query) params.set('q', query);
+      if (childQuery) params.set('child_name', childQuery);
       const res = await fetch(`/api/guardians?${params.toString()}`, { signal });
       if (!res.ok) throw new Error('取得に失敗しました');
       const json = await res.json();
@@ -66,9 +74,9 @@ export default function GuardianListPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchGuardians(debouncedSearch, controller.signal);
+    fetchGuardians(debouncedSearch, debouncedChildSearch, controller.signal);
     return () => controller.abort();
-  }, [debouncedSearch, fetchGuardians]);
+  }, [debouncedSearch, debouncedChildSearch, fetchGuardians]);
 
   const formatDate = (iso: string) => {
     try {
@@ -97,15 +105,25 @@ export default function GuardianListPage() {
         </div>
 
         {/* Search */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6">
-          <div className="relative max-w-sm">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="氏名で検索..."
+              placeholder="保護者名で検索..."
               className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="子どもの名前で絞り込み..."
+              className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+              value={childSearchTerm}
+              onChange={e => setChildSearchTerm(e.target.value)}
             />
           </div>
         </div>
@@ -129,7 +147,7 @@ export default function GuardianListPage() {
               <table className="w-full text-left border-collapse">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 text-center">
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-20 text-center">
                       写真
                     </th>
                     <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-48">
@@ -157,16 +175,16 @@ export default function GuardianListPage() {
                       className="group hover:bg-indigo-50/30 transition-colors"
                     >
                       {/* Photo */}
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-4 py-2 text-center">
                         {guardian.photo_url ? (
                           <img
                             src={guardian.photo_url}
                             alt={guardian.name}
-                            className="w-10 h-10 rounded-full object-cover mx-auto border border-slate-200"
+                            className="w-14 h-14 rounded-lg object-cover mx-auto border border-slate-200"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto border border-slate-200">
-                            <User size={18} className="text-slate-400" />
+                          <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center mx-auto border border-slate-200">
+                            <User size={22} className="text-slate-400" />
                           </div>
                         )}
                       </td>

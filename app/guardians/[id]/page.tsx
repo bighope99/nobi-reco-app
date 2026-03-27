@@ -96,6 +96,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   const [name, setName] = useState('');
   const [kana, setKana] = useState('');
@@ -108,6 +109,16 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [linkedChildren, setLinkedChildren] = useState<LinkedChild[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const savedRef = React.useRef(false);
+
+  // ブラウザタブを閉じたり更新しようとしたときに確認
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   // cleanup: delete orphaned photo if form is abandoned
   useEffect(() => {
@@ -138,6 +149,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
       setPhotoUrl(g.photo_url);
       setPhotoPath(g.photo_path);
       setLinkedChildren(g.linked_children);
+      setIsDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : '取得に失敗しました');
     } finally {
@@ -151,7 +163,15 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
     }
   }, [isNew, fetchGuardian]);
 
+  const markDirty = () => setIsDirty(true);
+
+  const handleNavigateAway = () => {
+    if (isDirty && !confirm('入力内容が保存されていません。移動しますか？')) return;
+    router.push('/guardians');
+  };
+
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsDirty(true);
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -212,7 +232,8 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         const json = await res.json();
         toast.success('保護者を登録しました');
         savedRef.current = true;
-        router.replace(`/guardians/${json.data.id}`);
+        setIsDirty(false);
+        router.push('/guardians');
       } else {
         const res = await fetch(`/api/guardians/${id}`, {
           method: 'PATCH',
@@ -224,6 +245,8 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           throw new Error(err.error ?? '更新に失敗しました');
         }
         toast.success('保存しました');
+        setIsDirty(false);
+        router.push('/guardians');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存に失敗しました');
@@ -269,13 +292,13 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Back link */}
         <div className="mb-6">
-          <Link
-            href="/guardians"
+          <button
+            onClick={handleNavigateAway}
             className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-indigo-600 transition-colors"
           >
             <ArrowLeft size={16} />
             保護者一覧に戻る
-          </Link>
+          </button>
         </div>
 
         {/* Error */}
@@ -322,10 +345,10 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
             {/* 氏名・ふりがな */}
             <div className="flex-1 space-y-3">
               <FieldGroup label="氏名" required>
-                <TextInput value={name} onChange={setName} placeholder="例: 山田 花子" icon={User} />
+                <TextInput value={name} onChange={v => { setName(v); markDirty(); }} placeholder="例: 山田 花子" icon={User} />
               </FieldGroup>
               <FieldGroup label="氏名（ふりがな）">
-                <TextInput value={kana} onChange={setKana} placeholder="例: やまだ はなこ" />
+                <TextInput value={kana} onChange={v => { setKana(v); markDirty(); }} placeholder="例: やまだ はなこ" />
               </FieldGroup>
             </div>
           </div>
@@ -335,13 +358,13 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           {/* 電話番号・続柄 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <FieldGroup label="電話番号">
-              <TextInput value={phone} onChange={setPhone} placeholder="例: 090-1234-5678" icon={Phone} />
+              <TextInput value={phone} onChange={v => { setPhone(v); markDirty(); }} placeholder="例: 090-1234-5678" icon={Phone} />
             </FieldGroup>
             <FieldGroup label="続柄" required>
               <select
                 className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5"
                 value={relationship ?? ''}
-                onChange={e => setRelationship(e.target.value)}
+                onChange={e => { setRelationship(e.target.value); markDirty(); }}
               >
                 <option value="母">母</option>
                 <option value="父">父</option>
@@ -359,7 +382,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
               rows={4}
               placeholder="例：お迎え時に本人確認済み。要望が多い場合は必ず記録すること。"
               value={memo}
-              onChange={e => setMemo(e.target.value)}
+              onChange={e => { setMemo(e.target.value); markDirty(); }}
             />
             <p className="text-xs text-slate-400 text-right">{memo.length} 文字</p>
           </FieldGroup>
@@ -415,12 +438,12 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
           )}
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/guardians"
+            <button
+              onClick={handleNavigateAway}
               className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-sm font-bold transition-colors"
             >
               キャンセル
-            </Link>
+            </button>
             <button
               className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm transition-colors disabled:opacity-50"
               onClick={handleSave}
