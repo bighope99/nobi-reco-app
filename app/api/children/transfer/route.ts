@@ -372,9 +372,9 @@ async function handlePreview({
       target_school_name: targetSchoolName,
       target_facility_name: targetFacilityName,
       changes: {
-        class: !!targetClassId,
-        school: !!targetSchoolId,
-        facility: !!targetFacilityId,
+        class: !!targetClassId && targetClassName !== currentClassName,
+        school: !!targetSchoolId && targetSchoolName !== currentSchoolName,
+        facility: !!targetFacilityId && targetFacilityName !== currentFacilityName,
       },
     };
   });

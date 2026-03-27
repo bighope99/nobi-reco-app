@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import Link from "next/link"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { useRole } from "@/hooks/useRole"
 import { useSession } from "@/hooks/useSession"
@@ -15,6 +16,7 @@ interface ChildRow {
   name: string
   grade: number | null
   grade_label: string
+  class_id: string | null
   class_name: string
   school_name: string | null
   facility_name: string
@@ -59,6 +61,7 @@ interface ChildrenAPIResponse {
       name: string
       grade: number | null
       grade_label: string
+      class_id: string | null
       class_name: string
       school_name: string | null
       facility_name: string
@@ -153,6 +156,7 @@ function Step1SelectChildren({
             name: c.name,
             grade: c.grade,
             grade_label: c.grade_label,
+            class_id: c.class_id,
             class_name: c.class_name,
             school_name: c.school_name,
             facility_name: c.facility_name,
@@ -188,7 +192,7 @@ function Step1SelectChildren({
     .filter((c) => {
       const matchClass =
         filterClass === "all" ||
-        (filterClass === "none" ? !c.class_name : c.class_name === classes.find((cl) => cl.class_id === filterClass)?.class_name)
+        (filterClass === "none" ? !c.class_id : c.class_id === filterClass)
       const matchGrade =
         filterGrade === "all" || String(c.grade) === filterGrade
       const matchSearch =
@@ -680,12 +684,12 @@ function Step3ConfirmAndExecute({
           付け替えが完了しました
         </h3>
         <p className="text-sm text-gray-500 mb-8">{updatedCount}件の子どもを更新しました</p>
-        <a
+        <Link
           href="/children"
           className="inline-block px-6 py-2.5 rounded-lg text-sm font-bold bg-purple-600 text-white hover:bg-purple-700 transition-colors"
         >
           子ども一覧に戻る
-        </a>
+        </Link>
       </div>
     )
   }
