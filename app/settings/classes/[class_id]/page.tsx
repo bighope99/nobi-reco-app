@@ -133,13 +133,18 @@ export default function ClassDetailPage() {
 
   // Fetch class data
   useEffect(() => {
-    fetchClassData();
-    fetchFacilities();
-    fetchAllTeachers();
-    fetchAllChildren();
+    const init = async () => {
+      const facilityId = await fetchClassData();
+      fetchFacilities();
+      fetchAllTeachers();
+      if (facilityId) {
+        await fetchAllChildren(facilityId);
+      }
+    };
+    init();
   }, [classId]);
 
-  const fetchClassData = async () => {
+  const fetchClassData = async (): Promise<string | null> => {
     try {
       setLoading(true);
       const response = await fetch(`/api/classes/${classId}`);
@@ -147,12 +152,15 @@ export default function ClassDetailPage() {
 
       if (result.success) {
         setClassData(result.data);
+        return result.data.facility_id as string;
       } else {
         alert(result.error || 'クラス情報の取得に失敗しました');
+        return null;
       }
     } catch (error) {
       console.error('Error fetching class:', error);
       alert('クラス情報の取得中にエラーが発生しました');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -188,12 +196,20 @@ export default function ClassDetailPage() {
     }
   };
 
-  const fetchAllChildren = async () => {
+  const fetchAllChildren = async (facilityId: string) => {
     try {
-      const response = await fetch('/api/children');
-      const result = await response.json();
+      const allChildren: Child[] = [];
+      let offset = 0;
+      const limit = 100;
 
-      if (result.success) {
+      while (true) {
+        const response = await fetch(
+          `/api/children?facility_id=${facilityId}&limit=${limit}&offset=${offset}`
+        );
+        const result = await response.json();
+
+        if (!result.success) break;
+
         const mappedChildren = (result.data.children || []).map((child: any) => ({
           id: child.child_id ?? child.id,
           name: child.name,
@@ -204,8 +220,14 @@ export default function ClassDetailPage() {
           birth_date: child.birth_date,
           enrollment_status: child.enrollment_status,
         }));
-        setAllChildren(mappedChildren);
+
+        allChildren.push(...mappedChildren);
+
+        if (!result.data.has_more) break;
+        offset += limit;
       }
+
+      setAllChildren(allChildren);
     } catch (error) {
       console.error('Error fetching children:', error);
     }
