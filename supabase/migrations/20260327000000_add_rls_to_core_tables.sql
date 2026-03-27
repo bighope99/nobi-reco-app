@@ -76,21 +76,30 @@ CREATE POLICY "users_select" ON m_users
   FOR SELECT TO authenticated
   USING (
     id = auth.uid()
-    OR (auth.jwt()->'app_metadata'->>'role') IN ('site_admin', 'company_admin')
+    OR (auth.jwt()->'app_metadata'->>'role') = 'site_admin'
+    OR (
+      (auth.jwt()->'app_metadata'->>'role') = 'company_admin'
+      AND m_users.company_id = (auth.jwt()->'app_metadata'->>'company_id')::uuid
+    )
     OR EXISTS (
       SELECT 1 FROM _user_facility uf1
       JOIN _user_facility uf2 ON uf1.facility_id = uf2.facility_id
       WHERE uf1.user_id = auth.uid()
         AND uf1.is_current = true
         AND uf2.user_id = m_users.id
+        AND uf2.is_current = true
     )
   );
 
--- INSERT: facility_admin 以上
+-- INSERT: facility_admin 以上（自社のみ）
 CREATE POLICY "users_insert" ON m_users
   FOR INSERT TO authenticated
   WITH CHECK (
-    (auth.jwt()->'app_metadata'->>'role') IN ('facility_admin', 'company_admin', 'site_admin')
+    (auth.jwt()->'app_metadata'->>'role') = 'site_admin'
+    OR (
+      (auth.jwt()->'app_metadata'->>'role') IN ('facility_admin', 'company_admin')
+      AND company_id = (auth.jwt()->'app_metadata'->>'company_id')::uuid
+    )
   );
 
 -- UPDATE: 自分自身 OR facility_admin 以上
@@ -148,7 +157,8 @@ CREATE POLICY "observation_select" ON r_observation
 CREATE POLICY "observation_insert" ON r_observation
   FOR INSERT TO authenticated
   WITH CHECK (
-    EXISTS (
+    (auth.jwt()->'app_metadata'->>'role') IN ('staff', 'facility_admin', 'company_admin', 'site_admin')
+    AND EXISTS (
       SELECT 1 FROM m_children c
       WHERE c.id = child_id
         AND c.facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
@@ -192,14 +202,16 @@ CREATE POLICY "daily_attendance_select" ON r_daily_attendance
 CREATE POLICY "daily_attendance_insert" ON r_daily_attendance
   FOR INSERT TO authenticated
   WITH CHECK (
-    facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
+    (auth.jwt()->'app_metadata'->>'role') IN ('staff', 'facility_admin', 'company_admin', 'site_admin')
+    AND facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
   );
 
 -- UPDATE: staff 以上が自施設のみ（論理削除済みを除く）
 CREATE POLICY "daily_attendance_update" ON r_daily_attendance
   FOR UPDATE TO authenticated
   USING (
-    facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
+    (auth.jwt()->'app_metadata'->>'role') IN ('staff', 'facility_admin', 'company_admin', 'site_admin')
+    AND facility_id = (auth.jwt()->'app_metadata'->>'current_facility_id')::uuid
     AND deleted_at IS NULL
   );
 
