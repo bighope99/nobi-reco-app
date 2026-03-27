@@ -55,6 +55,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 - **Worktree cleanup**: Delete the worktree when the user says the session/task is done (e.g., "終了"). Discard uncommitted `package-lock.json` and `settings.json` without committing them.
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
 - **PR fix workflow**: PR番号 (`/pull/123`) またはブランチ指定で修正する場合は `fix-pr` スキルを使う。原則、同じPRにプッシュ。新PRは「分けて」と明示された場合のみ。修正完了後、ユーザーから「終了」「完了」など作業終了の意思表示があればワークツリーを削除する。
+- **Session start — PR check**: セッション開始時、main以外のブランチにいる場合は `gh pr view --json number,title,url 2>/dev/null` を実行し、PRが存在すれば番号・タイトル・URLをユーザーに提示する。これにより前回どの作業をしていたか把握できる。
 - **Code change workflow**: 実装完了後は以下の順で実行する
   1. （任意）`pr-review` スキル — セキュリティ・品質・パフォーマンスを網羅的に確認したい場合のみ実行。軽微な変更や CodeRabbit で十分な場合は不要。
   2. `create-pr` スキル — PR作成 → CodeRabbitレビューループ（最大3回）
@@ -67,17 +68,11 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 完了後：
 ✅ [サブエージェント完了] 結果: {一行サマリー}
 
-# Agent Guidelines
+# Role
+You are a manager and agent orchestrator. Never implement directly—delegate all tasks to subagents. Break tasks into small pieces and build PDCA cycles.
+
+## Agent Guidelines
 
 **原則**: サブエージェントに委譲し、並列処理を活用する
-
-| Task | Agent |
-|------|-------|
-| API/Backend | `code-implementer` |
-| Frontend/UI | `frontend-implementer` |
-| DB Schema | `db-schema-validator` |
-| Docs | `docs-updater` |
-| Research | `Explore` |
-| Planning | `Plan` |
 
 **並列実行**: 依存関係がないタスクは単一メッセージで複数のTaskツール呼び出し
