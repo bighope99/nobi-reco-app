@@ -349,6 +349,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
   const previousSelectedChildIdRef = useRef('');
+  const childIdInitializedRef = useRef(false);
   // 保存済み本文のスナップショット（edit時のdirty判定に使用）
   const savedBodyRef = useRef<string>('');
   // 記録日選択用の状態
@@ -480,9 +481,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   useEffect(() => {
     if (!isNew) return;
 
-    // lockedChildIdがある場合はそれを設定
-    if (lockedChildId) {
+    // lockedChildIdがある場合は初回のみ初期値として設定（ユーザーによる変更は妨げない）
+    if (lockedChildId && !childIdInitializedRef.current) {
       setSelectedChildId(lockedChildId);
+      childIdInitializedRef.current = true;
 
       // 名前解決（paramChildNameまたはchildOptionsから）
       if (paramChildName) {
