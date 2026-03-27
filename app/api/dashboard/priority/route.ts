@@ -247,6 +247,7 @@ export async function GET(request: NextRequest) {
       actual_out_time: string | null;
       check_in_method: 'qr' | 'manual' | null;
       grade: number | null;
+      absent_confirmed: boolean;
     };
 
     const childStatuses: ChildStatusItem[] = childrenData.map((child) => {
@@ -288,6 +289,7 @@ export async function GET(request: NextRequest) {
         actual_out_time: formatTimeJST(displayLog?.checked_out_at),
         check_in_method: displayLog?.check_in_method || null,
         grade,
+        absent_confirmed: dailyRecord?.status === 'absent',
       };
     });
 
@@ -305,8 +307,8 @@ export async function GET(request: NextRequest) {
           return true;
         }
       }
-      // 遅刻（未登所で予定開始時刻超過）
-      if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time) {
+      // 遅刻（未登所で予定開始時刻超過）—— 欠席確定済みは除外
+      if (c.status === 'absent' && c.is_scheduled_today && c.scheduled_start_time && !c.absent_confirmed) {
         const threshold = getLateThreshold(c.child.school_id);
         if (getMinutesDiff(currentTime, c.scheduled_start_time) >= threshold) {
           return true;
@@ -316,8 +318,8 @@ export async function GET(request: NextRequest) {
       if (c.status === 'checked_in' && !c.is_scheduled_today && c.check_in_method === 'qr') {
         return true;
       }
-      // 未登所（予定ありだが未到着）
-      if (c.is_scheduled_today && c.status === 'absent') {
+      // 未登所（予定ありだが未到着）—— 欠席確定済みは除外
+      if (c.is_scheduled_today && c.status === 'absent' && !c.absent_confirmed) {
         return true;
       }
       return false;
