@@ -12,6 +12,11 @@ import {
 const SIGNED_URL_EXPIRES_IN = 3600;
 const GUARDIAN_PHOTO_BUCKET = 'guardian-photos';
 
+function validatePhotoPath(photoPath: string | undefined | null, facilityId: string): boolean {
+  if (!photoPath) return true;
+  return photoPath.startsWith(`${facilityId}/`);
+}
+
 async function getSignedPhotoUrl(
   supabase: Awaited<ReturnType<typeof createClient>>,
   photoPath: string | null
@@ -181,6 +186,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
     }
 
+    if (!validatePhotoPath(photo_path, current_facility_id)) {
+      return NextResponse.json({ error: '無効な写真パスです' }, { status: 400 });
+    }
+
     const normalizedPhone = phone ? normalizePhone(phone) : null;
 
     const { data: guardian, error } = await supabase
@@ -203,15 +212,31 @@ export async function POST(request: NextRequest) {
     }
 
     // 検索インデックス更新
-    await Promise.all([
-      updateSearchIndex(supabase, 'guardian', guardian.id, 'name', name.trim()),
-      normalizedPhone
-        ? updateSearchIndex(supabase, 'guardian', guardian.id, 'phone', normalizedPhone)
-        : Promise.resolve(),
-    ]);
+    try {
+      await Promise.all([
+        updateSearchIndex(supabase, 'guardian', guardian.id, 'name', name.trim()),
+        normalizedPhone
+          ? updateSearchIndex(supabase, 'guardian', guardian.id, 'phone', normalizedPhone)
+          : Promise.resolve(),
+      ]);
+    } catch (indexError) {
+      console.error('Search index update failed (guardian created):', guardian.id, indexError);
+    }
 
     // 子どもと紐づけ
     if (child_id && relationship) {
+      // 子どもが同じ施設に属することを確認
+      const { data: childCheck } = await supabase
+        .from('m_children')
+        .select('id')
+        .eq('id', child_id)
+        .eq('facility_id', current_facility_id)
+        .is('deleted_at', null)
+        .single();
+      if (!childCheck) {
+        return NextResponse.json({ error: '指定された子どもが見つかりません' }, { status: 400 });
+      }
+
       const { error: linkError } = await supabase
         .from('_child_guardian')
         .upsert({

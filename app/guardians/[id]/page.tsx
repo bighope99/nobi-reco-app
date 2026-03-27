@@ -107,6 +107,17 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [linkedChildren, setLinkedChildren] = useState<LinkedChild[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const savedRef = React.useRef(false);
+
+  // cleanup: delete orphaned photo if form is abandoned
+  useEffect(() => {
+    return () => {
+      if (isNew && photoPath && !savedRef.current) {
+        fetch(`/api/guardians/upload-photo?path=${encodeURIComponent(photoPath)}`, { method: 'DELETE' })
+          .catch(() => {/* best-effort cleanup */});
+      }
+    };
+  }, [isNew, photoPath]);
 
   const fetchGuardian = useCallback(async () => {
     setLoading(true);
@@ -199,6 +210,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         }
         const json = await res.json();
         toast.success('保護者を登録しました');
+        savedRef.current = true;
         router.replace(`/guardians/${json.data.id}`);
       } else {
         const res = await fetch(`/api/guardians/${id}`, {

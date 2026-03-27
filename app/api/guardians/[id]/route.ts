@@ -168,6 +168,24 @@ export async function PATCH(
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
     }
 
+    // photo_pathが変更される場合、旧写真をStorageから削除
+    if (photo_path !== undefined) {
+      const { data: current } = await supabase
+        .from('m_guardians')
+        .select('photo_path')
+        .eq('id', id)
+        .eq('facility_id', current_facility_id)
+        .single();
+      if (current?.photo_path && current.photo_path !== photo_path) {
+        const { error: removeErr } = await supabase.storage
+          .from(GUARDIAN_PHOTO_BUCKET)
+          .remove([current.photo_path]);
+        if (removeErr) {
+          console.error('Failed to remove old guardian photo:', removeErr.message);
+        }
+      }
+    }
+
     const normalizedPhone = phone !== undefined
       ? (phone ? normalizePhone(phone) : null)
       : undefined;
@@ -239,13 +257,17 @@ export async function DELETE(
     }
 
     // 写真パスを取得しておく（削除後にStorageからも削除するため）
-    const { data: guardianData } = await supabase
+    const { data: guardianData, error: findError } = await supabase
       .from('m_guardians')
       .select('photo_path')
       .eq('id', id)
       .eq('facility_id', current_facility_id)
       .is('deleted_at', null)
       .single();
+
+    if (findError || !guardianData) {
+      return NextResponse.json({ error: '保護者が見つかりません' }, { status: 404 });
+    }
 
     const { error } = await supabase
       .from('m_guardians')

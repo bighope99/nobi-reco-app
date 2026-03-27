@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Search,
@@ -44,18 +45,19 @@ export default function GuardianListPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  const fetchGuardians = useCallback(async (query: string) => {
+  const fetchGuardians = useCallback(async (query: string, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       if (query) params.set('q', query);
-      const res = await fetch(`/api/guardians?${params.toString()}`);
+      const res = await fetch(`/api/guardians?${params.toString()}`, { signal });
       if (!res.ok) throw new Error('取得に失敗しました');
       const json = await res.json();
       setGuardians(json.data ?? []);
       setTotalCount(json.data?.length ?? 0);
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : '保護者情報の取得に失敗しました');
     } finally {
       setLoading(false);
@@ -63,7 +65,9 @@ export default function GuardianListPage() {
   }, []);
 
   useEffect(() => {
-    fetchGuardians(debouncedSearch);
+    const controller = new AbortController();
+    fetchGuardians(debouncedSearch, controller.signal);
+    return () => controller.abort();
   }, [debouncedSearch, fetchGuardians]);
 
   const formatDate = (iso: string) => {
@@ -150,8 +154,7 @@ export default function GuardianListPage() {
                   {guardians.map(guardian => (
                     <tr
                       key={guardian.id}
-                      className="group hover:bg-indigo-50/30 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/guardians/${guardian.id}`)}
+                      className="group hover:bg-indigo-50/30 transition-colors"
                     >
                       {/* Photo */}
                       <td className="px-6 py-4 text-center">
@@ -225,7 +228,13 @@ export default function GuardianListPage() {
 
                       {/* Arrow */}
                       <td className="px-4 py-4 text-right">
-                        <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+                        <Link
+                          href={`/guardians/${guardian.id}`}
+                          className="inline-flex items-center justify-center p-1 rounded text-slate-300 group-hover:text-indigo-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          aria-label={`${guardian.name}の詳細を見る`}
+                        >
+                          <ChevronRight size={20} />
+                        </Link>
                       </td>
                     </tr>
                   ))}
