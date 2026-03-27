@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
         m_users!r_observation_created_by_fkey(id, name),
         recorded_by_user:m_users!recorded_by(id, name),
         _record_tag(
-          m_observation_tags(id, name, color)
+          m_observation_tags(id, name, color, sort_order)
         )
       `,
         { count: 'exact' }
@@ -250,6 +250,14 @@ export async function GET(request: NextRequest) {
       const tagData = firstTag
         ? (Array.isArray(firstTag.m_observation_tags) ? firstTag.m_observation_tags[0] : firstTag.m_observation_tags)
         : null;
+      const tags = recordTags
+        .map((rt) => {
+          const t = Array.isArray(rt.m_observation_tags) ? rt.m_observation_tags[0] : rt.m_observation_tags;
+          if (!t) return null;
+          return { id: t.id as string, name: t.name as string, color: (t.color as string | null) ?? null, sort_order: (t.sort_order as number) ?? 0 };
+        })
+        .filter((t): t is { id: string; name: string; color: string | null; sort_order: number } => t !== null)
+        .sort((a, b) => a.sort_order - b.sort_order);
 
       const staffUser = Array.isArray(obs.m_users) ? obs.m_users[0] : obs.m_users;
       const recordedByUser = Array.isArray(obs.recorded_by_user) ? obs.recorded_by_user[0] : obs.recorded_by_user;
@@ -274,6 +282,7 @@ export async function GET(request: NextRequest) {
         grade_label: formatGradeLabel(gradeNum),
         category: tagData?.name ?? null,
         category_color: tagData?.color ?? null,
+        tags,
         content: obs.content,
         objective: obs.objective ?? null,
         subjective: obs.subjective ?? null,

@@ -26,8 +26,7 @@ interface PersonalItem {
   className: string | null
   grade: number | null
   gradeLabel: string
-  category: string | null
-  categoryColor: string | null
+  tags: { id: string; name: string; color: string | null }[]
   content: string
   objective: string | null
   subjective: string | null
@@ -87,8 +86,7 @@ export default function PersonalHistoryClient() {
         class_name?: string
         grade?: number
         grade_label?: string
-        category?: string
-        category_color?: string
+        tags?: { id: string; name: string; color: string | null }[]
         content: string
         objective?: string | null
         subjective?: string | null
@@ -102,8 +100,7 @@ export default function PersonalHistoryClient() {
         className: o.class_name || null,
         grade: o.grade ?? null,
         gradeLabel: o.grade_label || '',
-        category: o.category || null,
-        categoryColor: o.category_color || null,
+        tags: o.tags || [],
         content: o.content,
         objective: o.objective ?? null,
         subjective: o.subjective ?? null,
@@ -337,11 +334,17 @@ export default function PersonalHistoryClient() {
                           ) : (
                             <div className="text-slate-700 text-sm whitespace-pre-wrap line-clamp-5">{item.content}</div>
                           )}
-                          {item.category && (
-                            <div className="mt-2">
-                              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-bold border border-amber-100">
-                                {item.category}
-                              </span>
+                          {item.tags.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {item.tags.map((tag) => (
+                                <span
+                                  key={tag.id}
+                                  className="px-2 py-0.5 rounded-md text-xs font-medium border bg-white text-slate-600"
+                                  style={{ borderColor: tag.color ? `${tag.color}99` : '#E5E7EB' }}
+                                >
+                                  {tag.name}
+                                </span>
+                              ))}
                             </div>
                           )}
                         </td>

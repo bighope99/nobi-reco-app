@@ -74,8 +74,8 @@ export async function GET(
     const decryptedFamilyName = decryptOrFallback(child.family_name);
     const decryptedGivenName = decryptOrFallback(child.given_name);
     const childName =
-      child.nickname ||
       [decryptedFamilyName, decryptedGivenName].filter(Boolean).join(' ') ||
+      child.nickname ||
       '';
     const tagFlags = (data.record_tags || []).reduce<Record<string, boolean>>((acc, item) => {
       if (item?.tag_id) {

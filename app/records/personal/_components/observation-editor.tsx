@@ -1280,14 +1280,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const getTagBadges = (tagIds?: string[]) => {
     if (!tagIds?.length) return [];
-    return tagIds.map((tagId) => {
-      const tag = observationTags.find((item) => item.id === tagId);
-      return {
-        id: tagId,
-        name: tag?.name || tagId,
-        color: tag?.color || null,
-      };
-    });
+    return tagIds
+      .map((tagId) => {
+        const tag = observationTags.find((item) => item.id === tagId);
+        return {
+          id: tagId,
+          name: tag?.name || tagId,
+          color: tag?.color || null,
+          sortOrder: tag?.sort_order ?? 999,
+        };
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   };
 
   const hasAiOutput =
@@ -2019,6 +2022,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
                         </Button>
                       )}
+                      {!isNew && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-green-200 text-green-600 hover:bg-green-50"
+                          disabled={savingEdit || aiEditSaving || aiProcessing}
+                          onClick={() => router.push('/records/personal/new')}
+                        >
+                          <PlusCircle className="h-4 w-4 mr-2" /> 別の記録を作成
+                        </Button>
+                      )}
                       {isNew && (
                         <Button type="button" variant="outline" className="border-purple-200 text-purple-600 hover:bg-purple-50" onClick={handleReanalyze}>
                           <RefreshCw className="h-4 w-4 mr-2" /> AI再解析
@@ -2076,7 +2090,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                         key={tag.id}
                                         variant="secondary"
                                         className="text-xs"
-                                        style={tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color, borderColor: tag.color } : { backgroundColor: 'white', color: '#374151', borderColor: '#E5E7EB' }}
+                                        style={{ backgroundColor: 'white', color: '#475569', borderColor: tag.color ? `${tag.color}99` : '#E5E7EB' }}
                                       >
                                         {tag.name}
                                       </Badge>

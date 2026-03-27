@@ -239,7 +239,7 @@ describe("タグUI改善", () => {
       expect((curiosityLabel as HTMLElement)?.style.borderColor).toBe("rgb(229, 231, 235)")
     })
 
-    it("過去の記録のBadgeにタグ色が反映されること", async () => {
+    it("過去の記録のBadgeにタグ色が枠色として反映されること", async () => {
       render(<ObservationEditor mode="edit" observationId="obs-1" />)
       await waitFor(() => {
         expect(screen.getByText("過去の記録（直近10件）")).toBeInTheDocument()
@@ -248,8 +248,8 @@ describe("タグUI改善", () => {
       const recentBadge = badges.find((b) => b.textContent?.includes("自立") && b.closest(".divide-y"))
       expect(recentBadge).toBeDefined()
       if (recentBadge) {
-        expect(recentBadge.style.color).toBe("rgb(76, 175, 80)")
-        expect(recentBadge.style.borderColor).toBe("rgb(76, 175, 80)")
+        expect(recentBadge.style.color).toBe("rgb(71, 85, 105)")
+        expect(recentBadge.style.backgroundColor).toBe("white")
       }
     })
   })
