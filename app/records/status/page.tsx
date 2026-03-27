@@ -123,14 +123,22 @@ const HEATMAP_COLORS: Record<string, string> = {
     absent: '#E0E7FF',          // 休み
 }
 
-const MonthlyHeatmap = ({ history }: { history: string[] }) => {
+const MonthlyHeatmap = ({ history, startDate }: { history: string[]; startDate: string }) => {
+    const dateLabels = useMemo(() => {
+        return history.map((_, i) => {
+            const d = new Date(`${startDate}T00:00:00+09:00`)
+            d.setDate(d.getDate() + i)
+            return `${d.getMonth() + 1}/${d.getDate()}`
+        })
+    }, [startDate, history.length])
+
     return (
         <div className="flex flex-wrap gap-0.5">
             {history.map((status, i) => {
                 const bgColor = HEATMAP_COLORS[status]
 
                 return (
-                    <div key={i} className="w-2 h-4 rounded-sm" style={{ backgroundColor: bgColor ?? '#f1f5f9' }} title={`Day ${i + 1}: ${DAILY_STATUS_LABEL[status] ?? status}`} />
+                    <div key={i} className="w-2 h-4 rounded-sm" style={{ backgroundColor: bgColor ?? '#f1f5f9' }} title={`${dateLabels[i]}: ${DAILY_STATUS_LABEL[status] ?? status}`} />
                 )
             })}
         </div>
@@ -176,6 +184,7 @@ export default function StatusPage() {
     // （サーバー側の暗号化フィールドへのilike検索は機能しないため）
     useEffect(() => {
         if (year === 0 || month === 0) return  // Wait for client-side date initialization
+        const controller = new AbortController()
         const fetchRecordsData = async () => {
             try {
                 setLoading(true)
@@ -190,7 +199,10 @@ export default function StatusPage() {
                     params.append('class_id', selectedClass)
                 }
 
-                const response = await fetch(`/api/records/status?${params}`)
+                const response = await fetch(`/api/records/status?${params}`, {
+                    signal: controller.signal,
+                    cache: 'no-store',
+                })
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch records data')
@@ -203,6 +215,7 @@ export default function StatusPage() {
                     throw new Error(result.error || 'Unknown error')
                 }
             } catch (err) {
+                if ((err as Error).name === 'AbortError') return
                 console.error('Records fetch error:', err)
                 setError(err instanceof Error ? err.message : 'Failed to load records')
             } finally {
@@ -211,6 +224,7 @@ export default function StatusPage() {
         }
 
         fetchRecordsData()
+        return () => controller.abort()
     }, [year, month, selectedClass, warningOnly, heatmapMode])
 
     // チケット1: 検索ボタン押下時のみ検索を実行
@@ -624,7 +638,7 @@ export default function StatusPage() {
                                             </td>
 
                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                <MonthlyHeatmap history={child.monthly.daily_status} />
+                                                <MonthlyHeatmap history={child.monthly.daily_status} startDate={recordsData.heatmap.start_date} />
                                             </td>
 
                                             <td className="px-4 py-4 whitespace-nowrap align-middle">
