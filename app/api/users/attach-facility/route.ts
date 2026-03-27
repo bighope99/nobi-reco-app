@@ -34,6 +34,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 施設が自社のものか確認（site_admin は除く）
+    if (role !== 'site_admin') {
+      const { data: facility, error: facilityError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', targetFacilityId)
+        .eq('company_id', company_id)
+        .single();
+
+      if (facilityError || !facility) {
+        return NextResponse.json(
+          { success: false, error: 'Facility not found or access denied' },
+          { status: 403 }
+        );
+      }
+    }
+
     // 既に対象施設に所属しているユーザーIDを取得
     const { data: assignedRows, error: assignedError } = await supabase
       .from('_user_facility')
@@ -127,6 +144,23 @@ export async function POST(request: NextRequest) {
         { success: false, error: '施設IDが指定されていません' },
         { status: 400 }
       );
+    }
+
+    // 施設が自社のものか確認（site_admin は除く）
+    if (role !== 'site_admin') {
+      const { data: facility, error: facilityError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', targetFacilityId)
+        .eq('company_id', company_id)
+        .single();
+
+      if (facilityError || !facility) {
+        return NextResponse.json(
+          { success: false, error: 'Facility not found or access denied' },
+          { status: 403 }
+        );
+      }
     }
 
     // 対象ユーザーが同会社に所属していることを確認
