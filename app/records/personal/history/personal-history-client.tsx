@@ -340,7 +340,7 @@ export default function PersonalHistoryClient() {
                                 <span
                                   key={tag.id}
                                   className="px-2 py-0.5 rounded-md text-xs font-medium border bg-white text-slate-600"
-                                  style={{ borderColor: tag.color ? `${tag.color}59` : '#E5E7EB' }}
+                                  style={{ borderColor: tag.color ? `${tag.color}99` : '#E5E7EB' }}
                                 >
                                   {tag.name}
                                 </span>
