@@ -355,7 +355,7 @@ export async function GET(request: NextRequest) {
       // 保護者情報の整形（復号化）
       const guardians = child._child_guardian || [];
       const primaryGuardian = guardians.find((g: any) => g.is_primary);
-      const decryptedPrimaryGuardian = primaryGuardian ? {
+      const decryptedPrimaryGuardian = primaryGuardian?.m_guardians ? {
         ...primaryGuardian,
         m_guardians: {
           ...primaryGuardian.m_guardians,
