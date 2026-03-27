@@ -1946,13 +1946,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                           {observationTags.length === 0 && <div className="text-sm text-gray-500">タグがありません。</div>}
                           {observationTags.map((tag) => (
-                            <label key={tag.id} className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
+                            <label key={tag.id} className="flex items-center gap-2 rounded-md border-2 px-3 py-2 text-sm" style={{ borderColor: tag.color || '#E5E7EB' }}>
                               <Checkbox
                                 checked={aiEditForm.flags[tag.id] ?? false}
                                 onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
                                 disabled={aiEditSaving}
-                                className="border-2"
-                                style={{ borderColor: tag.color || undefined }}
                               />
                               <div className="flex flex-col">
                                 <span>{tag.name}</span>

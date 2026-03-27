@@ -89,8 +89,8 @@ jest.mock("@/components/ui/label", () => ({
 }))
 
 jest.mock("@/components/ui/checkbox", () => ({
-  Checkbox: ({ checked, onCheckedChange, disabled, style, className }: { checked?: boolean; onCheckedChange?: (v: boolean) => void; disabled?: boolean; style?: React.CSSProperties; className?: string }) => (
-    <input type="checkbox" checked={checked} onChange={() => onCheckedChange?.(!checked)} disabled={disabled} style={style} className={className} data-testid="checkbox" />
+  Checkbox: ({ checked, onCheckedChange, disabled }: { checked?: boolean; onCheckedChange?: (v: boolean) => void; disabled?: boolean }) => (
+    <input type="checkbox" checked={checked} onChange={() => onCheckedChange?.(!checked)} disabled={disabled} data-testid="checkbox" />
   ),
 }))
 
@@ -219,26 +219,24 @@ describe("タグUI改善", () => {
   })
 
   describe("タグの色表示 (#32f092aa-b014-80c2)", () => {
-    it("色が設定されたタグのCheckboxにborderColorが適用されること", async () => {
+    it("色が設定されたタグの枠にborderColorが適用されること", async () => {
       render(<ObservationEditor mode="edit" observationId="obs-1" />)
       await waitFor(() => {
         expect(screen.getAllByText("自立").length).toBeGreaterThanOrEqual(1)
       })
       const independenceLabel = screen.getAllByText("自立").find((el) => el.closest("label"))?.closest("label")
-      const checkbox = independenceLabel?.querySelector("[data-testid='checkbox']")
-      expect(checkbox).toBeInTheDocument()
-      expect((checkbox as HTMLElement)?.style.borderColor).toBe("rgb(76, 175, 80)")
+      expect(independenceLabel).toBeInTheDocument()
+      expect((independenceLabel as HTMLElement)?.style.borderColor).toBe("rgb(76, 175, 80)")
     })
 
-    it("色がnullのタグのCheckboxにはborderColorが設定されないこと", async () => {
+    it("色がnullのタグの枠にはデフォルトborderColorが適用されること", async () => {
       render(<ObservationEditor mode="edit" observationId="obs-1" />)
       await waitFor(() => {
         expect(screen.getByText("好奇心")).toBeInTheDocument()
       })
       const curiosityLabel = screen.getByText("好奇心").closest("label")
-      const checkbox = curiosityLabel?.querySelector("[data-testid='checkbox']")
-      expect(checkbox).toBeInTheDocument()
-      expect((checkbox as HTMLElement)?.style.borderColor).toBe("")
+      expect(curiosityLabel).toBeInTheDocument()
+      expect((curiosityLabel as HTMLElement)?.style.borderColor).toBe("rgb(229, 231, 235)")
     })
 
     it("過去の記録のBadgeにタグ色が反映されること", async () => {
