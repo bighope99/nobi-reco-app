@@ -226,7 +226,7 @@ describe("タグUI改善", () => {
       })
       const independenceLabel = screen.getAllByText("自立").find((el) => el.closest("label"))?.closest("label")
       expect(independenceLabel).toBeInTheDocument()
-      expect((independenceLabel as HTMLElement)?.style.borderColor).toBe("rgb(76, 175, 80)")
+      expect((independenceLabel as HTMLElement)?.style.borderColor).toBe("rgba(76, 175, 80, 0.3)")
     })
 
     it("色がnullのタグの枠にはデフォルトborderColorが適用されること", async () => {
