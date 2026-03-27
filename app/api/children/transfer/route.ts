@@ -17,8 +17,8 @@ interface ChildPreview {
   child_id: string;
   name: string;
   current_class_name: string | null;
-  current_school_id: string | null;
-  current_facility_id: string;
+  current_school_name: string | null;
+  current_facility_name: string;
   target_class_name: string | null;
   target_school_name: string | null;
   target_facility_name: string | null;
@@ -292,51 +292,65 @@ async function handlePreview({
 }): Promise<NextResponse> {
   const childIds = children.map(c => c.id);
 
-  // 現在のクラス情報・移動先情報を並列取得
-  const queries: [
-    Promise<{ data: Array<{ child_id: string; m_classes: { id: string; name: string } | null }> | null; error: unknown }>,
-    Promise<{ data: { id: string; name: string } | null; error: unknown }> | null,
-    Promise<{ data: { id: string; name: string } | null; error: unknown }> | null,
-    Promise<{ data: { id: string; name: string } | null; error: unknown }> | null,
-  ] = [
-    supabase
-      .from('_child_class')
-      .select('child_id, m_classes(id, name)')
-      .in('child_id', childIds)
-      .eq('is_current', true) as unknown as Promise<{ data: Array<{ child_id: string; m_classes: { id: string; name: string } | null }> | null; error: unknown }>,
-    targetClassId
-      ? supabase.from('m_classes').select('id, name').eq('id', targetClassId).is('deleted_at', null).maybeSingle() as unknown as Promise<{ data: { id: string; name: string } | null; error: unknown }>
-      : null,
-    targetSchoolId
-      ? supabase.from('m_schools').select('id, name').eq('id', targetSchoolId).is('deleted_at', null).maybeSingle() as unknown as Promise<{ data: { id: string; name: string } | null; error: unknown }>
-      : null,
-    targetFacilityId
-      ? supabase.from('m_facilities').select('id, name').eq('id', targetFacilityId).is('deleted_at', null).maybeSingle() as unknown as Promise<{ data: { id: string; name: string } | null; error: unknown }>
-      : null,
-  ];
+  // 現在の学校ID・施設IDを収集
+  const currentSchoolIds = [...new Set(children.filter(c => c.school_id).map(c => c.school_id as string))];
+  const currentFacilityIds = [...new Set(children.map(c => c.facility_id))];
 
+  // 現在のクラス情報・移動先情報・学校名・施設名を並列取得
   const [
     currentClassResult,
     targetClassResult,
     targetSchoolResult,
     targetFacilityResult,
-  ] = await Promise.all(queries);
+    currentSchoolNamesResult,
+    currentFacilityNamesResult,
+  ] = await Promise.all([
+    supabase
+      .from('_child_class')
+      .select('child_id, m_classes(id, name)')
+      .in('child_id', childIds)
+      .eq('is_current', true),
+    targetClassId
+      ? supabase.from('m_classes').select('id, name').eq('id', targetClassId).is('deleted_at', null).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    targetSchoolId
+      ? supabase.from('m_schools').select('id, name').eq('id', targetSchoolId).is('deleted_at', null).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    targetFacilityId
+      ? supabase.from('m_facilities').select('id, name').eq('id', targetFacilityId).is('deleted_at', null).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    currentSchoolIds.length > 0
+      ? supabase.from('m_schools').select('id, name').in('id', currentSchoolIds).is('deleted_at', null)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
+    currentFacilityIds.length > 0
+      ? supabase.from('m_facilities').select('id, name').in('id', currentFacilityIds).is('deleted_at', null)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
+  ]);
 
   if (currentClassResult.error) {
     console.error('Failed to fetch current classes:', currentClassResult.error);
     return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
   }
 
+  type ClassRow = { child_id: string; m_classes: Array<{ id: string; name: string }> | { id: string; name: string } | null };
   const currentClassMap = new Map<string, string | null>(
-    (currentClassResult.data || []).map((cc) => [
-      cc.child_id,
-      cc.m_classes?.name ?? null,
-    ])
+    ((currentClassResult.data || []) as ClassRow[]).map((cc) => {
+      const cls = Array.isArray(cc.m_classes) ? cc.m_classes[0] : cc.m_classes;
+      return [cc.child_id, cls?.name ?? null];
+    })
   );
 
-  const targetClassName = targetClassResult?.data?.name ?? null;
-  const targetSchoolName = targetSchoolResult?.data?.name ?? null;
-  const targetFacilityName = targetFacilityResult?.data?.name ?? null;
+  type NameRow = { id: string; name: string };
+  const currentSchoolNameMap = new Map<string, string>(
+    ((currentSchoolNamesResult.data || []) as NameRow[]).map(s => [s.id, s.name])
+  );
+  const currentFacilityNameMap = new Map<string, string>(
+    ((currentFacilityNamesResult.data || []) as NameRow[]).map(f => [f.id, f.name])
+  );
+
+  const targetClassName = (targetClassResult.data as NameRow | null)?.name ?? null;
+  const targetSchoolName = (targetSchoolResult.data as NameRow | null)?.name ?? null;
+  const targetFacilityName = (targetFacilityResult.data as NameRow | null)?.name ?? null;
 
   const previewChildren: ChildPreview[] = children.map((child) => {
     const name = formatName(
@@ -345,13 +359,15 @@ async function handlePreview({
     );
 
     const currentClassName = currentClassMap.get(child.id) ?? null;
+    const currentSchoolName = child.school_id ? (currentSchoolNameMap.get(child.school_id) ?? null) : null;
+    const currentFacilityName = currentFacilityNameMap.get(child.facility_id) ?? '';
 
     return {
       child_id: child.id,
       name: name ?? '',
       current_class_name: currentClassName,
-      current_school_id: child.school_id,
-      current_facility_id: child.facility_id,
+      current_school_name: currentSchoolName,
+      current_facility_name: currentFacilityName,
       target_class_name: targetClassName,
       target_school_name: targetSchoolName,
       target_facility_name: targetFacilityName,

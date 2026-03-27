@@ -13,9 +13,11 @@ type Step = 1 | 2 | 3
 interface ChildRow {
   child_id: string
   name: string
+  grade: number | null
+  grade_label: string
   class_name: string
+  school_name: string | null
   facility_name: string
-  school_id: string | null
 }
 
 interface ClassOption {
@@ -37,8 +39,8 @@ interface PreviewChild {
   child_id: string
   name: string
   current_class_name: string | null
-  current_school_id: string | null
-  current_facility_id: string
+  current_school_name: string | null
+  current_facility_name: string
   target_class_name: string | null
   target_school_name: string | null
   target_facility_name: string | null
@@ -55,9 +57,11 @@ interface ChildrenAPIResponse {
     children: Array<{
       child_id: string
       name: string
+      grade: number | null
+      grade_label: string
       class_name: string
+      school_name: string | null
       facility_name: string
-      school_id: string | null
     }>
     filters: {
       classes: ClassOption[]
@@ -112,14 +116,17 @@ function Step1SelectChildren({
   selectedIds,
   onSelect,
   onNext,
+  isAdmin,
 }: {
   selectedIds: Set<string>
   onSelect: (ids: Set<string>) => void
   onNext: () => void
+  isAdmin: boolean
 }) {
   const [children, setChildren] = useState<ChildRow[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
   const [filterClass, setFilterClass] = useState("all")
+  const [filterGrade, setFilterGrade] = useState("all")
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -135,13 +142,22 @@ function Step1SelectChildren({
         if (!response.ok || !json.success) {
           throw new Error(json.error || "子ども一覧の取得に失敗しました")
         }
+        // 6年生→1年生（降順）でソート、学年なしは末尾
+        const sorted = [...json.data.children].sort((a, b) => {
+          if (a.grade === null && b.grade === null) return 0
+          if (a.grade === null) return 1
+          if (b.grade === null) return -1
+          return b.grade - a.grade
+        })
         setChildren(
-          json.data.children.map((c) => ({
+          sorted.map((c) => ({
             child_id: c.child_id,
             name: c.name,
+            grade: c.grade,
+            grade_label: c.grade_label,
             class_name: c.class_name,
+            school_name: c.school_name,
             facility_name: c.facility_name,
-            school_id: c.school_id,
           }))
         )
         setClasses(json.data.filters?.classes ?? [])
@@ -154,13 +170,17 @@ function Step1SelectChildren({
     fetchChildren()
   }, [])
 
+  const hasAnyClass = children.some((c) => c.class_name)
+
   const filtered = children.filter((c) => {
     const matchClass =
       filterClass === "all" ||
       (filterClass === "none" ? !c.class_name : c.class_name === classes.find((cl) => cl.class_id === filterClass)?.class_name)
+    const matchGrade =
+      filterGrade === "all" || String(c.grade) === filterGrade
     const matchSearch =
       search === "" || c.name.includes(search)
-    return matchClass && matchSearch
+    return matchClass && matchGrade && matchSearch
   })
 
   const allFilteredSelected =
@@ -192,6 +212,16 @@ function Step1SelectChildren({
     <div>
       {/* フィルター */}
       <div className="flex flex-wrap gap-3 mb-4">
+        <select
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+          value={filterGrade}
+          onChange={(e) => setFilterGrade(e.target.value)}
+        >
+          <option value="all">全学年</option>
+          {[6, 5, 4, 3, 2, 1].map((g) => (
+            <option key={g} value={String(g)}>{g}年生</option>
+          ))}
+        </select>
         <select
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
           value={filterClass}
@@ -245,14 +275,20 @@ function Step1SelectChildren({
                   />
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">氏名</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">クラス</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">施設</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">学年</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">所属学校</th>
+                {hasAnyClass && (
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">クラス</th>
+                )}
+                {isAdmin && (
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">施設</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={3 + (hasAnyClass ? 1 : 0) + (isAdmin ? 1 : 0) + 1} className="px-4 py-8 text-center text-gray-400">
                     該当する子どもが見つかりません
                   </td>
                 </tr>
@@ -273,8 +309,14 @@ function Step1SelectChildren({
                       />
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-800">{child.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{child.class_name || "−"}</td>
-                    <td className="px-4 py-3 text-gray-600">{child.facility_name}</td>
+                    <td className="px-4 py-3 text-gray-600">{child.grade_label || "−"}</td>
+                    <td className="px-4 py-3 text-gray-600">{child.school_name || "−"}</td>
+                    {hasAnyClass && (
+                      <td className="px-4 py-3 text-gray-600">{child.class_name || "−"}</td>
+                    )}
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-gray-600">{child.facility_name}</td>
+                    )}
                   </tr>
                 ))
               )}
@@ -420,6 +462,13 @@ function Step2SetDestination({
             </div>
           )}
 
+          {/* 施設管理者向け注意書き */}
+          {!isAdmin && (
+            <p className="text-xs text-gray-400">
+              ※ 施設の変更は会社管理者権限で行えます
+            </p>
+          )}
+
           {/* 学校選択 */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -492,12 +541,14 @@ function Step3ConfirmAndExecute({
   targetClassId,
   targetSchoolId,
   targetFacilityId,
+  isAdmin,
   onBack,
 }: {
   selectedIds: Set<string>
   targetClassId: string
   targetSchoolId: string
   targetFacilityId: string
+  isAdmin: boolean
   onBack: () => void
 }) {
   const [preview, setPreview] = useState<PreviewChild[]>([])
@@ -603,16 +654,20 @@ function Step3ConfirmAndExecute({
         </div>
       ) : (
         <div className="border border-gray-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm min-w-[600px]">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">氏名</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">変更前クラス</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">変更後クラス</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">変更前学校ID</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">変更後学校</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">変更前施設ID</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">変更後施設</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">変更前学校名</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">変更後学校名</th>
+                {isAdmin && (
+                  <>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">変更前施設名</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">変更後施設名</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -629,9 +684,7 @@ function Step3ConfirmAndExecute({
                       <span className="text-gray-400">変更なし</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs font-mono">
-                    {child.current_school_id ? child.current_school_id.slice(0, 8) + "…" : "−"}
-                  </td>
+                  <td className="px-4 py-3 text-gray-600">{child.current_school_name ?? "−"}</td>
                   <td className="px-4 py-3">
                     {child.changes.school ? (
                       <span className="text-purple-700 font-medium">
@@ -641,18 +694,20 @@ function Step3ConfirmAndExecute({
                       <span className="text-gray-400">変更なし</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs font-mono">
-                    {child.current_facility_id ? child.current_facility_id.slice(0, 8) + "…" : "−"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {child.changes.facility ? (
-                      <span className="text-purple-700 font-medium">
-                        {child.target_facility_name ?? "−"}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">変更なし</span>
-                    )}
-                  </td>
+                  {isAdmin && (
+                    <>
+                      <td className="px-4 py-3 text-gray-600">{child.current_facility_name || "−"}</td>
+                      <td className="px-4 py-3">
+                        {child.changes.facility ? (
+                          <span className="text-purple-700 font-medium">
+                            {child.target_facility_name ?? "−"}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">変更なし</span>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -733,6 +788,7 @@ export default function ChildrenTransferPage() {
               selectedIds={selectedIds}
               onSelect={setSelectedIds}
               onNext={() => setStep(2)}
+              isAdmin={isAdmin}
             />
           )}
           {step === 2 && (
@@ -755,6 +811,7 @@ export default function ChildrenTransferPage() {
               targetClassId={targetClassId}
               targetSchoolId={targetSchoolId}
               targetFacilityId={targetFacilityId}
+              isAdmin={isAdmin}
               onBack={() => setStep(2)}
             />
           )}
