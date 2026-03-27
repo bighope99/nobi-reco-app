@@ -123,11 +123,16 @@ function Step1SelectChildren({
   onNext: () => void
   isAdmin: boolean
 }) {
+  type SortKey = "name" | "grade" | "school_name" | "class_name" | "facility_name"
+  type SortDir = "asc" | "desc"
+
   const [children, setChildren] = useState<ChildRow[]>([])
   const [classes, setClasses] = useState<ClassOption[]>([])
   const [filterClass, setFilterClass] = useState("all")
   const [filterGrade, setFilterGrade] = useState("all")
   const [search, setSearch] = useState("")
+  const [sortKey, setSortKey] = useState<SortKey>("grade")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -142,15 +147,8 @@ function Step1SelectChildren({
         if (!response.ok || !json.success) {
           throw new Error(json.error || "子ども一覧の取得に失敗しました")
         }
-        // 6年生→1年生（降順）でソート、学年なしは末尾
-        const sorted = [...json.data.children].sort((a, b) => {
-          if (a.grade === null && b.grade === null) return 0
-          if (a.grade === null) return 1
-          if (b.grade === null) return -1
-          return b.grade - a.grade
-        })
         setChildren(
-          sorted.map((c) => ({
+          json.data.children.map((c) => ({
             child_id: c.child_id,
             name: c.name,
             grade: c.grade,
@@ -172,16 +170,49 @@ function Step1SelectChildren({
 
   const hasAnyClass = children.some((c) => c.class_name)
 
-  const filtered = children.filter((c) => {
-    const matchClass =
-      filterClass === "all" ||
-      (filterClass === "none" ? !c.class_name : c.class_name === classes.find((cl) => cl.class_id === filterClass)?.class_name)
-    const matchGrade =
-      filterGrade === "all" || String(c.grade) === filterGrade
-    const matchSearch =
-      search === "" || c.name.includes(search)
-    return matchClass && matchGrade && matchSearch
-  })
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setSortDir(key === "grade" ? "desc" : "asc")
+    }
+  }
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return <span className="ml-1 text-gray-300">↕</span>
+    return <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+  }
+
+  const filtered = children
+    .filter((c) => {
+      const matchClass =
+        filterClass === "all" ||
+        (filterClass === "none" ? !c.class_name : c.class_name === classes.find((cl) => cl.class_id === filterClass)?.class_name)
+      const matchGrade =
+        filterGrade === "all" || String(c.grade) === filterGrade
+      const matchSearch =
+        search === "" || c.name.includes(search)
+      return matchClass && matchGrade && matchSearch
+    })
+    .sort((a, b) => {
+      let cmp = 0
+      if (sortKey === "grade") {
+        if (a.grade === null && b.grade === null) cmp = 0
+        else if (a.grade === null) cmp = 1
+        else if (b.grade === null) cmp = -1
+        else cmp = a.grade - b.grade
+      } else if (sortKey === "name") {
+        cmp = a.name.localeCompare(b.name, "ja")
+      } else if (sortKey === "school_name") {
+        cmp = (a.school_name ?? "").localeCompare(b.school_name ?? "", "ja")
+      } else if (sortKey === "class_name") {
+        cmp = (a.class_name ?? "").localeCompare(b.class_name ?? "", "ja")
+      } else if (sortKey === "facility_name") {
+        cmp = a.facility_name.localeCompare(b.facility_name, "ja")
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every((c) => selectedIds.has(c.child_id))
@@ -276,14 +307,31 @@ function Step1SelectChildren({
                     className="rounded"
                   />
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">氏名</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">学年</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">所属学校</th>
+                {(["name", "grade", "school_name"] as SortKey[]).map((key) => (
+                  <th
+                    key={key}
+                    className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:text-gray-900 whitespace-nowrap"
+                    onClick={() => handleSort(key)}
+                  >
+                    {key === "name" ? "氏名" : key === "grade" ? "学年" : "所属学校"}
+                    {sortIndicator(key)}
+                  </th>
+                ))}
                 {hasAnyClass && (
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">クラス</th>
+                  <th
+                    className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:text-gray-900 whitespace-nowrap"
+                    onClick={() => handleSort("class_name")}
+                  >
+                    クラス{sortIndicator("class_name")}
+                  </th>
                 )}
                 {isAdmin && (
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">施設</th>
+                  <th
+                    className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:text-gray-900 whitespace-nowrap"
+                    onClick={() => handleSort("facility_name")}
+                  >
+                    施設{sortIndicator("facility_name")}
+                  </th>
                 )}
               </tr>
             </thead>
