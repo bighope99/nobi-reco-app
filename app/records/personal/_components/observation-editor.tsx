@@ -1441,9 +1441,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const childDisplayName = useMemo(() => {
-    if (isNew) return lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択');
+    if (isNew) {
+      if (selectedChild?.name) return selectedChild.name;
+      if (selectedChildId && selectedChildId === lockedChildId && lockedChildName) return lockedChildName;
+      return selectedChildId ? '不明' : '未選択';
+    }
     return observation?.child_name || observation?.child_id;
-  }, [isNew, lockedChildName, selectedChild, selectedChildId, childOptions, observation]);
+  }, [isNew, lockedChildId, lockedChildName, selectedChild, selectedChildId, observation]);
   const recorderDisplayName =
     observation?.recorded_by_name ||
     observation?.created_by_name ||
