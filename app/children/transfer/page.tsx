@@ -222,19 +222,21 @@ function Step1SelectChildren({
             <option key={g} value={String(g)}>{g}年生</option>
           ))}
         </select>
-        <select
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-          value={filterClass}
-          onChange={(e) => setFilterClass(e.target.value)}
-        >
-          <option value="all">全クラス</option>
-          <option value="none">クラスなし</option>
-          {classes.map((cls) => (
-            <option key={cls.class_id} value={cls.class_id}>
-              {cls.class_name}
-            </option>
-          ))}
-        </select>
+        {classes.length > 0 && (
+          <select
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+            value={filterClass}
+            onChange={(e) => setFilterClass(e.target.value)}
+          >
+            <option value="all">全クラス</option>
+            <option value="none">クラスなし</option>
+            {classes.map((cls) => (
+              <option key={cls.class_id} value={cls.class_id}>
+                {cls.class_name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           type="text"
           placeholder="氏名で検索"
