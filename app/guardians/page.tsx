@@ -172,7 +172,8 @@ export default function GuardianListPage() {
                   {guardians.map(guardian => (
                     <tr
                       key={guardian.id}
-                      className="group hover:bg-indigo-50/30 transition-colors"
+                      className="group hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/guardians/${guardian.id}`)}
                     >
                       {/* Photo */}
                       <td className="px-4 py-2 text-center">

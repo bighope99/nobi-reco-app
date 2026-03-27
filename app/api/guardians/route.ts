@@ -72,18 +72,19 @@ export async function GET(request: NextRequest) {
     if (childName) {
       const nameChildIds = await searchByName(supabase, 'child', 'name', childName);
 
-      // カナは平文なので直接DB検索（ひらがな→カタカナ正規化）
-      const normalizedChildName = normalizeSearch(childName);
-      const escapedChildName = normalizedChildName
-        .replace(/\\/g, '\\\\')
-        .replace(/%/g, '\\%')
-        .replace(/_/g, '\\_');
+      // カナは平文なので直接DB検索（カタカナ・ひらがな両方でOR検索）
+      const katakanaChildName = normalizeSearch(childName);
+      const hiraganaChildName = toHiragana(katakanaChildName);
+      const escapeForIlike = (s: string) =>
+        s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+      const escapedKatakana = escapeForIlike(katakanaChildName);
+      const escapedHiragana = escapeForIlike(hiraganaChildName);
       const { data: kanaChildMatches } = await supabase
         .from('m_children')
         .select('id')
         .eq('facility_id', current_facility_id)
         .is('deleted_at', null)
-        .or(`family_name_kana.ilike.%${escapedChildName}%,given_name_kana.ilike.%${escapedChildName}%`);
+        .or(`family_name_kana.ilike.%${escapedKatakana}%,given_name_kana.ilike.%${escapedKatakana}%,family_name_kana.ilike.%${escapedHiragana}%,given_name_kana.ilike.%${escapedHiragana}%`);
 
       const allChildIds = [...new Set([...nameChildIds, ...(kanaChildMatches ?? []).map((c: { id: string }) => c.id)])];
 
