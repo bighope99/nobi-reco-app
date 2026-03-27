@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
             email
           )
         ),
-        _child_sibling (sibling_id)
+        _child_sibling!_child_sibling_child_id_fkey (sibling_id)
       `)
       .eq('enrollment_status', status)
       .is('deleted_at', null);
