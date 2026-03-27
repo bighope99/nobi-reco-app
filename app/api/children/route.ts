@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
             email
           )
         ),
-        _child_sibling (count)
+        _child_sibling (sibling_id)
       `)
       .eq('enrollment_status', status)
       .is('deleted_at', null);
@@ -375,7 +375,7 @@ export async function GET(request: NextRequest) {
       const gradeLabel = formatGradeLabel(grade);
 
       // 兄弟数（詳細は遅延ロード）
-      const siblingCount = (child._child_sibling as Array<{ count: number }> | null)?.[0]?.count ?? 0;
+      const siblingCount = (child._child_sibling as Array<unknown> | null)?.length ?? 0;
 
       // 児童情報を復号化
       const decryptedFamilyName = decryptOrFallback(child.family_name);
