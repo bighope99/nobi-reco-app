@@ -1199,7 +1199,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       }
 
       // 保存成功時、観察記録を設定
-      const resolvedChildName = lockedChildName || selectedChild?.name || '不明';
+      // selectedChildIdと一致する場合のみlockedChildNameを使用（別の児童を選択した場合は上書きしない）
+      const resolvedChildName = selectedChild?.name || (selectedChildId === lockedChildId ? lockedChildName : '') || '不明';
       const recorderName = staffList.find(s => s.user_id === selectedRecorder)?.name || '';
       const newObservation: Observation = {
         id: result.data.id,
