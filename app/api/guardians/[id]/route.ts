@@ -245,8 +245,8 @@ export async function PATCH(
     if (kana !== undefined) {
       indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'name_kana', kana?.trim() || ''));
     }
-    if (normalizedPhone) {
-      indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'phone', normalizedPhone));
+    if (phone !== undefined) {
+      indexUpdates.push(updateSearchIndex(supabase, 'guardian', id, 'phone', normalizedPhone ?? ''));
     }
     await Promise.all(indexUpdates);
 

@@ -327,7 +327,14 @@ export async function POST(request: NextRequest) {
 
       if (linkError) {
         console.error('Child-guardian link error:', linkError.message);
-        return NextResponse.json({ error: '子どもとの紐づけに失敗しました' }, { status: 500 });
+        return NextResponse.json(
+          {
+            guardianId: guardian.id,
+            warning: '保護者は登録されましたが、子どもとの紐づけに失敗しました',
+            linkError: linkError.message,
+          },
+          { status: 207 }
+        );
       }
 
       // 兄弟がいれば自動的に紐づけ

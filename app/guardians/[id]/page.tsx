@@ -106,6 +106,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [memo, setMemo] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [photoChanged, setPhotoChanged] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [linkedChildren, setLinkedChildren] = useState<LinkedChild[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -158,6 +159,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
       setMemo(g.notes);
       setPhotoUrl(g.photo_url);
       setPhotoPath(g.photo_path);
+      setPhotoChanged(false);
       setLinkedChildren(g.linked_children);
       setIsDirty(false);
     } catch (e) {
@@ -240,6 +242,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
       const json = await res.json();
       setPhotoPath(json.data.file_path);
       setPhotoUrl(json.data.url);
+      setPhotoChanged(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : '写真のアップロードに失敗しました');
       setPhotoPreview(null);
@@ -292,7 +295,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         kana: kana.trim(),
         phone: phone.trim(),
         notes: memo.trim(),
-        ...(photoPath !== undefined ? { photo_path: photoPath } : {}),
+        ...(photoChanged ? { photo_path: photoPath } : {}),
       };
 
       if (isNew) {
@@ -411,7 +414,22 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
               {displayPhoto && !uploadingPhoto && (
                 <button
                   className="text-xs text-slate-400 hover:text-red-500 transition-colors"
-                  onClick={() => { setPhotoPreview(null); setPhotoUrl(null); setPhotoPath(null); }}
+                  onClick={async () => {
+                    if (photoPath) {
+                      try {
+                        await fetch(
+                          `/api/guardians/upload-photo?path=${encodeURIComponent(photoPath)}`,
+                          { method: 'DELETE' }
+                        );
+                      } catch (e) {
+                        console.error('Failed to delete photo from storage:', e);
+                      }
+                    }
+                    setPhotoPreview(null);
+                    setPhotoUrl(null);
+                    setPhotoPath(null);
+                    setPhotoChanged(true);
+                  }}
                 >
                   写真を削除
                 </button>
