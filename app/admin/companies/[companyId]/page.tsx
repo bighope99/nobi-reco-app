@@ -74,9 +74,9 @@ export default function CompanyDetailPage(props: {
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // 管理者追加モーダル
+  // アカウント追加モーダル
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
-  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "" })
+  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "", role: "company_admin", facility_id: "" })
   const [isAddingAdmin, setIsAddingAdmin] = useState(false)
   const [addAdminError, setAddAdminError] = useState<string | null>(null)
 
@@ -178,26 +178,31 @@ export default function CompanyDetailPage(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           company_id: companyId,
+          role: addAdminForm.role,
+          facility_id: addAdminForm.facility_id || undefined,
           admin_user: {
             name: addAdminForm.name,
             name_kana: addAdminForm.name_kana || undefined,
-            email: addAdminForm.email,
+            email: addAdminForm.email || undefined,
           },
         }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "管理者の追加に失敗しました")
+        throw new Error(data.error || "アカウントの追加に失敗しました")
       }
       setShowAddAdminModal(false)
-      setAddAdminForm({ name: "", name_kana: "", email: "" })
+      setAddAdminForm({ name: "", name_kana: "", email: "", role: "company_admin", facility_id: "" })
       await fetchCompanyDetail()
     } catch (err) {
-      setAddAdminError(err instanceof Error ? err.message : "管理者の追加に失敗しました")
+      setAddAdminError(err instanceof Error ? err.message : "アカウントの追加に失敗しました")
     } finally {
       setIsAddingAdmin(false)
     }
   }
+
+  const needsFacility = addAdminForm.role === "facility_admin" || addAdminForm.role === "staff"
+  const needsEmail = addAdminForm.role !== "staff"
 
   // Loading state
   if (isLoading) {
@@ -263,14 +268,14 @@ export default function CompanyDetailPage(props: {
         </div>
 
         {/* Company Information Card */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden py-0">
           <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">会社情報</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="py-6">
             <dl className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <dt className="text-sm font-semibold text-muted-foreground mb-1">会社名</dt>
@@ -305,7 +310,7 @@ export default function CompanyDetailPage(props: {
         </Card>
 
         {/* Accounts List Card */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden py-0">
           <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-muted-foreground" />
@@ -317,7 +322,7 @@ export default function CompanyDetailPage(props: {
                 onClick={() => setShowAddAdminModal(true)}
               >
                 <UserPlus className="h-4 w-4" />
-                管理者を追加
+                アカウントを追加
               </Button>
               <Badge variant="outline">
                 {accounts.length}件
@@ -381,7 +386,11 @@ export default function CompanyDetailPage(props: {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {account.email_confirmed ? (
+                          {!account.email ? (
+                            <Badge variant="secondary">
+                              ログインなし
+                            </Badge>
+                          ) : account.email_confirmed ? (
                             <Badge variant={account.is_active ? "default" : "destructive"}>
                               {account.is_active ? "有効" : "無効"}
                             </Badge>
@@ -393,7 +402,7 @@ export default function CompanyDetailPage(props: {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            {!account.email_confirmed && (
+                            {account.email && !account.email_confirmed && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -435,7 +444,7 @@ export default function CompanyDetailPage(props: {
         </Card>
 
         {/* Facilities List Card */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden py-0">
           <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
@@ -510,15 +519,47 @@ export default function CompanyDetailPage(props: {
         </Card>
       </div>
 
-      {/* 管理者追加モーダル */}
+      {/* アカウント追加モーダル */}
       {showAddAdminModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">管理者を追加</h2>
+            <h2 className="text-lg font-semibold mb-4">アカウントを追加</h2>
             <form onSubmit={handleAddAdmin} className="space-y-4">
               {addAdminError && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                   {addAdminError}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="admin-role">権限 <span className="text-destructive">*</span></Label>
+                <select
+                  id="admin-role"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  value={addAdminForm.role}
+                  onChange={(e) => setAddAdminForm((f) => ({ ...f, role: e.target.value, facility_id: "" }))}
+                  disabled={isAddingAdmin}
+                >
+                  <option value="company_admin">会社管理者</option>
+                  <option value="facility_admin">施設管理者</option>
+                  <option value="staff">職員</option>
+                </select>
+              </div>
+              {needsFacility && (
+                <div className="space-y-2">
+                  <Label htmlFor="admin-facility">所属施設 <span className="text-destructive">*</span></Label>
+                  <select
+                    id="admin-facility"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.facility_id}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, facility_id: e.target.value }))}
+                    required
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">施設を選択してください</option>
+                    {facilities.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
                 </div>
               )}
               <div className="space-y-2">
@@ -541,14 +582,19 @@ export default function CompanyDetailPage(props: {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="admin-email">メールアドレス <span className="text-destructive">*</span></Label>
+                <Label htmlFor="admin-email">
+                  メールアドレス
+                  {needsEmail && <span className="text-destructive"> *</span>}
+                  {!needsEmail && <span className="text-muted-foreground text-xs ml-1">（任意）</span>}
+                </Label>
                 <Input
                   id="admin-email"
                   type="email"
                   value={addAdminForm.email}
                   onChange={(e) => setAddAdminForm((f) => ({ ...f, email: e.target.value }))}
-                  required
+                  required={needsEmail}
                   disabled={isAddingAdmin}
+                  placeholder={!needsEmail ? "未入力の場合、ログインアカウントなしで登録" : ""}
                 />
               </div>
               <div className="flex gap-3 pt-2">
@@ -560,7 +606,7 @@ export default function CompanyDetailPage(props: {
                   onClick={() => {
                     setShowAddAdminModal(false)
                     setAddAdminError(null)
-                    setAddAdminForm({ name: "", name_kana: "", email: "" })
+                    setAddAdminForm({ name: "", name_kana: "", email: "", role: "company_admin", facility_id: "" })
                   }}
                 >
                   キャンセル

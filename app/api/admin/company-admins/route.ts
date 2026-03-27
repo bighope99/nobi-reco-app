@@ -8,7 +8,8 @@ import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
 
 /**
  * POST /api/admin/company-admins
- * 既存の会社に会社管理者ユーザーを追加（site_adminのみ）
+ * 既存の会社にユーザーを追加（site_admin または company_admin）
+ * company_admin は自社のみ操作可能
  */
 export async function POST(request: NextRequest) {
   try {
@@ -21,8 +22,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // site_admin権限チェック
-    if (metadata.role !== 'site_admin') {
+    // site_admin または company_admin のみアクセス可能
+    if (metadata.role !== 'site_admin' && metadata.role !== 'company_admin') {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -31,12 +32,51 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // company_admin は自社のみ操作可能
+    if (metadata.role === 'company_admin' && metadata.company_id !== body.company_id) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
+    const targetRole: string = body.role || 'company_admin';
+    const validRoles = ['company_admin', 'facility_admin', 'staff'];
+    if (!validRoles.includes(targetRole)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    const facilityId: string | undefined = body.facility_id;
+
+    // facility_admin, staff は facility_id 必須
+    if ((targetRole === 'facility_admin' || targetRole === 'staff') && !facilityId) {
+      return NextResponse.json(
+        { success: false, error: 'facility_id is required for facility_admin and staff roles' },
+        { status: 400 }
+      );
+    }
+
     // 必須パラメータチェック
-    if (!body.company_id || !body.admin_user?.name || !body.admin_user?.email) {
+    const hasEmail = !!body.admin_user?.email;
+    if (!body.company_id || !body.admin_user?.name) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Missing required parameters: company_id, admin_user.name, and admin_user.email are required'
+          error: 'Missing required parameters: company_id and admin_user.name are required'
+        },
+        { status: 400 }
+      );
+    }
+
+    // staff 以外はメール必須
+    if (targetRole !== 'staff' && !hasEmail) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'admin_user.email is required for company_admin and facility_admin roles'
         },
         { status: 400 }
       );
@@ -44,21 +84,23 @@ export async function POST(request: NextRequest) {
 
     // 入力値バリデーション
     const adminName = String(body.admin_user.name).trim();
-    const adminEmail = String(body.admin_user.email).trim();
+    const adminEmail = hasEmail ? String(body.admin_user.email).trim() : null;
 
     if (adminName.length > 100) {
       return NextResponse.json(
-        { success: false, error: '管理者氏名は100文字以内で入力してください' },
+        { success: false, error: '氏名は100文字以内で入力してください' },
         { status: 400 }
       );
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(adminEmail) || adminEmail.length > 255) {
-      return NextResponse.json(
-        { success: false, error: 'メールアドレスの形式が正しくないか、255文字を超えています' },
-        { status: 400 }
-      );
+    if (adminEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(adminEmail) || adminEmail.length > 255) {
+        return NextResponse.json(
+          { success: false, error: 'メールアドレスの形式が正しくないか、255文字を超えています' },
+          { status: 400 }
+        );
+      }
     }
 
     const supabase = await createClient();
@@ -84,6 +126,88 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Company not found' },
         { status: 404 }
       );
+    }
+
+    // 施設の存在確認（facility_id が指定されている場合）
+    if (facilityId) {
+      const { data: facility, error: facilityCheckError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('id', facilityId)
+        .eq('company_id', body.company_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (facilityCheckError) {
+        console.error('Database error checking facility:', facilityCheckError);
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
+      if (!facility) {
+        return NextResponse.json(
+          { success: false, error: '指定された施設が見つかりません' },
+          { status: 404 }
+        );
+      }
+    }
+
+    // メールなしスタッフの場合: auth.users を作成せず m_users に直接登録
+    if (!adminEmail) {
+      const hireDateValue = body.admin_user.hire_date || getCurrentDateJST();
+      const staffId = crypto.randomUUID();
+
+      const { data: newStaff, error: createStaffError } = await supabase
+        .from('m_users')
+        .insert({
+          id: staffId,
+          company_id: body.company_id,
+          email: null,
+          name: adminName,
+          name_kana: body.admin_user.name_kana || null,
+          role: targetRole,
+          is_active: true,
+          hire_date: hireDateValue,
+          is_retired: false,
+        })
+        .select()
+        .single();
+
+      if (createStaffError || !newStaff) {
+        throw createStaffError || new Error('Failed to create staff user');
+      }
+
+      // 施設との紐付け
+      if (facilityId) {
+        const { error: facilityLinkError } = await supabase.from('_user_facility').insert({
+          user_id: newStaff.id,
+          facility_id: facilityId,
+          start_date: hireDateValue,
+          is_current: true,
+          is_primary: true,
+        });
+
+        if (facilityLinkError) {
+          console.error('Failed to insert _user_facility:', facilityLinkError);
+          // ロールバック: m_users 削除
+          await supabase.from('m_users').delete().eq('id', newStaff.id);
+          throw facilityLinkError;
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          company_id: existingCompany.id,
+          company_name: existingCompany.name,
+          admin_user_id: newStaff.id,
+          admin_user_name: newStaff.name,
+          admin_user_email: null,
+        },
+        message: 'スタッフを登録しました',
+      });
     }
 
     // Step 2: メールアドレス重複チェック
@@ -131,9 +255,9 @@ export async function POST(request: NextRequest) {
       // app_metadata を更新
       const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
         app_metadata: {
-          role: 'company_admin',
+          role: targetRole,
           company_id: body.company_id,
-          current_facility_id: null,
+          current_facility_id: facilityId || null,
         },
       });
 
@@ -196,7 +320,7 @@ export async function POST(request: NextRequest) {
           company_id: body.company_id,
           name: adminName,
           name_kana: body.admin_user.name_kana || null,
-          role: 'company_admin',
+          role: targetRole,
           hire_date: hireDateValue,
         })
         .eq('id', existingUser.id)
@@ -217,6 +341,21 @@ export async function POST(request: NextRequest) {
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
         );
+      }
+
+      // 施設との紐付け（再招待時）
+      if (facilityId) {
+        const { error: facilityLinkError } = await supabase.from('_user_facility').insert({
+          user_id: updatedUser.id,
+          facility_id: facilityId,
+          start_date: hireDateValue,
+          is_current: true,
+          is_primary: true,
+        });
+
+        if (facilityLinkError && facilityLinkError.code !== '23505') {
+          console.error('Failed to insert _user_facility for reinvite:', facilityLinkError);
+        }
       }
 
       // 招待メール再送信（fire-and-forget）
@@ -254,9 +393,9 @@ export async function POST(request: NextRequest) {
       email: adminEmail,
       email_confirm: false,
       app_metadata: {
-        role: 'company_admin',
+        role: targetRole,
         company_id: body.company_id,
-        current_facility_id: null,
+        current_facility_id: facilityId || null,
       },
     });
 
@@ -282,7 +421,7 @@ export async function POST(request: NextRequest) {
     const type = urlObj.searchParams.get('type') || 'invite';
 
     if (!tokenHash) {
-      console.error('Failed to extract token from invite link for company admin registration');
+      console.error('Failed to extract token from invite link for user registration');
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       return NextResponse.json(
         { success: false, error: 'Failed to generate valid invite link' },
@@ -304,7 +443,7 @@ export async function POST(request: NextRequest) {
         email: adminEmail,
         name: adminName,
         name_kana: body.admin_user.name_kana || null,
-        role: 'company_admin',
+        role: targetRole,
         is_active: true,
         hire_date: hireDateValue,
         is_retired: false,
@@ -316,6 +455,25 @@ export async function POST(request: NextRequest) {
       // ロールバック: Auth ユーザー削除
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw createUserError;
+    }
+
+    // 施設との紐付け
+    if (facilityId) {
+      const { error: facilityLinkError } = await supabase.from('_user_facility').insert({
+        user_id: newUser.id,
+        facility_id: facilityId,
+        start_date: hireDateValue,
+        is_current: true,
+        is_primary: true,
+      });
+
+      if (facilityLinkError) {
+        console.error('Failed to insert _user_facility:', facilityLinkError);
+        // ロールバック: Auth ユーザー + m_users 削除
+        await supabase.from('m_users').delete().eq('id', newUser.id);
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        throw facilityLinkError;
+      }
     }
 
     // Step 6: 招待メール送信（fire-and-forget: レスポンスをブロックしない）
@@ -336,6 +494,9 @@ export async function POST(request: NextRequest) {
       console.error('Failed to send invitation email:', emailError);
     });
 
+    const roleLabel = targetRole === 'company_admin' ? '会社管理者' :
+      targetRole === 'facility_admin' ? '施設管理者' : 'スタッフ';
+
     return NextResponse.json({
       success: true,
       data: {
@@ -345,15 +506,15 @@ export async function POST(request: NextRequest) {
         admin_user_name: newUser.name,
         admin_user_email: newUser.email,
       },
-      message: '会社管理者を登録しました',
+      message: `${roleLabel}を登録しました`,
     });
   } catch (error) {
-    console.error('Error creating company admin user:', error);
+    console.error('Error creating user:', error);
     return NextResponse.json(
       {
         success: false,
         error: 'Internal Server Error',
-        message: '会社管理者の登録に失敗しました',
+        message: 'ユーザーの登録に失敗しました',
       },
       { status: 500 }
     );

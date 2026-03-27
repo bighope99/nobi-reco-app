@@ -87,7 +87,7 @@ export async function GET(
         .is('deleted_at', null)
         .order('name'),
 
-      // アカウント一覧（company_admin + facility_admin）
+      // アカウント一覧（company_admin + facility_admin + staff）
       supabase
         .from('m_users')
         .select(
@@ -100,7 +100,7 @@ export async function GET(
         `
         )
         .eq('company_id', companyId)
-        .in('role', ['company_admin', 'facility_admin'])
+        .in('role', ['company_admin', 'facility_admin', 'staff'])
         .is('deleted_at', null)
         .order('role'),
     ]);
@@ -136,7 +136,7 @@ export async function GET(
       email: user.email,
       role: user.role,
       is_active: user.is_active,
-      email_confirmed: emailConfirmedMap.get(user.id) ?? true,
+      email_confirmed: user.email ? (emailConfirmedMap.get(user.id) ?? false) : false,
       facilities: (user._user_facility || []).map((uf) => {
         const mFacilities = Array.isArray(uf.m_facilities) ? uf.m_facilities[0] : uf.m_facilities;
         return {
