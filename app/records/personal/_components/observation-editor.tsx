@@ -1951,8 +1951,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                 checked={aiEditForm.flags[tag.id] ?? false}
                                 onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
                                 disabled={aiEditSaving}
+                                className="border-2"
+                                style={{ borderColor: tag.color || undefined }}
                               />
-                              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color || '#9CA3AF' }} />
                               <div className="flex flex-col">
                                 <span>{tag.name}</span>
                                 {tag.description && (
