@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // 起動時チェック: 本番環境でE2Eテストモードが有効になっていないか検証
@@ -77,53 +77,29 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    let response = NextResponse.next({
-        request: {
-            headers: request.headers,
-        },
-    });
+    let response = NextResponse.next({ request });
 
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
             cookies: {
-                get(name: string) {
-                    return request.cookies.get(name)?.value;
+                getAll() {
+                    return request.cookies.getAll();
                 },
-                set(name: string, value: string, options: CookieOptions) {
-                    request.cookies.set({
-                        name,
-                        value,
-                        ...options,
-                    });
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    });
-                    response.cookies.set({
-                        name,
-                        value,
-                        ...options,
-                    });
-                },
-                remove(name: string, options: CookieOptions) {
-                    request.cookies.set({
-                        name,
-                        value: '',
-                        ...options,
-                    });
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    });
-                    response.cookies.set({
-                        name,
-                        value: '',
-                        ...options,
-                    });
+                setAll(cookiesToSet) {
+                    // まずリクエストのクッキーを更新（後続の getAll() で参照できるように）
+                    // request.cookies.set は (name, value) の2引数のみ受け付ける
+                    cookiesToSet.forEach(({ name, value }) =>
+                        request.cookies.set(name, value)
+                    );
+                    // レスポンスを再生成し、全クッキーを一度にセット
+                    // （旧 get/set/remove API では set() のたびに new NextResponse が作られ
+                    //   前のクッキーが消失するバグがあった）
+                    response = NextResponse.next({ request });
+                    cookiesToSet.forEach(({ name, value, options }) =>
+                        response.cookies.set(name, value, options)
+                    );
                 },
             },
         }
