@@ -252,15 +252,14 @@ describe('/api/records/activity', () => {
           }
           if (tableName === 'r_observation') {
             return {
-              insert: jest.fn(() => {
-                observationInsertCount++;
+              insert: jest.fn((rows) => {
+                observationInsertCount = Array.isArray(rows) ? rows.length : 1;
+                const insertedData = Array.isArray(rows)
+                  ? rows.map((row, i) => ({ id: `test-observation-id-${i + 1}`, content: '抽出された内容', ...row }))
+                  : [{ id: 'test-observation-id-1', content: '抽出された内容', ...rows }];
                 return {
-                  select: jest.fn().mockReturnThis(),
-                  single: jest.fn().mockResolvedValue({
-                    data: {
-                      id: `test-observation-id-${observationInsertCount}`,
-                      content: '抽出された内容',
-                    },
+                  select: jest.fn().mockResolvedValue({
+                    data: insertedData,
                     error: null,
                   }),
                 };
@@ -371,14 +370,13 @@ describe('/api/records/activity', () => {
           if (tableName === 'r_observation') {
             return {
               insert: jest.fn((data) => {
-                observationData = data;
+                observationData = Array.isArray(data) ? data[0] : data;
+                const insertedData = Array.isArray(data)
+                  ? data.map((row, i) => ({ id: `test-observation-id-${i + 1}`, ...row }))
+                  : [{ id: 'test-observation-id', ...data }];
                 return {
-                  select: jest.fn().mockReturnThis(),
-                  single: jest.fn().mockResolvedValue({
-                    data: {
-                      id: 'test-observation-id',
-                      ...data,
-                    },
+                  select: jest.fn().mockResolvedValue({
+                    data: insertedData,
                     error: null,
                   }),
                 };

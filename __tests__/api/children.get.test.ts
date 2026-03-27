@@ -329,8 +329,7 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table} (call ${callCount})`);
@@ -549,8 +548,7 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -996,8 +994,7 @@ describe('GET /api/children', () => {
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
