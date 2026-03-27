@@ -1,11 +1,12 @@
 "use client"
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * useUnsavedChanges - フォームに未保存の変更がある場合にページ遷移を防止するフック
  *
  * @param isDirty - フォームに未保存の変更があるかどうか
  * @param message - 確認ダイアログに表示するメッセージ
+ * @returns reset - isDirtyRefを即座にfalseにする関数（保存成功後の遷移前に呼ぶ）
  *
  * 対応する遷移:
  * 1. ブラウザのリロード/タブ閉じ → beforeunload イベント
@@ -14,9 +15,14 @@ import { useEffect, useRef } from 'react';
 export function useUnsavedChanges(
   isDirty: boolean,
   message: string = '保存されていない変更があります。ページを離れますか？'
-): void {
+): { reset: () => void } {
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+
+  // refを即座にfalseにして、beforeunload等の警告を抑止する
+  const reset = useCallback(() => {
+    isDirtyRef.current = false;
+  }, []);
 
   useEffect(() => {
     // 1. beforeunload: ブラウザのリロード・タブ閉じ・外部リンク遷移
@@ -51,4 +57,6 @@ export function useUnsavedChanges(
       document.removeEventListener('click', handleClick, true);
     };
   }, [message]); // isDirty は ref 経由で参照するため deps 不要
+
+  return { reset };
 }
