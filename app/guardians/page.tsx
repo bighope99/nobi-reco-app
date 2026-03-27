@@ -40,6 +40,7 @@ export default function GuardianListPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
 
   // 検索語のデバウンス
   useEffect(() => {
@@ -77,6 +78,12 @@ export default function GuardianListPage() {
     fetchGuardians(debouncedSearch, debouncedChildSearch, controller.signal);
     return () => controller.abort();
   }, [debouncedSearch, debouncedChildSearch, fetchGuardians]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setZoomPhotoUrl(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const formatDate = (iso: string) => {
     try {
@@ -178,11 +185,17 @@ export default function GuardianListPage() {
                       {/* Photo */}
                       <td className="px-4 py-2 text-center">
                         {guardian.photo_url ? (
-                          <img
-                            src={guardian.photo_url}
-                            alt={guardian.name}
-                            className="w-14 h-14 rounded-lg object-cover mx-auto border border-slate-200"
-                          />
+                          <button
+                            type="button"
+                            className="focus:outline-none"
+                            onClick={e => { e.stopPropagation(); setZoomPhotoUrl(guardian.photo_url); }}
+                          >
+                            <img
+                              src={guardian.photo_url}
+                              alt={guardian.name}
+                              className="w-14 h-14 rounded-lg object-cover mx-auto border border-slate-200 hover:opacity-80 transition-opacity cursor-zoom-in"
+                            />
+                          </button>
                         ) : (
                           <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center mx-auto border border-slate-200">
                             <User size={22} className="text-slate-400" />
@@ -271,6 +284,20 @@ export default function GuardianListPage() {
         </div>
 
       </div>
+
+      {zoomPhotoUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setZoomPhotoUrl(null)}
+        >
+          <img
+            src={zoomPhotoUrl}
+            alt="保護者写真"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </StaffLayout>
   );
 }

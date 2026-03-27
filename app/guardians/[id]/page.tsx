@@ -110,6 +110,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [linkedChildren, setLinkedChildren] = useState<LinkedChild[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [zoomPhoto, setZoomPhoto] = useState(false);
   const savedRef = React.useRef(false);
 
   // 子どもセレクタ（新規登録時のみ）
@@ -130,6 +131,12 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setZoomPhoto(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // cleanup: delete orphaned photo if form is abandoned
   useEffect(() => {
@@ -395,11 +402,17 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
             {/* Photo */}
             <div className="shrink-0 flex flex-col items-center gap-2">
               {displayPhoto ? (
-                <img
-                  src={displayPhoto}
-                  alt="顔写真"
-                  className="w-24 h-24 rounded-xl object-cover border-2 border-slate-200"
-                />
+                <button
+                  type="button"
+                  className="focus:outline-none"
+                  onClick={() => setZoomPhoto(true)}
+                >
+                  <img
+                    src={displayPhoto}
+                    alt="顔写真"
+                    className="w-24 h-24 rounded-xl object-cover border-2 border-slate-200 hover:opacity-80 transition-opacity cursor-zoom-in"
+                  />
+                </button>
               ) : (
                 <div className="w-24 h-24 rounded-xl bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1">
                   <User size={28} className="text-slate-300" />
@@ -614,6 +627,20 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         </div>
 
       </div>
+
+      {zoomPhoto && displayPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setZoomPhoto(false)}
+        >
+          <img
+            src={displayPhoto}
+            alt="保護者写真"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </StaffLayout>
   );
 }
