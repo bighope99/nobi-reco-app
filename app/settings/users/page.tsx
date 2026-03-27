@@ -1,6 +1,8 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { normalizeSearch } from '@/lib/utils/kana';
+import { useRole } from '@/hooks/useRole';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Users,
@@ -12,7 +14,10 @@ import {
   X,
   Save,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  Edit2,
+  Calendar,
+  SendHorizontal
 } from 'lucide-react';
 
 interface User {
@@ -22,6 +27,8 @@ interface User {
   name_kana?: string;
   phone?: string;
   role: string;
+  hire_date?: string;
+  password_set?: boolean;
   is_active: boolean;
   assigned_classes?: Array<{
     class_id: string;
@@ -52,7 +59,7 @@ const Input = ({ icon: Icon, className = "", ...props }: any) => (
 const Select = ({ children, className = "", ...props }: any) => (
   <div className="relative">
     <select
-      className={`w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 appearance-none cursor-pointer transition-shadow ${className}`}
+      className={`w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 pr-8 appearance-none cursor-pointer transition-shadow ${className}`}
       {...props}
     >
       {children}
@@ -77,12 +84,21 @@ const FieldGroup = ({ label, required, children }: any) => (
   </div>
 );
 
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+
 export default function UsersSettingsPage() {
+  const { isStaff, isFacilityAdmin } = useRole();
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff', hire_year: '', hire_month: '', hire_day: '' });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // New user form
@@ -90,7 +106,10 @@ export default function UsersSettingsPage() {
     name: '',
     email: '',
     phone: '',
-    role: 'staff'
+    role: 'staff',
+    hire_year: '',
+    hire_month: '',
+    hire_day: '',
   });
 
   // 初期ロード
@@ -143,12 +162,16 @@ export default function UsersSettingsPage() {
   })();
 
   const isEmailRequired = newUser.role !== 'staff';
+  const newUserHireDateComplete = !!(newUser.hire_year && newUser.hire_month && newUser.hire_day);
+  const newUserHireDate = newUserHireDateComplete
+    ? `${newUser.hire_year}-${newUser.hire_month.padStart(2, '0')}-${newUser.hire_day.padStart(2, '0')}`
+    : '';
 
   const handleAddUser = async () => {
     const normalizedName = newUser.name.trim();
     const normalizedEmail = newUser.email.trim();
     const normalizedPhone = (newUser.phone || '').trim() || null;
-    if (!normalizedName || (isEmailRequired && !normalizedEmail)) return;
+    if (!normalizedName || (isEmailRequired && !normalizedEmail) || !newUserHireDate) return;
     if (submitting) return;
 
     setSubmitting(true);
@@ -157,10 +180,11 @@ export default function UsersSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...newUser,
           name: normalizedName,
           email: normalizedEmail || null,
           phone: normalizedPhone,
+          role: newUser.role,
+          hire_date: newUserHireDate,
         }),
       });
 
@@ -171,12 +195,59 @@ export default function UsersSettingsPage() {
       }
 
       alert(data.message || '職員を追加しました。');
-      setNewUser({ name: '', email: '', phone: '', role: 'staff' });
+      setNewUser({ name: '', email: '', phone: '', role: 'staff', hire_year: '', hire_month: '', hire_day: '' });
       setShowAddModal(false);
       fetchUsers();
     } catch (err) {
       console.error('Error creating user:', err);
       alert(err instanceof Error ? err.message : 'Failed to create user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditStart = (user: User) => {
+    setEditingUser(user);
+    const hireDate = user.hire_date || '';
+    const [hireYear = '', hireMonth = '', hireDay = ''] = hireDate ? hireDate.split('-') : [];
+    setEditForm({
+      name: user.name,
+      email: user.email || '',
+      phone: user.phone || '',
+      role: user.role,
+      hire_year: hireYear,
+      hire_month: hireMonth ? String(Number(hireMonth)) : '',
+      hire_day: hireDay ? String(Number(hireDay)) : '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveUser = async () => {
+    if (!editingUser) return;
+    const editHireDateComplete = !!(editForm.hire_year && editForm.hire_month && editForm.hire_day);
+    const editHireDate = editHireDateComplete
+      ? `${editForm.hire_year}-${editForm.hire_month.padStart(2, '0')}-${editForm.hire_day.padStart(2, '0')}`
+      : '';
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/users/${editingUser.user_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim() || null,
+          phone: editForm.phone.trim() || null,
+          role: editForm.role,
+          hire_date: editHireDate || undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update user');
+      alert(data.message || '職員情報を更新しました。');
+      setShowEditModal(false);
+      fetchUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update user');
     } finally {
       setSubmitting(false);
     }
@@ -230,6 +301,26 @@ export default function UsersSettingsPage() {
     }
   };
 
+  const handleResendInvitation = async (userId: string) => {
+    if (!confirm('認証メールを再送信しますか？')) return;
+    setResendingUserId(userId);
+    try {
+      const response = await fetch(`/api/users/${userId}/resend-invitation`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to resend invitation');
+      }
+      alert(data.message || '認証メールを再送信しました');
+    } catch (err) {
+      console.error('Error resending invitation:', err);
+      alert(err instanceof Error ? err.message : '認証メールの再送信に失敗しました');
+    } finally {
+      setResendingUserId(null);
+    }
+  };
+
   const getRoleBadge = (role: string) => {
     const option = roleOptions.find(opt => opt.value === role);
     return option ? (
@@ -242,6 +333,12 @@ export default function UsersSettingsPage() {
       </span>
     );
   };
+
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
+
+  if (isStaff) return null
 
   return (
     <StaffLayout title="職員管理">
@@ -322,6 +419,9 @@ export default function UsersSettingsPage() {
                           電話番号
                         </th>
                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          入社年月日
+                        </th>
+                        <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                           権限
                         </th>
                         <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -333,7 +433,7 @@ export default function UsersSettingsPage() {
                       {filteredUsers.map((user) => (
                         <tr
                           key={user.user_id}
-                          className="group hover:bg-indigo-50/30 transition-colors"
+                          className="hover:bg-indigo-50/30 transition-colors"
                         >
                           {/* Name */}
                           <td className="px-6 py-4">
@@ -364,30 +464,67 @@ export default function UsersSettingsPage() {
                             </div>
                           </td>
 
-                          {/* Role (Editable) */}
+                          {/* Hire Date */}
                           <td className="px-6 py-4">
-                            <Select
-                              value={user.role}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateUserRole(user.user_id, e.target.value)}
-                              className="max-w-[140px] text-xs"
-                            >
-                              {roleOptions.map(option => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </Select>
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <Calendar size={14} className="text-slate-400" />
+                              <span>{user.hire_date || '-'}</span>
+                            </div>
+                          </td>
+
+                          {/* Role */}
+                          <td className="px-6 py-4">
+                            {isFacilityAdmin ? (
+                              <Select
+                                value={user.role}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateUserRole(user.user_id, e.target.value)}
+                                className="max-w-[140px] text-xs"
+                              >
+                                {roleOptions.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </Select>
+                            ) : (
+                              getRoleBadge(user.role)
+                            )}
                           </td>
 
                           {/* Actions */}
                           <td className="px-6 py-4">
-                            <button
-                              onClick={() => handleDeleteUser(user.user_id)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                              title="削除"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              {isFacilityAdmin && (
+                                <button
+                                  onClick={() => handleEditStart(user)}
+                                  className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  title="編集"
+                                >
+                                  <Edit2 size={18} />
+                                </button>
+                              )}
+                              {isFacilityAdmin && user.email && !user.password_set && (
+                                <button
+                                  onClick={() => handleResendInvitation(user.user_id)}
+                                  disabled={resendingUserId === user.user_id}
+                                  className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
+                                  title="認証メール再送"
+                                >
+                                  {resendingUserId === user.user_id ? (
+                                    <div className="animate-spin w-[18px] h-[18px] border-2 border-emerald-500 border-t-transparent rounded-full" />
+                                  ) : (
+                                    <SendHorizontal size={18} />
+                                  )}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteUser(user.user_id)}
+                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="削除"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -461,6 +598,47 @@ export default function UsersSettingsPage() {
                   />
                 </FieldGroup>
 
+                <FieldGroup label="入社年月日" required>
+                  <div className="flex gap-2">
+                    <Select
+                      value={newUser.hire_year}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_year: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">年</option>
+                      {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <option key={year} value={String(year)}>
+                          {year}年
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={newUser.hire_month}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_month: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">月</option>
+                      {MONTHS.map(month => (
+                        <option key={month} value={String(month)}>
+                          {month}月
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={newUser.hire_day}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewUser({ ...newUser, hire_day: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">日</option>
+                      {DAYS.map(day => (
+                        <option key={day} value={String(day)}>
+                          {day}日
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </FieldGroup>
+
                 <FieldGroup label="権限" required>
                   <Select
                     value={newUser.role}
@@ -488,7 +666,7 @@ export default function UsersSettingsPage() {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim())}
+                  disabled={submitting || !newUser.name.trim() || (isEmailRequired && !newUser.email.trim()) || !newUserHireDate}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? (
@@ -497,6 +675,142 @@ export default function UsersSettingsPage() {
                     <Plus size={16} />
                   )}
                   {submitting ? '追加中...' : '追加する'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit User Modal */}
+        {showEditModal && editingUser && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 rounded-lg">
+                    <Edit2 size={20} className="text-indigo-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-800">職員情報を編集</h2>
+                </div>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-4">
+                <FieldGroup label="氏名" required>
+                  <Input
+                    placeholder="例: 田中太郎"
+                    value={editForm.name}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, name: e.target.value })}
+                  />
+                </FieldGroup>
+
+                <FieldGroup label="メールアドレス">
+                  <Input
+                    icon={Mail}
+                    type="email"
+                    placeholder="example@email.com"
+                    value={editForm.email}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, email: e.target.value })}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    メールアドレスを入力すると招待メールが送信されログインアカウントが作成されます（既にアカウントがある場合は更新のみ）
+                  </p>
+                </FieldGroup>
+
+                <FieldGroup label="電話番号">
+                  <Input
+                    icon={Phone}
+                    type="tel"
+                    placeholder="090-1234-5678"
+                    value={editForm.phone}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, phone: e.target.value })}
+                  />
+                </FieldGroup>
+
+                <FieldGroup label="入社年月日" required>
+                  <div className="flex gap-2">
+                    <Select
+                      value={editForm.hire_year}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_year: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">年</option>
+                      {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                        <option key={year} value={String(year)}>
+                          {year}年
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={editForm.hire_month}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_month: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">月</option>
+                      {MONTHS.map(month => (
+                        <option key={month} value={String(month)}>
+                          {month}月
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={editForm.hire_day}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, hire_day: e.target.value })}
+                      className="flex-1"
+                    >
+                      <option value="">日</option>
+                      {DAYS.map(day => (
+                        <option key={day} value={String(day)}>
+                          {day}日
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </FieldGroup>
+
+                <FieldGroup label="権限" required>
+                  <Select
+                    value={editForm.role}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, role: e.target.value })}
+                  >
+                    {roleOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    施設管理者は全ての機能にアクセスできます
+                  </p>
+                </FieldGroup>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 rounded-b-xl">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium text-sm transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleSaveUser}
+                  disabled={submitting || !editForm.name.trim() || !(editForm.hire_year && editForm.hire_month && editForm.hire_day)}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                  {submitting ? '保存中...' : '保存する'}
                 </button>
               </div>
             </div>

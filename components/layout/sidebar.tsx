@@ -17,16 +17,25 @@ import {
   Home,
   Tag,
   X,
+  Hand,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/LogoutButton"
+
+type NavChildItem = {
+  label: string
+  href: string
+  hidden?: boolean
+  target?: string
+  roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
+}
 
 type NavItem = {
   label: string
   href: string
   icon: React.ReactNode
   roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
-  children?: { label: string; href: string; hidden?: boolean }[]
+  children?: NavChildItem[]
 }
 
 const staffNavItems: NavItem[] = [
@@ -47,8 +56,9 @@ const staffNavItems: NavItem[] = [
     href: "/attendance",
     icon: <UserCheck className="h-5 w-5" />,
     children: [
-      { label: "出席予定登録", href: "/attendance/schedule" },
-      { label: "QR出欠", href: "/attendance/qr" },
+      { label: "出席予定登録", href: "/attendance/schedule", roles: ["facility_admin"] },
+      { label: "QR出欠", href: "/attendance/qr", target: "_blank" },
+      { label: "タッチ出欠", href: "/attendance/self", target: "_blank" },
       { label: "出席児童一覧", href: "/attendance/list" },
     ],
   },
@@ -58,14 +68,15 @@ const staffNavItems: NavItem[] = [
     icon: <Users className="h-5 w-5" />,
     children: [
       { label: "子ども一覧", href: "/children" },
-      { label: "新規登録", href: "/children/new" },
-      { label: "CSV一括登録", href: "/children/import" },
+      { label: "新規登録", href: "/children/new", roles: ["facility_admin"] },
+      { label: "CSV一括登録", href: "/children/import", roles: ["facility_admin"] },
     ],
   },
   {
     label: "施設設定",
     href: "/settings",
     icon: <Settings className="h-5 w-5" />,
+    roles: ["facility_admin"],
     children: [
       { label: "施設情報", href: "/settings/facility" },
       { label: "クラス管理", href: "/settings/classes" },
@@ -74,7 +85,6 @@ const staffNavItems: NavItem[] = [
       { label: "メール送信テスト", href: "/settings/email", hidden: true },
     ],
   },
-  { label: "データ管理", href: "/data/export", icon: <Database className="h-5 w-5" /> },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -83,6 +93,7 @@ const adminNavItems: NavItem[] = [
     label: "会社管理",
     href: "/admin/companies",
     icon: <Building2 className="h-5 w-5" />,
+    roles: ["site_admin"],
     children: [
       { label: "会社一覧", href: "/admin/companies" },
       { label: "会社登録", href: "/admin/companies/new" },
@@ -98,6 +109,15 @@ const adminNavItems: NavItem[] = [
       { label: "施設登録", href: "/settings/facility/new" },
     ],
   },
+  {
+    label: "子ども一覧",
+    href: "/children",
+    icon: <Users className="h-5 w-5" />,
+    roles: ["company_admin"],
+    children: [
+      { label: "子ども一覧", href: "/children" },
+    ],
+  },
   { label: "タグ管理", href: "/admin/tags", icon: <Tag className="h-5 w-5" />, roles: ["site_admin"] },
   { label: "システムログ", href: "/admin/logs", icon: <Database className="h-5 w-5" /> },
 ]
@@ -105,14 +125,29 @@ const adminNavItems: NavItem[] = [
 type SidebarProps = {
   type: "staff" | "admin"
   role?: string
+  companyId?: string
   userName?: string
   isOpen?: boolean
   onClose?: () => void
 }
 
-export function Sidebar({ type, role, userName, isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ type, role, companyId, userName, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const allNavItems = type === "admin" ? adminNavItems : staffNavItems
+  const baseNavItems = type === "admin" ? adminNavItems : staffNavItems
+
+  // company_admin用の「会社情報」メニューを動的に追加
+  const allNavItems: NavItem[] = (role === "company_admin" && companyId)
+    ? [
+        ...baseNavItems,
+        {
+          label: "会社情報",
+          href: `/admin/companies/${companyId}`,
+          icon: <Building2 className="h-5 w-5" />,
+          roles: ["company_admin"],
+        },
+      ]
+    : baseNavItems
+
   const navItems = allNavItems.filter((item) => !item.roles || (role !== undefined && item.roles.includes(role)))
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
@@ -196,11 +231,12 @@ export function Sidebar({ type, role, userName, isOpen = false, onClose }: Sideb
                     {item.label}
                   </div>
                   <ul className="ml-8 mt-1 space-y-1">
-                    {item.children.map((child) => (
+                    {item.children.filter((child) => !child.roles || (role !== undefined && child.roles.includes(role))).map((child) => (
                       <li key={child.href}>
                         <Link
                           href={child.href}
                           onClick={handleNavClick}
+                          target={child.target}
                           className={cn(
                             "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                             "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",

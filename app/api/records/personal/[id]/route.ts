@@ -114,6 +114,9 @@ export async function GET(
           subjective,
           is_ai_analyzed,
           created_at,
+          recorded_by_user:m_users!recorded_by (
+            name
+          ),
           record_tags:_record_tag!observation_id (
             tag_id
           )
@@ -181,6 +184,7 @@ export async function GET(
           subjective: obs.subjective ?? null,
           is_ai_analyzed: obs.is_ai_analyzed ?? false,
           created_at: obs.created_at,
+          recorded_by_name: (obs.recorded_by_user as { name?: string } | null)?.name ?? null,
           tag_ids: (() => {
             const fromJoin = Array.isArray(obs.record_tags)
               ? obs.record_tags
@@ -222,6 +226,7 @@ export async function PATCH(
     const rawContent = typeof body?.content === 'string' ? body.content.trim() : undefined;
     const observationDate = typeof body?.observation_date === 'string' ? body.observation_date.trim() : null;
     const recorded_by = typeof body?.recorded_by === 'string' ? body.recorded_by.trim() : null;
+    const new_child_id = typeof body?.child_id === 'string' ? body.child_id.trim() : null;
 
     // contentが送信されたが空の場合は早期に拒否（DB問い合わせ前）
     if (rawContent !== undefined && !rawContent) {
@@ -246,6 +251,16 @@ export async function PATCH(
       if (!isValidUUID(recorded_by)) {
         return NextResponse.json(
           { success: false, error: 'Invalid recorded_by ID format' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // new_child_id のUUID形式検証
+    if (new_child_id) {
+      if (!isValidUUID(new_child_id)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid child_id format' },
           { status: 400 }
         );
       }
@@ -287,8 +302,8 @@ export async function PATCH(
       );
     }
 
-    // AI解析済みでない場合は本文が必須
-    if (!existing.is_ai_analyzed && !rawContent) {
+    // AI解析済みでない場合、content が送信されたなら空でないことを確認
+    if (!existing.is_ai_analyzed && rawContent !== undefined && !rawContent) {
       return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
     }
 
@@ -308,6 +323,20 @@ export async function PATCH(
 
     if (recorded_by !== null) {
       updateData.recorded_by = recorded_by || null;
+    }
+
+    // child_id 変更: 同施設の児童であることを確認してから更新
+    if (new_child_id) {
+      const { data: childCheck } = await supabase
+        .from('m_children')
+        .select('facility_id')
+        .eq('id', new_child_id)
+        .is('deleted_at', null)
+        .single();
+      if (!childCheck || childCheck.facility_id !== metadata.current_facility_id) {
+        return NextResponse.json({ success: false, error: 'Invalid child_id' }, { status: 400 });
+      }
+      updateData.child_id = new_child_id;
     }
 
     const { data: updated, error: updateError } = await supabase

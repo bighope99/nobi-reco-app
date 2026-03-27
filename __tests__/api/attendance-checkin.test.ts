@@ -213,7 +213,7 @@ describe('POST /api/attendance/checkin', () => {
 
       // Assert h_attendance check query structure
       expect(mockSupabase.from).toHaveBeenCalledWith('h_attendance');
-      expect(attendanceCheckQuery.select).toHaveBeenCalledWith('id, checked_in_at');
+      expect(attendanceCheckQuery.select).toHaveBeenCalledWith('id, checked_in_at, checked_out_at');
       expect(attendanceCheckQuery.eq).toHaveBeenCalledWith('child_id', childId);
       expect(attendanceCheckQuery.eq).toHaveBeenCalledWith('facility_id', facilityId);
       expect(attendanceCheckQuery.gte).toHaveBeenCalled();
@@ -798,7 +798,7 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.error).toBe('Facility ID mismatch');
     });
 
-    it('should return 200 when attendance check query returns an existing record for today', async () => {
+    it('should perform checkout when attendance record exists without checkout (2nd QR scan)', async () => {
       const childId = 'child-123';
       const facilityId = 'facility-456';
       const userId = 'user-789';
@@ -863,22 +863,31 @@ describe('POST /api/attendance/checkin', () => {
         error: null,
       });
 
-      // Mock attendance check returning existing record
+      // Mock attendance check returning existing record (checked in, not checked out)
       const attendanceCheckQuery = createSelectQueryWithFilters();
       attendanceCheckQuery.maybeSingle.mockResolvedValue({
         data: {
           id: 'attendance-existing',
           checked_in_at: new Date().toISOString(),
+          checked_out_at: null,
         },
         error: null,
       });
+
+      // Mock update for checkout
+      const updateQuery = {
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      };
 
       const mockSupabase = {
         auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           if (table === 'h_attendance') {
-            return attendanceCheckQuery;
+            return {
+              ...attendanceCheckQuery,
+              update: jest.fn().mockReturnValue(updateQuery),
+            };
           }
           throw new Error(`Unexpected table: ${table}`);
         }),
@@ -900,7 +909,8 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.data?.child_id).toBe(childId);
       expect(json.data?.child_name).toBe('Test Child');
       expect(json.data?.class_name).toBe('さくら組');
-      expect(json.data?.already_checked_in).toBe(true);
+      expect(json.data?.action_type).toBe('check_out');
+      expect(json.data?.checked_out_at).toBeDefined();
     });
 
     it('should return 500 when Supabase queries return error objects', async () => {

@@ -69,9 +69,10 @@ function buildUsersQuery(usersData: unknown[]) {
   usersQuery.or.mockReturnValue(usersQuery);
   usersQuery.in.mockReturnValue(usersQuery);
 
-  // order().order() チェーン → データを返す
-  const innerOrder = jest.fn().mockResolvedValue({ data: usersData, error: null });
-  usersQuery.order.mockReturnValue({ order: innerOrder });
+  // order().order().order() チェーン → データを返す
+  const innerMostOrder = jest.fn().mockResolvedValue({ data: usersData, error: null });
+  const middleOrder = jest.fn().mockReturnValue({ order: innerMostOrder });
+  usersQuery.order.mockReturnValue({ order: middleOrder });
 
   return usersQuery;
 }
@@ -362,6 +363,7 @@ describe('POST /api/users - facility_id 指定', () => {
       email: 'newuser@example.com',
       phone: '090-1234-5678',
       role: 'staff',
+      hire_date: '2026-04-01',
       facility_id: 'facility-2',
     });
 
@@ -483,6 +485,7 @@ describe('POST /api/users - facility_id 指定', () => {
       email: 'staff2@example.com',
       phone: '090-0000-0000',
       role: 'staff',
+      hire_date: '2026-04-01',
       facility_id: 'facility-999',
     });
 

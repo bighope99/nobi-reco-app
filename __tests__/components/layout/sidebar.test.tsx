@@ -56,7 +56,7 @@ describe("Sidebar", () => {
 
     it("does not highlight '子ども一覧' when pathname is /children/new", () => {
       mockPathname.mockReturnValue("/children/new")
-      render(<Sidebar type="staff" />)
+      render(<Sidebar type="staff" role="facility_admin" />)
 
       const childrenLink = screen.getByRole("link", { name: "子ども一覧" })
       expect(childrenLink).not.toHaveClass("bg-sidebar-accent")
@@ -84,7 +84,7 @@ describe("Sidebar", () => {
 
     it("does not highlight '会社一覧' when pathname is /admin/companies/new", () => {
       mockPathname.mockReturnValue("/admin/companies/new")
-      render(<Sidebar type="admin" />)
+      render(<Sidebar type="admin" role="site_admin" />)
 
       const companiesLink = screen.getByRole("link", { name: "会社一覧" })
       expect(companiesLink).not.toHaveClass("bg-sidebar-accent")
@@ -93,17 +93,9 @@ describe("Sidebar", () => {
       expect(newCompanyLink).toHaveClass("bg-sidebar-accent")
     })
 
-    it("highlights data export when pathname matches", () => {
-      mockPathname.mockReturnValue("/data/export")
-      render(<Sidebar type="staff" />)
-
-      const dataLink = screen.getByRole("link", { name: "データ管理" })
-      expect(dataLink).toHaveClass("bg-sidebar-accent")
-    })
-
     it("auto-opens parent menu containing the active child", () => {
       mockPathname.mockReturnValue("/settings/classes")
-      render(<Sidebar type="staff" />)
+      render(<Sidebar type="staff" role="facility_admin" />)
 
       // The child item should be visible (parent menu is open)
       const classesLink = screen.getByRole("link", { name: "クラス管理" })

@@ -1,5 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useRole } from '@/hooks/useRole';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   Clock,
@@ -104,6 +106,8 @@ const FieldGroup = ({ label, required, children }: any) => (
 );
 
 export default function ScheduleSettingsPage() {
+  const { isStaff } = useRole();
+  const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
   const [showAddSchool, setShowAddSchool] = useState(false);
   const [newSchoolName, setNewSchoolName] = useState('');
@@ -524,6 +528,12 @@ export default function ScheduleSettingsPage() {
       .filter(Boolean)
       .join('');
   };
+
+  useEffect(() => {
+    if (isStaff) router.replace('/dashboard');
+  }, [isStaff, router]);
+
+  if (isStaff) return null
 
   return (
     <StaffLayout title="通所設定">

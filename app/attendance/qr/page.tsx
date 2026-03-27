@@ -1,10 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Camera, Check, Loader2, SwitchCamera, TriangleAlert, VideoOff } from "lucide-react"
+import { Camera, Check, Home, Loader2, SwitchCamera, TriangleAlert, VideoOff } from "lucide-react"
 import { BrowserQRCodeReader } from "@zxing/browser"
 
-import { StaffLayout } from "@/components/layout/staff-layout"
 import { Button } from "@/components/ui/button"
 
 interface AttendanceQrPayload {
@@ -24,7 +23,9 @@ interface CheckInResult {
     child_name: string
     class_name: string
     checked_in_at: string
+    checked_out_at?: string
     attendance_date: string
+    action_type?: 'check_in' | 'check_out'
   }
   error?: string
 }
@@ -230,7 +231,7 @@ export default function QRAttendanceScannerPage() {
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
   return (
-    <StaffLayout title="QR出席" subtitle="QRコードをかざして出席をとろう">
+    <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
       <div className="space-y-6">
         {/* QRコード読み取りエリア */}
         <div className="relative overflow-hidden rounded-2xl border-4 border-primary/20 bg-black">
@@ -311,39 +312,58 @@ export default function QRAttendanceScannerPage() {
         {checkInResult && (
           <div className="space-y-4">
             {checkInResult.success ? (
-              <div className="rounded-2xl border-4 border-green-500 bg-green-50 p-8 text-center dark:bg-green-950">
-                <div className="mb-6 flex justify-center">
-                  <div className="rounded-full bg-green-500 p-6">
-                    <Check className="h-16 w-16 text-white" />
+              (() => {
+                const isCheckOut = checkInResult.data?.action_type === 'check_out'
+                const borderColor = isCheckOut ? 'border-blue-500' : 'border-green-500'
+                const bgColor = isCheckOut ? 'bg-blue-50 dark:bg-blue-950' : 'bg-green-50 dark:bg-green-950'
+                const iconBg = isCheckOut ? 'bg-blue-500' : 'bg-green-500'
+                const titleColor = isCheckOut ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200'
+                const nameColor = isCheckOut ? 'text-blue-900 dark:text-blue-100' : 'text-green-900 dark:text-green-100'
+                const classColor = isCheckOut ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200'
+                const timeColor = isCheckOut ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300'
+                const displayTime = isCheckOut && checkInResult.data?.checked_out_at
+                  ? checkInResult.data.checked_out_at
+                  : checkInResult.data?.checked_in_at
+                return (
+                  <div className={`rounded-2xl border-4 ${borderColor} ${bgColor} p-8 text-center`}>
+                    <div className="mb-6 flex justify-center">
+                      <div className={`rounded-full ${iconBg} p-6`}>
+                        {isCheckOut ? (
+                          <Home className="h-16 w-16 text-white" />
+                        ) : (
+                          <Check className="h-16 w-16 text-white" />
+                        )}
+                      </div>
+                    </div>
+                    <p className={`mb-2 text-2xl font-bold ${titleColor}`}>
+                      {isCheckOut ? 'おかえり！ きをつけてね' : 'しゅっせき かんりょう！'}
+                    </p>
+                    {checkInResult.data && (
+                      <div className="mt-6 space-y-3">
+                        <p className={`text-4xl font-bold ${nameColor}`}>
+                          {checkInResult.data.child_name}
+                        </p>
+                        <p className={`text-2xl font-semibold ${classColor}`}>
+                          {checkInResult.data.class_name}
+                        </p>
+                        <p className={`text-xl ${timeColor}`}>
+                          {displayTime && new Date(displayTime).toLocaleTimeString('ja-JP', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    )}
+                    <Button
+                      onClick={() => setCheckInResult(null)}
+                      size="lg"
+                      className="mt-6 text-lg"
+                    >
+                      つぎのおともだち
+                    </Button>
                   </div>
-                </div>
-                <p className="mb-2 text-2xl font-bold text-green-800 dark:text-green-200">
-                  しゅっせき かんりょう！
-                </p>
-                {checkInResult.data && (
-                  <div className="mt-6 space-y-3">
-                    <p className="text-4xl font-bold text-green-900 dark:text-green-100">
-                      {checkInResult.data.child_name}
-                    </p>
-                    <p className="text-2xl font-semibold text-green-800 dark:text-green-200">
-                      {checkInResult.data.class_name}
-                    </p>
-                    <p className="text-xl text-green-700 dark:text-green-300">
-                      {new Date(checkInResult.data.checked_in_at).toLocaleTimeString('ja-JP', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                  </div>
-                )}
-                <Button
-                  onClick={() => setCheckInResult(null)}
-                  size="lg"
-                  className="mt-6 text-lg"
-                >
-                  つぎのおともだち
-                </Button>
-              </div>
+                )
+              })()
             ) : (
               <div className="rounded-2xl border-4 border-red-500 bg-red-50 p-8 text-center dark:bg-red-950">
                 <div className="mb-6 flex justify-center">
@@ -370,6 +390,6 @@ export default function QRAttendanceScannerPage() {
           </div>
         )}
       </div>
-    </StaffLayout>
+    </div>
   )
 }

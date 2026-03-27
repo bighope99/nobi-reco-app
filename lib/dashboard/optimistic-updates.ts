@@ -34,11 +34,9 @@ export function updateAlertsAndKpi(
       break;
     }
     case 'mark_absent': {
-      const hadLateAlert = alerts.late.some((a) => a.child_id === childId);
       updatedAlerts.late = alerts.late.filter((a) => a.child_id !== childId);
-      if (hadLateAlert) {
-        updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1);
-      }
+      // 欠席確定により未到着カウントから除外（遅刻・未登所どちらの場合も）
+      updatedKpi.not_arrived = Math.max(0, updatedKpi.not_arrived - 1);
       break;
     }
     case 'confirm_unexpected':

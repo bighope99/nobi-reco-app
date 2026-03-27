@@ -1,8 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type ChangeEvent, type DragEvent } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges"
 import { StaffLayout } from "@/components/layout/staff-layout"
+import { useActivityTemplates } from "@/hooks/useActivityTemplates"
+import { useRole } from "@/hooks/useRole"
+import { useSession } from "@/hooks/useSession"
 import { getCurrentDateJST } from "@/lib/utils/timezone"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,6 +17,8 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -22,8 +29,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Mic, Sparkles, X, Edit2, Trash2, Plus, GripVertical, Clipboard, Check, CheckCircle2 } from "lucide-react"
+import { Mic, Sparkles, X, Edit2, Trash2, Plus, ChevronDown, ChevronUp, GripVertical, Clipboard, CheckCircle2, Pin } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/lib/utils"
+import { TimePicker } from "@/components/ui/time-picker"
 import DOMPurify from "dompurify"
 import {
   type AiObservationDraft as AiObservationResult,
@@ -70,6 +95,7 @@ interface Activity {
   created_by: string
   recorded_by_name?: string | null
   created_at: string
+  updated_at?: string | null
   individual_record_count: number
   individual_records: IndividualRecord[]
   mentioned_children?: string[]
@@ -107,17 +133,87 @@ interface StaffMember {
   name: string
 }
 
-// AiObservationResult型は共通ファイルからimport済み
+// 1日の流れ行のDnD並べ替え用コンポーネント
+interface SortableScheduleRowProps {
+  id: string
+  item: { time: string; content: string }
+  onTimeChange: (val: string) => void
+  onContentChange: (val: string) => void
+  onRemove: () => void
+  maxLength: number
+}
 
-const createScheduleItem = (): DailyScheduleItem => ({ time: "10:00", content: "" })
-const cloneSchedule = (items: DailyScheduleItem[]): DailyScheduleItem[] =>
-  items.map((item) => ({ ...item }))
-const createDefaultSchedule = (): DailyScheduleItem[] =>
-  Array.from({ length: 5 }, () => createScheduleItem())
+function SortableScheduleRow({
+  id,
+  item,
+  onTimeChange,
+  onContentChange,
+  onRemove,
+  maxLength,
+}: SortableScheduleRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+        {...attributes}
+        {...listeners}
+        aria-label="行を並べ替え"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <TimePicker
+        value={item.time || '10:00'}
+        onChange={onTimeChange}
+      />
+      <Input
+        type="text"
+        value={item.content}
+        onChange={(e) => onContentChange(e.target.value)}
+        placeholder="活動内容"
+        className="flex-1"
+        maxLength={maxLength}
+      />
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        aria-label="行を削除"
+        onClick={onRemove}
+        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
+// AiObservationResult型は共通ファイルからimport済み
 
 export default function ActivityRecordClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { isFacilityAdmin, isAdmin } = useRole()
+  const canManageAsAdmin = isFacilityAdmin || isAdmin
+  const session = useSession()
+
+  // 役割プリセット
+  const [rolePresets, setRolePresets] = useState<{ id: string; role_name: string; sort_order: number }[]>([])
   const [activitiesData, setActivitiesData] = useState<ActivitiesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -161,8 +257,10 @@ export default function ActivityRecordClient() {
   // 編集モードの状態
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [originalMentionedChildren, setOriginalMentionedChildren] = useState<string[]>([])
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [photos, setPhotos] = useState<ActivityPhoto[]>([])
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null)
@@ -170,16 +268,63 @@ export default function ActivityRecordClient() {
   const autoOpenedActivityIdRef = useRef<string | null>(null)
   const [originalContent, setOriginalContent] = useState<string>("")
 
+  // テンプレート保存ダイアログの状態
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false)
+  const [templateNameInput, setTemplateNameInput] = useState("")
+  // テンプレート編集ダイアログの状態
+  const [showEditTemplateDialog, setShowEditTemplateDialog] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<{ id: string; name: string; event_name: string; daily_schedule: DailyScheduleItem[] } | null>(null)
+
   // 新規フィールドの状態
   const [eventName, setEventName] = useState("")
   // デフォルト5行、初期値10:00
-  const DEFAULT_SCHEDULE: DailyScheduleItem[] = createDefaultSchedule()
+  const DEFAULT_SCHEDULE: DailyScheduleItem[] = [
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+    { time: "10:00", content: "" },
+  ]
   const [dailySchedule, setDailySchedule] = useState<DailyScheduleItem[]>(DEFAULT_SCHEDULE)
+  // DnD用のstable id（dailyScheduleと同じ長さを保つ）
+  const scheduleIdsRef = useRef<string[]>(DEFAULT_SCHEDULE.map(() => crypto.randomUUID()))
+  // 空フォーム状態のフィンガープリントで初期化（日付・記録者は含まない）
+  // DEFAULT_ROLE_ASSIGNMENTSはこの後に宣言されるため、空行2行分を直接インライン展開
+  const savedFingerprintRef = useRef<string>(JSON.stringify({
+    activityContent: "",
+    eventName: "",
+    specialNotes: "",
+    handover: "",
+    snack: "",
+    dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+    roleAssignments: [{ user_id: "", role: "" }, { user_id: "", role: "" }],
+    meal: { menu: "", items_to_bring: "", notes: "" },
+  }))
+  const getScheduleIds = () => {
+    // scheduleIdsRef が dailySchedule と長さが違う場合は補完
+    while (scheduleIdsRef.current.length < dailySchedule.length) {
+      scheduleIdsRef.current.push(crypto.randomUUID())
+    }
+    return scheduleIdsRef.current.slice(0, dailySchedule.length)
+  }
   // デフォルト2行
   const DEFAULT_ROLE_ASSIGNMENTS: RoleAssignment[] = [
     { user_id: "", user_name: "", role: "" },
     { user_id: "", user_name: "", role: "" },
   ]
+  const getPresetOrDefault = useCallback((): RoleAssignment[] => {
+    if (rolePresets.length > 0) {
+      const initial = rolePresets.map(p => ({ user_id: "", user_name: "", role: p.role_name }))
+      // プリセットが埋まっていても必ず末尾に空白行を1つ追加
+      initial.push({ user_id: "", user_name: "", role: "" })
+      return initial
+    }
+    return DEFAULT_ROLE_ASSIGNMENTS
+  }, [rolePresets])
+  const presetRoleSet = useMemo(
+    () => new Set(rolePresets.map((p) => p.role_name)),
+    [rolePresets]
+  )
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>(DEFAULT_ROLE_ASSIGNMENTS)
   const [snack, setSnack] = useState("")
   const [meal, setMeal] = useState<Meal | null>(null)
@@ -188,8 +333,7 @@ export default function ActivityRecordClient() {
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
-  const [draggingScheduleIndex, setDraggingScheduleIndex] = useState<number | null>(null)
-  const [dragOverScheduleIndex, setDragOverScheduleIndex] = useState<number | null>(null)
+  const [isMealOpen, setIsMealOpen] = useState(false)
   const ACTIVITY_CONTENT_MAX = 10000
   const MAX_PHOTOS = 6
   const MAX_PHOTO_SIZE = 5 * 1024 * 1024
@@ -201,75 +345,46 @@ export default function ActivityRecordClient() {
     KEEP_CONTENT: true,
   }
 
-  const appendScheduleItem = () => {
-    setDailySchedule((prev) => [...prev, createScheduleItem()])
-  }
+  const {
+    templates,
+    selectedTemplateId,
+    setSelectedTemplateId,
+    applyTemplate,
+    deleteTemplate,
+    saveTemplate,
+    updateTemplate,
+    isDeleting: isDeletingTemplate,
+    isSavingTemplate,
+    isUpdatingTemplate,
+    templateError,
+  } = useActivityTemplates({
+    onApply: (appliedEventName, appliedDailySchedule) => {
+      setEventName(appliedEventName)
+      const newSchedule = appliedDailySchedule.length > 0 ? appliedDailySchedule : DEFAULT_SCHEDULE
+      scheduleIdsRef.current = newSchedule.map(() => crypto.randomUUID())
+      setDailySchedule(newSchedule)
+    },
+  })
 
-  const insertScheduleItemAt = (index: number) => {
-    setDailySchedule((prev) => {
-      const next = [...prev]
-      next.splice(index, 0, createScheduleItem())
-      return next
+  // DnD sensors
+  const dndSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
-  }
+  )
 
-  const updateScheduleItem = (index: number, patch: Partial<DailyScheduleItem>) => {
-    setDailySchedule((prev) =>
-      prev.map((item, currentIndex) =>
-        currentIndex === index ? { ...item, ...patch } : item
-      )
-    )
-  }
+  const handleScheduleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
 
-  const removeScheduleItem = (index: number) => {
-    setDailySchedule((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
-  }
+    const ids = getScheduleIds()
+    const oldIndex = ids.indexOf(active.id as string)
+    const newIndex = ids.indexOf(over.id as string)
+    if (oldIndex === -1 || newIndex === -1) return
 
-  const reorderScheduleItem = (fromIndex: number, toIndex: number) => {
-    setDailySchedule((prev) => {
-      if (
-        fromIndex === toIndex ||
-        fromIndex < 0 ||
-        toIndex < 0 ||
-        fromIndex >= prev.length ||
-        toIndex >= prev.length
-      ) {
-        return prev
-      }
-
-      const next = [...prev]
-      const [movedItem] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, movedItem)
-      return next
-    })
-  }
-
-  const handleScheduleDragStart = (index: number) => {
-    setDraggingScheduleIndex(index)
-    setDragOverScheduleIndex(index)
-  }
-
-  const handleScheduleDragEnter = (index: number) => {
-    if (draggingScheduleIndex === null || draggingScheduleIndex === index) {
-      return
-    }
-    setDragOverScheduleIndex(index)
-  }
-
-  const handleScheduleDragEnd = () => {
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
-  }
-
-  const handleScheduleDrop = (event: DragEvent<HTMLDivElement>, dropIndex: number) => {
-    event.preventDefault()
-    if (draggingScheduleIndex === null) {
-      return
-    }
-
-    reorderScheduleItem(draggingScheduleIndex, dropIndex)
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
+    scheduleIdsRef.current = arrayMove(scheduleIdsRef.current, oldIndex, newIndex)
+    setDailySchedule((prev) => arrayMove(prev, oldIndex, newIndex))
   }
 
   useEffect(() => {
@@ -337,6 +452,108 @@ export default function ActivityRecordClient() {
     fetchStaff()
   }, [])
 
+  // 役割プリセットを取得し、フォーム初期値に反映
+  useEffect(() => {
+    const facilityId = session?.current_facility_id
+    if (!facilityId) return
+
+    const fetchPresets = async () => {
+      try {
+        const response = await fetch(`/api/facilities/${facilityId}/role-presets`)
+        if (!response.ok) return
+        const result = await response.json()
+        const presets: { id: string; role_name: string; sort_order: number }[] = result.presets || []
+        setRolePresets(presets)
+
+        if (presets.length > 0) {
+          setRoleAssignments((prev) => {
+            const isPristine = prev.every((r) => !r.user_id && !r.role)
+            if (!isPristine) return prev
+            const initial = presets.map((p) => ({ user_id: "", user_name: "", role: p.role_name }))
+            initial.push({ user_id: "", user_name: "", role: "" })
+            // プリセット適用後のフィンガープリントを更新して「未保存の変更あり」にならないようにする
+            savedFingerprintRef.current = JSON.stringify({
+              activityContent: activityContent.trim(),
+              eventName: eventName.trim(),
+              specialNotes: specialNotes.trim(),
+              handover: handover.trim(),
+              snack: snack.trim(),
+              dailySchedule: dailySchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+              roleAssignments: initial.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+              meal: {
+                menu: meal?.menu?.trim() ?? "",
+                items_to_bring: meal?.items_to_bring?.trim() ?? "",
+                notes: meal?.notes?.trim() ?? "",
+              },
+            })
+            return initial
+          })
+        }
+      } catch (err) {
+        console.error('Failed to fetch role presets:', err)
+      }
+    }
+
+    fetchPresets()
+  }, [session?.current_facility_id])
+
+  // 役割固定ボタンの toggle（保存/解除）
+  const handleTogglePreset = async (roleName: string) => {
+    const facilityId = session?.current_facility_id
+    if (!facilityId || !roleName.trim()) return
+
+    const existing = rolePresets.find((p) => p.role_name === roleName.trim())
+    const tempId = crypto.randomUUID()
+
+    // 楽観的更新：APIレスポンスを待たずに先にUIを変える
+    if (existing) {
+      setRolePresets((prev) => prev.filter((p) => p.id !== existing.id))
+    } else {
+      setRolePresets((prev) => [...prev, { id: tempId, role_name: roleName.trim(), sort_order: prev.length }])
+    }
+
+    try {
+      if (existing) {
+        // 解除: soft delete
+        const res = await fetch(`/api/facilities/${facilityId}/role-presets/${existing.id}`, { method: 'DELETE' })
+        if (!res.ok) {
+          // ロールバック
+          setRolePresets((prev) => [...prev, existing])
+          setSaveError('役割プリセットの解除に失敗しました')
+        }
+      } else {
+        // 追加
+        const response = await fetch(`/api/facilities/${facilityId}/role-presets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role_name: roleName.trim() }),
+        })
+        if (response.ok) {
+          const result = await response.json()
+          // 仮IDを正式なレスポンスデータで置換
+          setRolePresets((prev) =>
+            result.skipped
+              ? prev.filter((p) => p.id !== tempId)
+              : prev.map((p) => (p.id === tempId ? result.preset : p))
+          )
+        } else {
+          // ロールバック
+          setRolePresets((prev) => prev.filter((p) => p.id !== tempId))
+          setSaveError('役割プリセットの保存に失敗しました')
+        }
+      }
+    } catch (err) {
+      // ロールバック
+      if (existing) {
+        setRolePresets((prev) => [...prev, existing])
+      } else {
+        setRolePresets((prev) => prev.filter((p) => p.id !== tempId))
+      }
+      console.error('Failed to toggle role preset:', err)
+      setSaveError('役割プリセットの更新に失敗しました')
+    }
+  }
+
   const fetchActivities = useCallback(async () => {
     try {
       setLoading(true)
@@ -363,6 +580,82 @@ export default function ActivityRecordClient() {
   useEffect(() => {
     fetchActivities()
   }, [fetchActivities])
+
+  // クラスまたは日付が変わったとき、既存記録を自動ロード（新規モード時のみ）
+  useEffect(() => {
+    if (isLoadingClasses) return
+    if (isEditMode) return
+    if (!selectedClass && classOptions.length > 0) return
+    if (!activityDate) return
+
+    const controller = new AbortController()
+
+    const loadExistingActivity = async () => {
+      try {
+        const params = new URLSearchParams({ date: activityDate })
+        if (selectedClass) params.set('class_id', selectedClass)
+        const response = await fetch(`/api/activities?${params.toString()}&limit=1`, { signal: controller.signal })
+        const result = await response.json()
+
+        if (!response.ok || !result.success) return
+
+        const activities: Activity[] = result.data?.activities || []
+        if (activities.length === 0) return
+
+        // 既存記録があれば編集モードで自動展開
+        const activity = activities[0]
+        setEditingActivityId(activity.activity_id)
+        setIsEditMode(true)
+        setLastUpdatedAt(activity.updated_at ?? null)
+        setActivityContent(activity.content || '')
+        setSelectedRecorder(activity.recorded_by || '')
+        setOriginalContent(activity.content || '')
+        const mappedPhotos = (activity.photos || [])
+          .map((photo) => (typeof photo === 'string' ? { url: photo } : photo))
+          .filter(Boolean) as ActivityPhoto[]
+        setPhotos(mappedPhotos)
+        setEventName(activity.event_name || '')
+        const restoredSchedule = activity.daily_schedule && activity.daily_schedule.length > 0
+          ? activity.daily_schedule
+          : DEFAULT_SCHEDULE
+        scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
+        setDailySchedule(restoredSchedule)
+        setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+          ? activity.role_assignments
+          : getPresetOrDefault())
+        setSnack(activity.snack || '')
+        setMeal(activity.meal || null)
+        setSpecialNotes(activity.special_notes || '')
+        setHandover(activity.handover || '')
+        // 編集開始時点のフィンガープリントを記録（dirty扱いにならないよう）
+        savedFingerprintRef.current = JSON.stringify({
+          activityContent: (activity.content || '').trim(),
+          eventName: (activity.event_name || '').trim(),
+          specialNotes: (activity.special_notes || '').trim(),
+          handover: (activity.handover || '').trim(),
+          snack: (activity.snack || '').trim(),
+          dailySchedule: restoredSchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+          roleAssignments: (activity.role_assignments && activity.role_assignments.length > 0
+            ? activity.role_assignments
+            : DEFAULT_ROLE_ASSIGNMENTS
+          ).map((r) => ({ user_id: r.user_id, role: (r.role ?? '').trim() })),
+          meal: {
+            menu: activity.meal?.menu?.trim() ?? '',
+            items_to_bring: activity.meal?.items_to_bring?.trim() ?? '',
+            notes: activity.meal?.notes?.trim() ?? '',
+          },
+        })
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        // 自動ロード失敗は無視（新規入力モードのまま）
+        console.error('Failed to auto-load existing activity:', err)
+      }
+    }
+
+    void loadExistingActivity()
+
+    return () => { controller.abort() }
+  }, [selectedClass, activityDate, classOptions.length, isLoadingClasses, isEditMode])
 
   useEffect(() => {
     const activityId = searchParams.get('activityId')
@@ -448,6 +741,26 @@ export default function ActivityRecordClient() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [searchParams])
 
+  // フォームの現在状態を文字列化して比較用フィンガープリントを生成
+  const buildFingerprint = () => JSON.stringify({
+    activityContent: activityContent.trim(),
+    eventName: eventName.trim(),
+    specialNotes: specialNotes.trim(),
+    handover: handover.trim(),
+    snack: snack.trim(),
+    dailySchedule: dailySchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+    roleAssignments: roleAssignments.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+    meal: {
+      menu: meal?.menu?.trim() ?? "",
+      items_to_bring: meal?.items_to_bring?.trim() ?? "",
+      notes: meal?.notes?.trim() ?? "",
+    },
+  })
+
+  // 入力途中の離脱警告（ブラウザリロード・タブ閉じ・サイドメニュー遷移）
+  const isFormDirty = buildFingerprint() !== savedFingerprintRef.current
+  useUnsavedChanges(isFormDirty, "変更内容が失われます。ページを移動しますか？")
+
   const toHiragana = (text: string) =>
     text.replace(/[\u30a1-\u30f6]/g, (match) =>
       String.fromCharCode(match.charCodeAt(0) - 0x60)
@@ -483,10 +796,32 @@ export default function ActivityRecordClient() {
   }
 
   const handleClassChange = (value: string) => {
-    setSelectedClass(value)
+    setSelectedClass(value === "__none__" ? "" : value)
+    setIsEditMode(false)
+    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
+    setPhotos([])
+    setEventName("")
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments(getPresetOrDefault())
+    setSnack("")
+    setMeal(null)
+    setSpecialNotes("")
+    setHandover("")
+    setLastUpdatedAt(null)
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const removeMention = (mention: MentionSuggestion) => {
@@ -687,7 +1022,7 @@ export default function ActivityRecordClient() {
         throw new Error('メンションされた児童がありません')
       }
 
-      // 1. 先に保育日誌を保存（編集モードの場合は更新）
+      // 1. 先に活動記録を保存（編集モードの場合は更新）
       let savedActivityId: string | null = editingActivityId
 
       const sanitizedFields = getSanitizedExtendedFields()
@@ -773,7 +1108,7 @@ export default function ActivityRecordClient() {
           content: activityContent,
           activity_date: activityDate,
           mentioned_children: MENTION_ENABLED ? selectedMentions.map((child) => child.child_id) : undefined,
-          activity_id: savedActivityId, // 保存した保育日誌IDを紐付け
+          activity_id: savedActivityId, // 保存した活動記録IDを紐付け
         }),
       })
 
@@ -788,7 +1123,7 @@ export default function ActivityRecordClient() {
       setShowAnalysisModal(true)
       persistAiDraftsToCookie(analysisResults)
 
-      // 保育日誌一覧を更新
+      // 活動記録一覧を更新
       fetchActivities()
     } catch (err) {
       console.error('Failed to analyze:', err)
@@ -859,6 +1194,17 @@ export default function ActivityRecordClient() {
 
       const result = await response.json()
 
+      // 重複エラー（409）の場合は既存記録をフォームにロードして編集モードで開く
+      if (response.status === 409 && result.existing_activity_id) {
+        const existingResponse = await fetch(`/api/activities/${result.existing_activity_id}`)
+        const existingResult = await existingResponse.json()
+        if (existingResponse.ok && existingResult.success && existingResult.data?.activity) {
+          await handleEdit(existingResult.data.activity as Activity)
+        }
+        setSaveError('同日同クラスの活動記録が既に存在します。既存の記録を編集してください。')
+        return
+      }
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました')
       }
@@ -868,8 +1214,15 @@ export default function ActivityRecordClient() {
       setEditingActivityId(savedActivityId)
       setIsEditMode(true)
       setOriginalContent(contentForDB)
+      savedFingerprintRef.current = buildFingerprint()
       setSaveMessage('保存しました')
       fetchActivities()
+
+      // 新規保存時のみテンプレート保存ダイアログを表示（テンプレート選択済みの場合はスキップ）
+      if (!selectedTemplateId) {
+        setShowSaveTemplateDialog(true)
+        setTemplateNameInput("")
+      }
 
       // AI分析自動実行（観察記録+メンションがある場合のみ）
       if (MENTION_ENABLED && contentForDB.trim() && selectedMentions.length > 0) {
@@ -967,6 +1320,7 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '更新に失敗しました')
       }
 
+      savedFingerprintRef.current = buildFingerprint()
       setSaveMessage('更新しました')
       fetchActivities()
 
@@ -1007,8 +1361,18 @@ export default function ActivityRecordClient() {
   }
 
   const handleEdit = async (activity: Activity) => {
+    if (typeof window !== 'undefined') {
+      const scrollContainer = document.querySelector('main')
+      if (scrollContainer instanceof HTMLElement) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+
     setEditingActivityId(activity.activity_id)
     setIsEditMode(true)
+    setLastUpdatedAt(activity.updated_at ?? null)
     // @[child_id] 形式を @表示名 形式に変換して表示
     const idToNameMap = new Map(Object.entries(activity.mentioned_children_names || {}))
     const displayContent = convertToDisplayNames(activity.content, idToNameMap)
@@ -1027,18 +1391,39 @@ export default function ActivityRecordClient() {
 
     // 新規フィールドを復元（デフォルト値と一貫性を保つ）
     setEventName(activity.event_name || "")
-    setDailySchedule(
-      activity.daily_schedule && activity.daily_schedule.length > 0
-        ? cloneSchedule(activity.daily_schedule)
-        : createDefaultSchedule()
-    )
-    setRoleAssignments(activity.role_assignments && activity.role_assignments.length > 0
+    const restoredSchedule = activity.daily_schedule && activity.daily_schedule.length > 0
+      ? activity.daily_schedule
+      : DEFAULT_SCHEDULE
+    scheduleIdsRef.current = restoredSchedule.map(() => crypto.randomUUID())
+    setDailySchedule(restoredSchedule)
+    const restoredRoleAssignments = activity.role_assignments && activity.role_assignments.length > 0
       ? activity.role_assignments
-      : DEFAULT_ROLE_ASSIGNMENTS)
-    setSnack(activity.snack || "")
-    setMeal(activity.meal || null)
-    setSpecialNotes(activity.special_notes || "")
-    setHandover(activity.handover || "")
+      : getPresetOrDefault()
+    setRoleAssignments(restoredRoleAssignments)
+    const restoredSnack = activity.snack || ""
+    const restoredMeal = activity.meal || null
+    const restoredSpecialNotes = activity.special_notes || ""
+    const restoredHandover = activity.handover || ""
+    setSnack(restoredSnack)
+    setMeal(restoredMeal)
+    setSpecialNotes(restoredSpecialNotes)
+    setHandover(restoredHandover)
+
+    // 編集開始時点のフィンガープリントを記録（これと差異があれば dirty と判定）
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: displayContent.trim(),
+      eventName: (activity.event_name || "").trim(),
+      specialNotes: restoredSpecialNotes.trim(),
+      handover: restoredHandover.trim(),
+      snack: restoredSnack.trim(),
+      dailySchedule: restoredSchedule.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: restoredRoleAssignments.map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: {
+        menu: restoredMeal?.menu?.trim() ?? "",
+        items_to_bring: restoredMeal?.items_to_bring?.trim() ?? "",
+        notes: restoredMeal?.notes?.trim() ?? "",
+      },
+    })
 
     // メンション復元: クラスの児童リストから名前情報を取得
     if (MENTION_ENABLED && activity.mentioned_children && activity.mentioned_children.length > 0) {
@@ -1109,10 +1494,15 @@ export default function ActivityRecordClient() {
     }
   }
 
-  const handleDelete = async (activityId: string) => {
-    const confirmed = window.confirm("この保育日誌を削除しますか？")
-    if (!confirmed) return
+  const handleDelete = (activityId: string) => {
+    setDeleteConfirmId(activityId)
+  }
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId) return
+
+    const activityId = deleteConfirmId
+    setDeleteConfirmId(null)
     setIsDeletingId(activityId)
     setDeleteError(null)
 
@@ -1127,6 +1517,9 @@ export default function ActivityRecordClient() {
         throw new Error(result.error || '削除に失敗しました')
       }
 
+      if (activityId === editingActivityId) {
+        handleCancelEdit()
+      }
       fetchActivities()
     } catch (err) {
       console.error('Failed to delete:', err)
@@ -1213,8 +1606,6 @@ export default function ActivityRecordClient() {
   const handleCancelEdit = () => {
     setIsEditMode(false)
     setEditingActivityId(null)
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1223,19 +1614,26 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule(createDefaultSchedule())
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const handleRestart = () => {
-    setDraggingScheduleIndex(null)
-    setDragOverScheduleIndex(null)
-    setIsEditMode(false)
-    setEditingActivityId(null)
     setActivityContent("")
     setSelectedMentions([])
     setMentionTokens(new Map())
@@ -1243,12 +1641,25 @@ export default function ActivityRecordClient() {
     setPhotoUploadError(null)
     // 新規フィールドもリセット
     setEventName("")
-    setDailySchedule(createDefaultSchedule())
-    setRoleAssignments([...DEFAULT_ROLE_ASSIGNMENTS])
+    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
+    setDailySchedule([...DEFAULT_SCHEDULE])
+    setRoleAssignments(getPresetOrDefault())
     setSnack("")
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    // テンプレート選択をリセット
+    setSelectedTemplateId("")
+    savedFingerprintRef.current = JSON.stringify({
+      activityContent: "",
+      eventName: "",
+      specialNotes: "",
+      handover: "",
+      snack: "",
+      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+      meal: { menu: "", items_to_bring: "", notes: "" },
+    })
   }
 
   const handleMentionSelect = (mention: MentionSuggestion) => {
@@ -1471,6 +1882,8 @@ export default function ActivityRecordClient() {
     return query ? `/records/personal/new?${query}` : "/records/personal/new"
   }
 
+  const scheduleIds = getScheduleIds()
+
   return (
     <StaffLayout title="保育日誌" subtitle="1日の活動のまとめを記録">
       <div className="space-y-6">
@@ -1478,17 +1891,30 @@ export default function ActivityRecordClient() {
         <Card>
           <CardHeader>
             <CardTitle>保育日誌の入力</CardTitle>
+            {isEditMode && lastUpdatedAt && (
+              <p className="text-sm text-gray-500">
+                {(() => {
+                  const d = new Date(lastUpdatedAt)
+                  const m = d.getMonth() + 1
+                  const day = d.getDate()
+                  const hh = String(d.getHours()).padStart(2, '0')
+                  const mm = String(d.getMinutes()).padStart(2, '0')
+                  return `${m}/${day} ${hh}時${mm}分に更新`
+                })()}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {!isLoadingClasses && classOptions.length > 0 && (
                 <div className="space-y-2">
                   <Label htmlFor="class">クラス</Label>
-                  <Select value={selectedClass} onValueChange={handleClassChange}>
+                  <Select value={selectedClass || "__none__"} onValueChange={handleClassChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="クラスを選択" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__none__">（未選択）</SelectItem>
                       {classOptions.map((classOption) => (
                         <SelectItem key={classOption.class_id} value={classOption.class_id}>
                           {classOption.class_name}
@@ -1506,21 +1932,46 @@ export default function ActivityRecordClient() {
                   id="activityDate"
                   type="date"
                   value={activityDate}
-                  max={getCurrentDateJST()}
-                  onChange={(event) => setActivityDate(event.target.value)}
+                  onChange={(event) => {
+                    setActivityDate(event.target.value)
+                    setIsEditMode(false)
+                    setEditingActivityId(null)
+                    setActivityContent("")
+                    setPhotos([])
+                    setEventName("")
+                    scheduleIdsRef.current = DEFAULT_SCHEDULE.map(() => crypto.randomUUID())
+                    setDailySchedule([...DEFAULT_SCHEDULE])
+                    setRoleAssignments(getPresetOrDefault())
+                    setSnack("")
+                    setMeal(null)
+                    setSpecialNotes("")
+                    setHandover("")
+                    setLastUpdatedAt(null)
+                    savedFingerprintRef.current = JSON.stringify({
+                      activityContent: "",
+                      eventName: "",
+                      specialNotes: "",
+                      handover: "",
+                      snack: "",
+                      dailySchedule: DEFAULT_SCHEDULE.map((s) => ({ time: s.time, content: s.content.trim() })),
+                      roleAssignments: getPresetOrDefault().map((r) => ({ user_id: r.user_id, role: (r.role ?? "").trim() })),
+                      meal: { menu: "", items_to_bring: "", notes: "" },
+                    })
+                  }}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="recorder">記録者 <span className="text-red-500">*</span></Label>
                 <Select
-                  value={selectedRecorder}
-                  onValueChange={(value) => setSelectedRecorder(value)}
+                  value={selectedRecorder || "__none__"}
+                  onValueChange={(value) => setSelectedRecorder(value === "__none__" ? "" : value)}
                 >
                   <SelectTrigger id="recorder">
                     <SelectValue placeholder="記録者を選択" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">（未選択）</SelectItem>
                     {staffList.map((staff) => (
                       <SelectItem key={staff.user_id} value={staff.user_id}>
                         {staff.name}
@@ -1530,6 +1981,83 @@ export default function ActivityRecordClient() {
                 </Select>
               </div>
             </div>
+
+            {/* イベントテンプレート選択 */}
+            {templates.length > 0 && (
+              <div className="inline-flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                <span className="text-xs text-gray-500">イベントテンプレート</span>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedTemplateId}
+                    onValueChange={(id) => {
+                      if (id === "__none__") {
+                        setSelectedTemplateId("")
+                        return
+                      }
+                      const template = templates.find((t) => t.id === id)
+                      if (!template) return
+                      const hasExistingInput = eventName.trim() !== "" || dailySchedule.some((s) => s.content.trim() !== "")
+                      if (hasExistingInput) {
+                        if (!window.confirm("行事名・1日の流れが上書きされます。続けますか？")) return
+                      }
+                      setSelectedTemplateId(id)
+                      applyTemplate(template)
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-52 text-xs text-gray-600 border-gray-200 bg-white">
+                      <SelectValue placeholder="テンプレートなし" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-xs text-gray-400">テンプレートなし</SelectItem>
+                      {templates.map((t) => (
+                        <SelectItem key={t.id} value={t.id} className="text-xs">
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplateId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-gray-500 hover:text-blue-500"
+                      onClick={() => {
+                        const t = templates.find((t) => t.id === selectedTemplateId)
+                        if (!t) return
+                        setEditingTemplate({
+                          id: t.id,
+                          name: t.name,
+                          event_name: t.event_name ?? "",
+                          daily_schedule: t.daily_schedule ?? [],
+                        })
+                        setShowEditTemplateDialog(true)
+                      }}
+                    >
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      編集
+                    </Button>
+                  )}
+                  {canManageAsAdmin && selectedTemplateId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isDeletingTemplate}
+                      className="h-8 px-2 text-xs text-gray-500 hover:text-red-500"
+                      onClick={() => {
+                        if (!window.confirm("このテンプレートを削除しますか？")) return
+                        void deleteTemplate(selectedTemplateId)
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      削除
+                    </Button>
+                  )}
+                </div>
+                {templateError && <p className="text-xs text-red-500">{templateError}</p>}
+              </div>
+            )}
 
             {/* 今日の行事・イベント */}
             <div className="space-y-2">
@@ -1546,147 +2074,64 @@ export default function ActivityRecordClient() {
 
             {/* 1日の流れ */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium">1日の流れ</Label>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={appendScheduleItem}
+                  onClick={() => {
+                    scheduleIdsRef.current = [...scheduleIdsRef.current, crypto.randomUUID()]
+                    setDailySchedule((prev) => [...prev, { time: "10:00", content: "" }])
+                  }}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   追加
                 </Button>
               </div>
-              <div className="space-y-2">
-                {dailySchedule.map((item, index) => {
-                  // 時間フォーマットの防御的パース (HH:MM形式を想定)
-                  const timeParts = (item.time || '10:00').split(':')
-                  const hours = timeParts[0] || '10'
-                  const minutes = timeParts[1] || '00'
-                  const isDragging = draggingScheduleIndex === index
-                  const isDropTarget =
-                    dragOverScheduleIndex === index && draggingScheduleIndex !== null && !isDragging
-                  return (
-                    <div
-                      key={`${item.time}-${index}`}
-                      onDragEnter={() => handleScheduleDragEnter(index)}
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        event.dataTransfer.dropEffect = 'move'
-                      }}
-                      onDrop={(event) => handleScheduleDrop(event, index)}
-                      className={cn(
-                        "p-1 transition-colors",
-                        isDragging && "opacity-60",
-                        isDropTarget && "rounded-md bg-primary/5"
-                      )}
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                        <div
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = 'move'
-                            event.dataTransfer.setData('text/plain', '')
-                            handleScheduleDragStart(index)
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleScheduleDragEnd}
+              >
+                <SortableContext
+                  items={scheduleIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2">
+                    {dailySchedule.map((item, index) => {
+                      const rowId = scheduleIds[index]
+                      return (
+                        <SortableScheduleRow
+                          key={rowId}
+                          id={rowId}
+                          item={item}
+                          onTimeChange={(val) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, time: val }
+                            setDailySchedule(newSchedule)
                           }}
-                          onDragEnd={handleScheduleDragEnd}
-                          tabIndex={0}
-                          onKeyDown={(event) => {
-                            if (event.key === 'ArrowUp' && index > 0) {
-                              event.preventDefault()
-                              reorderScheduleItem(index, index - 1)
-                            } else if (event.key === 'ArrowDown' && index < dailySchedule.length - 1) {
-                              event.preventDefault()
-                              reorderScheduleItem(index, index + 1)
-                            }
+                          onContentChange={(val) => {
+                            const newSchedule = [...dailySchedule]
+                            newSchedule[index] = { ...item, content: val }
+                            setDailySchedule(newSchedule)
                           }}
-                          className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 rounded"
-                          aria-label={`${index + 1}行目をドラッグまたは矢印キーで並び替え`}
-                        >
-                          <GripVertical className="h-4 w-4" />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Select
-                            value={hours}
-                            onValueChange={(value) => {
-                              updateScheduleItem(index, { time: `${value}:${minutes}` })
-                            }}
-                          >
-                            <SelectTrigger className="w-16">
-                              <SelectValue placeholder="時" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map((h) => (
-                                <SelectItem key={h} value={h}>
-                                  {h}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <span className="text-sm text-muted-foreground">時</span>
-                          <Select
-                            value={minutes}
-                            onValueChange={(value) => {
-                              updateScheduleItem(index, { time: `${hours}:${value}` })
-                            }}
-                          >
-                            <SelectTrigger className="w-16">
-                              <SelectValue placeholder="分" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((m) => (
-                                <SelectItem key={m} value={m}>
-                                  {m}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <span className="text-sm text-muted-foreground">分</span>
-                        </div>
-                        <Input
-                          type="text"
-                          value={item.content}
-                          onChange={(e) => {
-                            updateScheduleItem(index, { content: e.target.value })
+                          onRemove={() => {
+                            scheduleIdsRef.current = scheduleIdsRef.current.filter((_, i) => i !== index)
+                            setDailySchedule((prev) => prev.filter((_, i) => i !== index))
                           }}
-                          placeholder="活動内容"
-                          className="flex-1"
                           maxLength={MAX_SCHEDULE_CONTENT_LENGTH}
                         />
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => insertScheduleItemAt(index + 1)}
-                          >
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            下に追加
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              removeScheduleItem(index)
-                            }}
-                            className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                            aria-label={`${index + 1}行目を削除`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                      )
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
 
             {/* 役割分担 */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium">役割分担</Label>
                 <Button
                   type="button"
@@ -1700,11 +2145,19 @@ export default function ActivityRecordClient() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {roleAssignments.map((assignment, index) => (
+                {roleAssignments.map((assignment, index) => {
+                  const isPinned = presetRoleSet.has(assignment.role?.trim() ?? "")
+                  return (
                   <div key={index} className="flex items-center gap-2">
                     <Select
-                      value={assignment.user_id}
+                      value={assignment.user_id || "__none__"}
                       onValueChange={(value) => {
+                        if (value === "__none__") {
+                          const newAssignments = [...roleAssignments]
+                          newAssignments[index] = { ...assignment, user_id: "", user_name: "" }
+                          setRoleAssignments(newAssignments)
+                          return
+                        }
                         const staff = staffList.find((s) => s.user_id === value)
                         const newAssignments = [...roleAssignments]
                         newAssignments[index] = {
@@ -1719,6 +2172,7 @@ export default function ActivityRecordClient() {
                         <SelectValue placeholder="職員を選択" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">（未選択）</SelectItem>
                         {staffList.map((staff) => (
                           <SelectItem key={staff.user_id} value={staff.user_id}>
                             {staff.name}
@@ -1727,17 +2181,39 @@ export default function ActivityRecordClient() {
                       </SelectContent>
                     </Select>
                     <Input
-                      type="text"
-                      value={assignment.role}
+                      className="flex-1"
+                      value={assignment.role || ""}
                       onChange={(e) => {
                         const newAssignments = [...roleAssignments]
                         newAssignments[index] = { ...assignment, role: e.target.value }
                         setRoleAssignments(newAssignments)
                       }}
-                      placeholder="役割（例: 主担当、配膳）"
-                      className="flex-1"
+                      placeholder="役割を入力"
                       maxLength={MAX_ROLE_LENGTH}
                     />
+                    {canManageAsAdmin && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={isPinned ? "プリセットから解除" : "プリセットに固定"}
+                        aria-pressed={isPinned}
+                        onClick={() => handleTogglePreset(assignment.role || "")}
+                        disabled={!assignment.role?.trim()}
+                        className={cn(
+                          "h-8 w-8",
+                          isPinned
+                            ? "text-primary hover:text-primary/80"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title={isPinned ? "プリセットから解除" : "プリセットに固定"}
+                      >
+                        <Pin
+                          className="h-4 w-4"
+                          fill={isPinned ? "currentColor" : "none"}
+                        />
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       size="icon"
@@ -1750,27 +2226,43 @@ export default function ActivityRecordClient() {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
             {/* おやつ */}
             <div className="space-y-2">
               <Label htmlFor="snack">おやつ</Label>
-              <Input
+              <Textarea
                 id="snack"
-                type="text"
+                rows={3}
                 value={snack}
                 onChange={(e) => setSnack(e.target.value)}
-                placeholder="例: りんご、クッキー"
+                placeholder="例: りんご、クッキー（アレルギー情報も記入可）"
                 maxLength={MAX_SNACK_LENGTH}
               />
             </div>
 
-            {/* ごはん */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">ごはん</Label>
-              <div className="grid grid-cols-1 gap-3 p-4 border rounded-lg bg-muted/30">
+            {/* ごはん（デフォルト折りたたみ） */}
+            <div className="border border-orange-200 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 bg-orange-50 hover:bg-orange-100 transition-colors text-sm font-medium text-orange-800"
+                onClick={() => setIsMealOpen((prev) => !prev)}
+                aria-expanded={isMealOpen}
+              >
+                <span>ごはん</span>
+                <span className="flex items-center gap-1 text-xs text-orange-600">
+                  {isMealOpen ? (
+                    <><ChevronUp className="h-4 w-4" />折りたたむ</>
+                  ) : (
+                    <><ChevronDown className="h-4 w-4" />展開</>
+                  )}
+                </span>
+              </button>
+              {isMealOpen && (
+              <div className="grid grid-cols-1 gap-3 p-4 bg-orange-50/50">
                 <div className="space-y-2">
                   <Label htmlFor="mealMenu" className="text-xs text-muted-foreground">メニュー</Label>
                   <Input
@@ -1817,6 +2309,7 @@ export default function ActivityRecordClient() {
                   />
                 </div>
               </div>
+              )}
             </div>
 
             {/* 観察記録（旧: 活動内容） */}
@@ -1879,7 +2372,7 @@ export default function ActivityRecordClient() {
                 onChange={handleContentChange}
                 onKeyDown={handleTextareaKeyDown}
                 maxLength={ACTIVITY_CONTENT_MAX}
-                placeholder="園での活動内容を入力してください"
+                placeholder="活動内容を入力してください"
                 className="min-h-[300px]"
               />
 
@@ -2065,18 +2558,11 @@ export default function ActivityRecordClient() {
                     <Button type="button" variant="outline" onClick={handleCancelEdit} className="flex-1 sm:flex-none">
                       キャンセル
                     </Button>
-                    <Button type="button" variant="outline" onClick={handleRestart} className="flex-1 sm:flex-none">
-                      <Plus className="mr-2 h-4 w-4" />
-                      新規作成
-                    </Button>
                   </>
                 ) : (
                   <>
                     <Button type="button" onClick={handleSave} disabled={isSaving || isUploadingPhotos} className="flex-1 sm:flex-none">
                       保存
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={handleRestart}>
-                      リセット
                     </Button>
                   </>
                 )}
@@ -2111,10 +2597,10 @@ export default function ActivityRecordClient() {
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">日付</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>
+                    {classOptions.length > 0 && <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">クラス</th>}
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">内容</th>
                     <th className="px-3 py-2.5 text-center font-medium text-muted-foreground whitespace-nowrap">引継ぎ</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">作成者</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground whitespace-nowrap">記録者</th>
                     <th className="px-3 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap">操作</th>
                   </tr>
                 </thead>
@@ -2131,11 +2617,13 @@ export default function ActivityRecordClient() {
                             {activity.activity_date}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="text-sm text-muted-foreground">
-                            {activity.class_name}
-                          </span>
-                        </td>
+                        {classOptions.length > 0 && (
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className="text-sm text-muted-foreground">
+                              {activity.class_name}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-3 py-2.5 max-w-xs">
                           <p className="text-sm text-foreground truncate" title={displayContent}>
                             {truncatedContent}
@@ -2165,7 +2653,7 @@ export default function ActivityRecordClient() {
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <span className="text-xs text-muted-foreground">
-                            {activity.created_by}
+                            {activity.recorded_by_name || activity.created_by}
                           </span>
                         </td>
                         <td className="px-3 py-2.5">
@@ -2204,6 +2692,13 @@ export default function ActivityRecordClient() {
                 <p className="text-sm text-muted-foreground mt-2">上のフォームから記録を追加してください。</p>
               </CardContent>
             </Card>
+          )}
+          {(activitiesData?.activities.length ?? 0) > 0 && (
+            <div className="mt-4 text-center">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/records/activity/history">さらに見る</Link>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -2268,6 +2763,188 @@ export default function ActivityRecordClient() {
         </Dialog>
 
       </div>
+
+      {/* テンプレート保存ダイアログ */}
+      <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>テンプレートとして保存しますか？</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              現在の行事名・1日の流れをテンプレートとして保存できます。次回から選択して使えます。
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="templateName">テンプレート名 <span className="text-red-500">*</span></Label>
+              <Input
+                id="templateName"
+                value={templateNameInput}
+                onChange={(e) => setTemplateNameInput(e.target.value)}
+                placeholder="例: 通常日程（平日）"
+                maxLength={100}
+              />
+            </div>
+            {templateError && <p className="text-sm text-red-500">{templateError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowSaveTemplateDialog(false)}
+              >
+                スキップ
+              </Button>
+              <Button
+                type="button"
+                disabled={isSavingTemplate || !templateNameInput.trim()}
+                onClick={async () => {
+                  try {
+                    await saveTemplate(templateNameInput.trim(), eventName, dailySchedule)
+                    setShowSaveTemplateDialog(false)
+                    setTemplateNameInput('')
+                  } catch {
+                    // templateError に表示済み
+                  }
+                }}
+              >
+                {isSavingTemplate ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* テンプレート編集ダイアログ */}
+      <Dialog open={showEditTemplateDialog} onOpenChange={setShowEditTemplateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>イベントテンプレートを編集</DialogTitle>
+          </DialogHeader>
+          {editingTemplate && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="editTemplateName">テンプレート名 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="editTemplateName"
+                  value={editingTemplate.name}
+                  onChange={(e) => setEditingTemplate((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                  placeholder="例: 通常日程（平日）"
+                  maxLength={100}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editTemplateEventName">行事名</Label>
+                <Input
+                  id="editTemplateEventName"
+                  value={editingTemplate.event_name}
+                  onChange={(e) => setEditingTemplate((prev) => prev ? { ...prev, event_name: e.target.value } : prev)}
+                  placeholder="例: 運動会、遠足"
+                  maxLength={200}
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>1日の流れ</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditingTemplate((prev) => prev ? { ...prev, daily_schedule: [...prev.daily_schedule, { time: "10:00", content: "" }] } : prev)}
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    追加
+                  </Button>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {editingTemplate.daily_schedule.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <TimePicker
+                        value={item.time || '10:00'}
+                        onChange={(val) => setEditingTemplate((prev) => {
+                          if (!prev) return prev
+                          const updated = [...prev.daily_schedule]
+                          updated[index] = { ...updated[index], time: val }
+                          return { ...prev, daily_schedule: updated }
+                        })}
+                      />
+                      <Input
+                        value={item.content}
+                        onChange={(e) => setEditingTemplate((prev) => {
+                          if (!prev) return prev
+                          const updated = [...prev.daily_schedule]
+                          updated[index] = { ...updated[index], content: e.target.value }
+                          return { ...prev, daily_schedule: updated }
+                        })}
+                        placeholder="内容"
+                        className="flex-1 text-sm"
+                        maxLength={200}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setEditingTemplate((prev) => prev ? { ...prev, daily_schedule: prev.daily_schedule.filter((_, i) => i !== index) } : prev)}
+                        className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {templateError && <p className="text-sm text-red-500">{templateError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowEditTemplateDialog(false)}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isUpdatingTemplate || !editingTemplate.name.trim()}
+                  onClick={async () => {
+                    try {
+                      await updateTemplate(
+                        editingTemplate.id,
+                        editingTemplate.name,
+                        editingTemplate.event_name,
+                        editingTemplate.daily_schedule
+                      )
+                      setShowEditTemplateDialog(false)
+                    } catch {
+                      // templateError に表示済み
+                    }
+                  }}
+                >
+                  {isUpdatingTemplate ? '保存中...' : '保存'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 削除確認ダイアログ */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>活動記録を削除</DialogTitle>
+            <DialogDescription>
+              この活動記録を削除しますか？この操作は元に戻せません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+              キャンセル
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
+              削除する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </StaffLayout>
   )
 }

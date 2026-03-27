@@ -332,6 +332,7 @@ export async function GET(request: NextRequest) {
         recorded_by_name: (activity.recorded_by_user as { id: string; name: string } | null)?.name ?? null,
         created_by: (activity.m_users as { id: string; name: string } | null)?.name ?? null,
         created_at: activity.created_at,
+        updated_at: activity.updated_at ?? null,
         individual_record_count: individualRecords.length,
         individual_records: individualRecords,
       };
@@ -488,6 +489,36 @@ export async function POST(request: NextRequest) {
 
     const normalizedPhotos = normalizePhotos(photos);
 
+    // 同一クラス×同一日付の重複チェック
+    const duplicateQueryBuilder = supabase
+      .from('r_activity')
+      .select('id')
+      .eq('facility_id', facility_id)
+      .eq('activity_date', activity_date)
+      .is('deleted_at', null)
+      .limit(1);
+
+    const duplicateQuery = class_id
+      ? duplicateQueryBuilder.eq('class_id', class_id)
+      : duplicateQueryBuilder.is('class_id', null);
+
+    const { data: existingActivity, error: duplicateError } = await duplicateQuery.maybeSingle();
+
+    if (duplicateError) {
+      console.error('Duplicate check error:', duplicateError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to check for duplicate activity' },
+        { status: 500 }
+      );
+    }
+
+    if (existingActivity) {
+      return NextResponse.json(
+        { success: false, error: '同日同クラスの活動記録が既に存在します', existing_activity_id: existingActivity.id },
+        { status: 409 }
+      );
+    }
+
     // 新規フィールドのバリデーション
     const extendedFieldsResult = validateActivityExtendedFields({
       event_name,
@@ -535,6 +566,25 @@ export async function POST(request: NextRequest) {
 
     if (activityError) {
       console.error('Activity insert error:', activityError);
+      // PostgreSQL unique violation (23505) → 409
+      if (activityError.code === '23505') {
+        // レースコンディションで挿入が衝突した場合、既存レコードのIDを取得して返す
+        const existingQueryBuilder = supabase
+          .from('r_activity')
+          .select('id')
+          .eq('facility_id', facility_id)
+          .eq('activity_date', activity_date)
+          .is('deleted_at', null)
+          .limit(1);
+        const existingQuery = class_id
+          ? existingQueryBuilder.eq('class_id', class_id)
+          : existingQueryBuilder.is('class_id', null);
+        const { data: existing } = await existingQuery.maybeSingle();
+        return NextResponse.json(
+          { success: false, error: '同日同クラスの活動記録が既に存在します', existing_activity_id: existing?.id },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { success: false, error: 'Failed to create activity' },
         { status: 500 }

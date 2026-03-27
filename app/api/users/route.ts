@@ -5,6 +5,7 @@ import { sendWithGas } from '@/lib/email/gas';
 import { buildUserInvitationEmailHtml } from '@/lib/email/templates';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 import { hasCompletedPasswordSetup } from '@/lib/auth/password-status';
+import type { User as AuthUser } from '@supabase/supabase-js';
 
 interface ClassAssignmentInput {
   class_id: string;
@@ -55,10 +56,54 @@ export async function GET(request: NextRequest) {
 
     // 権限チェック（staffは閲覧不可）
     if (role === 'staff') {
-      return NextResponse.json(
-        { success: false, error: 'Permission denied' },
-        { status: 403 }
-      );
+      if (!current_facility_id) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden' },
+          { status: 403 }
+        );
+      }
+      const isActiveFilter = request.nextUrl.searchParams.get('is_active');
+
+      let staffQuery = supabase
+        .from('m_users')
+        .select(
+          `
+          id,
+          name,
+          is_active,
+          _user_facility!inner (
+            facility_id
+          )
+        `
+        )
+        .is('deleted_at', null)
+        .eq('company_id', company_id)
+        .eq('_user_facility.facility_id', current_facility_id)
+        .eq('_user_facility.is_current', true);
+
+      if (isActiveFilter !== null) {
+        staffQuery = staffQuery.eq('is_active', isActiveFilter === 'true');
+      }
+
+      const { data: staffUsers, error: staffError } = await staffQuery.order('name');
+
+      if (staffError) {
+        throw staffError;
+      }
+
+      const users = (staffUsers || []).map((u: { id: string; name: string; is_active: boolean }) => ({
+        user_id: u.id,
+        name: u.name,
+        is_active: u.is_active,
+      }));
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          users,
+          total: users.length,
+        },
+      });
     }
 
     // リクエストパラメータ取得
@@ -142,7 +187,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: usersData, error: usersError } = await query.order('role').order('name');
+    const { data: usersData, error: usersError } = await query.order('role').order('hire_date', { ascending: true, nullsFirst: false }).order('name');
 
     if (usersError) {
       throw usersError;
@@ -188,25 +233,32 @@ export async function GET(request: NextRequest) {
       page: 1,
       perPage: 1000,
     });
-    const authUserMap = new Map<string, string | null>(
-      (authUsersData?.users ?? []).map((au) => [au.id, au.last_sign_in_at ?? null])
+    const authUserMap = new Map<string, { last_sign_in_at: string | null; password_set: boolean }>(
+      (authUsersData?.users ?? []).map((au: AuthUser) => [au.id, {
+        last_sign_in_at: au.last_sign_in_at ?? null,
+        password_set: hasCompletedPasswordSetup(au),
+      }])
     );
 
     // 同期的にデータを結合
-    const usersWithDetails = (usersData || []).map((u) => ({
-      user_id: u.id,
-      email: u.email,
-      name: u.name,
-      name_kana: u.name_kana,
-      role: u.role,
-      phone: u.phone,
-      hire_date: u.hire_date,
-      is_active: u.is_active,
-      assigned_classes: classAssignmentMap.get(u.id) || [],
-      last_login_at: authUserMap.get(u.id) ?? null,
-      created_at: u.created_at,
-      updated_at: u.updated_at,
-    }));
+    const usersWithDetails = (usersData || []).map((u) => {
+      const authInfo = authUserMap.get(u.id);
+      return {
+        user_id: u.id,
+        email: u.email,
+        name: u.name,
+        name_kana: u.name_kana,
+        role: u.role,
+        phone: u.phone,
+        hire_date: u.hire_date,
+        is_active: u.is_active,
+        assigned_classes: classAssignmentMap.get(u.id) || [],
+        last_login_at: authInfo?.last_sign_in_at ?? null,
+        password_set: authInfo?.password_set ?? false,
+        created_at: u.created_at,
+        updated_at: u.updated_at,
+      };
+    });
 
     // 統計情報
     const totalUsers = usersWithDetails.length;
@@ -272,9 +324,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 必須パラメータチェック
-    if (!body.name || !body.role) {
+    if (!body.name || !body.role || !body.hire_date) {
       return NextResponse.json(
-        { success: false, error: 'Missing required parameters: name, role' },
+        { success: false, error: 'Missing required parameters: name, role, hire_date' },
         { status: 400 }
       );
     }

@@ -38,6 +38,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid staff_id format' }, { status: 400 });
     }
     const staff_id = staff_id_raw;
+    const child_id_raw = searchParams.get('child_id') ?? undefined;
+    if (child_id_raw && !isValidUUID(child_id_raw)) {
+      return NextResponse.json({ success: false, error: 'Invalid child_id format' }, { status: 400 });
+    }
+    const child_id_param = child_id_raw;
     const child_name = searchParams.get('child_name') ?? undefined;
     const grade = searchParams.get('grade') ?? undefined;
     const keywordRaw = searchParams.get('keyword');
@@ -72,14 +77,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // child_name フィルター: 全児童を取得して復号後に部分一致検索
+    // child_name フィルター: 他フィルターで絞り込んでから復号後に部分一致検索
     let nameFilterChildIds: string[] | null = null;
     if (child_name) {
-      const { data: allChildrenForName } = await supabase
+      let nameSearchQuery = supabase
         .from('m_children')
         .select('id, family_name, given_name, family_name_kana, given_name_kana, nickname')
         .eq('facility_id', facility_id)
         .is('deleted_at', null);
+
+      // class_id フィルターが既に適用済みの場合、その child_id リストに絞り込む
+      if (classFilterChildIds !== null) {
+        nameSearchQuery = nameSearchQuery.in('id', classFilterChildIds);
+      }
+      // child_id 直接指定がある場合も絞り込む
+      if (child_id_param) {
+        nameSearchQuery = nameSearchQuery.eq('id', child_id_param);
+      }
+
+      const { data: allChildrenForName } = await nameSearchQuery;
 
       const searchLower = child_name.toLowerCase();
       nameFilterChildIds = (allChildrenForName ?? [])
@@ -133,9 +149,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // child_id 直接指定フィルター
+    const directChildIdFilter: string[] | null = child_id_param ? [child_id_param] : null;
+
     // child_id の絞り込みリストを結合（複数フィルターが AND 条件になる）
     let childIdFilter: string[] | null = null;
-    for (const idList of [classFilterChildIds, nameFilterChildIds, gradeFilterChildIds]) {
+    for (const idList of [directChildIdFilter, classFilterChildIds, nameFilterChildIds, gradeFilterChildIds]) {
       if (idList === null) continue;
       if (childIdFilter === null) {
         childIdFilter = idList;

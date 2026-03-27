@@ -28,9 +28,9 @@
 
 |接頭辞|分類|説明|テーブル数|
 |---|---|---|---|
-|`m_`|マスタ|会社、施設、職員、子ども、学校など基本エンティティ|7|
+|`m_`|マスタ|会社、施設、職員、子ども、学校など基本エンティティ|8|
 |`r_`|記録|日々の業務記録|4|
-|`s_`|設定|施設設定、スケジュールパターンなど|3|
+|`s_`|設定|施設設定、スケジュールパターンなど|4|
 |`h_`|履歴・ログ|システムログ、監査用データ|1|
 |`_`|中間テーブル|多対多リレーションの紐付け|4|
 
@@ -310,7 +310,8 @@ CREATE TYPE attendance_status_type AS ENUM (
 ```sql
 CREATE TYPE check_method_type AS ENUM (
   'qr',      -- QRコード
-  'manual'   -- 手動
+  'manual',  -- 手動
+  'self'     -- タッチ自己登録
 );
 ```
 
@@ -585,6 +586,29 @@ CREATE INDEX idx_guardians_name_search ON m_guardians
 **移行方針**:
 - `m_children`テーブルの保護者関連カラム（`parent_name`, `parent_email`, `parent_phone`, `emergency_contact_name`, `emergency_contact_phone`）は非推奨（2026年1月移行済み）
 - 新規登録・更新は必ず`m_guardians` + `_child_guardian`を使用すること
+
+---
+
+### 4.8 役割プリセットマスタ（`m_role_presets`）
+
+```sql
+CREATE TABLE m_role_presets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,  -- 施設
+  role_name VARCHAR(50) NOT NULL,   -- 役割名（例: 見守り、おやつ、連絡帳）
+  sort_order INTEGER NOT NULL DEFAULT 0,  -- 表示順序
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- インデックス
+CREATE INDEX idx_role_presets_facility_id ON m_role_presets(facility_id) WHERE deleted_at IS NULL;
+```
+
+**用途**: 活動記録の「役割分担」欄に対する施設単位のプリセット管理。
+固定ボタンを押すと役割テキストがここに保存され、次回作成時に自動プリセット表示される。
+`facility_admin` 以上が管理可能。RLS により他施設からの参照を防止。
 
 ---
 
@@ -1003,6 +1027,54 @@ SELECT entity_id FROM s_pii_search_index
 WHERE entity_type = 'child'
   AND search_type = 'name'
   AND normalized_value ILIKE '%田中%';
+```
+
+---
+
+### 6.5 活動記録テンプレート（`s_activity_templates`）
+
+```sql
+CREATE TABLE IF NOT EXISTS s_activity_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+
+  -- テンプレート内容
+  name VARCHAR(100) NOT NULL,          -- テンプレート名
+  event_name TEXT,                     -- 行事名
+  daily_schedule JSONB,                -- [{time, content}, ...] 形式
+
+  -- 作成者
+  created_by UUID NOT NULL REFERENCES m_users(id),
+
+  -- タイムスタンプ
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE  -- 論理削除
+);
+
+-- インデックス
+CREATE INDEX idx_s_activity_templates_facility
+  ON s_activity_templates(facility_id)
+  WHERE deleted_at IS NULL;
+```
+
+**説明**:
+- 活動記録フォームで使用するテンプレートを施設単位で管理
+- `daily_schedule`はJSONB型で、時間帯と活動内容のペアを配列で保持
+- 論理削除に対応（`deleted_at`）
+
+**権限（RLS）**:
+- **SELECT**: 同一施設のスタッフのみ
+- **INSERT**: staff以上（同一施設）
+- **UPDATE**（論理削除）: facility_admin以上のみ
+
+**`daily_schedule` のデータ例**:
+```json
+[
+  { "time": "10:00", "content": "朝の会" },
+  { "time": "10:30", "content": "自由遊び" },
+  { "time": "12:00", "content": "昼食" }
+]
 ```
 
 ---

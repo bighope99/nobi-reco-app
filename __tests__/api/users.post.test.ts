@@ -144,6 +144,7 @@ describe('POST /api/users (email invite flow)', () => {
       email: 'newuser@example.com',
       phone: '090-1234-5678',
       role: 'staff',
+      hire_date: '2024-04-01',
     });
 
     const response = await POST(request);

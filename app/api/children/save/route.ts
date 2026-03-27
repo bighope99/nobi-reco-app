@@ -26,6 +26,7 @@ export interface ChildPayload {
     birth_date?: string;
     school_id?: string | null;
     grade_add?: number;
+    photo_url?: string;
   };
   affiliation?: {
     enrollment_status?: string;
@@ -149,6 +150,14 @@ export async function saveChild(
     parent_characteristics: encryptPII(care_info?.parent_characteristics || null),
     photo_permission_public: permissions?.photo_permission_public !== false,
     photo_permission_share: permissions?.photo_permission_share !== false,
+    // photo_url: 送信された場合のみ更新（undefined の場合はキー削除パターンで上書きしない）
+    // 署名URL（https://で始まる）は受け付けない（パスのみ保存する）
+    photo_url: (() => {
+      const url = basic_info.photo_url;
+      if (url === undefined) return isUpdate ? undefined : null;
+      if (url.startsWith('https://')) return isUpdate ? undefined : null;
+      return url || null;
+    })(),
   };
 
   let result;
@@ -559,7 +568,12 @@ export async function handleChildSave(request: NextRequest, childId?: string) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id } = metadata;
+    const { role, current_facility_id } = metadata;
+    const allowedRoles = ['facility_admin', 'staff', 'site_admin', 'company_admin'];
+    if (!role || !allowedRoles.includes(role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }

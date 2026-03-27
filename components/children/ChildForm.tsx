@@ -129,9 +129,10 @@ interface ChildFormProps {
   mode: 'new' | 'edit';
   childId?: string;
   onSuccess?: () => void;
+  readOnly?: boolean;
 }
 
-export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) {
+export default function ChildForm({ mode, childId, onSuccess, readOnly = false }: ChildFormProps) {
   const isEditMode = mode === 'edit';
   const MAX_EMERGENCY_CONTACTS = 2;
   const contactIdRef = useRef(1);
@@ -302,6 +303,11 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             );
           }
 
+          // 写真プレビューの初期化（APIが署名URLを返す）
+          if (data.basic_info.photo_url) {
+            setPhotoPreviewUrl(data.basic_info.photo_url);
+          }
+
           // 紐付け済み兄弟の初期化
           if (data.siblings && data.siblings.length > 0) {
             setSiblings(data.siblings);
@@ -378,16 +384,26 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       }
 
       if (result.success && result.data.found && result.data.candidates.length > 0) {
-        // 最初の候補を表示
-        const candidate = result.data.candidates[0];
-        setSiblingResult({
-          id: candidate.child_id,
-          name: candidate.name,
-          kana: candidate.kana,
-          class: `${candidate.class_name}${candidate.age ? ` (${candidate.age}歳)` : ''}`,
-          status: candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済',
-          image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
-        });
+        // 登録済み兄弟のIDセットを作成して候補から除外
+        const registeredSiblingIds = new Set(siblings.map(s => s.child_id));
+        const unregisteredCandidates = result.data.candidates.filter(
+          (c: any) => !registeredSiblingIds.has(c.child_id)
+        );
+
+        if (unregisteredCandidates.length > 0) {
+          // 最初の未登録候補を表示
+          const candidate = unregisteredCandidates[0];
+          setSiblingResult({
+            id: candidate.child_id,
+            name: candidate.name,
+            kana: candidate.kana,
+            class: `${candidate.class_name}${candidate.age ? ` (${candidate.age}歳)` : ''}`,
+            status: candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済',
+            image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
+          });
+        } else {
+          setSiblingResult(null);
+        }
       } else {
         setSiblingResult(null);
       }
@@ -453,6 +469,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
 
     // 生年月日の組み立て
     const birthDate = formData.birth_year && formData.birth_month && formData.birth_day
@@ -476,6 +493,25 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
       setSaving(true);
       setError(null);
 
+      // 写真ファイルがある場合はアップロードしてパスを取得
+      // サーバー側でUUIDを生成するため child_id は不要
+      let uploadedPhotoPath: string | undefined = undefined;
+      if (photoFile) {
+        const photoFormData = new FormData();
+        photoFormData.append('file', photoFile);
+
+        const uploadResponse = await fetch('/api/storage/upload/child-photo', {
+          method: 'POST',
+          body: photoFormData,
+        });
+        const uploadResult = await uploadResponse.json();
+
+        if (!uploadResponse.ok || !uploadResult.success) {
+          throw new Error(uploadResult.error || '写真のアップロードに失敗しました');
+        }
+        uploadedPhotoPath = uploadResult.data.file_path;
+      }
+
       const requestBody = {
         child_id: isEditMode ? childId : undefined,
         basic_info: {
@@ -488,6 +524,8 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
           birth_date: birthDate,
           school_id: formData.school_id || null,
           grade_add: formData.grade_add,
+          // photo_url: アップロードした場合のみ含める（未変更時は省略して既存値を維持）
+          ...(uploadedPhotoPath !== undefined ? { photo_url: uploadedPhotoPath } : {}),
         },
         affiliation: {
           enrollment_status: formData.enrollment_status,
@@ -599,6 +637,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
               </div>
             )}
 
+            <fieldset disabled={readOnly} className="contents">
             <form id="child-form" onSubmit={handleSubmit}>
 
               {/* 1. 基本情報 */}
@@ -1091,6 +1130,7 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
               </SectionCard>
 
             </form>
+            </fieldset>
           </main>
         </div>
       </div>
@@ -1103,28 +1143,30 @@ export default function ChildForm({ mode, childId, onSuccess }: ChildFormProps) 
             onClick={() => window.location.href = '/children'}
             className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors"
           >
-            キャンセル
+            {readOnly ? '戻る' : 'キャンセル'}
           </button>
-          <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              form="child-form"
-              disabled={saving}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  {isEditMode ? '更新中...' : '登録中...'}
-                </>
-              ) : (
-                <>
-                  <Save size={18} />
-                  {isEditMode ? '更新する' : '登録する'}
-                </>
-              )}
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center gap-4">
+              <button
+                type="submit"
+                form="child-form"
+                disabled={saving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    {isEditMode ? '更新中...' : '登録中...'}
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    {isEditMode ? '更新する' : '登録する'}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
