@@ -37,6 +37,16 @@ interface User {
   }>;
 }
 
+interface AvailableUser {
+  user_id: string;
+  email: string | null;
+  name: string;
+  name_kana?: string;
+  role: string;
+  phone?: string;
+  hire_date?: string;
+}
+
 const roleOptions = [
   { value: 'facility_admin', label: '施設管理者', color: 'bg-red-50 text-red-700 border-red-200' },
   { value: 'staff', label: '職員', color: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -93,6 +103,12 @@ export default function UsersSettingsPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddTypeModal, setShowAddTypeModal] = useState(false);
+  const [showAttachModal, setShowAttachModal] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [attachSubmitting, setAttachSubmitting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'staff', hire_year: '', hire_month: '', hire_day: '' });
@@ -321,6 +337,43 @@ export default function UsersSettingsPage() {
     }
   };
 
+  const fetchAvailableUsers = async () => {
+    setLoadingAvailable(true);
+    try {
+      const response = await fetch('/api/users/attach-facility');
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to fetch');
+      setAvailableUsers(data.data.users);
+    } catch (err) {
+      console.error('Error fetching available users:', err);
+      alert(err instanceof Error ? err.message : 'Failed to fetch available users');
+    } finally {
+      setLoadingAvailable(false);
+    }
+  };
+
+  const handleAttachUsers = async () => {
+    if (selectedUserIds.length === 0 || attachSubmitting) return;
+    setAttachSubmitting(true);
+    try {
+      const response = await fetch('/api/users/attach-facility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_ids: selectedUserIds }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to attach');
+      alert(data.message || 'スタッフを追加しました。');
+      setShowAttachModal(false);
+      setSelectedUserIds([]);
+      fetchUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to attach users');
+    } finally {
+      setAttachSubmitting(false);
+    }
+  };
+
   const getRoleBadge = (role: string) => {
     const option = roleOptions.find(opt => opt.value === role);
     return option ? (
@@ -358,7 +411,7 @@ export default function UsersSettingsPage() {
             </div>
 
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => setShowAddTypeModal(true)}
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm"
             >
               <Plus size={18} />
@@ -481,8 +534,12 @@ export default function UsersSettingsPage() {
                                 className="max-w-[140px] text-xs"
                               >
                                 {roleOptions.map(option => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                    disabled={option.value === 'facility_admin' && !user.email}
+                                  >
+                                    {option.label}{option.value === 'facility_admin' && !user.email ? '（要メール）' : ''}
                                   </option>
                                 ))}
                               </Select>
@@ -542,6 +599,143 @@ export default function UsersSettingsPage() {
           )}
 
         </div>
+
+        {/* Add Type Selection Modal */}
+        {showAddTypeModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 rounded-lg">
+                    <Users size={20} className="text-indigo-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-800">職員を追加</h2>
+                </div>
+                <button
+                  onClick={() => setShowAddTypeModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-3">
+                <button
+                  onClick={() => { setShowAddTypeModal(false); setShowAddModal(true); }}
+                  className="w-full flex items-center gap-3 p-4 border border-slate-200 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-colors text-left"
+                >
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <Plus size={18} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">新規スタッフを追加</p>
+                    <p className="text-xs text-slate-500 mt-0.5">新しいスタッフ情報を入力して登録</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setShowAddTypeModal(false); fetchAvailableUsers(); setShowAttachModal(true); }}
+                  className="w-full flex items-center gap-3 p-4 border border-slate-200 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-colors text-left"
+                >
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <Users size={18} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">別施設のスタッフを追加</p>
+                    <p className="text-xs text-slate-500 mt-0.5">同会社の他施設スタッフをこの施設に追加</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Attach Facility Users Modal */}
+        {showAttachModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-50 rounded-lg">
+                    <Users size={20} className="text-emerald-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-800">別施設のスタッフを追加</h2>
+                </div>
+                <button
+                  onClick={() => { setShowAttachModal(false); setSelectedUserIds([]); }}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6">
+                {loadingAvailable ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full" />
+                  </div>
+                ) : availableUsers.length === 0 ? (
+                  <p className="text-center text-slate-500 text-sm py-8">
+                    追加できるスタッフが見つかりませんでした
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {availableUsers.map((u) => (
+                      <label
+                        key={u.user_id}
+                        className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.includes(u.user_id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedUserIds([...selectedUserIds, u.user_id]);
+                            } else {
+                              setSelectedUserIds(selectedUserIds.filter((id) => id !== u.user_id));
+                            }
+                          }}
+                          className="w-4 h-4 text-emerald-600 rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-slate-800 text-sm">{u.name}</p>
+                          <p className="text-xs text-slate-500">{u.email ?? 'ログインなし'}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
+                          u.role === 'facility_admin'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}>
+                          {u.role === 'facility_admin' ? '施設管理者' : '職員'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 rounded-b-xl">
+                <span className="text-sm text-slate-500">{selectedUserIds.length}名を選択中</span>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowAttachModal(false); setSelectedUserIds([]); }}
+                    className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium text-sm transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleAttachUsers}
+                    disabled={attachSubmitting || selectedUserIds.length === 0}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {attachSubmitting ? (
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    ) : (
+                      <Plus size={16} />
+                    )}
+                    {attachSubmitting ? '追加中...' : 'この施設に追加'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Add User Modal */}
         {showAddModal && (
@@ -781,13 +975,17 @@ export default function UsersSettingsPage() {
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, role: e.target.value })}
                   >
                     {roleOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
+                      <option
+                        key={option.value}
+                        value={option.value}
+                        disabled={option.value === 'facility_admin' && !editingUser.email}
+                      >
+                        {option.label}{option.value === 'facility_admin' && !editingUser.email ? '（要メール）' : ''}
                       </option>
                     ))}
                   </Select>
                   <p className="text-xs text-slate-500 mt-1">
-                    施設管理者は全ての機能にアクセスできます
+                    {editingUser.email ? '施設管理者は全ての機能にアクセスできます' : 'メールアドレスを登録すると施設管理者に設定できます'}
                   </p>
                 </FieldGroup>
               </div>
