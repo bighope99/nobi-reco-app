@@ -228,16 +228,18 @@ export default function CompanyDetailPage(props: {
               </Link>
             </Button>
           )}
-          <Button
-            size="sm"
-            asChild
-            className="gap-2"
-          >
-            <Link href={`/admin/companies/${companyId}/edit`}>
-              <Pencil className="h-4 w-4" />
-              編集
-            </Link>
-          </Button>
+          {!hasRole('company_admin') && (
+            <Button
+              size="sm"
+              asChild
+              className="gap-2"
+            >
+              <Link href={`/admin/companies/${companyId}/edit`}>
+                <Pencil className="h-4 w-4" />
+                編集
+              </Link>
+            </Button>
+          )}
         </div>
 
         {/* Company Information Card */}

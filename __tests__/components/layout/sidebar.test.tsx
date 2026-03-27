@@ -93,6 +93,22 @@ describe("Sidebar", () => {
       expect(newCompanyLink).toHaveClass("bg-sidebar-accent")
     })
 
+    it("shows '会社情報' menu for company_admin with companyId", () => {
+      mockPathname.mockReturnValue("/admin")
+      render(<Sidebar type="admin" role="company_admin" companyId="test-company-id" />)
+
+      const companyInfoLink = screen.getByRole("link", { name: "会社情報" })
+      expect(companyInfoLink).toBeInTheDocument()
+      expect(companyInfoLink).toHaveAttribute("href", "/admin/companies/test-company-id")
+    })
+
+    it("does not show '会社情報' menu for site_admin", () => {
+      mockPathname.mockReturnValue("/admin")
+      render(<Sidebar type="admin" role="site_admin" />)
+
+      expect(screen.queryByRole("link", { name: "会社情報" })).not.toBeInTheDocument()
+    })
+
     it("auto-opens parent menu containing the active child", () => {
       mockPathname.mockReturnValue("/settings/classes")
       render(<Sidebar type="staff" role="facility_admin" />)
