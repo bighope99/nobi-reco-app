@@ -72,6 +72,7 @@ const staffNavItems: NavItem[] = [
       { label: "CSV一括登録", href: "/children/import", roles: ["facility_admin"] },
     ],
   },
+  { label: "保護者管理", href: "/guardians", icon: <Hand className="h-5 w-5" /> },
   {
     label: "施設設定",
     href: "/settings",

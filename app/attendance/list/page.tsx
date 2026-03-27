@@ -1,19 +1,23 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
+import { normalizeSearch } from "@/lib/utils/kana"
 import { Button } from "@/components/ui/button"
 import {
   Calendar,
   ChevronLeft,
   ChevronRight,
   Filter,
+  Search,
   Users,
   UserX,
   Clock,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import {
   type ChildAttendance,
@@ -114,6 +118,9 @@ export default function AttendanceListPage() {
   const [canEditTime, setCanEditTime] = useState(false)
   const [editingTime, setEditingTime] = useState<{ childId: string; field: 'in' | 'out'; value: string } | null>(null)
   const [timeLoading, setTimeLoading] = useState<{ childId: string; field: 'in' | 'out' } | null>(null)
+  const [sortConfig, setSortConfig] = useState<{ key: string; order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
+  const [inputSearchTerm, setInputSearchTerm] = useState('')
+  const [committedSearchTerm, setCommittedSearchTerm] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null)
 
   // クライアント側でのみ初期日付・ロールを設定
@@ -198,12 +205,81 @@ export default function AttendanceListPage() {
     return `${month}月${day}日 (${weekday})`
   }
 
-  // クラスフィルター適用
-  const filteredChildren = attendanceData
-    ? filterClass === 'all'
-      ? attendanceData.children
-      : attendanceData.children.filter(c => c.class_id === filterClass)
-    : []
+  // 検索ボタン押下時のみ検索を実行
+  const handleSearch = () => {
+    setCommittedSearchTerm(inputSearchTerm)
+  }
+
+  // Enterキーでも検索を実行（IME変換中のEnterは無視）
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }
+
+  // ソート切り替え
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev.key === key) {
+        return { key, order: prev.order === 'asc' ? 'desc' : 'asc' }
+      }
+      return { key, order: key === 'grade' ? 'desc' : 'asc' }
+    })
+  }
+
+  // クラスフィルター + 名前検索 + ソート適用
+  const filteredChildren = useMemo(() => {
+    if (!attendanceData) return []
+
+    let data = attendanceData.children
+
+    // クラスフィルター
+    if (filterClass !== 'all') {
+      data = data.filter(c => c.class_id === filterClass)
+    }
+
+    // 名前検索（ひらがな/カタカナ両対応）
+    if (committedSearchTerm) {
+      const normalizedTerm = normalizeSearch(committedSearchTerm).trim()
+      data = data.filter(child =>
+        normalizeSearch(child.name).includes(normalizedTerm) ||
+        normalizeSearch(child.kana ?? '').includes(normalizedTerm)
+      )
+    }
+
+    // ソート
+    const sorted = [...data].sort((a, b) => {
+      type SortValue = string | number
+      const getSortValue = (child: ChildAttendance, key: string): SortValue => {
+        switch (key) {
+          case 'name':
+            return normalizeSearch(child.kana ?? '')
+          case 'grade':
+            return child.grade ?? 0
+          case 'class':
+            return child.class_name ?? ''
+          default:
+            return ''
+        }
+      }
+
+      const aValue = getSortValue(a, sortConfig.key)
+      const bValue = getSortValue(b, sortConfig.key)
+
+      if (aValue < bValue) return sortConfig.order === 'asc' ? -1 : 1
+      if (aValue > bValue) return sortConfig.order === 'asc' ? 1 : -1
+
+      // セカンダリソート: かな順（あいうえお昇順）
+      const aNorm = normalizeSearch(a.kana ?? '')
+      const bNorm = normalizeSearch(b.kana ?? '')
+      if (aNorm < bNorm) return -1
+      if (aNorm > bNorm) return 1
+      return 0
+    })
+
+    return sorted
+  }, [attendanceData, filterClass, committedSearchTerm, sortConfig])
 
   // Current date for status presentation (use attendance data date if available, otherwise selected date)
   const currentDate = attendanceData?.date || selectedDate
@@ -285,7 +361,7 @@ export default function AttendanceListPage() {
   if (loading) {
     return (
       <StaffLayout title="出席予定一覧">
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
             <p className="mt-4 text-slate-600">読み込み中...</p>
@@ -298,7 +374,7 @@ export default function AttendanceListPage() {
   if (error || !attendanceData) {
     return (
       <StaffLayout title="出席予定一覧">
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
             <p className="mt-4 text-slate-600">{error || 'データの取得に失敗しました'}</p>
@@ -369,13 +445,21 @@ export default function AttendanceListPage() {
               <div className="flex gap-2">
                 <button
                   onClick={goToToday}
-                  className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg shadow-sm transition-colors"
+                  className={`flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-colors ${
+                    selectedDate === getCurrentDateJST()
+                      ? 'text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100'
+                      : 'text-slate-600 bg-white border border-gray-200 hover:bg-gray-50'
+                  }`}
                 >
                   今日
                 </button>
                 <button
                   onClick={goToTomorrow}
-                  className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg shadow-sm transition-colors"
+                  className={`flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-colors ${
+                    selectedDate === getTomorrowDateJST()
+                      ? 'text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100'
+                      : 'text-slate-600 bg-white border border-gray-200 hover:bg-gray-50'
+                  }`}
                 >
                   明日
                 </button>
@@ -434,7 +518,7 @@ export default function AttendanceListPage() {
           {/* Attendance List */}
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
                 <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-md px-2 py-1.5">
                   <Filter size={14} className="text-slate-500" />
                   <select
@@ -448,9 +532,28 @@ export default function AttendanceListPage() {
                     ))}
                   </select>
                 </div>
+                <div className="flex gap-2 flex-1 max-w-md">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="児童名・かな検索"
+                      className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={inputSearchTerm}
+                      onChange={(e) => setInputSearchTerm(e.target.value)}
+                      onKeyDown={handleSearchKeyDown}
+                    />
+                  </div>
+                  <button
+                    onClick={handleSearch}
+                    className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    検索
+                  </button>
+                </div>
               </div>
 
-              <span className="text-xs text-slate-500 self-end sm:self-center">
+              <span className="text-xs text-slate-500 self-end sm:self-center whitespace-nowrap">
                 {filteredChildren.length} 名 表示
               </span>
             </div>
@@ -460,8 +563,18 @@ export default function AttendanceListPage() {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-white border-b border-gray-100 text-slate-500 text-xs uppercase tracking-wider">
-                    <th className="px-5 py-3 font-medium">児童名</th>
-                    <th className="px-5 py-3 font-medium">クラス / 学年</th>
+                    <th className="px-5 py-3 font-medium cursor-pointer select-none hover:text-slate-700" onClick={() => handleSort('name')}>
+                      <span className="inline-flex items-center gap-1">
+                        児童名
+                        {sortConfig.key === 'name' && (sortConfig.order === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                      </span>
+                    </th>
+                    <th className="px-5 py-3 font-medium cursor-pointer select-none hover:text-slate-700" onClick={() => handleSort('grade')}>
+                      <span className="inline-flex items-center gap-1">
+                        クラス / 学年
+                        {sortConfig.key === 'grade' && (sortConfig.order === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                      </span>
+                    </th>
                     <th className="px-5 py-3 font-medium">ステータス</th>
                     <th className="px-5 py-3 font-medium text-center">操作</th>
                     <th className="px-5 py-3 font-medium">チェックイン時刻</th>

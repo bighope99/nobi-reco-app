@@ -78,6 +78,14 @@ export async function PUT(
       );
     }
 
+    // メール未登録スタッフは施設管理者になれない
+    if (body.role === 'facility_admin' && !targetUser.email) {
+      return NextResponse.json(
+        { success: false, error: 'メール登録されていないスタッフは施設管理者に設定できません' },
+        { status: 400 }
+      );
+    }
+
     // Staffは自分のロール・クラス担当を変更不可
     if (isStaff && (body.role || body.assigned_classes)) {
       return NextResponse.json(

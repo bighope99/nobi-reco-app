@@ -152,7 +152,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const [isDirty, setIsDirty] = useState(false);
 
   // 未保存変更アラート
-  useUnsavedChanges(isDirty);
+  const { reset: resetUnsavedChanges } = useUnsavedChanges(isDirty);
 
   // フォーム変更時にdirtyフラグを立てるラッパー
   const updateFormData = useCallback((updates: Partial<typeof formData>) => {
@@ -565,6 +565,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
 
       if (result.success) {
         setIsDirty(false);
+        resetUnsavedChanges(); // refを即座にfalseにして遷移時の警告を抑止
         if (onSuccess) {
           onSuccess();
         } else {
@@ -787,22 +788,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       <p className="text-xs text-slate-400 mt-1">※学校が登録されていない場合は、先に学校マスタから登録してください</p>
                     </FieldGroup>
 
-                    <FieldGroup label="学年調整" className="sm:col-span-2">
-                      <div className="flex items-center gap-4">
-                        <Select
-                          value={formData.grade_add.toString()}
-                          onChange={(e: any) => updateFormData({ grade_add: parseInt(e.target.value) })}
-                          className="w-48"
-                        >
-                          <option value="-2">-2年（2学年下）</option>
-                          <option value="-1">-1年（1学年下）</option>
-                          <option value="0">調整なし（標準）</option>
-                          <option value="1">+1年（1学年上）</option>
-                          <option value="2">+2年（2学年上）</option>
-                        </Select>
-                        <p className="text-xs text-slate-500">留年・飛び級などで学年を調整する場合に設定します</p>
-                      </div>
-                    </FieldGroup>
+{/* 学年調整フィールドは非表示（grade_addデータは内部で保持） */}
                   </div>
                 </div>
               </SectionCard>
@@ -812,7 +798,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                 id="affiliation"
                 title="所属・契約"
                 icon={Building2}
-                description="園でのステータスや所属クラスを管理します。"
+                description="ステータスや所属クラスを管理します。"
                 isActive={activeSection === 'affiliation'}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Analytics } from "@vercel/analytics/next"
+import { Toaster } from "sonner"
 import { SessionGuard } from "@/components/auth/session-guard"
 import "./globals.css"
 
@@ -22,6 +23,7 @@ export default function RootLayout({
         <SessionGuard />
         {children}
         <Analytics />
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   )
