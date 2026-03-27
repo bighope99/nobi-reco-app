@@ -32,6 +32,7 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
       <Sidebar
         type={sidebarType}
         role={session?.role ?? undefined}
+        companyId={session?.company_id ?? undefined}
         userName={userName}
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}

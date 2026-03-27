@@ -9,7 +9,7 @@ export default function ChildEditForm({ params }: { params: Promise<{ id: string
   const { isStaff } = useRole();
 
   return (
-    <StaffLayout title={isStaff ? "園児情報" : "園児編集"}>
+    <StaffLayout title={isStaff ? "児童情報" : "児童編集"}>
       <ChildForm mode="edit" childId={id} readOnly={isStaff} />
     </StaffLayout>
   );

@@ -556,7 +556,7 @@ export default function DashboardClient() {
           <StatusBadge child={child} />
         </div>
 
-        {child.is_scheduled_today && (
+        {(child.is_scheduled_today || child.actual_in_time) && (
           <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
             <div>
               <div className="text-slate-400 mb-1">予定</div>

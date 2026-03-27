@@ -3,6 +3,7 @@
 import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { useRole } from "@/hooks/useRole"
 import { AdminLayout } from "@/components/layout/admin-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -61,6 +62,7 @@ export default function CompanyDetailPage(props: {
 }) {
   const { companyId } = use(props.params)
   const router = useRouter()
+  const { hasRole } = useRole()
 
   const [company, setCompany] = useState<Company | null>(null)
   const [facilities, setFacilities] = useState<Facility[]>([])
@@ -213,17 +215,19 @@ export default function CompanyDetailPage(props: {
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header Actions */}
         <div className="flex items-center justify-between gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="gap-2"
-          >
-            <Link href="/admin/companies">
-              <ArrowLeft className="h-4 w-4" />
-              会社一覧に戻る
-            </Link>
-          </Button>
+          {!hasRole('company_admin') && (
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="gap-2"
+            >
+              <Link href="/admin/companies">
+                <ArrowLeft className="h-4 w-4" />
+                会社一覧に戻る
+              </Link>
+            </Button>
+          )}
           <Button
             size="sm"
             asChild
