@@ -230,7 +230,7 @@ describe('GET /api/records/personal/[id]', () => {
       expect(json.data.recent_observations[0].id).toBe('obs-2');
     });
 
-    it('should handle child name from nickname', async () => {
+    it('should use full name even when nickname exists', async () => {
       const observationData = {
         id: 'obs-1',
         child_id: 'child-1',
@@ -269,7 +269,7 @@ describe('GET /api/records/personal/[id]', () => {
       const json = await response.json();
 
       expect(response.status).toBe(200);
-      expect(json.data.child_name).toBe('Ta-chan');
+      expect(json.data.child_name).toBe('Yamada Taro');
     });
 
     it('should handle empty recent observations', async () => {
