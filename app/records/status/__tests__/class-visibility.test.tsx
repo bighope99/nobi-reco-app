@@ -41,7 +41,7 @@ const baseChild = {
   child_id: "child-1",
   name: "山田 太郎",
   kana: "ヤマダ タロウ",
-  class_id: null,
+  class_id: null as string | null,
   class_name: "",
   age_group: "",
   grade: 1,
