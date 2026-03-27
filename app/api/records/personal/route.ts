@@ -77,14 +77,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // child_name フィルター: 全児童を取得して復号後に部分一致検索
+    // child_name フィルター: 他フィルターで絞り込んでから復号後に部分一致検索
     let nameFilterChildIds: string[] | null = null;
     if (child_name) {
-      const { data: allChildrenForName } = await supabase
+      let nameSearchQuery = supabase
         .from('m_children')
         .select('id, family_name, given_name, family_name_kana, given_name_kana, nickname')
         .eq('facility_id', facility_id)
         .is('deleted_at', null);
+
+      // class_id フィルターが既に適用済みの場合、その child_id リストに絞り込む
+      if (classFilterChildIds !== null) {
+        nameSearchQuery = nameSearchQuery.in('id', classFilterChildIds);
+      }
+      // child_id 直接指定がある場合も絞り込む
+      if (child_id_param) {
+        nameSearchQuery = nameSearchQuery.eq('id', child_id_param);
+      }
+
+      const { data: allChildrenForName } = await nameSearchQuery;
 
       const searchLower = child_name.toLowerCase();
       nameFilterChildIds = (allChildrenForName ?? [])

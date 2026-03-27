@@ -349,6 +349,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const autoAiDraftTriggeredRef = useRef(false);
   const aiFlagsInitializedRef = useRef(false);
   const previousSelectedChildIdRef = useRef('');
+  const childIdInitializedRef = useRef(false);
+  const previousLockedChildIdRef = useRef('');
   // 保存済み本文のスナップショット（edit時のdirty判定に使用）
   const savedBodyRef = useRef<string>('');
   // 記録日選択用の状態
@@ -480,9 +482,16 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   useEffect(() => {
     if (!isNew) return;
 
-    // lockedChildIdがある場合はそれを設定
-    if (lockedChildId) {
+    // lockedChildId自体が変わった場合（クライアントサイドナビゲーション）のみrefをリセット
+    if (lockedChildId && lockedChildId !== previousLockedChildIdRef.current) {
+      childIdInitializedRef.current = false;
+    }
+    previousLockedChildIdRef.current = lockedChildId;
+
+    // lockedChildIdがある場合は初回のみ初期値として設定（ユーザーによる変更は妨げない）
+    if (lockedChildId && !childIdInitializedRef.current) {
       setSelectedChildId(lockedChildId);
+      childIdInitializedRef.current = true;
 
       // 名前解決（paramChildNameまたはchildOptionsから）
       if (paramChildName) {
@@ -1190,7 +1199,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       }
 
       // 保存成功時、観察記録を設定
-      const resolvedChildName = lockedChildName || selectedChild?.name || '不明';
+      // selectedChildIdと一致する場合のみlockedChildNameを使用（別の児童を選択した場合は上書きしない）
+      const resolvedChildName = selectedChild?.name || (selectedChildId === lockedChildId ? lockedChildName : '') || '不明';
       const recorderName = staffList.find(s => s.user_id === selectedRecorder)?.name || '';
       const newObservation: Observation = {
         id: result.data.id,
@@ -1431,9 +1441,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   };
 
   const childDisplayName = useMemo(() => {
-    if (isNew) return lockedChildName || selectedChild?.name || (selectedChildId ? '不明' : '未選択');
+    if (isNew) {
+      if (selectedChild?.name) return selectedChild.name;
+      if (selectedChildId && selectedChildId === lockedChildId && lockedChildName) return lockedChildName;
+      return selectedChildId ? '不明' : '未選択';
+    }
     return observation?.child_name || observation?.child_id;
-  }, [isNew, lockedChildName, selectedChild, selectedChildId, childOptions, observation]);
+  }, [isNew, lockedChildId, lockedChildName, selectedChild, selectedChildId, observation]);
   const recorderDisplayName =
     observation?.recorded_by_name ||
     observation?.created_by_name ||
