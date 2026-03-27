@@ -389,7 +389,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
                         )}
                       </div>
                       <Link
-                        href={`/children/${child.id}`}
+                        href={`/children/${child.id}/edit`}
                         className="text-xs text-indigo-600 hover:underline"
                       >
                         詳細を見る
