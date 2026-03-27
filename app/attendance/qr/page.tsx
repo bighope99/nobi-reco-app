@@ -6,6 +6,8 @@ import { BrowserQRCodeReader } from "@zxing/browser"
 
 import { Button } from "@/components/ui/button"
 
+const OVERLAY_DURATION_MS = 3000
+
 interface AttendanceQrPayload {
   type: string
   child_id: string
@@ -41,6 +43,8 @@ export default function QRAttendanceScannerPage() {
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [facingMode, setFacingMode] = useState<CameraFacingMode>("environment")
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false)
+  const [overlayName, setOverlayName] = useState<string | null>(null)
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const stopScanner = useCallback(async () => {
     if (controlsRef.current) {
@@ -73,6 +77,9 @@ export default function QRAttendanceScannerPage() {
   useEffect(() => {
     return () => {
       stopScanner()
+      if (overlayTimerRef.current) {
+        clearTimeout(overlayTimerRef.current)
+      }
     }
   }, [stopScanner])
 
@@ -135,6 +142,14 @@ export default function QRAttendanceScannerPage() {
 
       const result: CheckInResult = await response.json()
       setCheckInResult(result)
+
+      if (result.success && result.data?.child_name) {
+        setOverlayName(result.data.child_name)
+        if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current)
+        overlayTimerRef.current = setTimeout(() => {
+          setOverlayName(null)
+        }, OVERLAY_DURATION_MS)
+      }
     } catch (error) {
       console.error('Check-in error:', error)
       setCheckInResult({
@@ -230,6 +245,17 @@ export default function QRAttendanceScannerPage() {
 
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
 
+  const getGreetingMessage = (result: CheckInResult): string => {
+    if (result.data?.action_type === 'check_out') return 'またね！'
+    // check_in: 12時前は「おはよう！」、12時以降は「おかえり！」
+    const checkedInAt = result.data?.checked_in_at
+    if (checkedInAt) {
+      const hour = new Date(checkedInAt).getHours()
+      return hour < 12 ? 'おはよう！' : 'おかえり！'
+    }
+    return 'おはよう！'
+  }
+
   return (
     <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
       <div className="space-y-6">
@@ -256,6 +282,13 @@ export default function QRAttendanceScannerPage() {
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="h-56 w-56 sm:h-48 sm:w-48 border-4 border-white/80 shadow-lg" />
           </div>
+          {overlayName && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <p className="rounded-xl bg-black/60 px-6 py-3 text-4xl font-bold text-white backdrop-blur-sm">
+                {overlayName}
+              </p>
+            </div>
+          )}
           {isScanning && (
             <button
               type="button"
@@ -336,7 +369,7 @@ export default function QRAttendanceScannerPage() {
                       </div>
                     </div>
                     <p className={`mb-2 text-2xl font-bold ${titleColor}`}>
-                      {isCheckOut ? 'おかえり！ きをつけてね' : 'しゅっせき かんりょう！'}
+                      {getGreetingMessage(checkInResult)}
                     </p>
                     {checkInResult.data && (
                       <div className="mt-6 space-y-3">
