@@ -283,7 +283,37 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
-    // has_sibling フィルターは取得後の後処理で行う（PostgREST のリレーション集計フィルターは非互換のため）
+    // has_sibling フィルター: ページネーション前にサブクエリでIDセットを取得してフィルタリング
+    // （PostgREST のリレーション集計フィルターは非互換のため、サブクエリ方式で実装）
+    if (has_sibling !== null) {
+      const siblingQuery = supabase
+        .from('_child_sibling')
+        .select('child_id');
+      const { data: siblingRows, error: siblingError } = await siblingQuery;
+      if (siblingError) {
+        console.error('Sibling subquery error:', siblingError);
+        return NextResponse.json({ error: 'Failed to fetch sibling data' }, { status: 500 });
+      }
+      const childIdsWithSibling = [...new Set((siblingRows || []).map((r: { child_id: string }) => r.child_id))];
+
+      if (has_sibling === 'true') {
+        if (childIdsWithSibling.length === 0) {
+          // 兄弟がいる子が1人もいない場合は空を返す
+          const { summary, filters } = await fetchSummaryAndFilters();
+          return NextResponse.json({
+            success: true,
+            data: { summary, children: [], filters, total: 0, has_more: false },
+          });
+        }
+        childrenQuery = childrenQuery.in('id', childIdsWithSibling);
+      } else {
+        // has_sibling=false: 兄弟がいない子のみ（兄弟ありIDを除外）
+        if (childIdsWithSibling.length > 0) {
+          childrenQuery = childrenQuery.not('id', 'in', `(${childIdsWithSibling.map(id => `"${id}"`).join(',')})`);
+        }
+        // childIdsWithSibling が空なら全員が兄弟なし → フィルター不要
+      }
+    }
 
     // ソートはクライアント側で処理するため、デフォルトのカナ順で返す
     childrenQuery = childrenQuery.order('family_name_kana', { ascending: true });
@@ -399,14 +429,6 @@ export async function GET(request: NextRequest) {
       ? children.filter(c => c.class_id === null)
       : children;
 
-    // has_sibling 後処理フィルター（sibling_count を使用）
-    if (has_sibling !== null) {
-      filteredChildren = filteredChildren.filter(child => {
-        const count = child.sibling_count ?? 0;
-        return has_sibling === 'true' ? count > 0 : count === 0;
-      });
-    }
-
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
     summary.has_sibling_count = hasSiblingCount;
 
@@ -423,8 +445,8 @@ export async function GET(request: NextRequest) {
         summary,
         children: filteredChildren,
         filters,
-        total: count || filteredChildren.length,
-        has_more: (count || 0) > offset + limit,
+        total: count ?? filteredChildren.length,
+        has_more: (count ?? 0) > offset + limit,
       },
     };
 

@@ -86,6 +86,7 @@ interface Student {
     parentName: string;
     parentPhone: string;
     siblings: string[];
+    siblingCount: number;
     hasAllergy: boolean;
     allergyDetail?: string;
     photoAllowed: boolean;
@@ -124,6 +125,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
         parentName: apiChild.parent_name || '',
         parentPhone: apiChild.parent_phone || '',
         siblings,
+        siblingCount,
         hasAllergy: apiChild.has_allergy,
         allergyDetail: apiChild.allergy_detail || undefined,
         photoAllowed: apiChild.photo_allowed,
@@ -330,8 +332,8 @@ export default function StudentList() {
                     comparison = (a.hasAllergy === b.hasAllergy) ? 0 : a.hasAllergy ? -1 : 1;
                     break;
                 case 'siblings':
-                    // 兄弟の数でソート
-                    comparison = a.siblings.length - b.siblings.length;
+                    // 兄弟の数でソート（数値で比較）
+                    comparison = a.siblingCount - b.siblingCount;
                     break;
                 case 'photoAllowed':
                     comparison = (a.photoAllowed === b.photoAllowed) ? 0 : a.photoAllowed ? 1 : -1;
