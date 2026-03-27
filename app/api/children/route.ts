@@ -200,7 +200,8 @@ export async function GET(request: NextRequest) {
             phone,
             email
           )
-        )
+        ),
+        _child_sibling (count)
       `)
       .eq('enrollment_status', status)
       .is('deleted_at', null);
@@ -282,6 +283,14 @@ export async function GET(request: NextRequest) {
       childrenQuery = childrenQuery.eq('enrollment_type', enrollment_type);
     }
 
+    if (has_sibling !== null) {
+      if (has_sibling === 'true') {
+        childrenQuery = (childrenQuery as any).not('_child_sibling', 'is', null);
+      } else {
+        childrenQuery = (childrenQuery as any).is('_child_sibling', null);
+      }
+    }
+
     // ソートはクライアント側で処理するため、デフォルトのカナ順で返す
     childrenQuery = childrenQuery.order('family_name_kana', { ascending: true });
 
@@ -310,31 +319,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const childIds = childrenData.map((c: any) => c.id);
-
-    // 2. 兄弟情報とサマリー・フィルターを並列取得
-    const [{ data: siblingsData }, { summary, filters }] = await Promise.all([
-      supabase
-        .from('_child_sibling')
-        .select(`
-          child_id,
-          sibling_id,
-          relationship,
-          m_children!_child_sibling_sibling_id_fkey (
-            id,
-            family_name,
-            given_name,
-            _child_class (
-              m_classes (
-                name,
-                age_group
-              )
-            )
-          )
-        `)
-        .in('child_id', childIds),
-      fetchSummaryAndFilters(),
-    ]);
+    // 2. サマリー・フィルターを取得（兄弟詳細クエリは廃止）
+    const { summary, filters } = await fetchSummaryAndFilters();
 
     // データ整形
     const children = childrenData.map((child: any) => {
@@ -364,22 +350,8 @@ export async function GET(request: NextRequest) {
       const grade = calculateGrade(child.birth_date, child.grade_add);
       const gradeLabel = formatGradeLabel(grade);
 
-      // 兄弟情報（復号化）
-      const childSiblings = (siblingsData || [])
-        .filter((s: any) => s.child_id === child.id)
-        .map((s: any) => {
-          const siblingInfo = s.m_children;
-          const siblingCurrentClass = siblingInfo?._child_class?.find((cc: any) => cc.is_current);
-          const siblingClass = siblingCurrentClass?.m_classes;
-          const decryptedFamilyName = decryptOrFallback(siblingInfo?.family_name);
-          const decryptedGivenName = decryptOrFallback(siblingInfo?.given_name);
-          return {
-            child_id: siblingInfo?.id,
-            name: formatName([decryptedFamilyName, decryptedGivenName], ''),
-            age_group: siblingClass?.age_group || '',
-            relationship: s.relationship,
-          };
-        });
+      // 兄弟数（詳細は遅延ロード）
+      const siblingCount = (child._child_sibling as Array<{ count: number }> | null)?.[0]?.count ?? 0;
 
       // 児童情報を復号化
       const decryptedFamilyName = decryptOrFallback(child.family_name);
@@ -417,8 +389,8 @@ export async function GET(request: NextRequest) {
           : null,
         parent_phone: decryptedPrimaryGuardian?.m_guardians.phone || decryptOrFallback(child.parent_phone) || null,
         parent_email: decryptedPrimaryGuardian?.m_guardians.email || decryptOrFallback(child.parent_email) || null,
-        siblings: childSiblings,
-        has_sibling: childSiblings.length > 0,
+        sibling_count: siblingCount,
+        has_sibling: siblingCount > 0,
         has_allergy: !!decryptedAllergies,
         allergy_detail: decryptedAllergies,
         photo_allowed: child.photo_permission_public,
@@ -428,15 +400,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // has_siblingフィルター適用（兄弟データ取得後）
-    let filteredChildren = has_sibling !== null
-      ? children.filter(c => c.has_sibling === (has_sibling === 'true'))
-      : children;
-
     // 「クラスなし」フィルター: is_current=trueのクラス所属がない子のみ
-    if (class_id === 'none') {
-      filteredChildren = filteredChildren.filter(c => c.class_id === null);
-    }
+    let filteredChildren = class_id === 'none'
+      ? children.filter(c => c.class_id === null)
+      : children;
 
     const hasSiblingCount = children.filter(c => c.has_sibling).length;
     summary.has_sibling_count = hasSiblingCount;

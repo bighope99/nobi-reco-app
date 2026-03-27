@@ -615,11 +615,7 @@ export default function DashboardClient() {
       )}
 
       <div className="min-h-screen text-slate-900 font-sans">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-[1600px] mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-[1600px] mx-auto">
           {/* Header */}
           <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6 border-b border-gray-200 pb-4 sm:pb-6">
             <div>

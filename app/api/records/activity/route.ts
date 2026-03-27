@@ -213,49 +213,32 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: ensured.error }, { status: ensured.status });
       }
 
-      const previewObservations: Array<{
-        child_id: string;
-        content: string;
-        observation_date: string;
-      }> = [];
-      const errors = [];
+      const previewErrors: Array<{ token?: string; childId?: string; error: string }> = [];
 
-      for (const encryptedToken of mentioned_children) {
-        try {
+      const previewResults = await Promise.allSettled(
+        mentioned_children.map(async (encryptedToken) => {
           const childId = decryptChildId(encryptedToken);
           if (!childId) {
-            errors.push({
-              token: encryptedToken,
-              error: 'Decryption failed',
-            });
-            continue;
+            throw Object.assign(new Error('Decryption failed'), { token: encryptedToken });
           }
+          const childContent = await extractChildContent(content, childId, encryptedToken);
+          return { child_id: childId, content: childContent, observation_date: activity_date };
+        })
+      );
 
-          let childContent: string;
-          try {
-            childContent = await extractChildContent(content, childId, encryptedToken);
-          } catch (aiError) {
-            console.error(`AI extraction error for child ${childId}:`, aiError);
-            errors.push({
-              childId,
-              error: 'AI extraction failed',
-            });
-            continue;
-          }
-
-          previewObservations.push({
-            child_id: childId,
-            content: childContent,
-            observation_date: activity_date,
-          });
-        } catch (error) {
-          console.error('Unexpected error processing child in preview:', error);
-          errors.push({
-            token: encryptedToken,
-            error: error instanceof Error ? error.message : 'Unknown error',
+      const previewObservations: Array<{ child_id: string; content: string; observation_date: string }> = [];
+      previewResults.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          previewObservations.push(result.value);
+        } else {
+          const err = result.reason as Error & { token?: string; childId?: string };
+          console.error(`AI extraction error in preview:`, err);
+          previewErrors.push({
+            ...(err.token ? { token: err.token } : { token: mentioned_children[i] }),
+            error: err.message || 'Unknown error',
           });
         }
-      }
+      });
 
       return NextResponse.json({
         success: true,
@@ -263,10 +246,10 @@ export async function POST(request: NextRequest) {
         activity: ensured.activity,
         observations: previewObservations,
         message:
-          errors.length > 0
+          previewErrors.length > 0
             ? 'AI解析が一部の児童で失敗しました。結果を確認してください。'
             : 'AI解析結果を確認し、必要な児童のみ許可してください。',
-        ...(errors.length > 0 && { errors }),
+        ...(previewErrors.length > 0 && { errors: previewErrors }),
       });
     }
 
@@ -277,65 +260,53 @@ export async function POST(request: NextRequest) {
     }
     const activity = ensured.activity;
 
-    // 2. 各子供の個別記録を生成
-    const observations = [];
-    const errors = [];
+    // 2. 各子供のAI抽出を並列実行
+    const extractionErrors: Array<{ token?: string; childId?: string; error: string }> = [];
 
-    for (const encryptedToken of mentioned_children) {
-      try {
-        // トークンを復号化
+    const extractionResults = await Promise.allSettled(
+      mentioned_children.map(async (encryptedToken) => {
         const childId = decryptChildId(encryptedToken);
         if (!childId) {
           console.error('Failed to decrypt child ID:', encryptedToken);
-          errors.push({
-            token: encryptedToken,
-            error: 'Decryption failed',
-          });
-          continue;
+          throw Object.assign(new Error('Decryption failed'), { token: encryptedToken });
         }
+        const childContent = await extractChildContent(content, childId, encryptedToken);
+        return { child_id: childId, content: childContent };
+      })
+    );
 
-        // AIで子供に関連する内容を抽出
-        let childContent: string;
-        try {
-          childContent = await extractChildContent(content, childId, encryptedToken);
-        } catch (aiError) {
-          console.error(`AI extraction error for child ${childId}:`, aiError);
-          errors.push({
-            childId,
-            error: 'AI extraction failed',
-          });
-          continue;
-        }
-
-        // 個別記録を保存
-        const { data: observation, error: obsError } = await supabase
-          .from('r_observation')
-          .insert({
-            child_id: childId,
-            observation_date: activity_date,
-            content: childContent,
-            activity_id: activity.id, // 元の保育日誌IDを保存
-            created_by: session.user_id,
-          })
-          .select()
-          .single();
-
-        if (obsError) {
-          console.error(`Observation insert error for child ${childId}:`, obsError);
-          errors.push({
-            childId,
-            error: obsError.message,
-          });
-          continue;
-        }
-
-        observations.push(observation);
-      } catch (error) {
-        console.error('Unexpected error processing child:', error);
-        errors.push({
-          token: encryptedToken,
-          error: error instanceof Error ? error.message : 'Unknown error',
+    // 抽出成功分をバッチinsert
+    const insertRows: Array<{ child_id: string; observation_date: string; content: string; activity_id: string; created_by: string }> = [];
+    extractionResults.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        insertRows.push({
+          child_id: result.value.child_id,
+          observation_date: activity_date,
+          content: result.value.content,
+          activity_id: activity.id,
+          created_by: session.user_id,
         });
+      } else {
+        const err = result.reason as Error & { token?: string; childId?: string };
+        console.error(`AI extraction error for child:`, err);
+        extractionErrors.push({
+          ...(err.token ? { token: err.token } : { token: mentioned_children[i] }),
+          error: err.message || 'Unknown error',
+        });
+      }
+    });
+
+    let observations: unknown[] = [];
+    if (insertRows.length > 0) {
+      const { data: inserted, error: obsError } = await supabase
+        .from('r_observation')
+        .insert(insertRows)
+        .select();
+      if (obsError) {
+        console.error('Observation batch insert error:', obsError);
+        extractionErrors.push({ error: obsError.message });
+      } else {
+        observations = inserted || [];
       }
     }
 
@@ -344,7 +315,7 @@ export async function POST(request: NextRequest) {
       activity,
       observations,
       message: `保育日誌を保存し、${observations.length}件の個別記録を生成しました`,
-      ...(errors.length > 0 && { errors }),
+      ...(extractionErrors.length > 0 && { errors: extractionErrors }),
     });
   } catch (error) {
     console.error('Activity API error:', error);

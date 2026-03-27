@@ -120,11 +120,7 @@ export default function ClassesListPage() {
   return (
     <StaffLayout title="クラス管理">
       <div className="min-h-screen text-slate-900 font-sans">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto">
 
           {/* Header Area */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

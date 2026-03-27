@@ -3,8 +3,6 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { toDateStringJST } from '@/lib/utils/timezone';
-import { ChatOpenAI } from '@langchain/openai';
-import { PromptTemplate } from '@langchain/core/prompts';
 
 export async function GET(
   request: NextRequest,
@@ -135,58 +133,14 @@ export async function GET(
       },
     ];
 
-    if (totalObservations > 0 && process.env.OPENAI_API_KEY) {
-      try {
-        // Initialize LangChain
-        const model = new ChatOpenAI({
-          modelName: 'gpt-4o-mini',
-          temperature: 0.7,
-          openAIApiKey: process.env.OPENAI_API_KEY,
-        });
-
-        // Simple prompt that analyzes observations
-        const observationText = observations?.slice(0, 10).map((o: any) => o.content).join('\n') || '';
-
-        const template = `以下の観察記録から、児童の成長を分析してください。
-
-観察記録:
-{observations}
-
-分析結果を返してください。`;
-
-        const prompt = PromptTemplate.fromTemplate(template);
-        const chain = prompt.pipe(model);
-
-        // Call LangChain (minimal implementation)
-        await chain.invoke({ observations: observationText });
-
-        // Use default scores (LangChain is integrated but returns simple analysis)
-        categories = categoryDefinitions.map((cat, idx) => ({
-          ...cat,
-          score: 70 + Math.floor(Math.random() * 20), // 70-90
-          level: '良好',
-          trend: 'stable',
-          observation_count: Math.floor(totalObservations * (0.15 + idx * 0.05)),
-        }));
-      } catch (error) {
-        console.error('LangChain error:', error);
-        // Fallback to default scores
-        categories = categoryDefinitions.map((cat, idx) => ({
-          ...cat,
-          score: 75,
-          level: '良好',
-          trend: 'stable',
-          observation_count: Math.floor(totalObservations * 0.2),
-        }));
-      }
-    } else {
-      // No observations or no API key - use default scores
+    {
+      // デフォルトスコアを返す
       categories = categoryDefinitions.map((cat) => ({
         ...cat,
         score: 75,
         level: '良好',
         trend: 'stable',
-        observation_count: 0,
+        observation_count: Math.floor(totalObservations * 0.2),
       }));
     }
 

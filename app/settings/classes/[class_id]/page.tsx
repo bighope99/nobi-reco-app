@@ -382,11 +382,7 @@ export default function ClassDetailPage() {
   return (
     <StaffLayout title="クラス詳細">
       <div className="min-h-screen bg-gray-50 text-slate-900 font-sans pb-24">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
           {/* Back Button */}
           <button

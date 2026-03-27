@@ -538,11 +538,7 @@ export default function ScheduleSettingsPage() {
   return (
     <StaffLayout title="通所設定">
       <div className="min-h-screen text-slate-900 font-sans pb-24">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-6xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-6xl mx-auto">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

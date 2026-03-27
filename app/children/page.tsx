@@ -467,12 +467,8 @@ export default function StudentList() {
 
     return (
         <StaffLayout title="子ども一覧">
-            <div className="min-h-screen text-slate-900 font-sans" >
-                <style>
-                    {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-                </style>
-
-                <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+            <div className="min-h-screen text-slate-900 font-sans">
+                <div className="max-w-7xl mx-auto">
 
                     {/* company_admin向け施設選択 */}
                     {isCompanyAdmin && facilityOptions.length > 0 && (
