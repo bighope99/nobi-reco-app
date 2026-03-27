@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { getQrSignatureSecret } from '@/lib/qr/secrets';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { decryptOrFallback } from '@/utils/crypto/decryption-helper';
 
 export async function POST(request: NextRequest) {
   try {
@@ -174,11 +175,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
       return NextResponse.json({
         success: true,
         data: {
           child_id,
-          child_name: `${child.family_name} ${child.given_name}`,
+          child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
           class_name: className,
           checked_in_at: existing.checked_in_at,
           checked_out_at: now.toISOString(),
@@ -221,11 +224,13 @@ export async function POST(request: NextRequest) {
 
         // If duplicate error but record exists, return success (idempotent behavior)
         if (existingAttendance) {
+          const decryptedFamilyName = decryptOrFallback(child.family_name);
+          const decryptedGivenName = decryptOrFallback(child.given_name);
           return NextResponse.json({
             success: true,
             data: {
               child_id,
-              child_name: `${child.family_name} ${child.given_name}`,
+              child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
               class_name: className,
               checked_in_at: existingAttendance.checked_in_at,
               attendance_date: today,
@@ -243,11 +248,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const decryptedFamilyName = decryptOrFallback(child.family_name);
+    const decryptedGivenName = decryptOrFallback(child.given_name);
     return NextResponse.json({
       success: true,
       data: {
         child_id,
-        child_name: `${child.family_name} ${child.given_name}`,
+        child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
         class_name: className,
         checked_in_at: attendance.checked_in_at,
         attendance_date: today,
