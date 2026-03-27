@@ -9,6 +9,7 @@ import {
   searchByName,
 } from '@/utils/pii/searchIndex';
 import { toKatakana, toHiragana, normalizeSearch } from '@/lib/utils/kana';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 
 const SIGNED_URL_EXPIRES_IN = 3600;
 const GUARDIAN_PHOTO_BUCKET = 'guardian-photos';
@@ -161,7 +162,9 @@ export async function GET(request: NextRequest) {
             id,
             family_name,
             given_name,
-            enrollment_status
+            enrollment_status,
+            birth_date,
+            grade_add
           )
         )
       `)
@@ -192,18 +195,24 @@ export async function GET(request: NextRequest) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .filter((link: any) => link.m_children)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((link: any) => ({
-            id: link.m_children.id,
-            name: [
-              decryptOrFallback(link.m_children.family_name),
-              decryptOrFallback(link.m_children.given_name),
-            ]
-              .filter(Boolean)
-              .join(' '),
-            relationship: link.relationship,
-            is_primary: link.is_primary,
-            enrollment_status: link.m_children.enrollment_status,
-          }));
+          .map((link: any) => {
+            const grade = calculateGrade(link.m_children.birth_date, link.m_children.grade_add);
+            const rawLabel = formatGradeLabel(grade);
+            const gradeLabel = rawLabel === '未就学' ? '未就学児' : rawLabel;
+            return {
+              id: link.m_children.id,
+              name: [
+                decryptOrFallback(link.m_children.family_name),
+                decryptOrFallback(link.m_children.given_name),
+              ]
+                .filter(Boolean)
+                .join(' '),
+              relationship: link.relationship,
+              is_primary: link.is_primary,
+              grade_label: gradeLabel,
+              enrollment_status: link.m_children.enrollment_status,
+            };
+          });
 
         // 紐づき無し、または全員退所済みの保護者は非表示
         if (linkedChildren.length === 0) return null;

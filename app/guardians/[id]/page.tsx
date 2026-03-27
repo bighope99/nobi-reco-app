@@ -72,6 +72,7 @@ interface LinkedChild {
   id: string;
   name: string;
   class_name: string | null;
+  grade_label: string;
   relationship: string | null;
 }
 
@@ -574,6 +575,9 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
                         <span className="font-bold text-slate-800 text-sm">{child.name}</span>
                         {child.class_name && (
                           <span className="ml-2 text-xs text-slate-500">{child.class_name}</span>
+                        )}
+                        {child.grade_label && child.grade_label !== '-' && (
+                          <span className="ml-1 text-xs text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">{child.grade_label}</span>
                         )}
                         {child.relationship && (
                           <span className="ml-2 text-xs text-slate-400">({child.relationship})</span>

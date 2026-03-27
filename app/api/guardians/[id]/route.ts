@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { encryptPII } from '@/utils/crypto/piiEncryption';
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper';
+import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { normalizePhone } from '@/lib/children/import-csv';
 import {
   updateSearchIndex,
@@ -65,6 +66,8 @@ export async function GET(
             id,
             family_name,
             given_name,
+            birth_date,
+            grade_add,
             _child_class (
               is_current,
               m_classes ( name )
@@ -93,6 +96,9 @@ export async function GET(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((link: any) => {
         const currentClass = link.m_children._child_class?.find((c: any) => c.is_current);
+        const grade = calculateGrade(link.m_children.birth_date, link.m_children.grade_add);
+        const rawLabel = formatGradeLabel(grade);
+        const gradeLabel = rawLabel === '未就学' ? '未就学児' : rawLabel;
         return {
           id: link.m_children.id,
           name: [
@@ -102,6 +108,7 @@ export async function GET(
             .filter(Boolean)
             .join(' '),
           class_name: currentClass?.m_classes?.name ?? null,
+          grade_label: gradeLabel,
           relationship: link.relationship,
           is_primary: link.is_primary,
           is_emergency_contact: link.is_emergency_contact,
