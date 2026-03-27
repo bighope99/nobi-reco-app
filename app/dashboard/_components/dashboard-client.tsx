@@ -189,24 +189,24 @@ export default function DashboardClient() {
             ...prev,
             alerts: updatedAlerts,
             kpi: updatedKpi,
-            action_required: prev.action_required.map((child) => {
-              if (child.child_id !== childId) return child;
+            action_required: prev.action_required
+              .filter((child) => !(child.child_id === childId && action === 'mark_absent'))
+              .map((child) => {
+                if (child.child_id !== childId) return child;
 
-              switch (action) {
-                case 'check_in':
-                  return { ...child, status: 'checked_in' as const, actual_in_time: timeJST, is_scheduled_today: true };
-                case 'check_out':
-                  return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
-                case 'mark_absent':
-                  return { ...child, status: 'absent' as const };
-                case 'add_schedule':
-                  return { ...child, is_scheduled_today: true };
-                case 'confirm_unexpected':
-                  return { ...child, is_scheduled_today: true, alert_type: null };
-                default:
-                  return child;
-              }
-            }),
+                switch (action) {
+                  case 'check_in':
+                    return { ...child, status: 'checked_in' as const, actual_in_time: timeJST, is_scheduled_today: true };
+                  case 'check_out':
+                    return { ...child, status: 'checked_out' as const, actual_out_time: timeJST };
+                  case 'add_schedule':
+                    return { ...child, is_scheduled_today: true };
+                  case 'confirm_unexpected':
+                    return { ...child, is_scheduled_today: true, alert_type: null };
+                  default:
+                    return child;
+                }
+              }),
           };
         });
       });
@@ -556,7 +556,7 @@ export default function DashboardClient() {
           <StatusBadge child={child} />
         </div>
 
-        {child.is_scheduled_today && (
+        {(child.is_scheduled_today || child.actual_in_time) && (
           <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
             <div>
               <div className="text-slate-400 mb-1">予定</div>

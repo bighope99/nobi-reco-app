@@ -93,6 +93,7 @@ const adminNavItems: NavItem[] = [
     label: "会社管理",
     href: "/admin/companies",
     icon: <Building2 className="h-5 w-5" />,
+    roles: ["site_admin"],
     children: [
       { label: "会社一覧", href: "/admin/companies" },
       { label: "会社登録", href: "/admin/companies/new" },
@@ -124,14 +125,29 @@ const adminNavItems: NavItem[] = [
 type SidebarProps = {
   type: "staff" | "admin"
   role?: string
+  companyId?: string
   userName?: string
   isOpen?: boolean
   onClose?: () => void
 }
 
-export function Sidebar({ type, role, userName, isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ type, role, companyId, userName, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const allNavItems = type === "admin" ? adminNavItems : staffNavItems
+  const baseNavItems = type === "admin" ? adminNavItems : staffNavItems
+
+  // company_admin用の「会社情報」メニューを動的に追加
+  const allNavItems: NavItem[] = (role === "company_admin" && companyId)
+    ? [
+        ...baseNavItems,
+        {
+          label: "会社情報",
+          href: `/admin/companies/${companyId}`,
+          icon: <Building2 className="h-5 w-5" />,
+          roles: ["company_admin"],
+        },
+      ]
+    : baseNavItems
+
   const navItems = allNavItems.filter((item) => !item.roles || (role !== undefined && item.roles.includes(role)))
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
