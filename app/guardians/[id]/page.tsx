@@ -494,11 +494,13 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
                     )}
                   </div>
                 )}
-                {/* 兄弟注意書き */}
-                {selectedChild && siblingInfo.length > 0 && (
-                  <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                {/* 兄弟案内 */}
+                {selectedChild && siblingInfo.length > 0 ? (
+                  <p className="text-xs text-slate-500 mt-1">
                     兄弟（{siblingInfo.map(s => s.name).join('、')}）にも自動的に紐づけされます
-                  </div>
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1">一人紐づけたら兄弟も紐づきます</p>
                 )}
               </FieldGroup>
             </>
