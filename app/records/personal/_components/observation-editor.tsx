@@ -1280,14 +1280,17 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
   const getTagBadges = (tagIds?: string[]) => {
     if (!tagIds?.length) return [];
-    return tagIds.map((tagId) => {
-      const tag = observationTags.find((item) => item.id === tagId);
-      return {
-        id: tagId,
-        name: tag?.name || tagId,
-        color: tag?.color || null,
-      };
-    });
+    return tagIds
+      .map((tagId) => {
+        const tag = observationTags.find((item) => item.id === tagId);
+        return {
+          id: tagId,
+          name: tag?.name || tagId,
+          color: tag?.color || null,
+          sortOrder: tag?.sort_order ?? 999,
+        };
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   };
 
   const hasAiOutput =
@@ -1978,7 +1981,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                           {observationTags.length === 0 && <div className="text-sm text-gray-500">タグがありません。</div>}
                           {observationTags.map((tag) => (
-                            <label key={tag.id} className="flex items-center gap-2 rounded-md border-2 px-3 py-2 text-sm" style={{ borderColor: tag.color ? `${tag.color}4D` : '#E5E7EB', backgroundColor: tag.color ? `${tag.color}59` : undefined }}>
+                            <label key={tag.id} className="flex items-center gap-2 rounded-md border-2 px-3 py-2 text-sm" style={{ borderColor: tag.color ? `${tag.color}4D` : '#E5E7EB' }}>
                               <Checkbox
                                 checked={aiEditForm.flags[tag.id] ?? false}
                                 onCheckedChange={(checked) => handleAiFlagToggle(tag.id, checked === true)}
@@ -2076,7 +2079,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                         key={tag.id}
                                         variant="secondary"
                                         className="text-xs"
-                                        style={tag.color ? { backgroundColor: `${tag.color}59`, color: tag.color, borderColor: tag.color } : { backgroundColor: 'white', color: '#374151', borderColor: '#E5E7EB' }}
+                                        style={{ backgroundColor: 'white', color: '#475569', borderColor: tag.color ? `${tag.color}59` : '#E5E7EB' }}
                                       >
                                         {tag.name}
                                       </Badge>
