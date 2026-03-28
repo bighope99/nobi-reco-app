@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         .is('deleted_at', null);
 
       for (const link of guardianLinksData || []) {
-        const guardian = link.m_guardians as {
+        const guardian = link.m_guardians as unknown as {
           id: string;
           family_name: string;
           family_name_kana: string | null;
