@@ -59,9 +59,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 入力値のトリミング（バリデーション前に実施）
+    const adminName = String(body.admin_user?.name ?? '').trim();
+    const adminEmail = body.admin_user?.email == null ? null : String(body.admin_user.email).trim() || null;
+
     // 必須パラメータチェック
-    const hasEmail = !!body.admin_user?.email;
-    if (!body.company_id || !body.admin_user?.name) {
+    if (!body.company_id || !adminName) {
       return NextResponse.json(
         {
           success: false,
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // staff 以外はメール必須
-    if (targetRole !== 'staff' && !hasEmail) {
+    if (targetRole !== 'staff' && !adminEmail) {
       return NextResponse.json(
         {
           success: false,
@@ -81,10 +84,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // 入力値バリデーション
-    const adminName = String(body.admin_user.name).trim();
-    const adminEmail = hasEmail ? String(body.admin_user.email).trim() : null;
 
     if (adminName.length > 100) {
       return NextResponse.json(
@@ -265,6 +264,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
+        );
+      }
+
+      // company_admin が他社の既存ユーザーを再招待することを防止
+      if (metadata.role === 'company_admin' && originalMUser.company_id !== metadata.company_id) {
+        return NextResponse.json(
+          { success: false, error: 'Permission denied' },
+          { status: 403 }
         );
       }
 
