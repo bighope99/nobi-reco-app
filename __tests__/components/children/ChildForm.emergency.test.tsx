@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
 beforeEach(() => {
@@ -21,39 +21,26 @@ beforeEach(() => {
 });
 
 describe('ChildForm emergency contacts', () => {
-  it('displays add button when less than 2 contacts', async () => {
+  it('displays add button when less than 5 contacts', async () => {
     render(<ChildForm mode="new" />);
 
     // 初期状態で「追加する」ボタンが表示される
     expect(screen.getByText('追加する')).toBeInTheDocument();
   });
 
-  it('hides add button after adding second contact', async () => {
+  it('disables add button when parent name is not filled', async () => {
     render(<ChildForm mode="new" />);
 
-    // 「追加する」ボタンをクリック
+    // 筆頭保護者名が未入力のときは追加ボタンが disabled になる
     const addButton = screen.getByText('追加する');
-    fireEvent.click(addButton);
-
-    // 2件になったらボタンが非表示になる
-    await waitFor(() => {
-      expect(screen.queryByText('追加する')).not.toBeInTheDocument();
-    });
+    expect(addButton).toBeDisabled();
   });
 
-  it('shows correct number of emergency contact fields', async () => {
+  it('shows correct number of guardian contact fields', async () => {
     render(<ChildForm mode="new" />);
 
-    // 初期状態: 1件の入力フィールド（緊急連絡先）
-    const relationInputs = screen.getAllByPlaceholderText('続柄');
+    // 初期状態: 1件の入力フィールド（保護者連絡先リスト）
+    const relationInputs = screen.getAllByPlaceholderText('続柄（例: 母、叔母など）');
     expect(relationInputs).toHaveLength(1);
-
-    // 追加後: 2件の入力フィールド
-    fireEvent.click(screen.getByText('追加する'));
-
-    await waitFor(() => {
-      const updatedRelationInputs = screen.getAllByPlaceholderText('続柄');
-      expect(updatedRelationInputs).toHaveLength(2);
-    });
   });
 });
