@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/server';
 
 export interface UserSession {
     user_id: string;
@@ -23,7 +23,7 @@ export interface UserSession {
 }
 
 export async function getUserSession(userId: string): Promise<UserSession | null> {
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
 
     try {
         // 並列でユーザー情報、施設、クラスを取得（パフォーマンス最適化）
