@@ -2,12 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
-interface UserFacilityRelation {
-  facility_id: string;
-  is_primary: boolean;
-  m_facilities: { name: string } | null;
-}
-
 /**
  * GET /api/admin/companies/[companyId]
  * 会社詳細取得（site_adminのみ）
@@ -76,7 +70,7 @@ export async function GET(
     }
 
     // 施設一覧とアカウント一覧を並列取得
-    const [facilitiesResult, accountsResult] = await Promise.all([
+    const [facilitiesResult, usersResult] = await Promise.all([
       // 施設一覧
       supabaseAdmin
         .from('m_facilities')
@@ -90,15 +84,7 @@ export async function GET(
       // アカウント一覧（company_admin + facility_admin + staff）
       supabaseAdmin
         .from('m_users')
-        .select(
-          `
-          id, name, name_kana, email, role, is_active,
-          _user_facility!_user_facility_user_id_fkey (
-            facility_id, is_primary, is_current,
-            m_facilities ( id, name )
-          )
-        `
-        )
+        .select('id, name, name_kana, email, role, is_active')
         .eq('company_id', companyId)
         .in('role', ['company_admin', 'facility_admin', 'staff'])
         .is('deleted_at', null)
@@ -109,26 +95,55 @@ export async function GET(
     if (facilitiesResult.error) {
       console.error('Error fetching facilities:', facilitiesResult.error);
     }
-    if (accountsResult.error) {
-      console.error('Error fetching accounts:', accountsResult.error);
+    if (usersResult.error) {
+      console.error('Error fetching accounts:', usersResult.error);
     }
 
-    // Auth ユーザーのメール確認状態を一括取得
-    const userIds = (accountsResult.data || []).map((u) => u.id);
-    const emailConfirmedMap = new Map<string, boolean>();
-    if (userIds.length > 0) {
-      const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({
-        perPage: 1000,
-      });
-      (authUsers?.users || []).forEach((authUser) => {
-        if (userIds.includes(authUser.id)) {
-          emailConfirmedMap.set(authUser.id, !!authUser.email_confirmed_at);
+    const userIds = (usersResult.data || []).map((u) => u.id);
+
+    // _user_facilityを別クエリで取得（PostgRESTの埋め込みの代わり）
+    const [emailConfirmedMap, userFacilitiesResult] = await Promise.all([
+      (async () => {
+        const map = new Map<string, boolean>();
+        if (userIds.length > 0) {
+          const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({
+            perPage: 1000,
+          });
+          (authUsers?.users || []).forEach((authUser) => {
+            if (userIds.includes(authUser.id)) {
+              map.set(authUser.id, !!authUser.email_confirmed_at);
+            }
+          });
         }
-      });
+        return map;
+      })(),
+      userIds.length > 0
+        ? supabaseAdmin
+            .from('_user_facility')
+            .select('user_id, facility_id, is_primary, is_current, m_facilities(id, name)')
+            .in('user_id', userIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (userFacilitiesResult.error) {
+      console.error('Error fetching user facilities:', userFacilitiesResult.error);
     }
 
-    // アカウントデータを整形（_user_facilityをフラットに）
-    const accounts = (accountsResult.data || []).map((user) => ({
+    // ユーザーごとの施設リストを構築
+    const facilityMap = new Map<string, Array<{ facility_id: string; facility_name: string; is_primary: boolean; is_current: boolean }>>();
+    (userFacilitiesResult.data || []).forEach((uf) => {
+      const mFacilities = Array.isArray(uf.m_facilities) ? uf.m_facilities[0] : uf.m_facilities as { name?: string } | null;
+      if (!facilityMap.has(uf.user_id)) facilityMap.set(uf.user_id, []);
+      facilityMap.get(uf.user_id)!.push({
+        facility_id: uf.facility_id,
+        facility_name: (mFacilities as { name?: string } | null)?.name || '',
+        is_primary: uf.is_primary,
+        is_current: uf.is_current,
+      });
+    });
+
+    // アカウントデータを整形
+    const accounts = (usersResult.data || []).map((user) => ({
       id: user.id,
       name: user.name,
       name_kana: user.name_kana,
@@ -136,15 +151,7 @@ export async function GET(
       role: user.role,
       is_active: user.is_active,
       email_confirmed: user.email ? (emailConfirmedMap.get(user.id) ?? false) : false,
-      facilities: (user._user_facility || []).map((uf) => {
-        const mFacilities = Array.isArray(uf.m_facilities) ? uf.m_facilities[0] : uf.m_facilities;
-        return {
-          facility_id: uf.facility_id,
-          facility_name: mFacilities?.name || '',
-          is_primary: uf.is_primary,
-          is_current: uf.is_current,
-        };
-      }),
+      facilities: facilityMap.get(user.id) || [],
     }));
 
     return NextResponse.json({

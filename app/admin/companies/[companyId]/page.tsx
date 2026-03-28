@@ -386,7 +386,7 @@ export default function CompanyDetailPage(props: {
                         <td className="px-6 py-4 min-w-[120px]">
                           <span className="text-sm text-slate-600">
                             {(() => {
-                              const sorted = [...account.facilities].sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0))
+                              const sorted = [...account.facilities].sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
                               if (sorted.length === 0) return "-"
                               if (sorted.length === 1) return sorted[0].facility_name
                               return `${sorted[0].facility_name}..他${sorted.length - 1}施設`
