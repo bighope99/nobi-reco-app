@@ -25,6 +25,7 @@ interface AccountFacility {
   facility_id: string
   facility_name: string
   is_primary: boolean
+  is_current: boolean
 }
 
 interface Account {
@@ -385,7 +386,10 @@ export default function CompanyDetailPage(props: {
                         <td className="px-6 py-4 min-w-[120px]">
                           <span className="text-sm text-slate-600">
                             {account.facilities.length > 0
-                              ? account.facilities.map((f) => f.facility_name).join(", ")
+                              ? [...account.facilities]
+                                  .sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0))
+                                  .map((f) => f.facility_name)
+                                  .join(", ")
                               : "-"}
                           </span>
                         </td>

@@ -94,7 +94,7 @@ export async function GET(
           `
           id, name, name_kana, email, role, is_active,
           _user_facility!_user_facility_user_id_fkey (
-            facility_id, is_primary,
+            facility_id, is_primary, is_current,
             m_facilities ( id, name )
           )
         `
@@ -143,6 +143,7 @@ export async function GET(
           facility_id: uf.facility_id,
           facility_name: mFacilities?.name || '',
           is_primary: uf.is_primary,
+          is_current: uf.is_current,
         };
       }),
     }));
