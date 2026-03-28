@@ -22,6 +22,7 @@ interface Guardian {
   given_name_kana?: string;
   phone?: string;
   email?: string;
+  photo_path?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -81,7 +82,8 @@ export async function GET(
             family_name,
             given_name,
             phone,
-            email
+            email,
+            photo_path
           )
         )
       `)
@@ -144,9 +146,43 @@ export async function GET(
       m_guardians: primaryGuardian.m_guardians ? decryptGuardian(primaryGuardian.m_guardians) : null,
     } : null;
 
+    // 筆頭保護者の写真署名URL生成
+    let parentPhotoSignedUrl: string | null = null;
+    if (decryptedPrimaryGuardian?.m_guardians?.photo_path) {
+      const { data: parentPhotoData, error: parentPhotoError } = await supabase.storage
+        .from('guardian-photos')
+        .createSignedUrl(decryptedPrimaryGuardian.m_guardians.photo_path, 3600);
+      if (parentPhotoError) {
+        console.error('Failed to create signed URL for primary guardian photo:', parentPhotoError.message);
+      }
+      parentPhotoSignedUrl = parentPhotoData?.signedUrl ?? null;
+    }
+
+    // 緊急連絡先の写真パスを一括収集
+    const ecPhotoPaths = emergencyContacts
+      .map((ec: GuardianRelation) => ec.m_guardians?.photo_path)
+      .filter((p): p is string => !!p);
+
+    const ecUrlMap = new Map<string, string>();
+    if (ecPhotoPaths.length > 0) {
+      const { data: ecSignedUrls, error: ecSignedError } = await supabase.storage
+        .from('guardian-photos')
+        .createSignedUrls(ecPhotoPaths, 3600);
+      if (ecSignedError) {
+        console.error('Failed to create signed URLs for guardian photos:', ecSignedError.message);
+      }
+      (ecSignedUrls ?? []).forEach((u: { path: string; signedUrl: string | null; error: string | null }) => {
+        if (u.signedUrl) ecUrlMap.set(u.path, u.signedUrl);
+      });
+    }
+
+    // 同期 map に変更
     const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({
       ...ec,
       m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
+      guardian_photo_url: ec.m_guardians?.photo_path
+        ? ecUrlMap.get(ec.m_guardians.photo_path) ?? null
+        : null,
     }));
 
     // データ整形
@@ -187,6 +223,7 @@ export async function GET(
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
           parent_phone: decryptedPrimaryGuardian?.m_guardians?.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians?.email || decryptOrFallback(childData.parent_email) || null,
+          parent_photo_url: parentPhotoSignedUrl,
           emergency_contacts: (() => {
             const formattedContacts = decryptedEmergencyContacts
               .filter((ec) => ec.m_guardians !== null)
@@ -197,6 +234,7 @@ export async function GET(
                 ) || '',
                 relation: ec.relationship,
                 phone: ec.m_guardians!.phone || '',
+                photo_url: ec.guardian_photo_url ?? null,
               }));
             return formattedContacts;
           })(),

@@ -150,6 +150,9 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const [classesLoaded, setClassesLoaded] = useState(false);
   const [schools, setSchools] = useState<Array<{ school_id: string; name: string }>>([]);
   const [isDirty, setIsDirty] = useState(false);
+  const [parentPhotoUrl, setParentPhotoUrl] = useState<string | null>(null);
+  const [emergencyPhotoUrls, setEmergencyPhotoUrls] = useState<Record<number, string | null>>({});
+  const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
 
   // 未保存変更アラート
   const { reset: resetUnsavedChanges } = useUnsavedChanges(isDirty);
@@ -303,6 +306,16 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             );
           }
 
+          // 保護者写真URLのセット
+          if (data.contact?.parent_photo_url) {
+            setParentPhotoUrl(data.contact.parent_photo_url);
+          }
+          const photoUrls: Record<number, string | null> = {};
+          (data.contact?.emergency_contacts ?? []).forEach((ec: any, idx: number) => {
+            photoUrls[idx] = ec.photo_url ?? null;
+          });
+          setEmergencyPhotoUrls(photoUrls);
+
           // 写真プレビューの初期化（APIが署名URLを返す）
           if (data.basic_info.photo_url) {
             setPhotoPreviewUrl(data.basic_info.photo_url);
@@ -346,6 +359,15 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll(); // 初期状態を設定
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // 拡大モーダルのEscapeキー閉じる
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomPhotoUrl(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // 電話番号変更時に兄弟を自動検索（デバウンス500ms）
@@ -872,6 +894,23 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 mb-6">
                   <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                     <User size={16} className="text-indigo-600" /> 保護者情報（筆頭者）
+                    {parentPhotoUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setZoomPhotoUrl(parentPhotoUrl)}
+                        className="cursor-zoom-in ml-1"
+                      >
+                        <img
+                          src={parentPhotoUrl}
+                          alt="保護者写真"
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      </button>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                        <User size={14} className="text-slate-400" />
+                      </div>
+                    )}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <FieldGroup label="保護者氏名" required>
@@ -988,6 +1027,23 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       <span className="bg-slate-200 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
                         {index + 1}
                       </span>
+                      {emergencyPhotoUrls[index] ? (
+                        <button
+                          type="button"
+                          onClick={() => setZoomPhotoUrl(emergencyPhotoUrls[index]!)}
+                          className="cursor-zoom-in shrink-0"
+                        >
+                          <img
+                            src={emergencyPhotoUrls[index]!}
+                            alt={contact.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        </button>
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                          <User size={14} className="text-slate-400" />
+                        </div>
+                      )}
                       <Input
                         placeholder="氏名"
                         className="h-9 py-1"
@@ -1120,6 +1176,21 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
           </main>
         </div>
       </div>
+
+      {/* 写真拡大モーダル */}
+      {zoomPhotoUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setZoomPhotoUrl(null)}
+        >
+          <img
+            src={zoomPhotoUrl}
+            alt="保護者写真"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Sticky Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-40">
