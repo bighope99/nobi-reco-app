@@ -171,8 +171,8 @@ export async function GET(
       if (ecSignedError) {
         console.error('Failed to create signed URLs for guardian photos:', ecSignedError.message);
       }
-      (ecSignedUrls ?? []).forEach((u: { path: string; signedUrl: string | null; error: string | null }) => {
-        if (u.signedUrl) ecUrlMap.set(u.path, u.signedUrl);
+      (ecSignedUrls ?? []).forEach((u) => {
+        if (u.path && u.signedUrl) ecUrlMap.set(u.path, u.signedUrl);
       });
     }
 
