@@ -311,4 +311,134 @@ describe('GET /api/children/export', () => {
     expect(lines.length).toBe(1);
     expect(lines[0].startsWith('ID,')).toBe(true);
   });
+
+  it('should preserve leading zeros in phone numbers using ="value" format', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'facility_admin',
+      current_facility_id: 'facility-1',
+      company_id: 'company-1',
+    });
+
+    const mockSupabase = buildMockSupabase({
+      childrenData: [
+        {
+          id: 'child-phone-test',
+          family_name: '田中',
+          given_name: '一郎',
+          family_name_kana: 'タナカ',
+          given_name_kana: 'イチロウ',
+          nickname: null,
+          gender: 'male',
+          birth_date: '2018-06-15',
+          enrollment_status: 'enrolled',
+          enrollment_type: 'regular',
+          enrolled_at: '2024-04-01T00:00:00.000Z',
+          withdrawn_at: null,
+          allergies: null,
+          child_characteristics: null,
+          parent_characteristics: null,
+          photo_permission_public: false,
+          photo_permission_share: false,
+          _child_guardian: [
+            {
+              relationship: '母',
+              is_primary: true,
+              is_emergency_contact: false,
+              m_guardians: {
+                family_name: '田中',
+                given_name: '花子',
+                phone: '09012345678',
+                email: 'hanako@example.com',
+              },
+            },
+            {
+              relationship: '父',
+              is_primary: false,
+              is_emergency_contact: true,
+              m_guardians: {
+                family_name: '田中',
+                given_name: '太郎',
+                phone: '08087654321',
+                email: null,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+    const response = await GET(makeRequest());
+    expect(response.status).toBe(200);
+
+    const text = await response.text();
+    const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
+
+    const headers = lines[0].split(',');
+    const parentPhoneIndex = headers.indexOf('保護者電話');
+    const ec1PhoneIndex = headers.indexOf('緊急連絡先1_電話');
+
+    expect(parentPhoneIndex).toBeGreaterThan(-1);
+    expect(ec1PhoneIndex).toBeGreaterThan(-1);
+
+    // ="値" 形式で出力されること（Excelで先頭0が保持される）
+    const dataFields = lines[1].split(',');
+    expect(dataFields[parentPhoneIndex]).toBe('="09012345678"');
+    expect(dataFields[ec1PhoneIndex]).toBe('="08087654321"');
+  });
+
+  it('should output empty string for empty phone numbers', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'facility_admin',
+      current_facility_id: 'facility-1',
+      company_id: 'company-1',
+    });
+
+    const mockSupabase = buildMockSupabase({
+      childrenData: [
+        {
+          id: 'child-no-phone',
+          family_name: '佐藤',
+          given_name: '次郎',
+          family_name_kana: 'サトウ',
+          given_name_kana: 'ジロウ',
+          nickname: null,
+          gender: 'male',
+          birth_date: '2019-01-01',
+          enrollment_status: 'enrolled',
+          enrollment_type: 'regular',
+          enrolled_at: '2024-04-01T00:00:00.000Z',
+          withdrawn_at: null,
+          allergies: null,
+          child_characteristics: null,
+          parent_characteristics: null,
+          photo_permission_public: false,
+          photo_permission_share: false,
+          _child_guardian: [],
+        },
+      ],
+    });
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+    const response = await GET(makeRequest());
+    expect(response.status).toBe(200);
+
+    const text = await response.text();
+    const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
+
+    const headers = lines[0].split(',');
+    const parentPhoneIndex = headers.indexOf('保護者電話');
+    const ec1PhoneIndex = headers.indexOf('緊急連絡先1_電話');
+    const ec2PhoneIndex = headers.indexOf('緊急連絡先2_電話');
+
+    // 電話番号が空の場合は空文字（="" 形式にならない）
+    const dataFields = lines[1].split(',');
+    expect(dataFields[parentPhoneIndex]).toBe('');
+    expect(dataFields[ec1PhoneIndex]).toBe('');
+    expect(dataFields[ec2PhoneIndex]).toBe('');
+  });
 });

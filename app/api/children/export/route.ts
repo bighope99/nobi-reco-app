@@ -74,6 +74,12 @@ function escapeCsvField(value: string): string {
   return sanitized;
 }
 
+// 電話番号をExcel/Googleスプレッドシートで文字列として認識させるため ="値" 形式で出力
+function escapePhoneField(value: string): string {
+  if (!value) return '';
+  return `="${value}"`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -220,36 +226,37 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // 電話番号フィールドは escapePhoneField で先頭0を保持、その他は escapeCsvField
       const row = [
-        child.id,
-        decryptedFamilyName,
-        decryptedGivenName,
-        decryptedFamilyNameKana,
-        decryptedGivenNameKana,
-        child.nickname || '',
-        formatGender(child.gender),
-        child.birth_date || '',
-        formatEnrollmentStatus(child.enrollment_status),
-        formatEnrollmentType(child.enrollment_type),
-        formatDate(child.enrolled_at),
-        formatDate(child.withdrawn_at),
-        parentName,
-        parentPhone,
-        parentEmail,
-        decryptOrEmpty(child.allergies),
-        decryptOrEmpty(child.child_characteristics),
-        decryptOrEmpty(child.parent_characteristics),
-        formatBoolean(child.photo_permission_public),
-        formatBoolean(child.photo_permission_share),
-        ecData[0]?.name || '',
-        ecData[0]?.relation || '',
-        ecData[0]?.phone || '',
-        ecData[1]?.name || '',
-        ecData[1]?.relation || '',
-        ecData[1]?.phone || '',
+        escapeCsvField(child.id),
+        escapeCsvField(decryptedFamilyName),
+        escapeCsvField(decryptedGivenName),
+        escapeCsvField(decryptedFamilyNameKana),
+        escapeCsvField(decryptedGivenNameKana),
+        escapeCsvField(child.nickname || ''),
+        escapeCsvField(formatGender(child.gender)),
+        escapeCsvField(child.birth_date || ''),
+        escapeCsvField(formatEnrollmentStatus(child.enrollment_status)),
+        escapeCsvField(formatEnrollmentType(child.enrollment_type)),
+        escapeCsvField(formatDate(child.enrolled_at)),
+        escapeCsvField(formatDate(child.withdrawn_at)),
+        escapeCsvField(parentName),
+        escapePhoneField(parentPhone),
+        escapeCsvField(parentEmail),
+        escapeCsvField(decryptOrEmpty(child.allergies)),
+        escapeCsvField(decryptOrEmpty(child.child_characteristics)),
+        escapeCsvField(decryptOrEmpty(child.parent_characteristics)),
+        escapeCsvField(formatBoolean(child.photo_permission_public)),
+        escapeCsvField(formatBoolean(child.photo_permission_share)),
+        escapeCsvField(ecData[0]?.name || ''),
+        escapeCsvField(ecData[0]?.relation || ''),
+        escapePhoneField(ecData[0]?.phone || ''),
+        escapeCsvField(ecData[1]?.name || ''),
+        escapeCsvField(ecData[1]?.relation || ''),
+        escapePhoneField(ecData[1]?.phone || ''),
       ];
 
-      csvRows.push(row.map(escapeCsvField).join(','));
+      csvRows.push(row.join(','));
     }
 
     const csv = `\ufeff${csvRows.join('\r\n')}\r\n`;
