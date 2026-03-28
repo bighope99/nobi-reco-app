@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     }>> = new Map();
 
     if (filteredChildIds.length > 0) {
-      const { data: guardianLinksData } = await supabase
+      const { data: guardianLinksData, error: guardianLinksError } = await supabase
         .from('_child_guardian')
         .select(`
           child_id,
@@ -130,6 +130,8 @@ export async function POST(request: NextRequest) {
             id,
             family_name,
             family_name_kana,
+            given_name,
+            given_name_kana,
             phone
           )
         `)
@@ -138,11 +140,18 @@ export async function POST(request: NextRequest) {
         .eq('is_emergency_contact', true)
         .is('deleted_at', null);
 
+      if (guardianLinksError) {
+        console.error('Guardian links search error:', guardianLinksError);
+        return NextResponse.json({ error: 'Failed to load guardian contacts' }, { status: 500 });
+      }
+
       for (const link of guardianLinksData || []) {
         const guardian = link.m_guardians as unknown as {
           id: string;
           family_name: string;
           family_name_kana: string | null;
+          given_name: string;
+          given_name_kana: string | null;
           phone: string;
         } | null;
         if (!guardian) continue;
@@ -150,8 +159,14 @@ export async function POST(request: NextRequest) {
         const childContacts = guardianContactsMap.get(link.child_id) || [];
         childContacts.push({
           guardian_id: guardian.id,
-          name: decryptOrFallback(guardian.family_name) || '',
-          kana: guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
+          name: formatName([
+            decryptOrFallback(guardian.family_name),
+            decryptOrFallback(guardian.given_name),
+          ]) || '',
+          kana: formatName([
+            guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
+            guardian.given_name_kana ? decryptOrFallback(guardian.given_name_kana) : null,
+          ]) || null,
           phone: decryptOrFallback(guardian.phone) || '',
           relation: link.relationship || '',
         });

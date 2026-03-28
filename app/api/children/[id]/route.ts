@@ -19,7 +19,7 @@ interface Guardian {
   family_name: string;
   given_name: string;
   family_name_kana?: string | null;
-  given_name_kana?: string;
+  given_name_kana?: string | undefined | null;
   phone?: string;
   email?: string;
   photo_path?: string | null;
@@ -82,6 +82,7 @@ export async function GET(
             family_name,
             family_name_kana,
             given_name,
+            given_name_kana,
             phone,
             email,
             photo_path
@@ -108,6 +109,7 @@ export async function GET(
         family_name: decryptOrFallback(guardian.family_name),
         family_name_kana: guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
         given_name: decryptOrFallback(guardian.given_name),
+        given_name_kana: guardian.given_name_kana ? decryptOrFallback(guardian.given_name_kana) : null,
         phone: decryptOrFallback(guardian.phone),
         email: decryptOrFallback(guardian.email),
       };
@@ -223,7 +225,12 @@ export async function GET(
                 null
               )
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
-          parent_kana: decryptedPrimaryGuardian?.m_guardians?.family_name_kana || null,
+          parent_kana: decryptedPrimaryGuardian?.m_guardians
+            ? formatName([
+                decryptedPrimaryGuardian.m_guardians.family_name_kana ?? null,
+                decryptedPrimaryGuardian.m_guardians.given_name_kana ?? null,
+              ], null)
+            : null,
           parent_phone: decryptedPrimaryGuardian?.m_guardians?.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians?.email || decryptOrFallback(childData.parent_email) || null,
           parent_relation: decryptedPrimaryGuardian?.relationship || null,
@@ -237,7 +244,10 @@ export async function GET(
                   [ec.m_guardians!.family_name, ec.m_guardians!.given_name],
                   ''
                 ) || '',
-                kana: ec.m_guardians!.family_name_kana || null,
+                kana: formatName([
+                  ec.m_guardians!.family_name_kana ?? null,
+                  ec.m_guardians!.given_name_kana ?? null,
+                ], null) || null,
                 relation: ec.relationship,
                 phone: ec.m_guardians!.phone || '',
                 photo_url: ec.guardian_photo_url ?? null,

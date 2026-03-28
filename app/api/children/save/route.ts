@@ -397,12 +397,24 @@ export async function saveChild(
 
       let emergencyGuardianId: string | null = null;
 
-      // guardian_id が指定されている場合（兄弟から引き継いだ既存保護者）は直接使用
+      // guardian_id が指定されている場合（兄弟から引き継いだ既存保護者）は施設スコープで再検証
       if (emergencyContact.guardian_id) {
-        emergencyGuardianId = emergencyContact.guardian_id;
+        const { data: scopedGuardian, error: scopedGuardianError } = await supabase
+          .from('m_guardians')
+          .select('id')
+          .eq('id', emergencyContact.guardian_id)
+          .eq('facility_id', facilityId)
+          .is('deleted_at', null)
+          .single();
+
+        if (scopedGuardianError || !scopedGuardian) {
+          return null;
+        }
+
+        emergencyGuardianId = scopedGuardian.id;
 
         // 既存保護者レコードを更新
-        await supabase
+        const { error: guardianUpdateError } = await supabase
           .from('m_guardians')
           .update({
             family_name: encryptPII(emergencyGuardianName),
@@ -411,7 +423,13 @@ export async function saveChild(
             phone: encryptPII(normalizedPhone),
             updated_at: new Date().toISOString(),
           })
-          .eq('id', emergencyGuardianId);
+          .eq('id', emergencyGuardianId)
+          .eq('facility_id', facilityId)
+          .is('deleted_at', null);
+
+        if (guardianUpdateError) {
+          return null;
+        }
 
         // 検索用ハッシュテーブルを更新
         const updatePromises = [];
