@@ -77,6 +77,12 @@ import { TodoListSection } from "./components/todo-list-section"
 
 const MENTION_ENABLED = false  // TODO: メンション機能復活時にtrueに変更
 
+const createDefaultTodoItem = (): TodoItem => ({
+  id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+  content: '',
+  completed: false,
+})
+
 interface IndividualRecord {
   observation_id: string
   child_id: string
@@ -332,7 +338,7 @@ export default function ActivityRecordClient() {
   const [meal, setMeal] = useState<Meal | null>(null)
   const [specialNotes, setSpecialNotes] = useState("")
   const [handover, setHandover] = useState("")
-  const [todoItems, setTodoItems] = useState<TodoItem[]>([])
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([createDefaultTodoItem()])
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
@@ -815,7 +821,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
-    setTodoItems([])
+    setTodoItems([createDefaultTodoItem()])
     setLastUpdatedAt(null)
     savedFingerprintRef.current = JSON.stringify({
       activityContent: "",
@@ -1630,7 +1636,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
-    setTodoItems([])
+    setTodoItems([createDefaultTodoItem()])
     savedFingerprintRef.current = JSON.stringify({
       activityContent: "",
       eventName: "",
@@ -1658,7 +1664,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
-    setTodoItems([])
+    setTodoItems([createDefaultTodoItem()])
     // テンプレート選択をリセット
     setSelectedTemplateId("")
     savedFingerprintRef.current = JSON.stringify({

@@ -123,8 +123,7 @@ export async function GET(request: NextRequest) {
       .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .lt('activity_date', date)
-      .not('handover', 'is', null)
-      .neq('handover', '')
+      .or('handover.not.is.null,todo_items.not.is.null')
       .order('activity_date', { ascending: false })
       .order('created_at', { ascending: true })
       .limit(20);
@@ -143,7 +142,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!activities || activities.length === 0) {
+    // handoverが空文字のみの場合も除外（todo_itemsがあれば残す）
+    const validActivities = (activities ?? []).filter(a =>
+      (a.handover !== null && a.handover !== '') ||
+      (a.todo_items !== null && Array.isArray(a.todo_items) && a.todo_items.length > 0)
+    );
+
+    if (validActivities.length === 0) {
       return NextResponse.json({
         success: true,
         data: {
@@ -154,8 +159,8 @@ export async function GET(request: NextRequest) {
     }
 
     // アプリケーション層で最新日付のデータのみ抽出
-    const handover_date = activities[0].activity_date;
-    const latestActivities = activities.filter(a => a.activity_date === handover_date);
+    const handover_date = validActivities[0].activity_date;
+    const latestActivities = validActivities.filter(a => a.activity_date === handover_date);
 
     // 引き継ぎ日以降（引き継ぎ日を含まない）に次の記録があるかチェック
     // class_id指定時は同クラスの記録のみ対象
