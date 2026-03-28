@@ -109,6 +109,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to search children' }, { status: 500 });
     }
 
+    // 各児童の保護者連絡先（is_primary=false）を取得
+    const filteredChildIds = childIds.filter((id) => !child_id || id !== child_id);
+
+    let guardianContactsMap: Map<string, Array<{
+      guardian_id: string;
+      name: string;
+      kana: string | null;
+      phone: string;
+      relation: string;
+    }>> = new Map();
+
+    if (filteredChildIds.length > 0) {
+      const { data: guardianLinksData } = await supabase
+        .from('_child_guardian')
+        .select(`
+          child_id,
+          relationship,
+          m_guardians (
+            id,
+            family_name,
+            family_name_kana,
+            phone
+          )
+        `)
+        .in('child_id', filteredChildIds)
+        .eq('is_primary', false)
+        .eq('is_emergency_contact', true)
+        .is('deleted_at', null);
+
+      for (const link of guardianLinksData || []) {
+        const guardian = link.m_guardians as {
+          id: string;
+          family_name: string;
+          family_name_kana: string | null;
+          phone: string;
+        } | null;
+        if (!guardian) continue;
+
+        const childContacts = guardianContactsMap.get(link.child_id) || [];
+        childContacts.push({
+          guardian_id: guardian.id,
+          name: decryptOrFallback(guardian.family_name) || '',
+          kana: guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
+          phone: decryptOrFallback(guardian.phone) || '',
+          relation: link.relationship || '',
+        });
+        guardianContactsMap.set(link.child_id, childContacts);
+      }
+    }
+
     // フィルタリング（編集モードの場合は本人を除外）
     const candidates = (childrenData || [])
       .filter((child: any) => {
@@ -139,6 +189,7 @@ export async function POST(request: NextRequest) {
         age_group: classInfo?.age_group || '',
         enrollment_status: child.enrollment_status,
         photo_url: child.photo_url,
+        guardian_contacts: guardianContactsMap.get(child.id) || [],
       };
     });
 

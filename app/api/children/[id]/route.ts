@@ -18,7 +18,7 @@ interface Guardian {
   facility_id: string;
   family_name: string;
   given_name: string;
-  family_name_kana?: string;
+  family_name_kana?: string | null;
   given_name_kana?: string;
   phone?: string;
   email?: string;
@@ -80,6 +80,7 @@ export async function GET(
           m_guardians (
             id,
             family_name,
+            family_name_kana,
             given_name,
             phone,
             email,
@@ -105,6 +106,7 @@ export async function GET(
       return {
         ...guardian,
         family_name: decryptOrFallback(guardian.family_name),
+        family_name_kana: guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
         given_name: decryptOrFallback(guardian.given_name),
         phone: decryptOrFallback(guardian.phone),
         email: decryptOrFallback(guardian.email),
@@ -221,17 +223,21 @@ export async function GET(
                 null
               )
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
+          parent_kana: decryptedPrimaryGuardian?.m_guardians?.family_name_kana || null,
           parent_phone: decryptedPrimaryGuardian?.m_guardians?.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians?.email || decryptOrFallback(childData.parent_email) || null,
+          parent_relation: decryptedPrimaryGuardian?.relationship || null,
           parent_photo_url: parentPhotoSignedUrl,
           emergency_contacts: (() => {
             const formattedContacts = decryptedEmergencyContacts
               .filter((ec) => ec.m_guardians !== null)
               .map((ec) => ({
+                guardian_id: ec.m_guardians!.id,
                 name: formatName(
                   [ec.m_guardians!.family_name, ec.m_guardians!.given_name],
                   ''
                 ) || '',
+                kana: ec.m_guardians!.family_name_kana || null,
                 relation: ec.relationship,
                 phone: ec.m_guardians!.phone || '',
                 photo_url: ec.guardian_photo_url ?? null,

@@ -132,9 +132,19 @@ interface ChildFormProps {
   readOnly?: boolean;
 }
 
+// 保護者連絡先エントリの型
+type GuardianContact = {
+  id: number;
+  guardianId?: string;
+  name: string;
+  kana: string;
+  relation: string;
+  phone: string;
+};
+
 export default function ChildForm({ mode, childId, onSuccess, readOnly = false }: ChildFormProps) {
   const isEditMode = mode === 'edit';
-  const MAX_EMERGENCY_CONTACTS = 2;
+  const MAX_GUARDIAN_CONTACTS = 5;
   const contactIdRef = useRef(1);
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
@@ -188,6 +198,8 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
 
     // 連絡先
     parent_name: '',
+    parent_kana: '',
+    parent_relation: '',
     parent_phone: '',
     parent_email: '',
 
@@ -201,8 +213,8 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     photo_permission_share: true,
   });
 
-  const [emergencyContacts, setEmergencyContacts] = useState([
-    { id: 1, name: '', relation: '', phone: '' }
+  const [guardianContacts, setGuardianContacts] = useState<GuardianContact[]>([
+    { id: 1, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }
   ]);
 
   // Fetch classes and schools on mount
@@ -282,6 +294,8 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             withdrawn_at: data.affiliation?.withdrawn_at ? data.affiliation.withdrawn_at.split('T')[0] : '',
             class_id: data.affiliation?.class_id || '',
             parent_name: data.contact?.parent_name || '',
+            parent_kana: data.contact?.parent_kana || '',
+            parent_relation: data.contact?.parent_relation || '',
             parent_phone: data.contact?.parent_phone || '',
             parent_email: data.contact?.parent_email || '',
             allergies: data.care_info?.allergies || '',
@@ -291,19 +305,22 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             photo_permission_share: data.permissions?.photo_permission_share ?? true,
           });
 
-          // 緊急連絡先の初期化（最大2つまで）
+          // 保護者連絡先リストの初期化（最大5つまで）
           if (data.contact?.emergency_contacts && data.contact.emergency_contacts.length > 0) {
-            setEmergencyContacts(
-              data.contact.emergency_contacts.slice(0, MAX_EMERGENCY_CONTACTS).map((ec: any, idx: number) => {
+            const contacts = data.contact.emergency_contacts
+              .slice(0, MAX_GUARDIAN_CONTACTS)
+              .map((ec: any, idx: number) => {
                 contactIdRef.current = idx + 1;
                 return {
                   id: idx + 1,
+                  guardianId: ec.guardian_id || undefined,
                   name: ec.name || '',
+                  kana: ec.kana || '',
                   relation: ec.relation || '',
                   phone: ec.phone || '',
                 };
-              })
-            );
+              });
+            setGuardianContacts(contacts);
           }
 
           // 保護者写真URLのセット
@@ -423,6 +440,36 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             status: candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済',
             image: candidate.photo_url || 'https://i.pravatar.cc/150?u=default'
           });
+
+          // 兄弟の保護者連絡先リストを guardianContacts に自動セット
+          const allGuardianContacts: GuardianContact[] = [];
+          for (const sibling of result.data.candidates) {
+            if (sibling.guardian_contacts) {
+              for (const gc of sibling.guardian_contacts) {
+                if (!allGuardianContacts.some(c => c.guardianId === gc.guardian_id)) {
+                  allGuardianContacts.push({
+                    id: Date.now() + allGuardianContacts.length,
+                    guardianId: gc.guardian_id,
+                    name: gc.name,
+                    kana: gc.kana || '',
+                    relation: gc.relation,
+                    phone: gc.phone,
+                  });
+                }
+              }
+            }
+          }
+          if (allGuardianContacts.length > 0) {
+            setGuardianContacts(prev => {
+              const nonEmpty = prev.filter(c => c.name || c.phone);
+              const merged = [...allGuardianContacts, ...nonEmpty]
+                .slice(0, MAX_GUARDIAN_CONTACTS)
+                .map((c, idx) => ({ ...c, id: idx + 1 }));
+              return merged.length > 0
+                ? merged
+                : [{ id: 1, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }];
+            });
+          }
         } else {
           setSiblingResult(null);
         }
@@ -476,15 +523,22 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     setPhotoPreviewUrl(objectUrl);
   };
 
-  const addEmergencyContact = () => {
-    if (emergencyContacts.length >= MAX_EMERGENCY_CONTACTS) return;
+  const addGuardianContact = () => {
+    if (guardianContacts.length >= MAX_GUARDIAN_CONTACTS) return;
     contactIdRef.current += 1;
-    setEmergencyContacts([...emergencyContacts, { id: contactIdRef.current, name: '', relation: '', phone: '' }]);
+    setGuardianContacts([...guardianContacts, { id: contactIdRef.current, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }]);
     setIsDirty(true);
   };
 
-  const removeEmergencyContact = (id: number) => {
-    setEmergencyContacts(emergencyContacts.filter(c => c.id !== id));
+  const updateGuardianContact = (index: number, field: keyof GuardianContact, value: string) => {
+    const updated = [...guardianContacts];
+    (updated[index] as any)[field] = value;
+    setGuardianContacts(updated);
+    setIsDirty(true);
+  };
+
+  const removeGuardianContact = (id: number) => {
+    setGuardianContacts(guardianContacts.filter(c => c.id !== id));
     setIsDirty(true);
   };
 
@@ -558,9 +612,19 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
         },
         contact: {
           parent_name: formData.parent_name,
+          parent_kana: formData.parent_kana,
+          parent_relation: formData.parent_relation,
           parent_phone: formData.parent_phone,
           parent_email: formData.parent_email,
-          emergency_contacts: emergencyContacts.filter(c => c.name && c.phone),
+          emergency_contacts: guardianContacts
+            .filter(c => c.name || c.phone)
+            .map(c => ({
+              guardian_id: c.guardianId,
+              name: c.name,
+              kana: c.kana,
+              relation: c.relation,
+              phone: c.phone,
+            })),
         },
         care_info: {
           allergies: formData.allergies,
@@ -920,6 +984,20 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         onChange={(e: any) => updateFormData({ parent_name: e.target.value })}
                       />
                     </FieldGroup>
+                    <FieldGroup label="保護者ふりがな">
+                      <Input
+                        placeholder="さとう たろう（不明の場合は空白）"
+                        value={formData.parent_kana}
+                        onChange={(e: any) => updateFormData({ parent_kana: e.target.value })}
+                      />
+                    </FieldGroup>
+                    <FieldGroup label="続柄">
+                      <Input
+                        placeholder="例: 母、父、祖母など"
+                        value={formData.parent_relation}
+                        onChange={(e: any) => updateFormData({ parent_relation: e.target.value })}
+                      />
+                    </FieldGroup>
                     <FieldGroup label="メールアドレス">
                       <Input
                         icon={Mail}
@@ -1006,85 +1084,87 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                   )}
                 </div>
 
-                {/* 緊急連絡先リスト */}
+                {/* 保護者連絡先リスト */}
                 <div className="space-y-4">
                   <div className="border-b border-slate-100 pb-2">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-800">緊急連絡先リスト（優先順）</h3>
-                      {emergencyContacts.length < MAX_EMERGENCY_CONTACTS && (
-                        <button type="button" onClick={addEmergencyContact} className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800">
-                          <Plus size={14} /> 追加する
-                        </button>
-                      )}
+                      <h3 className="text-sm font-bold text-slate-800">保護者連絡先リスト（優先順）</h3>
+                      <button
+                        type="button"
+                        onClick={addGuardianContact}
+                        disabled={!formData.parent_name || !formData.parent_phone || guardianContacts.length >= MAX_GUARDIAN_CONTACTS}
+                        className="text-xs flex items-center gap-1 text-indigo-600 font-medium hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Plus size={14} /> 追加する
+                      </button>
                     </div>
                     <p className="text-xs text-slate-500 mt-1.5">
-                      上記の保護者に連絡がつかない場合の連絡先を登録します（最大2件）
+                      筆頭保護者以外の連絡先を登録します（最大5件）。筆頭保護者の氏名と電話番号を入力後に追加できます。
                     </p>
                   </div>
 
-                  {emergencyContacts.map((contact, index) => (
-                    <div key={contact.id} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-slate-50/50 p-3 rounded-lg group hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200">
-                      <span className="bg-slate-200 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
-                        {index + 1}
-                      </span>
-                      {emergencyPhotoUrls[index] ? (
+                  {guardianContacts.map((contact, index) => (
+                    <div key={contact.id} className="flex flex-col gap-2 bg-slate-50/50 p-3 rounded-lg group hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-slate-200 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                          {index + 1}
+                        </span>
+                        {emergencyPhotoUrls[index] ? (
+                          <button
+                            type="button"
+                            onClick={() => setZoomPhotoUrl(emergencyPhotoUrls[index]!)}
+                            className="cursor-zoom-in shrink-0"
+                          >
+                            <img
+                              src={emergencyPhotoUrls[index]!}
+                              alt={contact.name}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          </button>
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                            <User size={14} className="text-slate-400" />
+                          </div>
+                        )}
                         <button
                           type="button"
-                          onClick={() => setZoomPhotoUrl(emergencyPhotoUrls[index]!)}
-                          className="cursor-zoom-in shrink-0"
+                          onClick={() => removeGuardianContact(contact.id)}
+                          className="ml-auto text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="削除"
                         >
-                          <img
-                            src={emergencyPhotoUrls[index]!}
-                            alt={contact.name}
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
+                          <Trash2 size={16} />
                         </button>
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                          <User size={14} className="text-slate-400" />
-                        </div>
-                      )}
-                      <Input
-                        placeholder="氏名"
-                        className="h-9 py-1"
-                        value={contact.name}
-                        onChange={(e: any) => {
-                          const updated = [...emergencyContacts];
-                          updated[index].name = e.target.value;
-                          setEmergencyContacts(updated);
-                          setIsDirty(true);
-                        }}
-                      />
-                      <Input
-                        placeholder="続柄"
-                        className="h-9 py-1 sm:w-24"
-                        value={contact.relation}
-                        onChange={(e: any) => {
-                          const updated = [...emergencyContacts];
-                          updated[index].relation = e.target.value;
-                          setEmergencyContacts(updated);
-                          setIsDirty(true);
-                        }}
-                      />
-                      <Input
-                        placeholder="電話番号"
-                        className="h-9 py-1"
-                        value={contact.phone}
-                        onChange={(e: any) => {
-                          const updated = [...emergencyContacts];
-                          updated[index].phone = e.target.value;
-                          setEmergencyContacts(updated);
-                          setIsDirty(true);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeEmergencyContact(contact.id)}
-                        className="text-slate-400 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="削除"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Input
+                          placeholder="氏名"
+                          className="h-9 py-1"
+                          value={contact.name}
+                          onChange={(e: any) => updateGuardianContact(index, 'name', e.target.value)}
+                          disabled={readOnly}
+                        />
+                        <Input
+                          placeholder="ふりがな（不明の場合は空白）"
+                          className="h-9 py-1"
+                          value={contact.kana}
+                          onChange={(e: any) => updateGuardianContact(index, 'kana', e.target.value)}
+                          disabled={readOnly}
+                        />
+                        <Input
+                          placeholder="続柄（例: 母、叔母など）"
+                          className="h-9 py-1 sm:w-32"
+                          value={contact.relation}
+                          onChange={(e: any) => updateGuardianContact(index, 'relation', e.target.value)}
+                          disabled={readOnly}
+                        />
+                        <Input
+                          placeholder="電話番号"
+                          className="h-9 py-1"
+                          value={contact.phone}
+                          onChange={(e: any) => updateGuardianContact(index, 'phone', e.target.value)}
+                          disabled={readOnly}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
