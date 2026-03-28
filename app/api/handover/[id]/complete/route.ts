@@ -130,18 +130,27 @@ export async function PATCH(
         item.id === todo_item_id ? { ...item, completed } : item
       );
 
-      const { error: updateError } = await supabase
+      const { data: updated, error: updateError } = await supabase
         .from('r_activity')
         .update({ todo_items: updatedTodoItems })
         .eq('id', id)
         .eq('facility_id', facility_id)
-        .is('deleted_at', null);
+        .eq('todo_items', JSON.stringify(currentTodoItems))
+        .is('deleted_at', null)
+        .select('id');
 
       if (updateError) {
         console.error('Failed to update todo item:', updateError);
         return NextResponse.json(
           { success: false, error: 'Failed to update todo item' },
           { status: 500 }
+        );
+      }
+
+      if (!updated || updated.length === 0) {
+        return NextResponse.json(
+          { success: false, error: '更新に失敗しました。再試行してください' },
+          { status: 409 }
         );
       }
 

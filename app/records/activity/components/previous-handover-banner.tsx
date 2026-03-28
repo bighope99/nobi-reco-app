@@ -25,6 +25,7 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
   const [items, setItems] = useState<HandoverItem[]>([])
   const [loading, setLoading] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [pendingTodoIds, setPendingTodoIds] = useState<Set<string>>(new Set())
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -90,6 +91,24 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
   }, [activityDate, selectedClass])
 
   const toggleTodoItem = useCallback(async (activityId: string, todoItemId: string, completed: boolean) => {
+    if (pendingTodoIds.has(todoItemId)) return
+
+    setPendingTodoIds(prev => new Set(prev).add(todoItemId))
+
+    // オプティミスティック更新
+    setItems(prev =>
+      prev.map(item =>
+        item.activity_id === activityId
+          ? {
+              ...item,
+              todo_items: (item.todo_items ?? []).map(t =>
+                t.id === todoItemId ? { ...t, completed } : t
+              ),
+            }
+          : item
+      )
+    )
+
     try {
       const res = await fetch(`/api/handover/${activityId}/complete`, {
         method: 'PATCH',
@@ -97,22 +116,30 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
         body: JSON.stringify({ completed, todo_item_id: todoItemId }),
       })
       if (!res.ok) throw new Error('更新に失敗しました')
+    } catch (err) {
+      console.error('ToDo更新エラー:', err)
+      // ロールバック
       setItems(prev =>
         prev.map(item =>
           item.activity_id === activityId
             ? {
                 ...item,
                 todo_items: (item.todo_items ?? []).map(t =>
-                  t.id === todoItemId ? { ...t, completed } : t
+                  t.id === todoItemId ? { ...t, completed: !completed } : t
                 ),
               }
             : item
         )
       )
-    } catch (err) {
-      console.error('ToDo更新エラー:', err)
+      window.alert('ToDoの更新に失敗しました。もう一度試してください。')
+    } finally {
+      setPendingTodoIds(prev => {
+        const next = new Set(prev)
+        next.delete(todoItemId)
+        return next
+      })
     }
-  }, [])
+  }, [pendingTodoIds])
 
   const handleToggleComplete = useCallback(async (activityId: string, currentCompleted: boolean) => {
     setTogglingId(activityId)
@@ -203,7 +230,8 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
                           type="checkbox"
                           checked={todo.completed}
                           onChange={e => toggleTodoItem(item.activity_id, todo.id, e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          disabled={pendingTodoIds.has(todo.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                           aria-label={todo.content}
                         />
                         <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
