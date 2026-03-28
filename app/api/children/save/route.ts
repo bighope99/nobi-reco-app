@@ -37,6 +37,7 @@ export interface ChildPayload {
   };
   contact?: {
     parent_name?: string;           // 保護者名（追加）
+    parent_name_kana?: string;      // 保護者ふりがな
     parent_phone?: string;
     parent_email?: string;
     emergency_contacts?: Array<{    // 緊急連絡先リスト（追加）
@@ -279,40 +280,54 @@ export async function saveChild(
         if (entityIds.length > 0) {
           const { data: existingGuardians } = await supabase
             .from('m_guardians')
-            .select('id')
+            .select('id, family_name_kana')
             .eq('facility_id', facilityId)
             .in('id', entityIds)
             .is('deleted_at', null)
             .limit(1);
-          
+
           if (existingGuardians && existingGuardians.length > 0) {
             guardianId = existingGuardians[0].id;
-            
+
+            // 既存のkanaが空の場合のみ更新（上書きしない）
+            const existingKanaValue = decryptOrFallback(existingGuardians[0].family_name_kana);
+            const incomingKana = contact?.parent_name_kana?.trim() || null;
+            const kanaToSave = !existingKanaValue && incomingKana ? encryptPII(incomingKana) : undefined;
+
             // 既存の保護者情報を更新（名前が変更されている可能性があるため）
             // PIIフィールドを暗号化
+            const updateFields: Record<string, unknown> = {
+              family_name: encryptPII(guardianName),
+              given_name: '',
+              phone: encryptPII(normalizedPhone),
+              email: encryptPII(contact?.parent_email || null),
+              updated_at: new Date().toISOString(),
+            };
+            if (kanaToSave !== undefined) {
+              updateFields.family_name_kana = kanaToSave;
+            }
             await supabase
               .from('m_guardians')
-              .update({
-                family_name: encryptPII(guardianName),
-                given_name: '',
-                phone: encryptPII(normalizedPhone),
-                email: encryptPII(contact?.parent_email || null),
-                updated_at: new Date().toISOString(),
-              })
+              .update(updateFields)
               .eq('id', guardianId);
 
             // 検索用ハッシュテーブルを更新
-            await Promise.all([
+            const searchUpdatePromises: Promise<unknown>[] = [
               updateSearchIndex(supabase, 'guardian', guardianId!, 'phone', normalizedPhone),
               updateSearchIndex(supabase, 'guardian', guardianId!, 'email', contact.parent_email || null),
               updateSearchIndex(supabase, 'guardian', guardianId!, 'name', guardianName),
-            ]);
+            ];
+            if (kanaToSave !== undefined && incomingKana) {
+              searchUpdatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'name_kana', incomingKana));
+            }
+            await Promise.all(searchUpdatePromises);
           }
         }
       }
 
       // 既存の保護者が見つからなかった場合は新規作成
       if (!guardianId) {
+        const newKana = contact.parent_name_kana?.trim() || null;
         // PIIフィールドを暗号化
         const { data: guardianData, error: guardianError } = await supabase
           .from('m_guardians')
@@ -320,6 +335,7 @@ export async function saveChild(
             facility_id: facilityId,
             family_name: encryptPII(guardianName),
             given_name: '',
+            family_name_kana: newKana ? encryptPII(newKana) : null,
             phone: encryptPII(normalizedPhone),
             email: encryptPII(contact.parent_email || null),
           })
@@ -333,7 +349,7 @@ export async function saveChild(
           guardianId = guardianData.id;
 
           // 検索用ハッシュテーブルを更新
-          const updatePromises = [];
+          const updatePromises: Promise<unknown>[] = [];
           if (normalizedPhone) {
             updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'phone', normalizedPhone));
           }
@@ -342,6 +358,9 @@ export async function saveChild(
           }
           if (guardianName) {
             updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'name', guardianName));
+          }
+          if (newKana) {
+            updatePromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'name_kana', newKana));
           }
           if (updatePromises.length > 0) {
             await Promise.all(updatePromises);

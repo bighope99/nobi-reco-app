@@ -42,6 +42,7 @@ const headerLabels = {
   enrolled_at: '入所日',
   withdrawn_at: '退所日',
   parent_name: '保護者氏名',
+  parent_name_kana: '保護者ふりがな',
   parent_phone: '保護者電話',
   parent_email: '保護者メール',
   allergies: 'アレルギー',
@@ -147,6 +148,7 @@ export function buildChildPayload(
     },
     contact: {
       parent_name: parentName || undefined,
+      parent_name_kana: row['保護者ふりがな'] ?? '',
       parent_phone: parentPhone,
       parent_email: getValue(row, headerLabels.parent_email),
       emergency_contacts: emergencyContacts.length > 0 ? emergencyContacts : undefined,

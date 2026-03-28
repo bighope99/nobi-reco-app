@@ -20,6 +20,7 @@ interface Guardian {
   given_name: string;
   family_name_kana?: string;
   given_name_kana?: string;
+  photo_path?: string | null;
   phone?: string;
   email?: string;
   created_at: string;
@@ -80,6 +81,8 @@ export async function GET(
             id,
             family_name,
             given_name,
+            family_name_kana,
+            photo_path,
             phone,
             email
           )
@@ -104,6 +107,7 @@ export async function GET(
         ...guardian,
         family_name: decryptOrFallback(guardian.family_name),
         given_name: decryptOrFallback(guardian.given_name),
+        family_name_kana: decryptOrFallback(guardian.family_name_kana),
         phone: decryptOrFallback(guardian.phone),
         email: decryptOrFallback(guardian.email),
       };
@@ -148,6 +152,34 @@ export async function GET(
       ...ec,
       m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
     }));
+
+    // 全保護者一覧（写真URL付き）
+    const allGuardians = await Promise.all(
+      guardians.map(async (g: GuardianRelation) => {
+        const decrypted = g.m_guardians ? decryptGuardian(g.m_guardians) : null;
+        let photo_url: string | null = null;
+        if (g.m_guardians?.photo_path) {
+          try {
+            const { data: signedUrl } = await supabase.storage
+              .from('guardian-photos')
+              .createSignedUrl(g.m_guardians.photo_path, 3600);
+            photo_url = signedUrl?.signedUrl ?? null;
+          } catch {
+            // 署名URL生成失敗は無視
+          }
+        }
+        return {
+          guardian_id: decrypted?.id ?? null,
+          name: decrypted?.family_name ?? null,
+          kana: decrypted?.family_name_kana ?? null,
+          phone: decrypted?.phone ?? null,
+          relationship: g.relationship ?? null,
+          is_primary: g.is_primary,
+          is_emergency_contact: g.is_emergency_contact,
+          photo_url,
+        };
+      })
+    );
 
     // データ整形
     const response = {
@@ -220,6 +252,7 @@ export async function GET(
             relationship: s.relationship,
           };
         }),
+        guardians: allGuardians,
         created_at: childData.created_at,
         updated_at: childData.updated_at,
       },

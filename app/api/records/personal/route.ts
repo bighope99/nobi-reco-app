@@ -4,6 +4,8 @@ import { isValidUUID } from '@/lib/utils/validation';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
+import { searchByName } from '@/utils/pii/searchIndex';
+import { toKatakana, toHiragana } from '@/lib/utils/kana';
 
 // Date parameter validation helper
 const isValidDateParam = (v: string): boolean => {
@@ -77,73 +79,59 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // child_name フィルター: 他フィルターで絞り込んでから復号後に部分一致検索
+    // child_name フィルター: s_pii_search_index 経由の検索（漢字名・カナ名）
     let nameFilterChildIds: string[] | null = null;
     if (child_name) {
-      let nameSearchQuery = supabase
+      const [nameIds, kanaKataIds, kanaHiraIds] = await Promise.all([
+        searchByName(supabase, 'child', 'name', child_name),
+        searchByName(supabase, 'child', 'name_kana', toKatakana(child_name)),
+        searchByName(supabase, 'child', 'name_kana', toHiragana(child_name)),
+      ]);
+
+      // nickname は平文なので直接 ilike 検索
+      const { data: nicknameMatches } = await supabase
         .from('m_children')
-        .select('id, family_name, given_name, family_name_kana, given_name_kana, nickname')
+        .select('id')
         .eq('facility_id', facility_id)
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .ilike('nickname', `%${child_name}%`);
+      const nicknameIds = (nicknameMatches ?? []).map((c: { id: string }) => c.id);
 
-      // class_id フィルターが既に適用済みの場合、その child_id リストに絞り込む
-      if (classFilterChildIds !== null) {
-        nameSearchQuery = nameSearchQuery.in('id', classFilterChildIds);
-      }
-      // child_id 直接指定がある場合も絞り込む
-      if (child_id_param) {
-        nameSearchQuery = nameSearchQuery.eq('id', child_id_param);
-      }
-
-      const { data: allChildrenForName } = await nameSearchQuery;
-
-      const searchLower = child_name.toLowerCase();
-      nameFilterChildIds = (allChildrenForName ?? [])
-        .filter((c) => {
-          const familyName = decryptOrFallback(c.family_name) ?? '';
-          const givenName = decryptOrFallback(c.given_name) ?? '';
-          const familyNameKana = decryptOrFallback(c.family_name_kana) ?? '';
-          const givenNameKana = decryptOrFallback(c.given_name_kana) ?? '';
-          const nickname = c.nickname ?? '';
-
-          const fullName = `${familyName}${givenName}`.toLowerCase();
-          const fullNameKana = `${familyNameKana}${givenNameKana}`.toLowerCase();
-          const fullNameWithSpace = `${familyName} ${givenName}`.toLowerCase();
-          const fullNameKanaWithSpace = `${familyNameKana} ${givenNameKana}`.toLowerCase();
-
-          return (
-            fullName.includes(searchLower) ||
-            fullNameWithSpace.includes(searchLower) ||
-            familyName.toLowerCase().includes(searchLower) ||
-            givenName.toLowerCase().includes(searchLower) ||
-            fullNameKana.includes(searchLower) ||
-            fullNameKanaWithSpace.includes(searchLower) ||
-            familyNameKana.toLowerCase().includes(searchLower) ||
-            givenNameKana.toLowerCase().includes(searchLower) ||
-            nickname.toLowerCase().includes(searchLower)
-          );
-        })
-        .map((c) => c.id);
+      // 全検索結果をマージ（重複排除）
+      const merged = new Set([...nameIds, ...kanaKataIds, ...kanaHiraIds, ...nicknameIds]);
+      nameFilterChildIds = [...merged];
 
       if (nameFilterChildIds.length === 0) {
         return NextResponse.json({ success: true, data: { observations: [], total: 0, has_more: false } });
       }
     }
 
-    // grade フィルター: 施設の全児童から学年一致する child_id リストを取得
+    // grade フィルター: DB関数 children_by_grade を使用（フォールバック: TS計算）
     let gradeFilterChildIds: string[] | null = null;
     if (grade) {
       const gradeNum = parseInt(grade, 10);
       if (!Number.isNaN(gradeNum)) {
-        const { data: allChildren } = await supabase
-          .from('m_children')
-          .select('id, birth_date, grade_add')
-          .eq('facility_id', facility_id)
-          .is('deleted_at', null);
-        gradeFilterChildIds = (allChildren ?? [])
-          .filter((c) => calculateGrade(c.birth_date, c.grade_add) === gradeNum)
-          .map((c) => c.id);
-        if (gradeFilterChildIds.length === 0) {
+        const { data: gradeChildren, error: gradeError } = await supabase
+          .rpc('children_by_grade', { p_facility_id: facility_id, p_grade: gradeNum });
+
+        if (gradeError) {
+          console.error('children_by_grade RPC error:', gradeError);
+          // フォールバック: 従来のTS計算に戻す
+          const { data: allChildren } = await supabase
+            .from('m_children')
+            .select('id, birth_date, grade_add')
+            .eq('facility_id', facility_id)
+            .is('deleted_at', null);
+          gradeFilterChildIds = (allChildren ?? [])
+            .filter((c: { id: string; birth_date: string; grade_add: number | null }) =>
+              calculateGrade(c.birth_date, c.grade_add) === gradeNum
+            )
+            .map((c: { id: string }) => c.id);
+        } else {
+          gradeFilterChildIds = (gradeChildren ?? []) as string[];
+        }
+
+        if ((gradeFilterChildIds ?? []).length === 0) {
           return NextResponse.json({ success: true, data: { observations: [], total: 0, has_more: false } });
         }
       }

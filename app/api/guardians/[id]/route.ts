@@ -172,7 +172,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, kana, phone, notes, photo_path } = body;
+    const { name, kana, phone, notes, photo_path, relationship, child_id } = body;
 
     if (name !== undefined && !name?.trim()) {
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
@@ -232,6 +232,25 @@ export async function PATCH(
     if (updateError) {
       console.error('Guardian update error:', updateError.message);
       return NextResponse.json({ error: '保護者の更新に失敗しました' }, { status: 500 });
+    }
+
+    // relationship が指定された場合、_child_guardian テーブルを更新
+    if (relationship !== undefined) {
+      let updateQuery = supabase
+        .from('_child_guardian')
+        .update({ relationship })
+        .eq('guardian_id', id);
+
+      // child_id が指定された場合は特定の紐づきのみ更新
+      if (child_id) {
+        updateQuery = updateQuery.eq('child_id', child_id);
+      }
+
+      const { error: relError } = await updateQuery;
+      if (relError) {
+        console.error('Failed to update relationship:', relError);
+        // エラーは致命的ではないので続行（保護者本体の更新は成功している）
+      }
     }
 
     // UPDATE成功後、旧写真をStorageから削除（best-effort: 失敗はログのみ）

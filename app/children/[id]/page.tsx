@@ -1,12 +1,24 @@
 "use client"
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useCallback, use } from 'react'
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { Edit, FileText, BarChart3 } from "lucide-react"
+import { Edit, BarChart3 } from "lucide-react"
+import { AddGuardianModal } from '@/components/children/AddGuardianModal'
+
+interface GuardianInfo {
+  guardian_id: string
+  name: string | null
+  kana: string | null
+  phone: string | null
+  relationship: string | null
+  is_primary: boolean
+  is_emergency_contact: boolean
+  photo_url: string | null
+}
 
 interface ChildSummary {
   child_info: {
@@ -54,6 +66,25 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
   const [summary, setSummary] = useState<ChildSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [guardians, setGuardians] = useState<GuardianInfo[]>([])
+  const [guardianLoading, setGuardianLoading] = useState(true)
+  const [showAddGuardian, setShowAddGuardian] = useState(false)
+  const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null)
+
+  const fetchGuardians = useCallback(async () => {
+    try {
+      setGuardianLoading(true)
+      const res = await fetch(`/api/children/${id}`)
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setGuardians(data.data.guardians ?? [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch guardians:', err)
+    } finally {
+      setGuardianLoading(false)
+    }
+  }, [id])
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -80,7 +111,8 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
     }
 
     fetchSummary()
-  }, [id])
+    fetchGuardians()
+  }, [id, fetchGuardians])
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -225,7 +257,81 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
             )}
           </CardContent>
         </Card>
+
+        {/* 保護者情報 */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>保護者情報</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => setShowAddGuardian(true)}>
+                + 保護者を追加
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {guardianLoading ? (
+              <p className="text-center text-muted-foreground py-4">読み込み中...</p>
+            ) : guardians.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">保護者が登録されていません</p>
+            ) : (
+              <div className="space-y-3">
+                {guardians.map((g) => (
+                  <div key={g.guardian_id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+                    {/* 写真 */}
+                    <div
+                      className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer"
+                      onClick={() => g.photo_url && setZoomPhotoUrl(g.photo_url)}
+                    >
+                      {g.photo_url ? (
+                        <img src={g.photo_url} alt={g.name ?? ''} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-slate-400 text-xs">写真なし</span>
+                      )}
+                    </div>
+                    {/* 情報 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{g.name ?? '氏名未設定'}</span>
+                        {g.relationship && (
+                          <Badge variant="outline" className="text-xs">{g.relationship}</Badge>
+                        )}
+                        {g.is_primary && (
+                          <Badge className="text-xs bg-indigo-100 text-indigo-700">主連絡先</Badge>
+                        )}
+                      </div>
+                      {g.kana && <p className="text-xs text-muted-foreground mt-0.5">{g.kana}</p>}
+                      {g.phone && <p className="text-sm text-muted-foreground mt-0.5">{g.phone}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* 写真ズームモーダル */}
+      {zoomPhotoUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setZoomPhotoUrl(null)}
+        >
+          <img
+            src={zoomPhotoUrl}
+            alt="保護者写真"
+            className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* 保護者追加モーダル */}
+      <AddGuardianModal
+        childId={id}
+        open={showAddGuardian}
+        onClose={() => setShowAddGuardian(false)}
+        onSuccess={() => { setShowAddGuardian(false); fetchGuardians() }}
+      />
     </StaffLayout>
   )
 }

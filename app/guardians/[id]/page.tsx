@@ -325,7 +325,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         const res = await fetch(`/api/guardians/${id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ ...body, relationship }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -468,19 +468,22 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
             <FieldGroup label="電話番号">
               <TextInput value={phone} onChange={v => { setPhone(v); markDirty(); }} placeholder="例: 090-1234-5678" icon={Phone} />
             </FieldGroup>
-            <FieldGroup label="続柄" required>
-              <select
-                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+            <FieldGroup label="続柄">
+              <input
+                list="relationship-options"
+                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5"
                 value={relationship ?? ''}
                 onChange={e => { setRelationship(e.target.value); markDirty(); }}
-                disabled={!isNew}
-              >
-                <option value="母">母</option>
-                <option value="父">父</option>
-                <option value="祖母">祖母</option>
-                <option value="祖父">祖父</option>
-                <option value="その他">その他</option>
-              </select>
+                placeholder="例: 母、父、祖母（自由入力可）"
+                maxLength={50}
+              />
+              <datalist id="relationship-options">
+                <option value="母" />
+                <option value="父" />
+                <option value="祖母" />
+                <option value="祖父" />
+                <option value="その他" />
+              </datalist>
             </FieldGroup>
           </div>
 
