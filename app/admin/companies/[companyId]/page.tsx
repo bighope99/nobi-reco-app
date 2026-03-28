@@ -385,12 +385,12 @@ export default function CompanyDetailPage(props: {
                         </td>
                         <td className="px-6 py-4 min-w-[120px]">
                           <span className="text-sm text-slate-600">
-                            {account.facilities.length > 0
-                              ? [...account.facilities]
-                                  .sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0))
-                                  .map((f) => f.facility_name)
-                                  .join(", ")
-                              : "-"}
+                            {(() => {
+                              const sorted = [...account.facilities].sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0))
+                              if (sorted.length === 0) return "-"
+                              if (sorted.length === 1) return sorted[0].facility_name
+                              return `${sorted[0].facility_name}..他${sorted.length - 1}施設`
+                            })()}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
