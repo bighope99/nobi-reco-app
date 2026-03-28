@@ -85,7 +85,7 @@ describe('GET /api/admin/companies/[companyId]', () => {
       from: jest.fn(() => companyQuery),
     };
 
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockSupabase as any);
 
     const request = new NextRequest('http://localhost/api/admin/companies/company-1');
     const response = await GET(request, createParams('company-1'));
@@ -184,8 +184,14 @@ describe('GET /api/admin/companies/[companyId]', () => {
       }),
     };
 
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
     mockedCreateAdminClient.mockResolvedValue({
+      from: jest.fn((table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1 && table === 'm_companies') return companyQuery;
+        if (fromCallCount === 2 && table === 'm_facilities') return facilitiesQuery;
+        if (fromCallCount === 3 && table === 'm_users') return accountsQuery;
+        throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
+      }),
       auth: {
         admin: {
           listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
