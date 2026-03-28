@@ -231,6 +231,7 @@ describe('/api/handover GET', () => {
         handover_completed: false,
         class_name: 'ひまわり組',
         created_by_name: '山田太郎',
+        todo_items: null,
       });
     });
 
