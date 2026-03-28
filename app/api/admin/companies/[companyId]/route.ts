@@ -44,10 +44,10 @@ export async function GET(
       );
     }
 
-    const supabase = await createClient();
+    const supabaseAdmin = await createAdminClient();
 
     // 会社情報を取得
-    const { data: company, error: companyError } = await supabase
+    const { data: company, error: companyError } = await supabaseAdmin
       .from('m_companies')
       .select(`
         id,
@@ -78,7 +78,7 @@ export async function GET(
     // 施設一覧とアカウント一覧を並列取得
     const [facilitiesResult, accountsResult] = await Promise.all([
       // 施設一覧
-      supabase
+      supabaseAdmin
         .from('m_facilities')
         .select(
           'id, name, name_kana, postal_code, address, phone, capacity, is_active'
@@ -88,7 +88,7 @@ export async function GET(
         .order('name'),
 
       // アカウント一覧（company_admin + facility_admin + staff）
-      supabase
+      supabaseAdmin
         .from('m_users')
         .select(
           `
@@ -114,7 +114,6 @@ export async function GET(
     }
 
     // Auth ユーザーのメール確認状態を一括取得
-    const supabaseAdmin = await createAdminClient();
     const userIds = (accountsResult.data || []).map((u) => u.id);
     const emailConfirmedMap = new Map<string, boolean>();
     if (userIds.length > 0) {
