@@ -235,6 +235,8 @@ export async function PATCH(
     }
 
     // relationship が指定された場合、_child_guardian テーブルを更新
+    // NOTE: child_id を省略した場合、この guardian に紐づく全ての子どもの relationship が
+    // 一括更新される。子どもごとに異なる続柄を使い分ける場合は child_id を指定すること。
     if (relationship !== undefined) {
       let updateQuery = supabase
         .from('_child_guardian')

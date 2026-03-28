@@ -34,7 +34,7 @@ export function AddGuardianModal({ childId, open, onClose, onSuccess }: AddGuard
       const res = await fetch('/api/guardians', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), kana: kana.trim(), phone: phone.trim(), relationship: relationship.trim(), child_id: childId }),
+        body: JSON.stringify({ name: name.trim(), kana: kana.trim(), phone: phone.trim(), relationship: relationship.trim() || '保護者', child_id: childId }),
       })
       const data = await res.json()
       if (!res.ok) {
