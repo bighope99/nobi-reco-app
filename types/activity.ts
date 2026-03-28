@@ -52,6 +52,25 @@ export interface RoleAssignment {
 }
 
 /**
+ * 明日やることリストのアイテム
+ *
+ * @example
+ * {
+ *   id: "550e8400-e29b-41d4-a716-446655440000",
+ *   content: "明日の朝の会の準備",
+ *   completed: false
+ * }
+ */
+export interface TodoItem {
+  /** アイテムID */
+  id: string;
+  /** 内容 */
+  content: string;
+  /** 完了フラグ */
+  completed: boolean;
+}
+
+/**
  * ごはん情報
  *
  * @example
@@ -108,6 +127,8 @@ export interface ActivityRecord {
   handover?: string | null;
   /** ごはん情報 */
   meal?: Meal | null;
+  /** 明日やることリスト */
+  todo_items?: TodoItem[] | null;
 
   /** 作成者ID */
   created_by: string;

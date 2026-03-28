@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import type { TodoItem } from '@/types/activity';
 
 /**
  * PATCH /api/handover/[id]/complete
@@ -61,7 +62,7 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    const { completed } = body as { completed?: unknown };
+    const { completed, todo_item_id } = body as { completed?: unknown; todo_item_id?: unknown };
 
     if (typeof completed !== 'boolean') {
       return NextResponse.json(
@@ -70,10 +71,17 @@ export async function PATCH(
       );
     }
 
-    // 対象の保育日誌が存在し、引き継ぎがあり、同じ施設であることを確認
+    if (todo_item_id !== undefined && typeof todo_item_id !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'todo_item_id must be a string' },
+        { status: 400 }
+      );
+    }
+
+    // 対象の保育日誌が存在し、同じ施設であることを確認
     const { data: activity, error: fetchError } = await supabase
       .from('r_activity')
-      .select('id, facility_id, handover')
+      .select('id, facility_id, handover, todo_items')
       .eq('id', id)
       .eq('facility_id', facility_id)
       .is('deleted_at', null)
@@ -100,6 +108,54 @@ export async function PATCH(
       );
     }
 
+    // todo_item_id が指定された場合: ToDoアイテムの completed フラグを更新
+    if (todo_item_id) {
+      const currentTodoItems = activity.todo_items as TodoItem[] | null;
+      if (!Array.isArray(currentTodoItems)) {
+        return NextResponse.json(
+          { success: false, error: 'This activity has no todo items' },
+          { status: 400 }
+        );
+      }
+
+      const targetItem = currentTodoItems.find((item) => item.id === todo_item_id);
+      if (!targetItem) {
+        return NextResponse.json(
+          { success: false, error: 'Todo item not found' },
+          { status: 404 }
+        );
+      }
+
+      const updatedTodoItems = currentTodoItems.map((item) =>
+        item.id === todo_item_id ? { ...item, completed } : item
+      );
+
+      const { error: updateError } = await supabase
+        .from('r_activity')
+        .update({ todo_items: updatedTodoItems })
+        .eq('id', id)
+        .eq('facility_id', facility_id)
+        .is('deleted_at', null);
+
+      if (updateError) {
+        console.error('Failed to update todo item:', updateError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to update todo item' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          activity_id: id,
+          todo_item_id,
+          completed,
+        },
+      });
+    }
+
+    // todo_item_id が未指定の場合: 既存の handover_completed を更新（後方互換性維持）
     if (!activity.handover) {
       return NextResponse.json(
         { success: false, error: 'This activity has no handover content' },

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Clipboard, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import type { TodoItem } from "@/types/activity"
 
 interface HandoverItem {
   activity_id: string
@@ -10,6 +11,7 @@ interface HandoverItem {
   handover_completed: boolean
   class_name: string
   created_by_name: string
+  todo_items?: TodoItem[] | null
 }
 
 interface PreviousHandoverBannerProps {
@@ -86,6 +88,31 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
       abortController.abort()
     }
   }, [activityDate, selectedClass])
+
+  const toggleTodoItem = useCallback(async (activityId: string, todoItemId: string, completed: boolean) => {
+    try {
+      const res = await fetch(`/api/handover/${activityId}/complete`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed, todo_item_id: todoItemId }),
+      })
+      if (!res.ok) throw new Error('更新に失敗しました')
+      setItems(prev =>
+        prev.map(item =>
+          item.activity_id === activityId
+            ? {
+                ...item,
+                todo_items: (item.todo_items ?? []).map(t =>
+                  t.id === todoItemId ? { ...t, completed } : t
+                ),
+              }
+            : item
+        )
+      )
+    } catch (err) {
+      console.error('ToDo更新エラー:', err)
+    }
+  }, [])
 
   const handleToggleComplete = useCallback(async (activityId: string, currentCompleted: boolean) => {
     setTogglingId(activityId)
@@ -167,6 +194,25 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
                 >
                   {item.handover}
                 </p>
+                {item.todo_items && item.todo_items.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs font-medium text-gray-500">明日やることリスト</p>
+                    {item.todo_items.map(todo => (
+                      <div key={todo.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={todo.completed}
+                          onChange={e => toggleTodoItem(item.activity_id, todo.id, e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          aria-label={todo.content}
+                        />
+                        <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                          {todo.content}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <Button
                 type="button"

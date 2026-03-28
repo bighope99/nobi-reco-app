@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       special_notes,
       snack,
       meal,
+      todo_items,
     } = body;
 
     // バリデーション
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
       special_notes,
       snack,
       meal,
+      todo_items,
     });
 
     if (!extendedFieldsResult.valid) {
@@ -152,6 +154,7 @@ export async function POST(request: NextRequest) {
           special_notes: validatedFields.special_notes,
           snack: validatedFields.snack,
           meal: validatedFields.meal,
+          todo_items: validatedFields.todo_items,
         }
 
         if (Array.isArray(photos)) {
@@ -187,6 +190,7 @@ export async function POST(request: NextRequest) {
         special_notes: validatedFields.special_notes,
         snack: validatedFields.snack,
         meal: validatedFields.meal,
+        todo_items: validatedFields.todo_items,
       }
 
       if (Array.isArray(photos)) {
@@ -369,6 +373,7 @@ export async function PUT(request: NextRequest) {
       special_notes,
       snack,
       meal,
+      todo_items,
     } = body;
 
     // バリデーション
@@ -408,6 +413,7 @@ export async function PUT(request: NextRequest) {
       special_notes,
       snack,
       meal,
+      todo_items,
     });
 
     if (!extendedFieldsResult.valid) {
@@ -458,6 +464,7 @@ export async function PUT(request: NextRequest) {
         special_notes: validatedFields.special_notes,
         snack: validatedFields.snack,
         meal: validatedFields.meal,
+        todo_items: validatedFields.todo_items,
       })
       .eq('id', activity_id)
       .select()

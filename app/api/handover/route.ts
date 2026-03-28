@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
         activity_date,
         handover,
         handover_completed,
+        todo_items,
         class_id,
         m_classes (
           id,
@@ -189,6 +190,7 @@ export async function GET(request: NextRequest) {
         handover_completed: activity.handover_completed ?? false,
         class_name: classData?.name || '',
         created_by_name: userData?.name || '',
+        todo_items: activity.todo_items ?? null,
       };
     });
 

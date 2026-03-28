@@ -57,7 +57,7 @@ import {
 } from "@/lib/drafts/aiDraftCookie"
 import { replaceChildIdsWithNames } from "@/lib/ai/childIdFormatter"
 import { convertToDisplayNames, convertToPlaceholders, buildNameToIdMap } from "@/lib/mention/mentionFormatter"
-import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from "@/types/activity"
+import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal, TodoItem } from "@/types/activity"
 import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from "@/lib/security/sanitize"
 import {
   MAX_EVENT_NAME_LENGTH,
@@ -73,6 +73,7 @@ import {
 } from "@/lib/validation/activityValidation"
 import { getSanitizedExtendedFields as getSanitizedExtendedFieldsUtil } from "@/lib/activity/sanitizeExtendedFields"
 import { PreviousHandoverBanner } from "./components/previous-handover-banner"
+import { TodoListSection } from "./components/todo-list-section"
 
 const MENTION_ENABLED = false  // TODO: メンション機能復活時にtrueに変更
 
@@ -108,6 +109,7 @@ interface Activity {
   meal?: Meal | null
   handover?: string | null
   handover_completed?: boolean | null
+  todo_items?: TodoItem[] | null
 }
 
 interface MentionSuggestion {
@@ -330,6 +332,7 @@ export default function ActivityRecordClient() {
   const [meal, setMeal] = useState<Meal | null>(null)
   const [specialNotes, setSpecialNotes] = useState("")
   const [handover, setHandover] = useState("")
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([])
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [isLoadingStaff, setIsLoadingStaff] = useState(false)
   const [selectedRecorder, setSelectedRecorder] = useState<string>("")
@@ -627,6 +630,7 @@ export default function ActivityRecordClient() {
         setMeal(activity.meal || null)
         setSpecialNotes(activity.special_notes || '')
         setHandover(activity.handover || '')
+        setTodoItems(activity.todo_items ?? [])
         // 編集開始時点のフィンガープリントを記録（dirty扱いにならないよう）
         savedFingerprintRef.current = JSON.stringify({
           activityContent: (activity.content || '').trim(),
@@ -811,6 +815,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    setTodoItems([])
     setLastUpdatedAt(null)
     savedFingerprintRef.current = JSON.stringify({
       activityContent: "",
@@ -1162,6 +1167,7 @@ export default function ActivityRecordClient() {
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
 
       const sanitizedFields = getSanitizedExtendedFields()
+      const validTodoItems = todoItems.filter(item => item.content.trim().length > 0)
 
       // 記録者をCookieに保存（30日間）
       if (selectedRecorder) {
@@ -1189,6 +1195,7 @@ export default function ActivityRecordClient() {
           meal: sanitizedFields.meal,
           special_notes: sanitizedFields.special_notes,
           handover: sanitizedFields.handover,
+          todo_items: validTodoItems,
         }),
       })
 
@@ -1290,6 +1297,7 @@ export default function ActivityRecordClient() {
       const contentForDB = convertToPlaceholders(activityContent, nameToIdMap)
 
       const sanitizedFields = getSanitizedExtendedFields()
+      const validTodoItems = todoItems.filter(item => item.content.trim().length > 0)
 
       const response = await fetch(`/api/activities/${editingActivityId}`, {
         method: 'PATCH',
@@ -1311,6 +1319,7 @@ export default function ActivityRecordClient() {
           meal: sanitizedFields.meal,
           special_notes: sanitizedFields.special_notes,
           handover: sanitizedFields.handover,
+          todo_items: validTodoItems,
         }),
       })
 
@@ -1621,6 +1630,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    setTodoItems([])
     savedFingerprintRef.current = JSON.stringify({
       activityContent: "",
       eventName: "",
@@ -1648,6 +1658,7 @@ export default function ActivityRecordClient() {
     setMeal(null)
     setSpecialNotes("")
     setHandover("")
+    setTodoItems([])
     // テンプレート選択をリセット
     setSelectedTemplateId("")
     savedFingerprintRef.current = JSON.stringify({
@@ -2547,6 +2558,14 @@ export default function ActivityRecordClient() {
               />
             </div>
 
+            <div className="mt-4">
+              <TodoListSection
+                items={todoItems}
+                onChange={setTodoItems}
+                disabled={isSaving}
+              />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex flex-wrap gap-3 flex-1">
                 {isEditMode ? (
@@ -2650,6 +2669,14 @@ export default function ActivityRecordClient() {
                           ) : (
                             <span className="text-xs text-muted-foreground">-</span>
                           )}
+                          {(() => {
+                            const incomplete = (activity.todo_items ?? []).filter(t => !t.completed).length
+                            return incomplete > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                                未完了: {incomplete}件
+                              </span>
+                            ) : null
+                          })()}
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <span className="text-xs text-muted-foreground">
