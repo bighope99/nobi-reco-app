@@ -786,12 +786,19 @@ describe('POST /api/admin/company-admins', () => {
         if (table === 'm_companies') return companyCheckQuery;
         if (table === 'm_facilities') return facilityCheckQuery;
         if (table === 'm_users') return userInsertQuery;
-        if (table === '_user_facility') return facilityLinkQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
 
+    const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        if (table === '_user_facility') return facilityLinkQuery;
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    };
+
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
 
     const request = buildRequest({
       company_id: 'company-1',

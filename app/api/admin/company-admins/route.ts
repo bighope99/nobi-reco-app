@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const supabaseAdmin = await createAdminClient();
+
     // メールなしスタッフの場合: auth.users を作成せず m_users に直接登録
     if (!adminEmail) {
       const hireDateValue = body.admin_user.hire_date || getCurrentDateJST();
@@ -182,7 +184,7 @@ export async function POST(request: NextRequest) {
 
       // 施設との紐付け
       if (facilityId) {
-        const { error: facilityLinkError } = await supabase.from('_user_facility').insert({
+        const { error: facilityLinkError } = await supabaseAdmin.from('_user_facility').insert({
           user_id: newStaff.id,
           facility_id: facilityId,
           start_date: hireDateValue,
@@ -228,8 +230,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 3: Supabase Auth ユーザー作成
-    const supabaseAdmin = await createAdminClient();
-
     if (existingUser) {
       // 既存ユーザーが存在する場合: last_sign_in_at を確認して再招待 or エラー
       const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(existingUser.id);
@@ -362,7 +362,7 @@ export async function POST(request: NextRequest) {
 
       // 施設との紐付け（再招待時）
       if (facilityId) {
-        const { error: facilityLinkError } = await supabase.from('_user_facility').insert({
+        const { error: facilityLinkError } = await supabaseAdmin.from('_user_facility').insert({
           user_id: updatedUser.id,
           facility_id: facilityId,
           start_date: hireDateValue,
@@ -505,7 +505,7 @@ export async function POST(request: NextRequest) {
 
     // 施設との紐付け
     if (facilityId) {
-      const { error: facilityLinkError } = await supabase.from('_user_facility').insert({
+      const { error: facilityLinkError } = await supabaseAdmin.from('_user_facility').insert({
         user_id: newUser.id,
         facility_id: facilityId,
         start_date: hireDateValue,
