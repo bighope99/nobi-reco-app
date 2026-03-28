@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
           role: targetRole,
           is_active: true,
           hire_date: hireDateValue,
+          phone: body.admin_user.phone || null,
           is_retired: false,
         })
         .select()
@@ -252,6 +253,21 @@ export async function POST(request: NextRequest) {
       // パスワード未設定 → 再招待フロー
       const originalAppMetadata = authUserData.user.app_metadata;
 
+      // ロールバック用に元の m_users データを取得
+      const { data: originalMUser, error: originalMUserError } = await supabase
+        .from('m_users')
+        .select('company_id, name, name_kana, role, hire_date, phone')
+        .eq('id', existingUser.id)
+        .single();
+
+      if (originalMUserError || !originalMUser) {
+        console.error('Failed to fetch original m_users data:', originalMUserError);
+        return NextResponse.json(
+          { success: false, error: 'Internal Server Error' },
+          { status: 500 }
+        );
+      }
+
       // app_metadata を更新
       const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
         app_metadata: {
@@ -322,6 +338,7 @@ export async function POST(request: NextRequest) {
           name_kana: body.admin_user.name_kana || null,
           role: targetRole,
           hire_date: hireDateValue,
+          phone: body.admin_user.phone || null,
         })
         .eq('id', existingUser.id)
         .select()
@@ -355,6 +372,34 @@ export async function POST(request: NextRequest) {
 
         if (facilityLinkError && facilityLinkError.code !== '23505') {
           console.error('Failed to insert _user_facility for reinvite:', facilityLinkError);
+          // ロールバック: m_users を元に戻す
+          try {
+            await supabase
+              .from('m_users')
+              .update({
+                company_id: originalMUser.company_id,
+                name: originalMUser.name,
+                name_kana: originalMUser.name_kana,
+                role: originalMUser.role,
+                hire_date: originalMUser.hire_date,
+                phone: originalMUser.phone,
+              })
+              .eq('id', existingUser.id);
+          } catch (rollbackErr) {
+            console.error('Failed to rollback m_users:', rollbackErr);
+          }
+          // ロールバック: app_metadata を元に戻す
+          try {
+            await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+              app_metadata: originalAppMetadata,
+            });
+          } catch (rollbackErr) {
+            console.error('Failed to rollback app_metadata:', rollbackErr);
+          }
+          return NextResponse.json(
+            { success: false, error: '施設の紐付けに失敗しました' },
+            { status: 500 }
+          );
         }
       }
 
@@ -446,6 +491,7 @@ export async function POST(request: NextRequest) {
         role: targetRole,
         is_active: true,
         hire_date: hireDateValue,
+        phone: body.admin_user.phone || null,
         is_retired: false,
       })
       .select()

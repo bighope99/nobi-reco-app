@@ -76,7 +76,7 @@ export default function CompanyDetailPage(props: {
 
   // アカウント追加モーダル
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
-  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "", role: "company_admin", facility_id: "" })
+  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
   const [isAddingAdmin, setIsAddingAdmin] = useState(false)
   const [addAdminError, setAddAdminError] = useState<string | null>(null)
 
@@ -184,6 +184,10 @@ export default function CompanyDetailPage(props: {
             name: addAdminForm.name,
             name_kana: addAdminForm.name_kana || undefined,
             email: addAdminForm.email || undefined,
+            phone: addAdminForm.phone || undefined,
+            hire_date: addAdminForm.hire_year && addAdminForm.hire_month && addAdminForm.hire_day
+              ? `${addAdminForm.hire_year}-${addAdminForm.hire_month.padStart(2, '0')}-${addAdminForm.hire_day.padStart(2, '0')}`
+              : undefined,
           },
         }),
       })
@@ -192,7 +196,7 @@ export default function CompanyDetailPage(props: {
         throw new Error(data.error || "アカウントの追加に失敗しました")
       }
       setShowAddAdminModal(false)
-      setAddAdminForm({ name: "", name_kana: "", email: "", role: "company_admin", facility_id: "" })
+      setAddAdminForm({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
       await fetchCompanyDetail()
     } catch (err) {
       setAddAdminError(err instanceof Error ? err.message : "アカウントの追加に失敗しました")
@@ -597,6 +601,58 @@ export default function CompanyDetailPage(props: {
                   placeholder={!needsEmail ? "未入力の場合、ログインアカウントなしで登録" : ""}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-phone">
+                  電話番号
+                  <span className="text-muted-foreground text-xs ml-1">（任意）</span>
+                </Label>
+                <Input
+                  id="admin-phone"
+                  type="tel"
+                  value={addAdminForm.phone}
+                  onChange={(e) => setAddAdminForm((f) => ({ ...f, phone: e.target.value }))}
+                  disabled={isAddingAdmin}
+                  placeholder="090-1234-5678"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>入社年月日 <span className="text-destructive">*</span></Label>
+                <div className="flex gap-2">
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.hire_year}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, hire_year: e.target.value }))}
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">年</option>
+                    {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                      <option key={year} value={String(year)}>{year}年</option>
+                    ))}
+                  </select>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.hire_month}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, hire_month: e.target.value }))}
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">月</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+                      <option key={month} value={String(month)}>{month}月</option>
+                    ))}
+                  </select>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.hire_day}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, hire_day: e.target.value }))}
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">日</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={String(day)}>{day}日</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="flex gap-3 pt-2">
                 <Button
                   type="button"
@@ -606,12 +662,12 @@ export default function CompanyDetailPage(props: {
                   onClick={() => {
                     setShowAddAdminModal(false)
                     setAddAdminError(null)
-                    setAddAdminForm({ name: "", name_kana: "", email: "", role: "company_admin", facility_id: "" })
+                    setAddAdminForm({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
                   }}
                 >
                   キャンセル
                 </Button>
-                <Button type="submit" className="flex-1" disabled={isAddingAdmin}>
+                <Button type="submit" className="flex-1" disabled={isAddingAdmin || !addAdminForm.hire_year || !addAdminForm.hire_month || !addAdminForm.hire_day}>
                   {isAddingAdmin ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
