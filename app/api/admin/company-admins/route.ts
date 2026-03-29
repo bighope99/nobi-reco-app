@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
         if (facilityLinkError) {
           console.error('Failed to insert _user_facility:', facilityLinkError);
           // ロールバック: m_users 削除
-          await supabase.from('m_users').delete().eq('id', newStaff.id);
+          await supabaseAdmin.from('m_users').delete().eq('id', newStaff.id);
           throw facilityLinkError;
         }
       }
@@ -523,7 +523,7 @@ export async function POST(request: NextRequest) {
       if (facilityLinkError) {
         console.error('Failed to insert _user_facility:', facilityLinkError);
         // ロールバック: Auth ユーザー + m_users 削除
-        await supabase.from('m_users').delete().eq('id', newUser.id);
+        await supabaseAdmin.from('m_users').delete().eq('id', newUser.id);
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         throw facilityLinkError;
       }

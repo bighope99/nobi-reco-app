@@ -237,7 +237,7 @@ describe('GET /api/admin/companies/[companyId]', () => {
       from: jest.fn(() => companyQuery),
     };
 
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockSupabase as any);
 
     const request = new NextRequest('http://localhost/api/admin/companies/company-1');
     const response = await GET(request, createParams('company-1'));
