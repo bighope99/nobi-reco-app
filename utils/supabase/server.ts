@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 export async function createClient() {
@@ -37,33 +38,18 @@ export async function createClient() {
 
 /**
  * Admin用のSupabaseクライアントを作成（サービスロールキー使用）
+ * @supabase/supabase-js の createClient を使用してcookieを読まず、
+ * サービスロールによるRLSバイパスを保証する。
  * 注意: Admin APIを使用する場合のみ使用すること（auth.admin.createUser等）
  */
 export async function createAdminClient() {
-    const cookieStore = await cookies();
-
-    return createServerClient(
+    return createSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!,
         {
-            cookies: {
-                get(name: string) {
-                    return cookieStore.get(name)?.value;
-                },
-                set(name: string, value: string, options: CookieOptions) {
-                    try {
-                        cookieStore.set({ name, value, ...options });
-                    } catch (error) {
-                        // Ignore
-                    }
-                },
-                remove(name: string, options: CookieOptions) {
-                    try {
-                        cookieStore.set({ name, value: '', ...options });
-                    } catch (error) {
-                        // Ignore
-                    }
-                },
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
             },
         }
     );
