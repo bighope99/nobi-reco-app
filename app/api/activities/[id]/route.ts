@@ -4,7 +4,7 @@ import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { normalizePhotos } from '@/lib/utils/photos';
 import { findInvalidUUIDs } from '@/lib/utils/validation';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
-import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
+import type { DailyScheduleItem, RoleAssignment, Meal, TodoItem } from '@/types/activity';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 
 const ACTIVITY_PHOTO_BUCKET = 'private-activity-photos';
@@ -35,6 +35,7 @@ interface ActivityUpdateData {
   role_assignments?: RoleAssignment[] | null;
   special_notes?: string | null;
   handover?: string | null;
+  todo_items?: TodoItem[] | null;
   meal?: Meal | null;
   recorded_by?: string | null;
 }
@@ -300,7 +301,7 @@ export async function PATCH(
 
     const body = await request.json();
     const { activity_date, class_id, title, content, snack, mentioned_children, photos,
-      event_name, daily_schedule, role_assignments, special_notes, handover, meal, recorded_by } = body;
+      event_name, daily_schedule, role_assignments, special_notes, handover, todo_items, meal, recorded_by } = body;
 
     // Content length validation
     if (content !== undefined && typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) {
@@ -414,6 +415,7 @@ export async function PATCH(
       role_assignments,
       special_notes,
       handover,
+      todo_items,
       snack,
       meal,
     });
@@ -448,6 +450,7 @@ export async function PATCH(
     if (role_assignments !== undefined) updateData.role_assignments = validatedFields.role_assignments;
     if (special_notes !== undefined) updateData.special_notes = validatedFields.special_notes;
     if (handover !== undefined) updateData.handover = validatedFields.handover;
+    if (todo_items !== undefined) updateData.todo_items = validatedFields.todo_items;
     if (meal !== undefined) updateData.meal = validatedFields.meal;
     if (recorded_by !== undefined) updateData.recorded_by = sanitizeUuid(recorded_by);
 
