@@ -70,8 +70,9 @@ export async function POST(request: NextRequest) {
         .gte('checked_in_at', startOfDayUTC)
         .lte('checked_in_at', endOfDayUTC)
         .is('checked_out_at', null)
+        .is('deleted_at', null)
         .maybeSingle(),
-      // 取り消し用: 当日の出席レコード（checkout済みも含む）
+      // 取り消し用: 当日の出席レコード（checkout済み・ソフトデリート済みも含む）
       supabase
         .from('h_attendance')
         .select('*')
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (todayAttendance) {
-        // 既存レコードがある場合（帰宅済み等）→ 時刻を上書きして復活
+        // 既存レコードがある場合（帰宅済み・ソフトデリート済み等）→ 時刻を上書きして復活
         const { error: updateError } = await supabase
           .from('h_attendance')
           .update({
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
             checked_out_at: null,
             check_out_method: null,
             checked_out_by: null,
+            deleted_at: null,
           })
           .eq('id', todayAttendance.id);
 
@@ -215,15 +217,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Child is already checked in' }, { status: 409 });
       }
 
-      // 帰宅済みの h_attendance レコードが残っている場合は削除
-      if (todayAttendance) {
-        const { error: deleteError } = await supabase
+      // 帰宅済みの h_attendance レコードが残っている場合はソフトデリート
+      if (todayAttendance && !todayAttendance.deleted_at) {
+        const { error: softDeleteError } = await supabase
           .from('h_attendance')
-          .delete()
+          .update({ deleted_at: new Date().toISOString() })
           .eq('id', todayAttendance.id);
 
-        if (deleteError) {
-          console.error('Attendance delete error on mark_absent:', deleteError);
+        if (softDeleteError) {
+          console.error('Attendance soft delete error on mark_absent:', softDeleteError);
           return NextResponse.json({ success: false, error: 'Failed to clear attendance record' }, { status: 500 });
         }
       }
@@ -270,8 +272,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (actionType === 'cancel_check_in') {
-      // 登所取り消し: h_attendance レコードを削除し、r_daily_attendance を元に戻す
-      if (!todayAttendance) {
+      // 登所取り消し: h_attendance をソフトデリートし、r_daily_attendance を元に戻す
+      if (!todayAttendance || todayAttendance.deleted_at) {
         return NextResponse.json({ success: false, error: 'No attendance record to cancel' }, { status: 404 });
       }
 
@@ -280,13 +282,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Must cancel check-out first' }, { status: 409 });
       }
 
-      const { error: deleteError } = await supabase
+      const { error: softDeleteError } = await supabase
         .from('h_attendance')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', todayAttendance.id);
 
-      if (deleteError) {
-        console.error('Cancel check-in delete error:', deleteError);
+      if (softDeleteError) {
+        console.error('Cancel check-in soft delete error:', softDeleteError);
         return NextResponse.json({ success: false, error: 'Failed to cancel check-in' }, { status: 500 });
       }
 

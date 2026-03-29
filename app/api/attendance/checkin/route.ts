@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
       .eq('facility_id', facility_id)
       .gte('checked_in_at', startOfDayUTC)
       .lte('checked_in_at', endOfDayUTC)
+      .is('deleted_at', null)
       .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
@@ -219,6 +220,7 @@ export async function POST(request: NextRequest) {
           .eq('facility_id', facility_id)
           .gte('checked_in_at', startOfDayUTC)
           .lte('checked_in_at', endOfDayUTC)
+          .is('deleted_at', null)
           .order('checked_in_at', { ascending: true })
           .maybeSingle();
 

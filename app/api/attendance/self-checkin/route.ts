@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     .eq('facility_id', facilityId)
     .gte('checked_in_at', startOfDayUTC)
     .lte('checked_in_at', endOfDayUTC)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (existingError) {
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
           .eq('facility_id', facilityId)
           .gte('checked_in_at', startOfDayUTC)
           .lte('checked_in_at', endOfDayUTC)
+          .is('deleted_at', null)
           .maybeSingle()
         if (existing2) {
           return NextResponse.json({ action: 'check_in', time: existing2.checked_in_at, attendance_id: existing2.id })
@@ -127,6 +129,7 @@ export async function DELETE(req: NextRequest) {
     .select('id, checked_out_at')
     .eq('id', attendance_id)
     .eq('facility_id', facilityId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (recordError) {
