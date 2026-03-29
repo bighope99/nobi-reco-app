@@ -101,7 +101,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // handover が存在する最新の活動を検索（1クエリで完結）
+    // 30日間の lookback 上限
+    const lookbackDate = new Date(parsedDate);
+    lookbackDate.setDate(lookbackDate.getDate() - 30);
+    const lookbackDateStr = lookbackDate.toISOString().slice(0, 10);
+
+    // handover または todo_items が存在する活動を検索
     let query = supabase
       .from('r_activity')
       .select(`
@@ -123,10 +128,11 @@ export async function GET(request: NextRequest) {
       .eq('facility_id', facility_id)
       .is('deleted_at', null)
       .lt('activity_date', date)
+      .gte('activity_date', lookbackDateStr)
       .or('handover.not.is.null,todo_items.not.is.null')
       .order('activity_date', { ascending: false })
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(100);
 
     if (class_id) {
       query = query.eq('class_id', class_id);
@@ -154,6 +160,7 @@ export async function GET(request: NextRequest) {
         data: {
           handover_date: null,
           items: [],
+          older_items: [],
         },
       });
     }
@@ -161,6 +168,18 @@ export async function GET(request: NextRequest) {
     // アプリケーション層で最新日付のデータのみ抽出
     const handover_date = validActivities[0].activity_date;
     const latestActivities = validActivities.filter(a => a.activity_date === handover_date);
+
+    // それ以前の未完了todoがあるアクティビティを抽出
+    const olderActivities = validActivities.filter(a => a.activity_date !== handover_date);
+    interface TodoItemRecord {
+      id: string;
+      content: string;
+      completed: boolean;
+    }
+    const olderWithUncompletedTodos = olderActivities.filter(a => {
+      if (!Array.isArray(a.todo_items)) return false;
+      return (a.todo_items as TodoItemRecord[]).some(t => !t.completed);
+    });
 
     // 引き継ぎ日以降（引き継ぎ日を含まない）に次の記録があるかチェック
     // class_id指定時は同クラスの記録のみ対象
@@ -186,16 +205,29 @@ export async function GET(request: NextRequest) {
     }
     const has_next_record = (nextRecordCount ?? 0) > 0;
 
-    const items = latestActivities.map((activity) => {
+    const mapActivity = (activity: typeof validActivities[number]) => {
       const classData = Array.isArray(activity.m_classes) ? activity.m_classes[0] : activity.m_classes;
       const userData = Array.isArray(activity.m_users) ? activity.m_users[0] : activity.m_users;
       return {
         activity_id: activity.id,
+        activity_date: activity.activity_date,
         handover: activity.handover,
         handover_completed: activity.handover_completed ?? false,
         class_name: classData?.name || '',
         created_by_name: userData?.name || '',
         todo_items: activity.todo_items ?? null,
+      };
+    };
+
+    const items = latestActivities.map(mapActivity);
+
+    // 過去の未完了todoのみ（完了済みtodoは除外、引き継ぎ内容はnull）
+    const older_items = olderWithUncompletedTodos.map(activity => {
+      const mapped = mapActivity(activity);
+      return {
+        ...mapped,
+        handover: null as string | null,
+        todo_items: (activity.todo_items as TodoItemRecord[]).filter(t => !t.completed),
       };
     });
 
@@ -205,6 +237,7 @@ export async function GET(request: NextRequest) {
         handover_date,
         has_next_record,
         items,
+        older_items,
       },
     });
 
