@@ -147,19 +147,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Already checked in today' }, { status: 409 });
       }
 
-      const { error: insertError } = await supabase
-        .from('h_attendance')
-        .insert({
-          child_id,
-          facility_id: facility_id,
-          checked_in_at: resolvedTimestamp,
-          check_in_method: 'manual',
-          checked_in_by: user_id,
-        });
+      if (todayAttendance) {
+        // 既存レコードがある場合（帰宅済み等）→ 時刻を上書きして復活
+        const { error: updateError } = await supabase
+          .from('h_attendance')
+          .update({
+            checked_in_at: resolvedTimestamp,
+            check_in_method: 'manual',
+            checked_in_by: user_id,
+            checked_out_at: null,
+            check_out_method: null,
+            checked_out_by: null,
+          })
+          .eq('id', todayAttendance.id);
 
-      if (insertError) {
-        console.error('Check-in insert error:', insertError);
-        return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
+        if (updateError) {
+          console.error('Check-in update error:', updateError);
+          return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from('h_attendance')
+          .insert({
+            child_id,
+            facility_id: facility_id,
+            checked_in_at: resolvedTimestamp,
+            check_in_method: 'manual',
+            checked_in_by: user_id,
+          });
+
+        if (insertError) {
+          console.error('Check-in insert error:', insertError);
+          return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
+        }
       }
 
       // 手動ボタンでは常にscheduled（irregularはQRコードのみ）
@@ -193,6 +213,19 @@ export async function POST(request: NextRequest) {
     if (actionType === 'mark_absent') {
       if (openAttendance) {
         return NextResponse.json({ success: false, error: 'Child is already checked in' }, { status: 409 });
+      }
+
+      // 帰宅済みの h_attendance レコードが残っている場合は削除
+      if (todayAttendance) {
+        const { error: deleteError } = await supabase
+          .from('h_attendance')
+          .delete()
+          .eq('id', todayAttendance.id);
+
+        if (deleteError) {
+          console.error('Attendance delete error on mark_absent:', deleteError);
+          return NextResponse.json({ success: false, error: 'Failed to clear attendance record' }, { status: 500 });
+        }
       }
 
       await upsertDailyAttendance('absent');
