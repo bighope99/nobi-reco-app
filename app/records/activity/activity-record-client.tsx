@@ -1001,6 +1001,7 @@ export default function ActivityRecordClient() {
       specialNotes,
       eventName,
       handover,
+      todoItems,
     })
   }
 
