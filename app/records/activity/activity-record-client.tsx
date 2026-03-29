@@ -2677,12 +2677,19 @@ export default function ActivityRecordClient() {
                             <span className="text-xs text-muted-foreground">-</span>
                           )}
                           {(() => {
-                            const incomplete = (activity.todo_items ?? []).filter(t => !t.completed).length
+                            const todos = activity.todo_items ?? []
+                            if (todos.length === 0) return null
+                            const incomplete = todos.filter(t => !t.completed).length
                             return incomplete > 0 ? (
                               <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
                                 未完了: {incomplete}件
                               </span>
-                            ) : null
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="h-3 w-3" />
+                                全完了
+                              </span>
+                            )
                           })()}
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
