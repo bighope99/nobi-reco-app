@@ -288,44 +288,37 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
             </div>
           </div>
         ))}
-      </div>
-      {/* 過去の未完了タスク */}
-      {olderItems.length > 0 && (
-        <div className="border-t border-orange-300">
-          <div className="px-4 py-2 bg-orange-100/50">
-            <p className="text-xs font-bold text-orange-700">過去の未完了タスク</p>
-          </div>
-          <div className="divide-y divide-orange-200">
-            {olderItems.map((item) => (
-              <div key={item.activity_id} className="px-4 py-3">
-                <p className="text-xs font-semibold text-orange-600 mb-1">
-                  {item.activity_date && <span className="mr-1">{item.activity_date}</span>}
-                  {item.class_name && `${item.class_name} / `}{item.created_by_name}
-                </p>
-                {item.todo_items && item.todo_items.length > 0 && (
-                  <div className="space-y-1">
-                    {item.todo_items.map(todo => (
-                      <div key={todo.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={todo.completed}
-                          onChange={e => toggleTodoItem(item.activity_id, todo.id, e.target.checked)}
-                          disabled={pendingTodoIds.has(todo.id)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                          aria-label={todo.content}
-                        />
-                        <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                          {todo.content}
-                        </span>
-                      </div>
-                    ))}
+        {olderItems.map((item) => (
+          <div key={item.activity_id} className="px-4 py-3">
+            <p className="text-xs font-semibold text-orange-600 mb-1">
+              {item.class_name}
+            </p>
+            {item.todo_items && item.todo_items.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs font-medium text-gray-500">明日やることリスト</p>
+                {item.todo_items.map(todo => (
+                  <div key={todo.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={todo.completed}
+                      onChange={e => toggleTodoItem(item.activity_id, todo.id, e.target.checked)}
+                      disabled={pendingTodoIds.has(todo.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={todo.content}
+                    />
+                    <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                      {todo.content}
+                      {item.activity_date && (
+                        <span className="ml-2 text-xs text-gray-400">[{item.activity_date}]</span>
+                      )}
+                    </span>
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   )
 }
