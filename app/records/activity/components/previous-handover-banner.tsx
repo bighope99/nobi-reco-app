@@ -225,7 +225,7 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-orange-600 mb-1">
-                  {[item.class_name, handoverDate && `[${handoverDate}]`].filter(Boolean).join(' ')}
+                  {item.class_name}
                 </p>
                 <p
                   className={`text-sm whitespace-pre-wrap ${
@@ -251,6 +251,9 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
                         />
                         <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                           {todo.content}
+                          {handoverDate && (
+                            <span className="ml-2 text-xs text-gray-400">[{handoverDate}]</span>
+                          )}
                         </span>
                       </div>
                     ))}
