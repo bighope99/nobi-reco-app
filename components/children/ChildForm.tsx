@@ -1158,6 +1158,19 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                           className="h-9 py-1"
                           value={contact.phone}
                           onChange={(e: any) => updateGuardianContact(index, 'phone', e.target.value)}
+                          onBlur={() => {
+                            if (
+                              contact.phone &&
+                              index === guardianContacts.length - 1 &&
+                              guardianContacts.length < MAX_GUARDIAN_CONTACTS
+                            ) {
+                              contactIdRef.current += 1;
+                              setGuardianContacts(prev => [
+                                ...prev,
+                                { id: contactIdRef.current, guardianId: undefined, name: '', kana: '', relation: '', phone: '' },
+                              ]);
+                            }
+                          }}
                           disabled={readOnly}
                         />
                       </div>
