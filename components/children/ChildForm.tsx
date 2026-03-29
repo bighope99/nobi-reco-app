@@ -385,16 +385,6 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 電話番号変更時に兄弟を自動検索（デバウンス500ms）
-  useEffect(() => {
-    if (!formData.parent_phone || siblingSearchDismissed) return;
-    const timer = setTimeout(() => {
-      handleSiblingSearch();
-    }, 500);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.parent_phone]);
-
   // 兄弟検索ロジック
   const handleSiblingSearch = async () => {
     // 電話番号が入力されていない場合はスキップ
@@ -470,9 +460,11 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
           }
         } else {
           setSiblingResult(null);
+          setGuardianContacts([{ id: Date.now(), guardianId: undefined, name: '', kana: '', relation: '', phone: '' }]);
         }
       } else {
         setSiblingResult(null);
+        setGuardianContacts([{ id: Date.now(), guardianId: undefined, name: '', kana: '', relation: '', phone: '' }]);
       }
     } catch (err) {
       console.error('Failed to search siblings:', err);
@@ -1036,7 +1028,13 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         onChange={(e: any) => {
                           setSiblingSearchDismissed(false);
                           setSiblingResult(null);
+                          setGuardianContacts([]);
                           updateFormData({ parent_phone: e.target.value });
+                        }}
+                        onBlur={() => {
+                          if (formData.parent_phone && !siblingSearchDismissed) {
+                            handleSiblingSearch();
+                          }
                         }}
                       />
                       {isSearchingSibling && (
