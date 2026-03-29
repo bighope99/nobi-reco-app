@@ -151,35 +151,36 @@ export async function GET(
       m_guardians: primaryGuardian.m_guardians ? decryptGuardian(primaryGuardian.m_guardians) : null,
     } : null;
 
-    // 筆頭保護者の写真署名URL生成
-    let parentPhotoSignedUrl: string | null = null;
-    if (decryptedPrimaryGuardian?.m_guardians?.photo_path) {
-      const { data: parentPhotoData, error: parentPhotoError } = await supabase.storage
-        .from('guardian-photos')
-        .createSignedUrl(decryptedPrimaryGuardian.m_guardians.photo_path, 3600);
-      if (parentPhotoError) {
-        console.error('Failed to create signed URL for primary guardian photo:', parentPhotoError.message);
-      }
-      parentPhotoSignedUrl = parentPhotoData?.signedUrl ?? null;
-    }
-
-    // 緊急連絡先の写真パスを一括収集
+    // 筆頭保護者と緊急連絡先の写真署名URLを並列生成
     const ecPhotoPaths = emergencyContacts
       .map((ec: GuardianRelation) => ec.m_guardians?.photo_path)
       .filter((p): p is string => !!p);
 
-    const ecUrlMap = new Map<string, string>();
-    if (ecPhotoPaths.length > 0) {
-      const { data: ecSignedUrls, error: ecSignedError } = await supabase.storage
-        .from('guardian-photos')
-        .createSignedUrls(ecPhotoPaths, 3600);
-      if (ecSignedError) {
-        console.error('Failed to create signed URLs for guardian photos:', ecSignedError.message);
-      }
-      (ecSignedUrls ?? []).forEach((u) => {
-        if (u.path && u.signedUrl) ecUrlMap.set(u.path, u.signedUrl);
-      });
+    const [parentPhotoResult, ecSignedResult] = await Promise.all([
+      decryptedPrimaryGuardian?.m_guardians?.photo_path
+        ? supabase.storage
+            .from('guardian-photos')
+            .createSignedUrl(decryptedPrimaryGuardian.m_guardians.photo_path, 3600)
+        : Promise.resolve({ data: null, error: null }),
+      ecPhotoPaths.length > 0
+        ? supabase.storage.from('guardian-photos').createSignedUrls(ecPhotoPaths, 3600)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (parentPhotoResult.error) {
+      console.error('Failed to create signed URL for primary guardian photo:', parentPhotoResult.error.message);
     }
+    const parentPhotoSignedUrl = parentPhotoResult.data && 'signedUrl' in parentPhotoResult.data
+      ? (parentPhotoResult.data as { signedUrl: string }).signedUrl
+      : null;
+
+    if (ecSignedResult.error) {
+      console.error('Failed to create signed URLs for guardian photos:', ecSignedResult.error.message);
+    }
+    const ecUrlMap = new Map<string, string>();
+    ((ecSignedResult.data as Array<{ path: string; signedUrl: string }> | null) ?? []).forEach((u) => {
+      if (u.path && u.signedUrl) ecUrlMap.set(u.path, u.signedUrl);
+    });
 
     // 同期 map に変更
     const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({

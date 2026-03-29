@@ -3,44 +3,81 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 /**
  * 指定した子どもの保護者を全兄弟姉妹に同期する
  * 既存のリンクは保持し、新規リンクのみ追加する（is_primary は上書きしない）
+ *
+ * @param supabase Supabase クライアント（RLS 有効）
+ * @param childId  起点となる子どもの ID
+ * @param facilityId 施設 ID（クロステナントアクセスを防ぐ二重防御）
  */
 export async function syncGuardiansToSiblings(
   supabase: SupabaseClient,
-  childId: string
+  childId: string,
+  facilityId: string
 ): Promise<void> {
   // 兄弟を取得
-  const { data: siblingLinks } = await supabase
+  const { data: siblingLinks, error: siblingError } = await supabase
     .from('_child_sibling')
     .select('sibling_id')
     .eq('child_id', childId);
 
+  if (siblingError) {
+    throw new Error(`Failed to fetch sibling links for child ${childId}: ${siblingError.message}`);
+  }
   if (!siblingLinks || siblingLinks.length === 0) return;
 
   const siblingIds = siblingLinks.map((s: { sibling_id: string }) => s.sibling_id);
 
+  // 施設スコープを明示的に検証（RLS に依存しない二重防御）
+  const { data: validSiblings, error: validationError } = await supabase
+    .from('m_children')
+    .select('id')
+    .in('id', siblingIds)
+    .eq('facility_id', facilityId)
+    .is('deleted_at', null);
+
+  if (validationError) {
+    throw new Error(`Failed to validate sibling facility scope: ${validationError.message}`);
+  }
+  if (!validSiblings || validSiblings.length === 0) return;
+
+  const validSiblingIds = validSiblings.map((s: { id: string }) => s.id);
+
   // この子どもに紐づく保護者を取得
-  const { data: childGuardians } = await supabase
+  const { data: childGuardians, error: guardianError } = await supabase
     .from('_child_guardian')
     .select('guardian_id, relationship, is_emergency_contact')
     .eq('child_id', childId);
 
+  if (guardianError) {
+    throw new Error(`Failed to fetch guardians for child ${childId}: ${guardianError.message}`);
+  }
   if (!childGuardians || childGuardians.length === 0) return;
 
-  // 各兄弟に保護者リンクを追加（既存は保持）
-  for (const siblingId of siblingIds) {
-    // 兄弟の既存リンクを取得
-    const { data: existingLinks } = await supabase
-      .from('_child_guardian')
-      .select('guardian_id')
-      .eq('child_id', siblingId);
+  // 全兄弟の既存リンクを一括取得（N+1 クエリを防ぐ）
+  const { data: allExistingLinks, error: existingError } = await supabase
+    .from('_child_guardian')
+    .select('child_id, guardian_id')
+    .in('child_id', validSiblingIds);
 
-    const existingGuardianIds = new Set(
-      (existingLinks || []).map((l: { guardian_id: string }) => l.guardian_id)
-    );
+  if (existingError) {
+    throw new Error(`Failed to fetch existing guardian links: ${existingError.message}`);
+  }
 
-    // 新規リンクのみ追加
-    const newLinks = childGuardians
-      .filter((g: { guardian_id: string }) => !existingGuardianIds.has(g.guardian_id))
+  // sibling_id => Set<guardian_id> のマップを構築
+  const existingMap = new Map<string, Set<string>>();
+  for (const link of allExistingLinks || []) {
+    const entry = existingMap.get(link.child_id);
+    if (entry) {
+      entry.add(link.guardian_id);
+    } else {
+      existingMap.set(link.child_id, new Set([link.guardian_id]));
+    }
+  }
+
+  // 全兄弟の新規リンクを一括構築
+  const newLinks = validSiblingIds.flatMap((siblingId: string) => {
+    const existing = existingMap.get(siblingId) ?? new Set<string>();
+    return childGuardians
+      .filter((g: { guardian_id: string }) => !existing.has(g.guardian_id))
       .map((g: { guardian_id: string; relationship: string; is_emergency_contact: boolean }) => ({
         child_id: siblingId,
         guardian_id: g.guardian_id,
@@ -48,13 +85,17 @@ export async function syncGuardiansToSiblings(
         is_primary: false,
         is_emergency_contact: g.is_emergency_contact,
       }));
+  });
 
-    if (newLinks.length > 0) {
-      const { error } = await supabase.from('_child_guardian').insert(newLinks);
-      if (error) {
-        console.error('Guardian sync to sibling error:', error.message);
-      }
-    }
+  if (newLinks.length === 0) return;
+
+  // upsert で競合（unique constraint）を安全に処理
+  const { error: upsertError } = await supabase
+    .from('_child_guardian')
+    .upsert(newLinks, { onConflict: 'child_id,guardian_id', ignoreDuplicates: true });
+
+  if (upsertError) {
+    throw new Error(`Failed to sync guardian links to siblings: ${upsertError.message}`);
   }
 }
 
@@ -62,14 +103,19 @@ export async function syncGuardiansToSiblings(
  * 2人の子ども間で保護者を双方向に同期する
  * 既存のリンクは保持し、新規リンクのみ追加する
  * ※ _child_sibling への挿入後に呼び出すこと
+ *
+ * @param supabase   Supabase クライアント（RLS 有効）
+ * @param childIdA   子ども A の ID
+ * @param childIdB   子ども B の ID
+ * @param facilityId 施設 ID（クロステナントアクセスを防ぐ二重防御）
  */
 export async function syncGuardiansBidirectional(
   supabase: SupabaseClient,
   childIdA: string,
-  childIdB: string
+  childIdB: string,
+  facilityId: string
 ): Promise<void> {
-  await Promise.all([
-    syncGuardiansToSiblings(supabase, childIdA),
-    syncGuardiansToSiblings(supabase, childIdB),
-  ]);
+  // 直列実行で unique 制約違反の競合を防ぐ
+  await syncGuardiansToSiblings(supabase, childIdA, facilityId);
+  await syncGuardiansToSiblings(supabase, childIdB, facilityId);
 }

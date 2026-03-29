@@ -301,6 +301,72 @@ describe('saveChild PII暗号化', () => {
     expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
   });
 
+  describe('is_primary cleanup on save', () => {
+    it('resets is_primary on other guardians when saving primary guardian', async () => {
+      const supabase = createSupabaseUpdateMock();
+      const payload: ChildPayload = {
+        basic_info: {
+          family_name: '田中',
+          given_name: '太郎',
+          birth_date: '2020-01-01',
+        },
+        affiliation: {
+          enrolled_at: '2024-04-01',
+        },
+        contact: {
+          parent_name: '田中太郎',
+          parent_phone: '090-1234-5678',
+          parent_email: 'test@example.com',
+        },
+      };
+
+      await saveChild(payload, 'facility-1', supabase as any, 'child-1');
+
+      // _child_guardian への update 呼び出しを取得
+      const childGuardianCalls = supabase.from.mock.calls
+        .map((args: string[], i: number) => ({ table: args[0], result: supabase.from.mock.results[i].value }))
+        .filter(({ table }: { table: string }) => table === '_child_guardian');
+
+      const updateMock = childGuardianCalls.find(
+        ({ result }: { result: any }) => typeof result.update === 'function'
+      )?.result.update as jest.Mock | undefined;
+
+      // is_primary=false のリセットが呼ばれること
+      expect(updateMock).toHaveBeenCalledWith({ is_primary: false });
+    });
+
+    it('sets is_primary=true for primary guardian after reset', async () => {
+      const supabase = createSupabaseUpdateMock();
+      const payload: ChildPayload = {
+        basic_info: {
+          family_name: '田中',
+          given_name: '太郎',
+          birth_date: '2020-01-01',
+        },
+        affiliation: {
+          enrolled_at: '2024-04-01',
+        },
+        contact: {
+          parent_name: '田中太郎',
+          parent_phone: '090-1234-5678',
+        },
+      };
+
+      await saveChild(payload, 'facility-1', supabase as any, 'child-1');
+
+      const childGuardianCalls = supabase.from.mock.calls
+        .map((args: string[], i: number) => ({ table: args[0], result: supabase.from.mock.results[i].value }))
+        .filter(({ table }: { table: string }) => table === '_child_guardian');
+
+      const updateMock = childGuardianCalls.find(
+        ({ result }: { result: any }) => typeof result.update === 'function'
+      )?.result.update as jest.Mock | undefined;
+
+      // is_primary=true のセットも呼ばれること
+      expect(updateMock).toHaveBeenCalledWith({ is_primary: true });
+    });
+  });
+
   it('保護者保存に失敗した更新でも既存の紐付けを削除しないこと', async () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = createSupabaseUpdateMock('child-1', { guardianInsertError: true });

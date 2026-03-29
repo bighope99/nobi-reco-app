@@ -306,7 +306,8 @@ export async function saveChild(
                 email: encryptPII(contact?.parent_email || null),
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', guardianId);
+              .eq('id', guardianId)
+              .eq('facility_id', facilityId);
 
             // 検索用ハッシュテーブルを更新
             await Promise.all([
@@ -470,7 +471,8 @@ export async function saveChild(
                 phone: encryptPII(normalizedPhone),
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', emergencyGuardianId);
+              .eq('id', emergencyGuardianId)
+              .eq('facility_id', facilityId);
 
             // 検索用ハッシュテーブルを更新
             const updatePromises = [];
@@ -599,22 +601,32 @@ export async function saveChild(
     // is_primary の整合性を保証：筆頭保護者のみ is_primary=true にする
     if (primaryGuardianId) {
       // 旧 is_primary フラグをリセット（筆頭保護者以外）
-      await supabase
+      const { error: resetPrimaryError } = await supabase
         .from('_child_guardian')
         .update({ is_primary: false })
         .eq('child_id', result.id)
         .neq('guardian_id', primaryGuardianId);
+      if (resetPrimaryError) {
+        console.error('Failed to reset is_primary flags:', resetPrimaryError.message);
+      }
 
       // 筆頭保護者は is_primary=true を保証
-      await supabase
+      const { error: setPrimaryError } = await supabase
         .from('_child_guardian')
         .update({ is_primary: true })
         .eq('child_id', result.id)
         .eq('guardian_id', primaryGuardianId);
+      if (setPrimaryError) {
+        console.error('Failed to set is_primary for primary guardian:', setPrimaryError.message);
+      }
     }
 
-    // 兄弟姉妹への保護者同期（新規リンクのみ追加、既存は保持）
-    await syncGuardiansToSiblings(supabase, result.id);
+    // 兄弟姉妹への保護者同期（エラーは保存の成功を妨げないが記録する）
+    try {
+      await syncGuardiansToSiblings(supabase, result.id, facilityId);
+    } catch (syncError) {
+      console.error('Guardian sync to siblings error:', syncError instanceof Error ? syncError.message : syncError);
+    }
   }
 
   const decryptedFamilyName = decryptOrFallback(result.family_name);

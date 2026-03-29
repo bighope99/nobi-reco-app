@@ -34,7 +34,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id } = metadata;
+    const { role, current_facility_id } = metadata;
+
+    const allowedRoles = ['facility_admin', 'staff', 'site_admin', 'company_admin'];
+    if (!role || !allowedRoles.includes(role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
@@ -123,8 +129,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 保護者を双方向に同期（兄弟リンク後なので _child_sibling で互いを検出できる）
-    await syncGuardiansBidirectional(supabase, child_id, sibling_id);
+    // 保護者同期エラーは兄弟リンクの成功を妨げないが、ログは記録する
+    try {
+      await syncGuardiansBidirectional(supabase, child_id, sibling_id, current_facility_id);
+    } catch (syncError) {
+      console.error('Guardian sync error after sibling link:', syncError instanceof Error ? syncError.message : syncError);
+    }
 
     // 紐付けた兄弟の名前を取得してレスポンスに含める
     const siblingInfo = childrenData.find((c: any) => c.id === sibling_id);
