@@ -71,6 +71,7 @@ describe('GET /api/handover', () => {
       eq: jest.fn().mockReturnThis(),
       is: jest.fn().mockReturnThis(),
       lt: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
       or: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue({
@@ -98,6 +99,7 @@ describe('GET /api/handover', () => {
       eq: jest.fn().mockReturnThis(),
       is: jest.fn().mockReturnThis(),
       lt: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
       gt: jest.fn().mockReturnThis(),
       or: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
