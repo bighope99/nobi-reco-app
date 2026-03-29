@@ -74,6 +74,7 @@ export async function GET(
           )
         ),
         _child_guardian (
+          guardian_id,
           relationship,
           is_primary,
           is_emergency_contact,
@@ -274,6 +275,22 @@ export async function GET(
             relationship: s.relationship,
           };
         }),
+        guardians: guardians
+          .filter((g: GuardianRelation) => g.m_guardians !== null)
+          .map((g: GuardianRelation) => {
+            const decrypted = decryptGuardian(g.m_guardians);
+            return {
+              guardian_id: g.guardian_id,
+              name: decrypted
+                ? formatName([decrypted.family_name, decrypted.given_name], '')
+                : '',
+              phone: decrypted?.phone || '',
+              email: decrypted?.email || '',
+              relationship: g.relationship || '',
+              is_primary: g.is_primary,
+              is_emergency_contact: g.is_emergency_contact,
+            };
+          }),
         created_at: childData.created_at,
         updated_at: childData.updated_at,
       },

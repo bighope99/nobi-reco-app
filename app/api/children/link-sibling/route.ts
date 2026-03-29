@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { syncGuardiansBidirectional } from '@/lib/children/guardian-sync';
 
 interface LinkSiblingRequest {
   child_id: string;
@@ -121,6 +122,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // 保護者を双方向に同期（兄弟リンク後なので _child_sibling で互いを検出できる）
+    await syncGuardiansBidirectional(supabase, child_id, sibling_id);
 
     // 紐付けた兄弟の名前を取得してレスポンスに含める
     const siblingInfo = childrenData.find((c: any) => c.id === sibling_id);

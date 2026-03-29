@@ -13,6 +13,7 @@ import {
 } from '@/utils/pii/searchIndex';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { syncGuardiansToSiblings } from '@/lib/children/guardian-sync';
 
 export interface ChildPayload {
   child_id?: string;
@@ -585,7 +586,7 @@ export async function saveChild(
     // 更新時：不要になったリンクを削除（孤立した保護者レコードは残るが、リンクは削除）
     if (isUpdate && existingGuardianIds.length > 0 && newGuardianIds.length > 0) {
       const guardianIdsToRemove = existingGuardianIds.filter(id => !newGuardianIds.includes(id));
-      
+
       if (guardianIdsToRemove.length > 0) {
         await supabase
           .from('_child_guardian')
@@ -594,6 +595,26 @@ export async function saveChild(
           .in('guardian_id', guardianIdsToRemove);
       }
     }
+
+    // is_primary の整合性を保証：筆頭保護者のみ is_primary=true にする
+    if (primaryGuardianId) {
+      // 旧 is_primary フラグをリセット（筆頭保護者以外）
+      await supabase
+        .from('_child_guardian')
+        .update({ is_primary: false })
+        .eq('child_id', result.id)
+        .neq('guardian_id', primaryGuardianId);
+
+      // 筆頭保護者は is_primary=true を保証
+      await supabase
+        .from('_child_guardian')
+        .update({ is_primary: true })
+        .eq('child_id', result.id)
+        .eq('guardian_id', primaryGuardianId);
+    }
+
+    // 兄弟姉妹への保護者同期（新規リンクのみ追加、既存は保持）
+    await syncGuardiansToSiblings(supabase, result.id);
   }
 
   const decryptedFamilyName = decryptOrFallback(result.family_name);

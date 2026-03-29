@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import {
   User,
@@ -165,6 +166,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const [parentPhotoUrl, setParentPhotoUrl] = useState<string | null>(null);
   const [emergencyPhotoUrls, setEmergencyPhotoUrls] = useState<Record<number, string | null>>({});
   const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
+  const [primaryGuardianId, setPrimaryGuardianId] = useState<string | null>(null);
 
   // 未保存変更アラート
   const { reset: resetUnsavedChanges } = useUnsavedChanges(isDirty);
@@ -341,6 +343,14 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
           // 紐付け済み兄弟の初期化
           if (data.siblings && data.siblings.length > 0) {
             setSiblings(data.siblings);
+          }
+
+          // 筆頭保護者IDの初期化
+          if (data.guardians && data.guardians.length > 0) {
+            const primary = data.guardians.find((g: any) => g.is_primary);
+            if (primary) {
+              setPrimaryGuardianId(primary.guardian_id);
+            }
           }
         }
       } catch (err) {
@@ -950,6 +960,15 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 mb-6">
                   <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                     <User size={16} className="text-indigo-600" /> 保護者情報（筆頭者）
+                    {primaryGuardianId && (
+                      <Link
+                        href={`/guardians/${primaryGuardianId}`}
+                        className="text-xs text-indigo-500 hover:text-indigo-700 underline font-normal"
+                        target="_blank"
+                      >
+                        詳細を見る
+                      </Link>
+                    )}
                     {parentPhotoUrl ? (
                       <button
                         type="button"
@@ -1124,10 +1143,19 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                             <User size={14} className="text-slate-400" />
                           </div>
                         )}
+                        {contact.guardianId && (
+                          <Link
+                            href={`/guardians/${contact.guardianId}`}
+                            className="ml-auto mr-1 text-xs text-indigo-500 hover:text-indigo-700 underline opacity-0 group-hover:opacity-100 transition-opacity"
+                            target="_blank"
+                          >
+                            詳細
+                          </Link>
+                        )}
                         <button
                           type="button"
                           onClick={() => removeGuardianContact(contact.id)}
-                          className="ml-auto text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className={`${contact.guardianId ? '' : 'ml-auto '}text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity`}
                           title="削除"
                         >
                           <Trash2 size={16} />

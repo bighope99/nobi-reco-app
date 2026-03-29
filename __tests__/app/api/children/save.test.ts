@@ -51,6 +51,13 @@ const createSupabaseMock = (childId = 'child-1', guardianId = 'guardian-1'): Sup
 
   const childGuardianUpsert = jest.fn().mockResolvedValue({ error: null });
 
+  const childGuardianUpdate = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      eq: jest.fn().mockResolvedValue({ error: null }),
+      neq: jest.fn().mockResolvedValue({ error: null }),
+    }),
+  });
+
   const from = jest.fn((table: string) => {
     switch (table) {
       case 'm_children':
@@ -58,7 +65,13 @@ const createSupabaseMock = (childId = 'child-1', guardianId = 'guardian-1'): Sup
       case 'm_guardians':
         return { insert: guardianInsert };
       case '_child_guardian':
-        return { upsert: childGuardianUpsert };
+        return { upsert: childGuardianUpsert, update: childGuardianUpdate };
+      case '_child_sibling':
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: [] }),
+          }),
+        };
       default:
         return {};
     }
@@ -135,6 +148,13 @@ const createSupabaseUpdateMock = (
   });
   const childGuardianDelete = jest.fn();
 
+  const childGuardianUpdate = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      eq: jest.fn().mockResolvedValue({ error: null }),
+      neq: jest.fn().mockResolvedValue({ error: null }),
+    }),
+  });
+
   const from = jest.fn((table: string) => {
     switch (table) {
       case 'm_children':
@@ -142,7 +162,13 @@ const createSupabaseUpdateMock = (
       case 'm_guardians':
         return { insert: guardianInsert };
       case '_child_guardian':
-        return { select: childGuardianSelect, delete: childGuardianDelete, upsert: childGuardianUpsert };
+        return { select: childGuardianSelect, delete: childGuardianDelete, upsert: childGuardianUpsert, update: childGuardianUpdate };
+      case '_child_sibling':
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: [] }),
+          }),
+        };
       default:
         return {};
     }
