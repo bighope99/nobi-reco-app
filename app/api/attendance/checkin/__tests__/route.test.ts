@@ -21,6 +21,7 @@ describe('/api/attendance/checkin POST', () => {
       eq: jest.fn().mockReturnThis(),
       gte: jest.fn().mockReturnThis(),
       lte: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       maybeSingle: jest.fn(),
       single: jest.fn(),

@@ -63,6 +63,7 @@ const createSelectQueryWithFilters = (): MockSelectQueryWithFilters => {
   query.gte = jest.fn().mockReturnValue(query);
   query.lte = jest.fn().mockReturnValue(query);
   query.order = jest.fn().mockReturnValue(query);
+  (query as any).is = jest.fn().mockReturnValue(query);
   return query;
 };
 

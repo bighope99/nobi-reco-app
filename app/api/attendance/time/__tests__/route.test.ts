@@ -64,6 +64,7 @@ const buildMockSupabase = (opts: { childFound?: boolean; attendanceFound?: boole
           eq: jest.fn().mockReturnThis(),
           gte: jest.fn().mockReturnThis(),
           lte: jest.fn().mockReturnThis(),
+          is: jest.fn().mockReturnThis(),
           order: jest.fn().mockReturnThis(),
           maybeSingle: jest.fn().mockResolvedValue({
             data: attendanceFound
