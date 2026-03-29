@@ -1,6 +1,10 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 /**
  * 兄弟候補フィルタリングのテスト
  * - 既に登録済みの兄弟は候補から除外される
