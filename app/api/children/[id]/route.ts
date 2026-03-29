@@ -19,7 +19,7 @@ interface Guardian {
   family_name: string;
   given_name: string;
   family_name_kana?: string | null;
-  given_name_kana?: string | undefined | null;
+  given_name_kana?: string | null;
   phone?: string;
   email?: string;
   photo_path?: string | null;

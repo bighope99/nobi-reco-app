@@ -566,13 +566,11 @@ export async function saveChild(
       );
     }
 
-    // 主たる保護者と緊急連絡先を並列処理
-    const [primaryGuardianId, ...emergencyGuardianIds] = await Promise.all([
-      processPrimaryGuardian(),
-      ...(contact?.emergency_contacts && contact.emergency_contacts.length > 0
-        ? contact.emergency_contacts.map(ec => processEmergencyContact(ec))
-        : []),
-    ]);
+    // 主たる保護者を先にupsertし、完了後に緊急連絡先を処理する（同一guardian_idの競合を避けるため直列化）
+    const primaryGuardianId = await processPrimaryGuardian();
+    const emergencyGuardianIds = contact?.emergency_contacts && contact.emergency_contacts.length > 0
+      ? await Promise.all(contact.emergency_contacts.map(ec => processEmergencyContact(ec)))
+      : [];
 
     // 有効な保護者IDを収集
     if (primaryGuardianId) {

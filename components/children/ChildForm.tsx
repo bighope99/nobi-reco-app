@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import {
   User,
@@ -143,6 +144,7 @@ type GuardianContact = {
 };
 
 export default function ChildForm({ mode, childId, onSuccess, readOnly = false }: ChildFormProps) {
+  const router = useRouter();
   const isEditMode = mode === 'edit';
   const MAX_GUARDIAN_CONTACTS = 5;
   const contactIdRef = useRef(1);
@@ -645,7 +647,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
         if (onSuccess) {
           onSuccess();
         } else {
-          window.location.href = '/children';
+          router.push('/children');
         }
       }
     } catch (err) {
@@ -1286,7 +1288,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6">
           <button
             type="button"
-            onClick={() => window.location.href = '/children'}
+            onClick={() => router.push('/children')}
             className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors"
           >
             {readOnly ? '戻る' : 'キャンセル'}
