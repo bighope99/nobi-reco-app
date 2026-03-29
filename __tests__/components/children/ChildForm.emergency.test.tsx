@@ -36,11 +36,11 @@ describe('ChildForm emergency contacts', () => {
     expect(addButton).toBeDisabled();
   });
 
-  it('shows correct number of guardian contact fields', async () => {
+  it('shows no guardian contact fields initially', async () => {
     render(<ChildForm mode="new" />);
 
-    // 初期状態: 1件の入力フィールド（保護者連絡先リスト）
-    const relationInputs = screen.getAllByPlaceholderText('続柄（例: 母、叔母など）');
-    expect(relationInputs).toHaveLength(1);
+    // 初期状態: 保護者連絡先リストは空（0件）
+    const relationInputs = screen.queryAllByPlaceholderText('続柄（例: 母、叔母など）');
+    expect(relationInputs).toHaveLength(0);
   });
 });

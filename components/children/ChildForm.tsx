@@ -213,9 +213,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     photo_permission_share: true,
   });
 
-  const [guardianContacts, setGuardianContacts] = useState<GuardianContact[]>([
-    { id: 1, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }
-  ]);
+  const [guardianContacts, setGuardianContacts] = useState<GuardianContact[]>([]);
 
   // Fetch classes and schools on mount
   useEffect(() => {
