@@ -35,7 +35,7 @@ export function TodoListSection({ items, onChange, disabled }: TodoListSectionPr
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-gray-700">
-          明日やることリスト
+          次回やることリスト
         </label>
         <span className="text-xs text-gray-400">{items.length}/20</span>
       </div>
