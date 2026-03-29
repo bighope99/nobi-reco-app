@@ -322,3 +322,4 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
     </div>
   )
 }
+
