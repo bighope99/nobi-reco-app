@@ -1,6 +1,6 @@
 'use client'
 
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Check } from 'lucide-react'
 import { useId } from 'react'
 import { TodoItem } from '@/types/activity'
 
@@ -42,8 +42,14 @@ export function TodoListSection({ items, onChange, disabled }: TodoListSectionPr
 
       <div className="space-y-2">
         {items.map((item, index) => (
-          <div key={item.id} className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 w-4 shrink-0">{index + 1}</span>
+          <div key={item.id} className={`flex items-center gap-2 ${item.completed ? 'rounded-md bg-green-50 px-1 py-0.5' : ''}`}>
+            {item.completed ? (
+              <span className="w-4 shrink-0 flex items-center justify-center">
+                <Check className="h-3.5 w-3.5 text-green-600" />
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400 w-4 shrink-0">{index + 1}</span>
+            )}
             <input
               id={`${baseId}-item-${item.id}`}
               type="text"
@@ -52,7 +58,9 @@ export function TodoListSection({ items, onChange, disabled }: TodoListSectionPr
               placeholder="やることを入力..."
               maxLength={200}
               disabled={disabled}
-              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+              className={`flex-1 px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400 ${
+                item.completed ? 'border-green-300 bg-green-50 text-green-700' : 'border-gray-300'
+              }`}
             />
             <button
               type="button"

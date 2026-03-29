@@ -250,9 +250,6 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
                           aria-label={todo.content}
                         />
                         <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                          {todo.completed && (
-                            <span className="inline-flex items-center text-xs font-medium text-green-600 mr-1">✓済</span>
-                          )}
                           {todo.content}
                         </span>
                       </div>
@@ -315,9 +312,6 @@ export function PreviousHandoverBanner({ activityDate, selectedClass }: Previous
                           aria-label={todo.content}
                         />
                         <span className={`text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                          {todo.completed && (
-                            <span className="inline-flex items-center text-xs font-medium text-green-600 mr-1">✓済</span>
-                          )}
                           {todo.content}
                         </span>
                       </div>
