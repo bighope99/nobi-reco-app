@@ -21,6 +21,8 @@ describe('/api/attendance/checkin POST', () => {
       eq: jest.fn().mockReturnThis(),
       gte: jest.fn().mockReturnThis(),
       lte: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      not: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       maybeSingle: jest.fn(),
       single: jest.fn(),
@@ -411,6 +413,10 @@ describe('/api/attendance/checkin POST', () => {
         .mockResolvedValueOnce({
           data: null,
           error: null,
+        })
+        .mockResolvedValueOnce({
+          data: null,
+          error: null,
         });
 
       mockSupabase.single.mockResolvedValueOnce({
@@ -466,6 +472,10 @@ describe('/api/attendance/checkin POST', () => {
               },
             ],
           },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: null,
           error: null,
         })
         .mockResolvedValueOnce({
@@ -534,6 +544,11 @@ describe('/api/attendance/checkin POST', () => {
           },
           error: null,
         });
+
+      mockSupabase.maybeSingle.mockResolvedValueOnce({
+        data: null,
+        error: null,
+      });
 
       mockSupabase.maybeSingle.mockResolvedValueOnce({
         data: null,

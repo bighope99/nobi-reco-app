@@ -1106,6 +1106,9 @@ CREATE TABLE IF NOT EXISTS h_attendance (
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
+  -- ソフトデリート（登所取り消し時に使用）
+  deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+
   -- JST日付（チェックイン日、自動生成）
   checked_in_date DATE GENERATED ALWAYS AS (
     (checked_in_at AT TIME ZONE 'Asia/Tokyo')::date
@@ -1117,6 +1120,7 @@ CREATE INDEX idx_h_attendance_child_id ON h_attendance(child_id);
 CREATE INDEX idx_h_attendance_facility_id ON h_attendance(facility_id);
 CREATE INDEX idx_h_attendance_checked_in_at ON h_attendance(checked_in_at);
 CREATE INDEX idx_h_attendance_facility_date ON h_attendance(facility_id, DATE(checked_in_at));
+CREATE INDEX idx_h_attendance_deleted_at ON h_attendance(deleted_at) WHERE deleted_at IS NULL;
 
 -- ユニーク制約（同一児童・施設・日付でチェックインは1件のみ）
 ALTER TABLE h_attendance
