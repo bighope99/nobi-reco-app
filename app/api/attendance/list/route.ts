@@ -38,7 +38,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     // 対象日（デフォルトは今日）
-    const targetDate = dateParam || getCurrentDateJST();
+    const currentDateJST = getCurrentDateJST();
+    const targetDate = dateParam || currentDateJST;
+    const isPastTargetDate = targetDate < currentDateJST;
 
     // 児童一覧を取得
     let childrenQuery = supabase
@@ -157,6 +159,8 @@ export async function GET(request: NextRequest) {
         if (!isExpected) {
           isUnexpected = true;
         }
+      } else if (isPastTargetDate && dailyRecord?.status === 'scheduled') {
+        status = 'present';
       } else if (isExpected) {
         status = 'absent';
       } else if (isMarkedAbsent) {

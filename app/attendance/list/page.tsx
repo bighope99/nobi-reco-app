@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
+import { formatTimeJST, getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { normalizeSearch } from "@/lib/utils/kana"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,13 +18,19 @@ import {
   CheckCircle2,
   ArrowUp,
   ArrowDown,
+  Undo2,
 } from "lucide-react"
 import {
   type ChildAttendance,
   type AttendanceData,
+  type CancelAction,
+  type TimeField,
   getStatusPresentation,
   getStatusAction,
+  canDisplayTimeSetting,
   applyOptimisticStatusUpdate,
+  applyOptimisticCancelUpdate,
+  getCancelActions,
   isPastDate,
 } from "./helpers"
 
@@ -41,45 +47,20 @@ const StatusBadge = ({ child, currentDate }: { child: ChildAttendance; currentDa
 const StatusActionButton = ({
   child,
   currentDate,
+  canCancel,
   onMarkStatus,
   isLoading,
 }: {
   child: ChildAttendance
   currentDate: string
+  canCancel: boolean
   onMarkStatus: (childId: string, status: 'absent' | 'present') => void
   isLoading: boolean
 }) => {
-  if (isPastDate(currentDate)) {
-    // 過去日付: ステータスに応じて disabled 状態で両ボタンを表示
-    // 楽観的更新は status='absent', is_expected=true/false で状態を表現するため両方考慮
-    const isPresent = child.status === 'present' || child.status === 'late'
-    const isAbsent = child.status === 'absent'
-
-    return (
-      <div className="flex gap-2">
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => onMarkStatus(child.child_id, 'absent')}
-          disabled={isLoading || isAbsent}
-        >
-          {isLoading ? '処理中...' : '欠席にする'}
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => onMarkStatus(child.child_id, 'present')}
-          disabled={isLoading || isPresent}
-        >
-          {isLoading ? '処理中...' : '出席にする'}
-        </Button>
-      </div>
-    )
-  }
-
-  // 今日/未来: 現行ロジック
   const action = getStatusAction(child, currentDate)
 
   if (!action) return null
+  if (action === 'absent' && isPastDate(currentDate) && !canCancel) return null
 
   if (action === 'absent') {
     return (
@@ -105,6 +86,159 @@ const StatusActionButton = ({
   )
 }
 
+const EditableTimeField = ({
+  child,
+  field,
+  currentDate,
+  canEditTime,
+  isActionLoading,
+  editingTime,
+  timeLoading,
+  formatTime,
+  onStartEdit,
+  onCommit,
+  onCancel,
+}: {
+  child: ChildAttendance
+  field: TimeField
+  currentDate: string
+  canEditTime: boolean
+  isActionLoading: boolean
+  editingTime: { childId: string; field: TimeField; value: string } | null
+  timeLoading: { childId: string; field: TimeField } | null
+  formatTime: (dateString: string | null) => string
+  onStartEdit: (childId: string, field: TimeField, value: string) => void
+  onCommit: (childId: string, field: TimeField, value: string) => void
+  onCancel: () => void
+}) => {
+  const timestamp = field === 'in' ? child.checked_in_at : child.checked_out_at
+  const isEditing = editingTime?.childId === child.child_id && editingTime.field === field
+  const isUpdating = timeLoading?.childId === child.child_id && timeLoading.field === field
+  const settingVisible = canDisplayTimeSetting(child, field, currentDate, canEditTime) && !isActionLoading
+  const textClassName = field === 'in' ? 'text-emerald-600' : 'text-slate-600'
+  const editTitle = field === 'in' ? 'クリックして出席時刻を修正' : 'クリックして帰宅時刻を修正'
+  const settingLabel = field === 'in' ? '出席時刻を設定' : '帰宅時刻を設定'
+  const cancelOnBlurRef = useRef(false)
+
+  if (isUpdating) {
+    return (
+      <span className="inline-flex items-center gap-1 text-indigo-500">
+        <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
+        <span className="text-xs">更新中</span>
+      </span>
+    )
+  }
+
+  if (isEditing) {
+    return (
+      <input
+        type="time"
+        defaultValue={timestamp ? formatTime(timestamp) : ''}
+        className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        onBlur={(e) => {
+          const cancelled = cancelOnBlurRef.current
+          cancelOnBlurRef.current = false
+
+          if (cancelled) {
+            onCancel()
+            return
+          }
+
+          if (editingTime?.childId === child.child_id && editingTime.field === field) {
+            if (e.target.value) onCommit(child.child_id, field, e.target.value)
+            else onCancel()
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            cancelOnBlurRef.current = true
+            onCancel()
+            e.currentTarget.blur()
+          }
+        }}
+        autoFocus
+      />
+    )
+  }
+
+  if (timestamp) {
+    return canEditTime && !isActionLoading ? (
+      <button
+        type="button"
+        className={`${textClassName} font-medium hover:underline`}
+        onClick={() => onStartEdit(child.child_id, field, formatTime(timestamp))}
+        title={editTitle}
+      >
+        {formatTime(timestamp)}
+      </button>
+    ) : (
+      <span className={`${textClassName} font-medium`}>{formatTime(timestamp)}</span>
+    )
+  }
+
+  if (settingVisible) {
+    return (
+      <button
+        type="button"
+        className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+        onClick={() => onStartEdit(child.child_id, field, '')}
+        title={settingLabel}
+      >
+        設定
+      </button>
+    )
+  }
+
+  return <span className="text-slate-400">-</span>
+}
+
+// 取り消しボタンコンポーネント（施設管理者以上限定）
+const CancelActionButtons = ({
+  child,
+  currentDate,
+  canCancel,
+  onCancel,
+  isLoading,
+}: {
+  child: ChildAttendance
+  currentDate: string
+  canCancel: boolean
+  onCancel: (childId: string, action: CancelAction) => void
+  isLoading: boolean
+}) => {
+  if (!canCancel) return null
+
+  const actions = getCancelActions(child, currentDate)
+  if (actions.length === 0) return null
+
+  return (
+    <div className="flex gap-3 mt-1">
+      {actions.includes('cancel_check_in') && (
+        <button
+          onClick={() => onCancel(child.child_id, 'cancel_check_in')}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 text-xs text-red-500 underline hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Undo2 size={12} />
+          登園取消
+        </button>
+      )}
+      {actions.includes('cancel_check_out') && (
+        <button
+          onClick={() => onCancel(child.child_id, 'cancel_check_out')}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 text-xs text-slate-400 underline hover:text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Undo2 size={12} />
+          降園取消
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function AttendanceListPage() {
   // 初期値は空文字列にして、useEffectでクライアント側のみで設定
   // SSR時のタイムゾーン不一致を防ぐため
@@ -116,8 +250,9 @@ export default function AttendanceListPage() {
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
   const [canEditTime, setCanEditTime] = useState(false)
-  const [editingTime, setEditingTime] = useState<{ childId: string; field: 'in' | 'out'; value: string } | null>(null)
-  const [timeLoading, setTimeLoading] = useState<{ childId: string; field: 'in' | 'out' } | null>(null)
+  const [canCancel, setCanCancel] = useState(false)
+  const [editingTime, setEditingTime] = useState<{ childId: string; field: TimeField; value: string } | null>(null)
+  const [timeLoading, setTimeLoading] = useState<{ childId: string; field: TimeField } | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
   const [inputSearchTerm, setInputSearchTerm] = useState('')
   const [committedSearchTerm, setCommittedSearchTerm] = useState('')
@@ -135,6 +270,7 @@ export default function AttendanceListPage() {
         const session = JSON.parse(raw)
         const role = session.role as string
         setCanEditTime(['site_admin', 'company_admin', 'facility_admin'].includes(role))
+        setCanCancel(['site_admin', 'company_admin', 'facility_admin'].includes(role))
       }
     } catch {
       // sessionStorageが使えない場合は権限なし
@@ -191,9 +327,7 @@ export default function AttendanceListPage() {
   }
 
   const formatTime = (dateString: string | null) => {
-    if (!dateString) return ''
-    const date = new Date(dateString)
-    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
+    return formatTimeJST(dateString) || ''
   }
 
   const formatDisplayDate = (dateString: string) => {
@@ -312,6 +446,10 @@ export default function AttendanceListPage() {
       if (!response.ok || !result.success) {
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
+
+      if (isPastDate(currentDate)) {
+        await fetchAttendance(true)
+      }
     } catch (err) {
       console.error('Failed to update attendance status:', err)
       // エラー時はロールバック
@@ -322,7 +460,40 @@ export default function AttendanceListPage() {
     }
   }
 
-  const handleTimeEdit = async (childId: string, field: 'in' | 'out', timeValue: string) => {
+  const handleCancelAction = async (childId: string, cancelAction: CancelAction) => {
+    if (!attendanceData) return
+
+    setActionError(null)
+    setActionLoading(prev => ({ ...prev, [childId]: true }))
+
+    const previousData = attendanceData
+    setAttendanceData(applyOptimisticCancelUpdate(attendanceData, childId, cancelAction))
+
+    try {
+      const response = await fetch('/api/attendance/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          status: cancelAction,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '取消に失敗しました')
+      }
+    } catch (err) {
+      console.error('Failed to cancel attendance:', err)
+      setAttendanceData(previousData)
+      setActionError(err instanceof Error ? err.message : '取消に失敗しました')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [childId]: false }))
+    }
+  }
+
+  const handleTimeEdit = async (childId: string, field: TimeField, timeValue: string) => {
     setActionError(null)
     setActionLoading(prev => ({ ...prev, [childId]: true }))
     setEditingTime(null)
@@ -593,85 +764,47 @@ export default function AttendanceListPage() {
                         <StatusActionButton
                           child={child}
                           currentDate={currentDate}
+                          canCancel={canCancel}
                           onMarkStatus={handleStatusChange}
+                          isLoading={Boolean(actionLoading[child.child_id])}
+                        />
+                        <CancelActionButtons
+                          child={child}
+                          currentDate={currentDate}
+                          canCancel={canCancel}
+                          onCancel={handleCancelAction}
                           isLoading={Boolean(actionLoading[child.child_id])}
                         />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
-                          <span className="inline-flex items-center gap-1 text-indigo-500">
-                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                            <span className="text-xs">更新中</span>
-                          </span>
-                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'in' ? (
-                          <input
-                            type="time"
-                            defaultValue={child.checked_in_at ? formatTime(child.checked_in_at) : ''}
-                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            onBlur={(e) => {
-                              if (editingTime?.childId === child.child_id && editingTime?.field === 'in') {
-                                if (e.target.value) handleTimeEdit(child.child_id, 'in', e.target.value)
-                                else setEditingTime(null)
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                              if (e.key === 'Escape') {
-                                setEditingTime(null)
-                                e.currentTarget.blur()
-                              }
-                            }}
-                            autoFocus
-                          />
-                        ) : child.checked_in_at ? (
-                          <span
-                            className={`text-emerald-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
-                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'in', value: formatTime(child.checked_in_at) })}
-                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
-                          >
-                            {formatTime(child.checked_in_at)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
+                        <EditableTimeField
+                          child={child}
+                          field="in"
+                          currentDate={currentDate}
+                          canEditTime={canEditTime}
+                          isActionLoading={Boolean(actionLoading[child.child_id])}
+                          editingTime={editingTime}
+                          timeLoading={timeLoading}
+                          formatTime={formatTime}
+                          onStartEdit={(childId, field, value) => setEditingTime({ childId, field, value })}
+                          onCommit={handleTimeEdit}
+                          onCancel={() => setEditingTime(null)}
+                        />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
-                          <span className="inline-flex items-center gap-1 text-indigo-500">
-                            <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                            <span className="text-xs">更新中</span>
-                          </span>
-                        ) : editingTime?.childId === child.child_id && editingTime?.field === 'out' ? (
-                          <input
-                            type="time"
-                            defaultValue={child.checked_out_at ? formatTime(child.checked_out_at) : ''}
-                            className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            onBlur={(e) => {
-                              if (editingTime?.childId === child.child_id && editingTime?.field === 'out') {
-                                if (e.target.value) handleTimeEdit(child.child_id, 'out', e.target.value)
-                                else setEditingTime(null)
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                              if (e.key === 'Escape') {
-                                setEditingTime(null)
-                                e.currentTarget.blur()
-                              }
-                            }}
-                            autoFocus
-                          />
-                        ) : child.checked_out_at ? (
-                          <span
-                            className={`text-slate-600 font-medium${canEditTime && !actionLoading[child.child_id] ? ' cursor-pointer hover:underline' : ''}`}
-                            onClick={() => canEditTime && !actionLoading[child.child_id] && setEditingTime({ childId: child.child_id, field: 'out', value: formatTime(child.checked_out_at) })}
-                            title={canEditTime && !actionLoading[child.child_id] ? 'クリックして時刻を修正' : undefined}
-                          >
-                            {formatTime(child.checked_out_at)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
+                        <EditableTimeField
+                          child={child}
+                          field="out"
+                          currentDate={currentDate}
+                          canEditTime={canEditTime}
+                          isActionLoading={Boolean(actionLoading[child.child_id])}
+                          editingTime={editingTime}
+                          timeLoading={timeLoading}
+                          formatTime={formatTime}
+                          onStartEdit={(childId, field, value) => setEditingTime({ childId, field, value })}
+                          onCommit={handleTimeEdit}
+                          onCancel={() => setEditingTime(null)}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -705,41 +838,58 @@ export default function AttendanceListPage() {
                       <StatusActionButton
                         child={child}
                         currentDate={currentDate}
+                        canCancel={canCancel}
                         onMarkStatus={handleStatusChange}
+                        isLoading={Boolean(actionLoading[child.child_id])}
+                      />
+                      <CancelActionButtons
+                        child={child}
+                        currentDate={currentDate}
+                        canCancel={canCancel}
+                        onCancel={handleCancelAction}
                         isLoading={Boolean(actionLoading[child.child_id])}
                       />
                     </div>
 
-                    {(child.checked_in_at || child.checked_out_at) && (
+                    {(child.checked_in_at ||
+                      child.checked_out_at ||
+                      canDisplayTimeSetting(child, 'in', currentDate, canEditTime) ||
+                      canDisplayTimeSetting(child, 'out', currentDate, canEditTime)) && (
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
                           <div className="text-slate-400 mb-1">チェックイン</div>
                           <div className="text-slate-600">
-                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
-                              <span className="inline-flex items-center gap-1 text-indigo-500">
-                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                                <span>更新中</span>
-                              </span>
-                            ) : child.checked_in_at ? (
-                              <span className="text-emerald-600 font-medium">{formatTime(child.checked_in_at)}</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
+                            <EditableTimeField
+                              child={child}
+                              field="in"
+                              currentDate={currentDate}
+                              canEditTime={canEditTime}
+                              isActionLoading={Boolean(actionLoading[child.child_id])}
+                              editingTime={editingTime}
+                              timeLoading={timeLoading}
+                              formatTime={formatTime}
+                              onStartEdit={(childId, field, value) => setEditingTime({ childId, field, value })}
+                              onCommit={handleTimeEdit}
+                              onCancel={() => setEditingTime(null)}
+                            />
                           </div>
                         </div>
                         <div>
                           <div className="text-slate-400 mb-1">チェックアウト</div>
                           <div className="text-slate-600">
-                            {timeLoading?.childId === child.child_id && timeLoading?.field === 'out' ? (
-                              <span className="inline-flex items-center gap-1 text-indigo-500">
-                                <span className="animate-spin h-3 w-3 border-2 border-indigo-400 border-t-transparent rounded-full"></span>
-                                <span>更新中</span>
-                              </span>
-                            ) : child.checked_out_at ? (
-                              <span className="font-medium">{formatTime(child.checked_out_at)}</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
+                            <EditableTimeField
+                              child={child}
+                              field="out"
+                              currentDate={currentDate}
+                              canEditTime={canEditTime}
+                              isActionLoading={Boolean(actionLoading[child.child_id])}
+                              editingTime={editingTime}
+                              timeLoading={timeLoading}
+                              formatTime={formatTime}
+                              onStartEdit={(childId, field, value) => setEditingTime({ childId, field, value })}
+                              onCommit={handleTimeEdit}
+                              onCancel={() => setEditingTime(null)}
+                            />
                           </div>
                         </div>
                       </div>

@@ -40,8 +40,10 @@ const buildRequest = (body: Record<string, unknown>) =>
     body: JSON.stringify(body),
   })
 
-const buildMockSupabase = (opts: { childFound?: boolean; attendanceFound?: boolean; updateError?: boolean } = {}) => {
-  const { childFound = true, attendanceFound = true, updateError = false } = opts
+const buildMockSupabase = (
+  opts: { childFound?: boolean; attendanceFound?: boolean; updateError?: boolean; insertError?: boolean } = {}
+) => {
+  const { childFound = true, attendanceFound = true, updateError = false, insertError = false } = opts
   return {
     from: jest.fn().mockImplementation((table: string) => {
       if (table === 'm_children') {
@@ -59,6 +61,7 @@ const buildMockSupabase = (opts: { childFound?: boolean; attendanceFound?: boole
         const mockUpdate = jest.fn().mockReturnValue({
           eq: jest.fn().mockResolvedValue({ error: updateError ? { message: 'update failed' } : null }),
         })
+        const mockInsert = jest.fn().mockResolvedValue({ error: insertError ? { message: 'insert failed' } : null })
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
@@ -77,6 +80,7 @@ const buildMockSupabase = (opts: { childFound?: boolean; attendanceFound?: boole
             error: null,
           }),
           update: mockUpdate,
+          insert: mockInsert,
         }
       }
       return {}
@@ -208,7 +212,7 @@ describe('PATCH /api/attendance/time', () => {
       expect(json.success).toBe(false)
     })
 
-    it('should return 404 if no attendance record found', async () => {
+    it('should create attendance record when check-in time is set without existing attendance', async () => {
       mockedCreateClient.mockResolvedValue(buildMockSupabase({ attendanceFound: false }) as any)
 
       const response = await PATCH(buildRequest({
@@ -216,6 +220,22 @@ describe('PATCH /api/attendance/time', () => {
         date: today,
         field: 'checked_in_at',
         time: '09:30',
+      }))
+      const json = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(json.success).toBe(true)
+      expect(json.data.field).toBe('checked_in_at')
+    })
+
+    it('should still return 404 when check-out time is set without existing attendance', async () => {
+      mockedCreateClient.mockResolvedValue(buildMockSupabase({ attendanceFound: false }) as any)
+
+      const response = await PATCH(buildRequest({
+        child_id: childId,
+        date: today,
+        field: 'checked_out_at',
+        time: '17:30',
       }))
       const json = await response.json()
 
