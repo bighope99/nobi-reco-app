@@ -434,45 +434,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
         );
 
         if (unregisteredCandidates.length > 0) {
-          setSiblingCandidates(unregisteredCandidates);  // 全候補を保存
-
-          // 保護者連絡先の自動セット（既存ロジックをそのまま残す）
-          const allGuardianContacts: GuardianContact[] = [];
-          for (const sibling of result.data.candidates) {
-            if (sibling.guardian_contacts) {
-              for (const gc of sibling.guardian_contacts) {
-                if (!allGuardianContacts.some(c => c.guardianId === gc.guardian_id)) {
-                  allGuardianContacts.push({
-                    id: ++contactIdRef.current,
-                    guardianId: gc.guardian_id,
-                    name: gc.name,
-                    kana: gc.kana || '',
-                    relation: gc.relation,
-                    phone: gc.phone,
-                  });
-                }
-              }
-            }
-          }
-          if (allGuardianContacts.length > 0) {
-            setGuardianContacts(prev => {
-              const nonEmpty = prev.filter(c => c.name || c.phone);
-              // is_primary=true の保護者を先頭に並べる
-              const primaryContacts = allGuardianContacts.filter(c =>
-                result.data.candidates.some((s: any) =>
-                  s.guardian_contacts?.some((gc: any) => gc.guardian_id === c.guardianId && gc.is_primary)
-                )
-              );
-              const nonPrimaryContacts = allGuardianContacts.filter(c => !primaryContacts.includes(c));
-              const sortedContacts = [...primaryContacts, ...nonPrimaryContacts];
-              const merged = [...sortedContacts, ...nonEmpty].slice(0, MAX_GUARDIAN_CONTACTS);
-              const maxId = merged.reduce((max, c) => Math.max(max, c.id), contactIdRef.current);
-              contactIdRef.current = maxId;
-              return merged.length > 0
-                ? merged
-                : [{ id: ++contactIdRef.current, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }];
-            });
-          }
+          setSiblingCandidates(unregisteredCandidates);
         } else {
           setSiblingCandidates([]);
         }
@@ -494,8 +456,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     candidateGuardianContacts?: Array<{ guardian_id: string; name: string; kana: string | null; phone: string; relation: string; is_primary: boolean }>
   ) => {
     if (!isEditMode) {
-      // 新規登録モードではフォーム保存後に自動紐付けが行われることを案内
-      setError('先に「保存する」ボタンで児童情報を保存してから、兄弟紐づけを行ってください。');
+      console.warn('handleSiblingLink called in create mode');
       return;
     }
 
@@ -1151,7 +1112,9 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                               <button
                                 type="button"
                                 onClick={() => handleSiblingLink(candidate.child_id, candidate.name, candidate.guardian_contacts)}
-                                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm"
+                                disabled={!isEditMode}
+                                title={!isEditMode ? '先に「保存する」で児童情報を保存してください' : undefined}
+                                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 紐付ける
                               </button>
@@ -1173,6 +1136,9 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       >
                         すべて兄弟として登録しない
                       </button>
+                      {!isEditMode && (
+                        <p className="text-xs text-amber-600 mt-2">※保存後に「紐付ける」ボタンが有効になります</p>
+                      )}
                     </div>
                   )}
 
@@ -1231,7 +1197,9 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                                   <button
                                     type="button"
                                     onClick={() => handleSiblingLink(candidate.child_id, candidate.name, candidate.guardian_contacts)}
-                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm shrink-0"
+                                    disabled={!isEditMode}
+                                    title={!isEditMode ? '先に「保存する」で児童情報を保存してください' : undefined}
+                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     紐付ける
                                   </button>
