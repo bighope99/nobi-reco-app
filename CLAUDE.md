@@ -60,6 +60,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
   1. （任意）`pr-review` スキル — セキュリティ・品質・パフォーマンスを網羅的に確認したい場合のみ実行。軽微な変更や CodeRabbit で十分な場合は不要。
   2. `create-pr` スキル — PR作成 → CodeRabbitレビューループ（最大3回）
   3. PR URLをユーザーに報告
+- **Single ticket workflow**: 承認OKのNotionチケットをシングルエージェントで1グループだけ処理する場合は `ticket-solo-workflow` スキルを使う。「ソロで片付けて」「チームなしで」「一人でやって」「codexでチケット処理」「シングルエージェントで」「Windowsでチケット処理」「順番にやって」などがトリガー。
 - **Manual update**: UI・機能に影響する変更後は `manual-update` スキルで対応するNotionマニュアルページを更新する
 
 ## ログルール
