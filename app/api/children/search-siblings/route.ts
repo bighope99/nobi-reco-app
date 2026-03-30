@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to search children' }, { status: 500 });
     }
 
-    // 各児童の保護者連絡先（is_primary=false）を取得
+    // 各児童の保護者連絡先（緊急連絡先フラグあり、主保護者含む全件）を取得
     const filteredChildIds = childIds.filter((id) => !child_id || id !== child_id);
 
     let guardianContactsMap: Map<string, Array<{
@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
       kana: string | null;
       phone: string;
       relation: string;
+      is_primary: boolean;
     }>> = new Map();
 
     if (filteredChildIds.length > 0) {
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
         .select(`
           child_id,
           relationship,
+          is_primary,
           m_guardians (
             id,
             family_name,
@@ -136,9 +138,7 @@ export async function POST(request: NextRequest) {
           )
         `)
         .in('child_id', filteredChildIds)
-        .eq('is_primary', false)
-        .eq('is_emergency_contact', true)
-        .is('deleted_at', null);
+        .eq('is_emergency_contact', true);
 
       if (guardianLinksError) {
         console.error('Guardian links search error:', guardianLinksError);
@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
           ]) || null,
           phone: decryptOrFallback(guardian.phone) || '',
           relation: link.relationship || '',
+          is_primary: link.is_primary ?? false,
         });
         guardianContactsMap.set(link.child_id, childContacts);
       }

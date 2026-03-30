@@ -1,45 +1,62 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * 指定した子どもの保護者を全兄弟姉妹に同期する
+ * 指定した子どもの保護者を兄弟姉妹に同期する
  * 既存のリンクは保持し、新規リンクのみ追加する（is_primary は上書きしない）
  *
- * @param supabase Supabase クライアント（RLS 有効）
- * @param childId  起点となる子どもの ID
- * @param facilityId 施設 ID（クロステナントアクセスを防ぐ二重防御）
+ * @param supabase         Supabase クライアント（RLS 有効）
+ * @param childId          起点となる子どもの ID
+ * @param facilityId       施設 ID（クロステナントアクセスを防ぐ二重防御）
+ * @param targetSiblingId  省略時は全兄弟姉妹に同期。指定時は対象の兄弟のみに同期
  */
 export async function syncGuardiansToSiblings(
   supabase: SupabaseClient,
   childId: string,
-  facilityId: string
+  facilityId: string,
+  targetSiblingId?: string
 ): Promise<void> {
-  // 兄弟を取得
-  const { data: siblingLinks, error: siblingError } = await supabase
-    .from('_child_sibling')
-    .select('sibling_id')
-    .eq('child_id', childId);
+  let validSiblingIds: string[];
 
-  if (siblingError) {
-    throw new Error(`Failed to fetch sibling links for child ${childId}: ${siblingError.message}`);
+  if (targetSiblingId) {
+    // 対象の兄弟が同じ施設に属し削除されていないことを検証
+    const { data: validSibling } = await supabase
+      .from('m_children')
+      .select('id')
+      .eq('id', targetSiblingId)
+      .eq('facility_id', facilityId)
+      .is('deleted_at', null)
+      .single();
+    if (!validSibling) return;
+    validSiblingIds = [targetSiblingId];
+  } else {
+    // 兄弟を取得
+    const { data: siblingLinks, error: siblingError } = await supabase
+      .from('_child_sibling')
+      .select('sibling_id')
+      .eq('child_id', childId);
+
+    if (siblingError) {
+      throw new Error(`Failed to fetch sibling links for child ${childId}: ${siblingError.message}`);
+    }
+    if (!siblingLinks || siblingLinks.length === 0) return;
+
+    const siblingIds = siblingLinks.map((s: { sibling_id: string }) => s.sibling_id);
+
+    // 施設スコープを明示的に検証（RLS に依存しない二重防御）
+    const { data: validSiblings, error: validationError } = await supabase
+      .from('m_children')
+      .select('id')
+      .in('id', siblingIds)
+      .eq('facility_id', facilityId)
+      .is('deleted_at', null);
+
+    if (validationError) {
+      throw new Error(`Failed to validate sibling facility scope: ${validationError.message}`);
+    }
+    if (!validSiblings || validSiblings.length === 0) return;
+
+    validSiblingIds = validSiblings.map((s: { id: string }) => s.id);
   }
-  if (!siblingLinks || siblingLinks.length === 0) return;
-
-  const siblingIds = siblingLinks.map((s: { sibling_id: string }) => s.sibling_id);
-
-  // 施設スコープを明示的に検証（RLS に依存しない二重防御）
-  const { data: validSiblings, error: validationError } = await supabase
-    .from('m_children')
-    .select('id')
-    .in('id', siblingIds)
-    .eq('facility_id', facilityId)
-    .is('deleted_at', null);
-
-  if (validationError) {
-    throw new Error(`Failed to validate sibling facility scope: ${validationError.message}`);
-  }
-  if (!validSiblings || validSiblings.length === 0) return;
-
-  const validSiblingIds = validSiblings.map((s: { id: string }) => s.id);
 
   // この子どもに紐づく保護者を取得
   const { data: childGuardians, error: guardianError } = await supabase
@@ -115,7 +132,7 @@ export async function syncGuardiansBidirectional(
   childIdB: string,
   facilityId: string
 ): Promise<void> {
-  // 直列実行で unique 制約違反の競合を防ぐ
-  await syncGuardiansToSiblings(supabase, childIdA, facilityId);
-  await syncGuardiansToSiblings(supabase, childIdB, facilityId);
+  // targetSiblingId を指定してカスケード伝播を防ぐ（A→B のみ、B→A のみに限定）
+  await syncGuardiansToSiblings(supabase, childIdA, facilityId, childIdB);
+  await syncGuardiansToSiblings(supabase, childIdB, facilityId, childIdA);
 }

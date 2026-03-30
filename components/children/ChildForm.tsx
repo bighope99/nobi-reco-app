@@ -164,7 +164,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const [schools, setSchools] = useState<Array<{ school_id: string; name: string }>>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [parentPhotoUrl, setParentPhotoUrl] = useState<string | null>(null);
-  const [emergencyPhotoUrls, setEmergencyPhotoUrls] = useState<Record<number, string | null>>({});
+  const [emergencyPhotoUrls, setEmergencyPhotoUrls] = useState<Record<string, string | null>>({});
   const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
   const [primaryGuardianId, setPrimaryGuardianId] = useState<string | null>(null);
 
@@ -329,9 +329,9 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
           if (data.contact?.parent_photo_url) {
             setParentPhotoUrl(data.contact.parent_photo_url);
           }
-          const photoUrls: Record<number, string | null> = {};
-          (data.contact?.emergency_contacts ?? []).forEach((ec: any, idx: number) => {
-            photoUrls[idx] = ec.photo_url ?? null;
+          const photoUrls: Record<string, string | null> = {};
+          (data.contact?.emergency_contacts ?? []).forEach((ec: any) => {
+            if (ec.guardian_id && ec.photo_url) photoUrls[ec.guardian_id] = ec.photo_url;
           });
           setEmergencyPhotoUrls(photoUrls);
 
@@ -448,7 +448,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
               for (const gc of sibling.guardian_contacts) {
                 if (!allGuardianContacts.some(c => c.guardianId === gc.guardian_id)) {
                   allGuardianContacts.push({
-                    id: Date.now() + allGuardianContacts.length,
+                    id: ++contactIdRef.current,
                     guardianId: gc.guardian_id,
                     name: gc.name,
                     kana: gc.kana || '',
@@ -463,20 +463,19 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             setGuardianContacts(prev => {
               const nonEmpty = prev.filter(c => c.name || c.phone);
               const merged = [...allGuardianContacts, ...nonEmpty]
-                .slice(0, MAX_GUARDIAN_CONTACTS)
-                .map((c, idx) => ({ ...c, id: idx + 1 }));
+                .slice(0, MAX_GUARDIAN_CONTACTS);
+              const maxId = merged.reduce((max, c) => Math.max(max, c.id), contactIdRef.current);
+              contactIdRef.current = maxId;
               return merged.length > 0
                 ? merged
-                : [{ id: 1, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }];
+                : [{ id: ++contactIdRef.current, guardianId: undefined, name: '', kana: '', relation: '', phone: '' }];
             });
           }
         } else {
           setSiblingResult(null);
-          setGuardianContacts([{ id: Date.now(), guardianId: undefined, name: '', kana: '', relation: '', phone: '' }]);
         }
       } else {
         setSiblingResult(null);
-        setGuardianContacts([{ id: Date.now(), guardianId: undefined, name: '', kana: '', relation: '', phone: '' }]);
       }
     } catch (err) {
       console.error('Failed to search siblings:', err);
@@ -1049,7 +1048,6 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         onChange={(e: any) => {
                           setSiblingSearchDismissed(false);
                           setSiblingResult(null);
-                          setGuardianContacts([]);
                           updateFormData({ parent_phone: e.target.value });
                         }}
                         onBlur={() => {
@@ -1126,14 +1124,14 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         <span className="bg-slate-200 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
                           {index + 1}
                         </span>
-                        {emergencyPhotoUrls[index] ? (
+                        {contact.guardianId && emergencyPhotoUrls[contact.guardianId] ? (
                           <button
                             type="button"
-                            onClick={() => setZoomPhotoUrl(emergencyPhotoUrls[index]!)}
+                            onClick={() => setZoomPhotoUrl(emergencyPhotoUrls[contact.guardianId!]!)}
                             className="cursor-zoom-in shrink-0"
                           >
                             <img
-                              src={emergencyPhotoUrls[index]!}
+                              src={emergencyPhotoUrls[contact.guardianId]!}
                               alt={contact.name}
                               className="w-8 h-8 rounded-full object-cover"
                             />

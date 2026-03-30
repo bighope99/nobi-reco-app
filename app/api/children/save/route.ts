@@ -410,41 +410,51 @@ export async function saveChild(
           .single();
 
         if (scopedGuardianError || !scopedGuardian) {
-          return null;
-        }
+          console.warn(
+            `guardian_id ${emergencyContact.guardian_id} failed facility-scope validation; falling through to phone-based search`,
+            scopedGuardianError?.message,
+          );
+          // バリデーション失敗時は電話番号検索にフォールスルー
+        } else {
+          emergencyGuardianId = scopedGuardian.id;
 
-        emergencyGuardianId = scopedGuardian.id;
+          // 既存保護者レコードを更新
+          const { error: guardianUpdateError } = await supabase
+            .from('m_guardians')
+            .update({
+              family_name: encryptPII(emergencyGuardianName),
+              family_name_kana: emergencyGuardianKana ? encryptPII(emergencyGuardianKana) : null,
+              given_name: '',
+              phone: encryptPII(normalizedPhone),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', emergencyGuardianId)
+            .eq('facility_id', facilityId)
+            .is('deleted_at', null);
 
-        // 既存保護者レコードを更新
-        const { error: guardianUpdateError } = await supabase
-          .from('m_guardians')
-          .update({
-            family_name: encryptPII(emergencyGuardianName),
-            family_name_kana: emergencyGuardianKana ? encryptPII(emergencyGuardianKana) : null,
-            given_name: '',
-            phone: encryptPII(normalizedPhone),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', emergencyGuardianId)
-          .eq('facility_id', facilityId)
-          .is('deleted_at', null);
+          if (guardianUpdateError) {
+            console.warn(
+              `Failed to update guardian ${emergencyGuardianId}; falling through to phone-based search`,
+              guardianUpdateError.message,
+            );
+            emergencyGuardianId = null;
+          } else {
+            // 検索用ハッシュテーブルを更新
+            const updatePromises = [];
+            if (normalizedPhone) {
+              updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId!, 'phone', normalizedPhone));
+            }
+            if (emergencyGuardianName) {
+              updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId!, 'name', emergencyGuardianName));
+            }
+            if (updatePromises.length > 0) {
+              await Promise.all(updatePromises);
+            }
+          }
+        }
+      }
 
-        if (guardianUpdateError) {
-          return null;
-        }
-
-        // 検索用ハッシュテーブルを更新
-        const updatePromises = [];
-        if (normalizedPhone) {
-          updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId!, 'phone', normalizedPhone));
-        }
-        if (emergencyGuardianName) {
-          updatePromises.push(updateSearchIndex(supabase, 'guardian', emergencyGuardianId!, 'name', emergencyGuardianName));
-        }
-        if (updatePromises.length > 0) {
-          await Promise.all(updatePromises);
-        }
-      } else {
+      if (!emergencyGuardianId) {
         // 既存の保護者を検索（検索用ハッシュテーブル経由）
         const entityIds = await searchByPhone(supabase, 'guardian', normalizedPhone);
 
@@ -571,9 +581,13 @@ export async function saveChild(
 
     // 主たる保護者を先にupsertし、完了後に緊急連絡先を処理する（同一guardian_idの競合を避けるため直列化）
     const primaryGuardianId = await processPrimaryGuardian();
-    const emergencyGuardianIds = contact?.emergency_contacts && contact.emergency_contacts.length > 0
-      ? await Promise.all(contact.emergency_contacts.map(ec => processEmergencyContact(ec)))
-      : [];
+    const emergencyGuardianIds: (string | null)[] = [];
+    if (contact?.emergency_contacts && contact.emergency_contacts.length > 0) {
+      for (const ec of contact.emergency_contacts) {
+        const id = await processEmergencyContact(ec);
+        emergencyGuardianIds.push(id);
+      }
+    }
 
     // 有効な保護者IDを収集
     if (primaryGuardianId) {

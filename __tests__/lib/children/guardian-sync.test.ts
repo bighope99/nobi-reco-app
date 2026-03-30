@@ -347,30 +347,19 @@ describe('syncGuardiansBidirectional', () => {
   });
 
   it('A→B と B→A の両方向で syncGuardiansToSiblings が呼ばれる', async () => {
-    // 両方 sibling なし → 早期リターンするが呼び出し自体は発生する
-    const supabase = createSupabaseMock({ siblingLinksData: [] });
-
-    await syncGuardiansBidirectional(supabase as any, CHILD_ID_A, CHILD_ID_B, FACILITY_ID);
-
-    // _child_sibling への from 呼び出しが2回（A用・B用）あることを確認
-    const siblingCalls = supabase.from.mock.calls.filter(
-      (c: string[]) => c[0] === '_child_sibling'
-    );
-    expect(siblingCalls).toHaveLength(2);
-  });
-
-  it('A が完了してから B が実行される（直列実行）', async () => {
-    const executionOrder: string[] = [];
-
-    // A 用は child-a を eq に渡す、B 用は child-b を eq に渡す
+    // targetSiblingId が渡されるため m_children の .single() パスが使われる
+    // validSibling が null を返す → 早期リターンするが呼び出し自体は発生する
     const supabase = {
       from: jest.fn((table: string) => {
-        if (table === '_child_sibling') {
+        if (table === 'm_children') {
           return {
             select: jest.fn().mockReturnValue({
-              eq: jest.fn().mockImplementation((col: string, val: string) => {
-                executionOrder.push(val);
-                return Promise.resolve({ data: [], error: null });
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  is: jest.fn().mockReturnValue({
+                    single: jest.fn().mockResolvedValue({ data: null, error: null }),
+                  }),
+                }),
               }),
             }),
           };
@@ -381,15 +370,72 @@ describe('syncGuardiansBidirectional', () => {
 
     await syncGuardiansBidirectional(supabase as any, CHILD_ID_A, CHILD_ID_B, FACILITY_ID);
 
-    // A (child-a) が先に実行され、その後 B (child-b) が実行されること
-    expect(executionOrder[0]).toBe(CHILD_ID_A);
-    expect(executionOrder[1]).toBe(CHILD_ID_B);
+    // m_children への from 呼び出しが2回（A→B用・B→A用）あることを確認
+    const mChildrenCalls = supabase.from.mock.calls.filter(
+      (c: string[]) => c[0] === 'm_children'
+    );
+    expect(mChildrenCalls).toHaveLength(2);
+  });
+
+  it('A が完了してから B が実行される（直列実行）', async () => {
+    const executionOrder: string[] = [];
+
+    // targetSiblingId が渡されるため m_children の .single() パスが使われる
+    // .eq('id', targetSiblingId) の第2引数（targetSiblingId の値）で実行順を記録する
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_children') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockImplementation((_col: string, val: string) => {
+                executionOrder.push(val); // targetSiblingId の値を記録
+                return {
+                  eq: jest.fn().mockReturnValue({
+                    is: jest.fn().mockReturnValue({
+                      single: jest.fn().mockResolvedValue({ data: null, error: null }),
+                    }),
+                  }),
+                };
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    };
+
+    await syncGuardiansBidirectional(supabase as any, CHILD_ID_A, CHILD_ID_B, FACILITY_ID);
+
+    // A→B（targetSiblingId=child-b）が先に実行され、その後 B→A（targetSiblingId=child-a）が実行されること
+    expect(executionOrder[0]).toBe(CHILD_ID_B);
+    expect(executionOrder[1]).toBe(CHILD_ID_A);
   });
 
   it('A でエラーが発生した場合、B は実行されない', async () => {
+    // targetSiblingId が渡されるため m_children の .single() パスが使われる
+    // validSibling を返したあと _child_guardian の取得でエラーを発生させる
+    let mChildrenCallCount = 0;
     const supabase = {
       from: jest.fn((table: string) => {
-        if (table === '_child_sibling') {
+        if (table === 'm_children') {
+          mChildrenCallCount += 1;
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  is: jest.fn().mockReturnValue({
+                    single: jest.fn().mockResolvedValue({
+                      data: { id: mChildrenCallCount === 1 ? CHILD_ID_B : CHILD_ID_A },
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === '_child_guardian') {
+          // A の処理中（1回目）にエラーを返す
           return {
             select: jest.fn().mockReturnValue({
               eq: jest.fn().mockResolvedValue({
@@ -407,10 +453,10 @@ describe('syncGuardiansBidirectional', () => {
       syncGuardiansBidirectional(supabase as any, CHILD_ID_A, CHILD_ID_B, FACILITY_ID)
     ).rejects.toThrow();
 
-    // _child_sibling の from が1回のみ呼ばれている（A で失敗し B は実行されない）
-    const siblingCalls = supabase.from.mock.calls.filter(
-      (c: string[]) => c[0] === '_child_sibling'
+    // m_children の from が1回のみ呼ばれている（A で失敗し B は実行されない）
+    const mChildrenCalls = supabase.from.mock.calls.filter(
+      (c: string[]) => c[0] === 'm_children'
     );
-    expect(siblingCalls).toHaveLength(1);
+    expect(mChildrenCalls).toHaveLength(1);
   });
 });

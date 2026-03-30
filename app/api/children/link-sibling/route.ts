@@ -130,14 +130,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 保護者同期エラーは兄弟リンクの成功を妨げないが、ログは記録する
+    let syncWarning: string | null = null;
     try {
       await syncGuardiansBidirectional(supabase, child_id, sibling_id, current_facility_id);
     } catch (syncError) {
       console.error('Guardian sync error after sibling link:', syncError instanceof Error ? syncError.message : syncError);
+      syncWarning = '兄弟姉妹の紐付けは成功しましたが、保護者情報の同期に失敗しました。';
     }
 
     // 紐付けた兄弟の名前を取得してレスポンスに含める
-    const siblingInfo = childrenData.find((c: any) => c.id === sibling_id);
+    const siblingInfo = childrenData.find((c: { id: string }) => c.id === sibling_id);
     const siblingName = siblingInfo
       ? `${siblingInfo.family_name} ${siblingInfo.given_name}`
       : '';
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
         sibling_name: siblingName,
       },
       message: '兄弟姉妹を紐付けました',
+      ...(syncWarning ? { warnings: [syncWarning] } : {}),
     });
   } catch (error) {
     console.error('Link sibling API error:', error);
