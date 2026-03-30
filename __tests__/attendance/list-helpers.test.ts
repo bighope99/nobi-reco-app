@@ -1,5 +1,6 @@
 import {
   isPastDate,
+  isFutureDate,
   getStatusPresentation,
   getStatusAction,
   canDisplayTimeSetting,
@@ -75,6 +76,25 @@ describe('isPastDate', () => {
 
   it('未来の日付は false を返す', () => {
     expect(isPastDate(FUTURE_DATE)).toBe(false)
+  })
+})
+
+describe('isFutureDate', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(FIXED_NOW)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('未来の日付は true を返す', () => {
+    expect(isFutureDate(FUTURE_DATE)).toBe(true)
+  })
+
+  it('今日の日付は false を返す', () => {
+    expect(isFutureDate(TODAY)).toBe(false)
   })
 })
 

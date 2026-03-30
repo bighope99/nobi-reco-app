@@ -127,4 +127,62 @@ describe('POST /api/attendance/status', () => {
     expect(attendanceRestoreQuery.update).toHaveBeenCalledWith({ deleted_at: null })
     expect(restoreTerminal.eq).toHaveBeenCalledWith('id', 'attendance-1')
   })
+
+  it('staff cannot delete past attendance history through absent status', async () => {
+    mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'staff',
+      company_id: 'company-1',
+      current_facility_id: 'facility-1',
+    })
+    mockedHasPermission.mockReturnValue(false)
+
+    const childQuery = createFilterQuery()
+    childQuery.single.mockResolvedValue({ data: { id: 'child-1' }, error: null })
+
+    const dailyFetchQuery = createFilterQuery()
+    dailyFetchQuery.maybeSingle.mockResolvedValue({ data: { id: 'daily-1' }, error: null })
+
+    const dailyUpdateTerminal = {
+      eq: jest.fn().mockResolvedValue({ data: null, error: null }),
+    }
+    const dailyUpdateQuery = {
+      update: jest.fn().mockReturnValue(dailyUpdateTerminal),
+    }
+
+    let dailyFromCount = 0
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_children') return childQuery
+
+        if (table === 'r_daily_attendance') {
+          dailyFromCount += 1
+          return dailyFromCount === 1 ? dailyFetchQuery : dailyUpdateQuery
+        }
+
+        if (table === 'h_attendance') {
+          throw new Error('h_attendance should not be touched for staff')
+        }
+
+        throw new Error(`Unexpected table: ${table}`)
+      }),
+    }
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as never)
+
+    const response = await POST(
+      buildRequest({
+        child_id: 'child-1',
+        date: '2020-01-01',
+        status: 'absent',
+      })
+    )
+    const json = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(json.error).toBe('Forbidden: insufficient permissions')
+    expect(dailyUpdateQuery.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'absent' })
+    )
+  })
 })

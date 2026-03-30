@@ -2,6 +2,7 @@
  * 出席予定一覧ページのヘルパー関数
  * page.tsx から抽出したテスト可能な純粋関数群
  */
+import { getCurrentDateJST } from '@/lib/utils/timezone'
 
 export interface ChildAttendance {
   child_id: string
@@ -51,26 +52,10 @@ export interface AttendanceData {
 }
 
 /** 日付が今日より過去かどうか判定 */
-export const isPastDate = (dateString: string): boolean => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const target = new Date(dateString)
-  target.setHours(0, 0, 0, 0)
-
-  return target < today
-}
+export const isPastDate = (dateString: string): boolean => dateString < getCurrentDateJST()
 
 /** 日付が今日より未来かどうか判定 */
-export const isFutureDate = (dateString: string): boolean => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const target = new Date(dateString)
-  target.setHours(0, 0, 0, 0)
-
-  return target > today
-}
+export const isFutureDate = (dateString: string): boolean => dateString > getCurrentDateJST()
 
 /** ステータスの表示情報を取得 */
 export const getStatusPresentation = (child: ChildAttendance, currentDate: string): StatusPresentation | null => {

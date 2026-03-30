@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
+import { formatTimeJST, getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { normalizeSearch } from "@/lib/utils/kana"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,17 +47,20 @@ const StatusBadge = ({ child, currentDate }: { child: ChildAttendance; currentDa
 const StatusActionButton = ({
   child,
   currentDate,
+  canCancel,
   onMarkStatus,
   isLoading,
 }: {
   child: ChildAttendance
   currentDate: string
+  canCancel: boolean
   onMarkStatus: (childId: string, status: 'absent' | 'present') => void
   isLoading: boolean
 }) => {
   const action = getStatusAction(child, currentDate)
 
   if (!action) return null
+  if (action === 'absent' && isPastDate(currentDate) && !canCancel) return null
 
   if (action === 'absent') {
     return (
@@ -324,9 +327,7 @@ export default function AttendanceListPage() {
   }
 
   const formatTime = (dateString: string | null) => {
-    if (!dateString) return ''
-    const date = new Date(dateString)
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+    return formatTimeJST(dateString) || ''
   }
 
   const formatDisplayDate = (dateString: string) => {
@@ -763,6 +764,7 @@ export default function AttendanceListPage() {
                         <StatusActionButton
                           child={child}
                           currentDate={currentDate}
+                          canCancel={canCancel}
                           onMarkStatus={handleStatusChange}
                           isLoading={Boolean(actionLoading[child.child_id])}
                         />
@@ -836,6 +838,7 @@ export default function AttendanceListPage() {
                       <StatusActionButton
                         child={child}
                         currentDate={currentDate}
+                        canCancel={canCancel}
                         onMarkStatus={handleStatusChange}
                         isLoading={Boolean(actionLoading[child.child_id])}
                       />

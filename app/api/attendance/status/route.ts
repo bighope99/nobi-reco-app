@@ -60,8 +60,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Child not found for facility' }, { status: 404 })
     }
 
+    const canManageAttendanceHistory = hasPermission(metadata, ['site_admin', 'company_admin', 'facility_admin'])
+
     if (status === 'cancel_check_in' || status === 'cancel_check_out') {
-      if (!hasPermission(metadata, ['site_admin', 'company_admin', 'facility_admin'])) {
+      if (!canManageAttendanceHistory) {
         return NextResponse.json({ success: false, error: 'Forbidden: insufficient permissions' }, { status: 403 })
       }
     }
@@ -230,6 +232,10 @@ export async function POST(request: NextRequest) {
 
       // 過去日付の場合: h_attendance のチェックイン記録を削除
       if (isPastDate(date)) {
+        if (!canManageAttendanceHistory) {
+          return NextResponse.json({ success: false, error: 'Forbidden: insufficient permissions' }, { status: 403 })
+        }
+
         const { error: hDeleteError } = await supabase
           .from('h_attendance')
           .delete()
