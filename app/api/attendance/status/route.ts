@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
       if (dailyRecord) {
         const { error: dailyResetError } = await supabase
           .from('r_daily_attendance')
-          .update({ status: 'scheduled', updated_by: user_id, updated_at: timestamp })
+          .update({ status: 'absent', updated_by: user_id, updated_at: timestamp })
           .eq('id', dailyRecord.id)
 
         if (dailyResetError) {
