@@ -318,7 +318,7 @@ describe('GET /api/children/export', () => {
     expect(lines[0]).toBe(CHILD_IMPORT_HEADERS.join(','));
   });
 
-  it('should preserve leading zeros in phone numbers using ="value" format', async () => {
+  it('should preserve leading zeros in phone numbers using double-quote wrapping', async () => {
     mockedGetMetadata.mockResolvedValue({
       user_id: 'user-1',
       role: 'facility_admin',
@@ -389,10 +389,10 @@ describe('GET /api/children/export', () => {
     expect(parentPhoneIndex).toBeGreaterThan(-1);
     expect(ec1PhoneIndex).toBeGreaterThan(-1);
 
-    // ゼロ幅スペース付きで出力されること（見た目を崩さず先頭0を保持）
+    // ダブルクォートで囲まれて出力されること（先頭0を保持）
     const dataFields = lines[1].split(',');
-    expect(dataFields[parentPhoneIndex]).toBe('\u200B09012345678');
-    expect(dataFields[ec1PhoneIndex]).toBe('\u200B08087654321');
+    expect(dataFields[parentPhoneIndex]).toBe('"09012345678"');
+    expect(dataFields[ec1PhoneIndex]).toBe('"08087654321"');
   });
 
   it('should output empty string for empty phone numbers', async () => {
