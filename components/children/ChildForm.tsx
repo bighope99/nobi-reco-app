@@ -161,6 +161,15 @@ type SiblingCandidate = {
   }>;
 };
 
+type CandidateGuardianContact = {
+  guardian_id: string;
+  name: string;
+  kana: string | null;
+  phone: string;
+  relation: string;
+  is_primary: boolean;
+};
+
 export default function ChildForm({ mode, childId, onSuccess, readOnly = false }: ChildFormProps) {
   const router = useRouter();
   const isEditMode = mode === 'edit';
@@ -471,8 +480,51 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const handleSiblingLink = async (
     siblingId: string,
     siblingName: string,
-    candidateGuardianContacts?: Array<{ guardian_id: string; name: string; kana: string | null; phone: string; relation: string; is_primary: boolean }>
+    candidateGuardianContacts?: CandidateGuardianContact[]
   ) => {
+    const applySiblingGuardianContacts = (contacts: CandidateGuardianContact[]) => {
+      if (contacts.length === 0) return;
+
+      const primaryContact = contacts.find(gc => gc.is_primary);
+      const nonPrimaryContacts = contacts.filter(gc => !gc.is_primary);
+
+      if (primaryContact) {
+        setFormData(prev => ({
+          ...prev,
+          parent_name: primaryContact.name,
+          parent_kana: primaryContact.kana || '',
+          parent_relation: primaryContact.relation,
+          parent_phone: primaryContact.phone,
+        }));
+        setPrimaryGuardianId(primaryContact.guardian_id);
+        setParentPhotoUrl(emergencyPhotoUrls[primaryContact.guardian_id] ?? null);
+      }
+
+      setGuardianContacts(prev => {
+        const excludedIds = new Set(
+          [primaryContact?.guardian_id, ...nonPrimaryContacts.map(gc => gc.guardian_id)].filter(Boolean)
+        );
+        const preservedContacts = prev.filter(c => !c.guardianId || !excludedIds.has(c.guardianId));
+        const existingIds = new Set(preservedContacts.map(c => c.guardianId).filter(Boolean));
+        const nextContacts = nonPrimaryContacts
+          .filter(gc => !existingIds.has(gc.guardian_id))
+          .map(gc => ({
+            id: ++contactIdRef.current,
+            guardianId: gc.guardian_id,
+            name: gc.name,
+            kana: gc.kana || '',
+            relation: gc.relation,
+            phone: gc.phone,
+          }));
+        const merged = [...nextContacts, ...preservedContacts].slice(0, MAX_GUARDIAN_CONTACTS);
+        const maxId = merged.reduce((max, c) => Math.max(max, c.id), contactIdRef.current);
+        contactIdRef.current = maxId;
+        return merged;
+      });
+
+      setIsDirty(true);
+    };
+
     if (!isEditMode) {
       setSiblingCandidates(prev => prev.filter(c => c.child_id !== siblingId));
       setNameSearchResults(prev => prev.filter(c => c.child_id !== siblingId));
@@ -483,24 +535,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
       setPendingSiblingIds(prev => prev.includes(siblingId) ? prev : [...prev, siblingId]);
 
       if (candidateGuardianContacts && candidateGuardianContacts.length > 0) {
-        setGuardianContacts(prev => {
-          const existingIds = new Set(prev.map(c => c.guardianId).filter(Boolean));
-          const newContacts = candidateGuardianContacts
-            .filter(gc => !existingIds.has(gc.guardian_id))
-            .map(gc => ({
-              id: ++contactIdRef.current,
-              guardianId: gc.guardian_id,
-              name: gc.name,
-              kana: gc.kana || '',
-              relation: gc.relation,
-              phone: gc.phone,
-            }));
-          if (newContacts.length === 0) return prev;
-          const merged = [...newContacts, ...prev].slice(0, MAX_GUARDIAN_CONTACTS);
-          const maxId = merged.reduce((max, c) => Math.max(max, c.id), contactIdRef.current);
-          contactIdRef.current = maxId;
-          return merged;
-        });
+        applySiblingGuardianContacts(candidateGuardianContacts);
       }
 
       return;
@@ -522,27 +557,12 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
         setSiblingCandidates(prev => prev.filter(c => c.child_id !== siblingId));
         setNameSearchResults(prev => prev.filter(c => c.child_id !== siblingId));
         // siblings に追加
-        setSiblings(prev => [...prev, { child_id: siblingId, name: siblingName, relationship: '兄弟' }]);
-        // 保護者リストに反映（is_primary の保護者を先頭に）
+        setSiblings(prev => prev.some(s => s.child_id === siblingId)
+          ? prev
+          : [...prev, { child_id: siblingId, name: siblingName, relationship: '兄弟' }]
+        );
         if (candidateGuardianContacts && candidateGuardianContacts.length > 0) {
-          setGuardianContacts(prev => {
-            const existingIds = new Set(prev.map(c => c.guardianId).filter(Boolean));
-            const newContacts = candidateGuardianContacts
-              .filter(gc => !existingIds.has(gc.guardian_id))
-              .map(gc => ({
-                id: ++contactIdRef.current,
-                guardianId: gc.guardian_id,
-                name: gc.name,
-                kana: gc.kana || '',
-                relation: gc.relation,
-                phone: gc.phone,
-              }));
-            if (newContacts.length === 0) return prev;
-            const merged = [...newContacts, ...prev].slice(0, MAX_GUARDIAN_CONTACTS);
-            const maxId = merged.reduce((max, c) => Math.max(max, c.id), contactIdRef.current);
-            contactIdRef.current = maxId;
-            return merged;
-          });
+          applySiblingGuardianContacts(candidateGuardianContacts);
         }
       } else {
         setError(result.error || '兄弟紐づけに失敗しました');
