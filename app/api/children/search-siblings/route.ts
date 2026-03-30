@@ -134,7 +134,8 @@ export async function POST(request: NextRequest) {
             family_name_kana,
             given_name,
             given_name_kana,
-            phone
+            phone,
+            deleted_at
           )
         `)
         .in('child_id', filteredChildIds)
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to load guardian contacts' }, { status: 500 });
       }
 
-      for (const link of guardianLinksData || []) {
+      for (const link of (guardianLinksData || []).filter((g: any) => g.m_guardians && g.m_guardians.deleted_at === null)) {
         const guardian = link.m_guardians as unknown as {
           id: string;
           family_name: string;
@@ -153,6 +154,7 @@ export async function POST(request: NextRequest) {
           given_name: string;
           given_name_kana: string | null;
           phone: string;
+          deleted_at: string | null;
         } | null;
         if (!guardian) continue;
 

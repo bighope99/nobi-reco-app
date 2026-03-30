@@ -1375,7 +1375,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-3 items-end">
-                        <div className="flex-1 min-w-[120px] min-w-0">
+                        <div className="flex-1 min-w-[120px]">
                           <label className="text-xs font-medium text-slate-500 mb-1 block">氏名</label>
                           <Input
                             placeholder="氏名"
@@ -1385,7 +1385,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                             disabled={readOnly}
                           />
                         </div>
-                        <div className="flex-1 min-w-[120px] min-w-0">
+                        <div className="flex-1 min-w-[120px]">
                           <label className="text-xs font-medium text-slate-500 mb-1 block">ふりがな</label>
                           <Input
                             placeholder="ふりがな"
@@ -1405,7 +1405,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                             disabled={readOnly}
                           />
                         </div>
-                        <FieldGroup error={index < 2 ? fieldErrors[`ec_phone_${index}`] : undefined} className="flex-1 min-w-[120px] min-w-0">
+                        <FieldGroup error={index < 2 ? fieldErrors[`ec_phone_${index}`] : undefined} className="flex-1 min-w-[120px]">
                           <label className="text-xs font-medium text-slate-500 mb-1 block">電話番号</label>
                           <Input
                             placeholder="電話番号"
