@@ -81,7 +81,6 @@ interface GuardianDetail {
   name: string;
   kana: string;
   phone: string;
-  relationship: string | null;
   photo_url: string | null;
   photo_path: string | null;
   notes: string;
@@ -103,7 +102,6 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const [name, setName] = useState('');
   const [kana, setKana] = useState('');
   const [phone, setPhone] = useState('');
-  const [relationship, setRelationship] = useState('母');
   const [memo, setMemo] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoPath, setPhotoPath] = useState<string | null>(null);
@@ -163,7 +161,6 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
       setName(g.name);
       setKana(g.kana);
       setPhone(g.phone);
-      setRelationship(g.relationship ?? '母');
       setMemo(g.notes);
       setPhotoUrl(g.photo_url);
       setPhotoPath(g.photo_path);
@@ -310,7 +307,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
         const res = await fetch('/api/guardians', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, relationship, child_id: selectedChild!.id }),
+          body: JSON.stringify({ ...body, child_id: selectedChild!.id }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -463,24 +460,10 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
 
           <div className="border-t border-slate-100" />
 
-          {/* 電話番号・続柄 */}
+          {/* 電話番号 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <FieldGroup label="電話番号">
               <TextInput value={phone} onChange={v => { setPhone(v); markDirty(); }} placeholder="例: 090-1234-5678" icon={Phone} />
-            </FieldGroup>
-            <FieldGroup label="続柄" required>
-              <select
-                className="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 p-2.5 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                value={relationship ?? ''}
-                onChange={e => { setRelationship(e.target.value); markDirty(); }}
-                disabled={!isNew}
-              >
-                <option value="母">母</option>
-                <option value="父">父</option>
-                <option value="祖母">祖母</option>
-                <option value="祖父">祖父</option>
-                <option value="その他">その他</option>
-              </select>
             </FieldGroup>
           </div>
 

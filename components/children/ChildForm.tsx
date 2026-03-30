@@ -198,6 +198,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
   const [primaryGuardianId, setPrimaryGuardianId] = useState<string | null>(null);
   const [pendingSiblingIds, setPendingSiblingIds] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // 未保存変更アラート
   const { reset: resetUnsavedChanges } = useUnsavedChanges(isDirty);
@@ -644,17 +645,41 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
       : (isEditMode ? formData.birth_date : '');
 
     // Validation
-    if (
-      !formData.family_name ||
-      !formData.given_name ||
-      !birthDate ||
-      !formData.enrolled_at
-    ) {
-      setError(
-        '必須項目を入力してください（氏名、生年月日、入所開始日は必須です）'
-      );
+    const errors: Record<string, string> = {};
+
+    if (!formData.family_name) errors.family_name = '姓を入力してください';
+    if (!formData.given_name) errors.given_name = '名を入力してください';
+    if (!birthDate) errors.birth_date = '生年月日を入力してください';
+    if (!formData.enrolled_at) errors.enrolled_at = '入所開始日を入力してください';
+
+    // 筆頭保護者電話番号バリデーション
+    if (!formData.parent_phone) {
+      errors.parent_phone = '電話番号を入力してください';
+    } else {
+      const parentPhoneDigits = formData.parent_phone.replace(/\D/g, '');
+      if (parentPhoneDigits.length < 10 || parentPhoneDigits.length > 15) {
+        errors.parent_phone = '電話番号は10〜15桁で入力してください';
+      }
+    }
+
+    // 緊急連絡先の電話番号バリデーション（入力がある場合のみ）
+    guardianContacts.forEach((contact, idx) => {
+      if (idx >= 2) return; // ec_phone_0 と ec_phone_1 のみチェック
+      if (contact.phone) {
+        const digits = contact.phone.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 15) {
+          errors[`ec_phone_${idx}`] = '電話番号は10〜15桁で入力してください';
+        }
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError('入力内容にエラーがあります。赤枠の項目を確認してください。');
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setSaving(true);
@@ -818,7 +843,15 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
             )}
 
             <fieldset disabled={readOnly} className="contents">
-            <form id="child-form" onSubmit={handleSubmit}>
+            <form
+              id="child-form"
+              onSubmit={handleSubmit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+                  e.preventDefault();
+                }
+              }}
+            >
 
               {/* 1. 基本情報 */}
               <SectionCard
@@ -852,17 +885,19 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
 
                   {/* Inputs */}
                   <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <FieldGroup label="氏名（漢字）" required>
+                    <FieldGroup label="氏名（漢字）" required error={fieldErrors.family_name || fieldErrors.given_name}>
                       <div className="flex gap-2">
                         <Input
                           placeholder="姓"
                           value={formData.family_name}
                           onChange={(e: any) => updateFormData({ family_name: e.target.value })}
+                          className={fieldErrors.family_name ? 'border-red-500 focus:border-red-500' : ''}
                         />
                         <Input
                           placeholder="名"
                           value={formData.given_name}
                           onChange={(e: any) => updateFormData({ given_name: e.target.value })}
+                          className={fieldErrors.given_name ? 'border-red-500 focus:border-red-500' : ''}
                         />
                       </div>
                     </FieldGroup>
@@ -916,12 +951,12 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       </div>
                     </FieldGroup>
 
-                    <FieldGroup label="生年月日" required className="sm:col-span-2">
+                    <FieldGroup label="生年月日" required className="sm:col-span-2" error={fieldErrors.birth_date}>
                       <div className="flex gap-2 items-center">
                         <Input
                           type="number"
                           placeholder="年"
-                          className="max-w-[100px]"
+                          className={`max-w-[100px] ${fieldErrors.birth_date ? 'border-red-500 focus:border-red-500' : ''}`}
                           value={formData.birth_year}
                           onChange={(e: any) => updateFormData({ birth_year: e.target.value })}
                           min="1900"
@@ -932,7 +967,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         <Input
                           type="number"
                           placeholder="月"
-                          className="max-w-[80px]"
+                          className={`max-w-[80px] ${fieldErrors.birth_date ? 'border-red-500 focus:border-red-500' : ''}`}
                           value={formData.birth_month}
                           onChange={(e: any) => updateFormData({ birth_month: e.target.value })}
                           min="1"
@@ -942,7 +977,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                         <Input
                           type="number"
                           placeholder="日"
-                          className="max-w-[80px]"
+                          className={`max-w-[80px] ${fieldErrors.birth_date ? 'border-red-500 focus:border-red-500' : ''}`}
                           value={formData.birth_day}
                           onChange={(e: any) => updateFormData({ birth_day: e.target.value })}
                           min="1"
@@ -1003,11 +1038,12 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                     </Select>
                   </FieldGroup>
 
-                  <FieldGroup label="入所開始日" required>
+                  <FieldGroup label="入所開始日" required error={fieldErrors.enrolled_at}>
                     <Input
                       type="date"
                       value={formData.enrolled_at}
                       onChange={(e: any) => updateFormData({ enrolled_at: e.target.value })}
+                      className={fieldErrors.enrolled_at ? 'border-red-500 focus:border-red-500' : ''}
                     />
                   </FieldGroup>
 
@@ -1131,7 +1167,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                     )}
 
                     {/* 兄弟紐づけトリガー（電話番号入力で自動検索） */}
-                    <FieldGroup label="携帯電話番号" required className="relative sm:col-span-2">
+                    <FieldGroup label="携帯電話番号" required className="relative sm:col-span-2" error={fieldErrors.parent_phone}>
                       <Input
                         icon={Phone}
                         type="tel"
@@ -1147,6 +1183,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                             handleSiblingSearch();
                           }
                         }}
+                        className={fieldErrors.parent_phone ? 'border-red-500 focus:border-red-500' : ''}
                       />
                       {isSearchingSibling && (
                         <p className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
@@ -1359,26 +1396,28 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                           onChange={(e: any) => updateGuardianContact(index, 'relation', e.target.value)}
                           disabled={readOnly}
                         />
-                        <Input
-                          placeholder="電話番号"
-                          className="h-9 py-1"
-                          value={contact.phone}
-                          onChange={(e: any) => updateGuardianContact(index, 'phone', e.target.value)}
-                          onBlur={() => {
-                            if (
-                              contact.phone &&
-                              index === guardianContacts.length - 1 &&
-                              guardianContacts.length < MAX_GUARDIAN_CONTACTS
-                            ) {
-                              contactIdRef.current += 1;
-                              setGuardianContacts(prev => [
-                                ...prev,
-                                { id: contactIdRef.current, guardianId: undefined, name: '', kana: '', relation: '', phone: '' },
-                              ]);
-                            }
-                          }}
-                          disabled={readOnly}
-                        />
+                        <FieldGroup error={index < 2 ? fieldErrors[`ec_phone_${index}`] : undefined} className="flex-1 min-w-0">
+                          <Input
+                            placeholder="電話番号"
+                            className={`h-9 py-1 ${index < 2 && fieldErrors[`ec_phone_${index}`] ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={contact.phone}
+                            onChange={(e: any) => updateGuardianContact(index, 'phone', e.target.value)}
+                            onBlur={() => {
+                              if (
+                                contact.phone &&
+                                index === guardianContacts.length - 1 &&
+                                guardianContacts.length < MAX_GUARDIAN_CONTACTS
+                              ) {
+                                contactIdRef.current += 1;
+                                setGuardianContacts(prev => [
+                                  ...prev,
+                                  { id: contactIdRef.current, guardianId: undefined, name: '', kana: '', relation: '', phone: '' },
+                                ]);
+                              }
+                            }}
+                            disabled={readOnly}
+                          />
+                        </FieldGroup>
                       </div>
                     </div>
                   ))}
