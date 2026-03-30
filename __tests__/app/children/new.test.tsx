@@ -68,6 +68,9 @@ describe('ChildForm new', () => {
     fireEvent.change(screen.getByPlaceholderText('日'), {
       target: { value: '10' },
     });
+    fireEvent.change(screen.getByPlaceholderText('090-0000-0000'), {
+      target: { value: '090-1234-5678' },
+    });
     const dateInputs = document.querySelectorAll('input[type="date"]');
     fireEvent.change(dateInputs[0], {
       target: { value: '2024-04-01' },
