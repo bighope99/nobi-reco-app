@@ -61,6 +61,17 @@ export const isPastDate = (dateString: string): boolean => {
   return target < today
 }
 
+/** 日付が今日より未来かどうか判定 */
+export const isFutureDate = (dateString: string): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const target = new Date(dateString)
+  target.setHours(0, 0, 0, 0)
+
+  return target > today
+}
+
 /** ステータスの表示情報を取得 */
 export const getStatusPresentation = (child: ChildAttendance, currentDate: string): StatusPresentation | null => {
   if (child.is_unexpected) {
@@ -233,11 +244,11 @@ export const applyOptimisticStatusUpdate = (
 export type CancelAction = 'cancel_check_in' | 'cancel_check_out'
 
 /**
- * 取り消しボタンの表示判定（施設管理者以上限定、過去日付のみ）
+ * 取り消しボタンの表示判定（施設管理者以上限定、未来日以外）
  * @returns 表示すべき取り消しアクションの配列
  */
 export const getCancelActions = (child: ChildAttendance, currentDate: string): CancelAction[] => {
-  if (!isPastDate(currentDate)) return []
+  if (isFutureDate(currentDate)) return []
 
   const actions: CancelAction[] = []
 

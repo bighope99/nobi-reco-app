@@ -356,9 +356,18 @@ describe('getCancelActions', () => {
     jest.useRealTimers()
   })
 
-  it('今日の日付では空配列を返す', () => {
+  it('今日の日付 + present + checked_in_at あり → [cancel_check_in]', () => {
     const child = makeChild({ status: 'present', checked_in_at: '2026-03-18T09:00:00Z' })
-    expect(getCancelActions(child, TODAY)).toEqual([])
+    expect(getCancelActions(child, TODAY)).toEqual(['cancel_check_in'])
+  })
+
+  it('今日の日付 + checked_out_at あり → [cancel_check_in, cancel_check_out]', () => {
+    const child = makeChild({
+      status: 'present',
+      checked_in_at: '2026-03-18T09:00:00Z',
+      checked_out_at: '2026-03-18T18:00:00Z',
+    })
+    expect(getCancelActions(child, TODAY)).toEqual(['cancel_check_in', 'cancel_check_out'])
   })
 
   it('未来日付では空配列を返す', () => {
