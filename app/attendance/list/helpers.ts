@@ -205,3 +205,67 @@ export const applyOptimisticStatusUpdate = (
     summary,
   }
 }
+
+export type CancelAction = 'cancel_check_in' | 'cancel_check_out'
+
+/**
+ * 取り消しボタンの表示判定（施設管理者以上限定、過去日付のみ）
+ * @returns 表示すべき取り消しアクションの配列
+ */
+export const getCancelActions = (child: ChildAttendance, currentDate: string): CancelAction[] => {
+  if (!isPastDate(currentDate)) return []
+
+  const actions: CancelAction[] = []
+
+  // 登園取消: 出席/遅刻でチェックイン記録がある場合
+  if ((child.status === 'present' || child.status === 'late') && child.checked_in_at) {
+    actions.push('cancel_check_in')
+  }
+
+  // 降園取消: チェックアウト記録がある場合
+  if (child.checked_out_at) {
+    actions.push('cancel_check_out')
+  }
+
+  return actions
+}
+
+/**
+ * 楽観的更新: 取り消しアクションを即座にUIに反映する純粋関数
+ */
+export const applyOptimisticCancelUpdate = (
+  data: AttendanceData,
+  childId: string,
+  cancelAction: CancelAction
+): AttendanceData => {
+  const updatedChildren = data.children.map(child => {
+    if (child.child_id !== childId) return child
+
+    if (cancelAction === 'cancel_check_in') {
+      return {
+        ...child,
+        status: 'absent' as const,
+        checked_in_at: null,
+        checked_out_at: null,
+        check_in_method: null,
+        is_unexpected: false,
+      }
+    }
+
+    // cancel_check_out: チェックアウト情報のみクリア
+    return {
+      ...child,
+      checked_out_at: null,
+    }
+  })
+
+  const summary = {
+    total_children: updatedChildren.length,
+    present_count: updatedChildren.filter(c => c.status === 'present').length,
+    absent_count: updatedChildren.filter(c => c.status === 'absent').length,
+    late_count: updatedChildren.filter(c => c.status === 'late').length,
+    not_checked_in_count: updatedChildren.filter(c => c.status === 'not_arrived' && c.is_expected).length,
+  }
+
+  return { ...data, children: updatedChildren, summary }
+}

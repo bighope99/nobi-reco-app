@@ -18,13 +18,17 @@ import {
   CheckCircle2,
   ArrowUp,
   ArrowDown,
+  Undo2,
 } from "lucide-react"
 import {
   type ChildAttendance,
   type AttendanceData,
+  type CancelAction,
   getStatusPresentation,
   getStatusAction,
   applyOptimisticStatusUpdate,
+  applyOptimisticCancelUpdate,
+  getCancelActions,
   isPastDate,
 } from "./helpers"
 
@@ -105,6 +109,51 @@ const StatusActionButton = ({
   )
 }
 
+// 取り消しボタンコンポーネント（施設管理者以上限定）
+const CancelActionButtons = ({
+  child,
+  currentDate,
+  canCancel,
+  onCancel,
+  isLoading,
+}: {
+  child: ChildAttendance
+  currentDate: string
+  canCancel: boolean
+  onCancel: (childId: string, action: CancelAction) => void
+  isLoading: boolean
+}) => {
+  if (!canCancel) return null
+
+  const actions = getCancelActions(child, currentDate)
+  if (actions.length === 0) return null
+
+  return (
+    <div className="flex gap-3 mt-1">
+      {actions.includes('cancel_check_in') && (
+        <button
+          onClick={() => onCancel(child.child_id, 'cancel_check_in')}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 text-xs text-red-500 underline hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Undo2 size={12} />
+          登園取消
+        </button>
+      )}
+      {actions.includes('cancel_check_out') && (
+        <button
+          onClick={() => onCancel(child.child_id, 'cancel_check_out')}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 text-xs text-slate-400 underline hover:text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Undo2 size={12} />
+          降園取消
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function AttendanceListPage() {
   // 初期値は空文字列にして、useEffectでクライアント側のみで設定
   // SSR時のタイムゾーン不一致を防ぐため
@@ -116,6 +165,7 @@ export default function AttendanceListPage() {
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
   const [canEditTime, setCanEditTime] = useState(false)
+  const [canCancel, setCanCancel] = useState(false)
   const [editingTime, setEditingTime] = useState<{ childId: string; field: 'in' | 'out'; value: string } | null>(null)
   const [timeLoading, setTimeLoading] = useState<{ childId: string; field: 'in' | 'out' } | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
@@ -135,6 +185,7 @@ export default function AttendanceListPage() {
         const session = JSON.parse(raw)
         const role = session.role as string
         setCanEditTime(['site_admin', 'company_admin', 'facility_admin'].includes(role))
+        setCanCancel(['site_admin', 'company_admin', 'facility_admin'].includes(role))
       }
     } catch {
       // sessionStorageが使えない場合は権限なし
@@ -317,6 +368,39 @@ export default function AttendanceListPage() {
       // エラー時はロールバック
       setAttendanceData(previousData)
       setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [childId]: false }))
+    }
+  }
+
+  const handleCancelAction = async (childId: string, cancelAction: CancelAction) => {
+    if (!attendanceData) return
+
+    setActionError(null)
+    setActionLoading(prev => ({ ...prev, [childId]: true }))
+
+    const previousData = attendanceData
+    setAttendanceData(applyOptimisticCancelUpdate(attendanceData, childId, cancelAction))
+
+    try {
+      const response = await fetch('/api/attendance/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          child_id: childId,
+          date: selectedDate,
+          status: cancelAction,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '取消に失敗しました')
+      }
+    } catch (err) {
+      console.error('Failed to cancel attendance:', err)
+      setAttendanceData(previousData)
+      setActionError(err instanceof Error ? err.message : '取消に失敗しました')
     } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))
     }
@@ -596,6 +680,13 @@ export default function AttendanceListPage() {
                           onMarkStatus={handleStatusChange}
                           isLoading={Boolean(actionLoading[child.child_id])}
                         />
+                        <CancelActionButtons
+                          child={child}
+                          currentDate={currentDate}
+                          canCancel={canCancel}
+                          onCancel={handleCancelAction}
+                          isLoading={Boolean(actionLoading[child.child_id])}
+                        />
                       </td>
                       <td className="px-5 py-3 text-slate-600">
                         {timeLoading?.childId === child.child_id && timeLoading?.field === 'in' ? (
@@ -706,6 +797,13 @@ export default function AttendanceListPage() {
                         child={child}
                         currentDate={currentDate}
                         onMarkStatus={handleStatusChange}
+                        isLoading={Boolean(actionLoading[child.child_id])}
+                      />
+                      <CancelActionButtons
+                        child={child}
+                        currentDate={currentDate}
+                        canCancel={canCancel}
+                        onCancel={handleCancelAction}
                         isLoading={Boolean(actionLoading[child.child_id])}
                       />
                     </div>

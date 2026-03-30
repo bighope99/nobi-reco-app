@@ -3,6 +3,8 @@ import {
   getStatusPresentation,
   getStatusAction,
   applyOptimisticStatusUpdate,
+  getCancelActions,
+  applyOptimisticCancelUpdate,
   ChildAttendance,
   AttendanceData,
 } from '@/app/attendance/list/helpers'
@@ -280,5 +282,229 @@ describe('applyOptimisticStatusUpdate', () => {
 
     expect(result.summary.present_count).toBe(1)
     expect(result.summary.absent_count).toBe(2)
+  })
+})
+
+describe('getCancelActions', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(FIXED_NOW)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('今日の日付では空配列を返す', () => {
+    const child = makeChild({ status: 'present', checked_in_at: '2026-03-18T09:00:00Z' })
+    expect(getCancelActions(child, TODAY)).toEqual([])
+  })
+
+  it('未来日付では空配列を返す', () => {
+    const child = makeChild({ status: 'present', checked_in_at: '2099-12-31T09:00:00Z' })
+    expect(getCancelActions(child, FUTURE_DATE)).toEqual([])
+  })
+
+  it('過去日付 + present + checked_in_at あり → [cancel_check_in]', () => {
+    const child = makeChild({
+      status: 'present',
+      checked_in_at: '2020-01-01T09:00:00Z',
+    })
+    expect(getCancelActions(child, PAST_DATE)).toEqual(['cancel_check_in'])
+  })
+
+  it('過去日付 + late + checked_in_at あり → [cancel_check_in]', () => {
+    const child = makeChild({
+      status: 'late',
+      checked_in_at: '2020-01-01T10:30:00Z',
+    })
+    expect(getCancelActions(child, PAST_DATE)).toEqual(['cancel_check_in'])
+  })
+
+  it('過去日付 + absent（チェックインなし）→ []', () => {
+    const child = makeChild({
+      status: 'absent',
+      checked_in_at: null,
+    })
+    expect(getCancelActions(child, PAST_DATE)).toEqual([])
+  })
+
+  it('過去日付 + present + checked_in_at あり + checked_out_at あり → [cancel_check_in, cancel_check_out]', () => {
+    const child = makeChild({
+      status: 'present',
+      checked_in_at: '2020-01-01T09:00:00Z',
+      checked_out_at: '2020-01-01T18:00:00Z',
+    })
+    expect(getCancelActions(child, PAST_DATE)).toEqual(['cancel_check_in', 'cancel_check_out'])
+  })
+
+  it('過去日付 + absent + checked_out_at だけある → [cancel_check_out]', () => {
+    // 理論的には発生しないが checked_out_at のみの場合の検証
+    const child = makeChild({
+      status: 'absent',
+      checked_in_at: null,
+      checked_out_at: '2020-01-01T18:00:00Z',
+    })
+    expect(getCancelActions(child, PAST_DATE)).toEqual(['cancel_check_out'])
+  })
+})
+
+describe('applyOptimisticCancelUpdate', () => {
+  describe('cancel_check_in', () => {
+    it('対象 child の status が absent になる', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+          is_unexpected: true,
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_in')
+
+      expect(result.children[0].status).toBe('absent')
+    })
+
+    it('対象 child の checked_in_at が null になる', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_in')
+
+      expect(result.children[0].checked_in_at).toBeNull()
+    })
+
+    it('対象 child の checked_out_at が null になる', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+          checked_out_at: '2020-01-01T18:00:00Z',
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_in')
+
+      expect(result.children[0].checked_out_at).toBeNull()
+    })
+
+    it('対象 child の is_unexpected が false になる', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+          is_unexpected: true,
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_in')
+
+      expect(result.children[0].is_unexpected).toBe(false)
+    })
+
+    it('summary の present_count が減り absent_count が増える', () => {
+      const children = [
+        makeChild({ child_id: 'child-1', status: 'present', checked_in_at: '2020-01-01T09:00:00Z' }),
+        makeChild({ child_id: 'child-2', status: 'absent' }),
+      ]
+      const data = makeAttendanceData(children)
+      expect(data.summary.present_count).toBe(1)
+      expect(data.summary.absent_count).toBe(1)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_in')
+
+      expect(result.summary.present_count).toBe(0)
+      expect(result.summary.absent_count).toBe(2)
+    })
+  })
+
+  describe('cancel_check_out', () => {
+    it('対象 child の checked_out_at が null になる', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+          checked_out_at: '2020-01-01T18:00:00Z',
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_out')
+
+      expect(result.children[0].checked_out_at).toBeNull()
+    })
+
+    it('対象 child の status は変わらない', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+          checked_out_at: '2020-01-01T18:00:00Z',
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_out')
+
+      expect(result.children[0].status).toBe('present')
+    })
+
+    it('summary は変わらない（status が変わらないため）', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+          checked_out_at: '2020-01-01T18:00:00Z',
+        }),
+        makeChild({ child_id: 'child-2', status: 'absent' }),
+      ]
+      const data = makeAttendanceData(children)
+      const beforePresent = data.summary.present_count
+      const beforeAbsent = data.summary.absent_count
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_out')
+
+      expect(result.summary.present_count).toBe(beforePresent)
+      expect(result.summary.absent_count).toBe(beforeAbsent)
+    })
+  })
+
+  describe('対象外の child', () => {
+    it('対象ではない child は変化しない', () => {
+      const children = [
+        makeChild({
+          child_id: 'child-1',
+          status: 'present',
+          checked_in_at: '2020-01-01T09:00:00Z',
+        }),
+        makeChild({
+          child_id: 'child-2',
+          status: 'late',
+          checked_in_at: '2020-01-01T10:30:00Z',
+        }),
+      ]
+      const data = makeAttendanceData(children)
+
+      const result = applyOptimisticCancelUpdate(data, 'child-1', 'cancel_check_in')
+
+      expect(result.children[1].status).toBe('late')
+      expect(result.children[1].checked_in_at).toBe('2020-01-01T10:30:00Z')
+      expect(result.children[1].child_id).toBe('child-2')
+    })
   })
 })

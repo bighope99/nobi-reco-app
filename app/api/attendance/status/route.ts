@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
+import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt'
 
 /** 今日の日付をJSTで YYYY-MM-DD 形式で返す */
 const getTodayJST = (): string => {
@@ -15,7 +15,8 @@ const getTodayJST = (): string => {
 /** 日付文字列が今日より過去かどうか判定 */
 const isPastDate = (date: string): boolean => date < getTodayJST()
 
-const VALID_STATUSES = ['absent', 'present', 'cancel'] as const
+const VALID_STATUSES = ['absent', 'present', 'cancel', 'cancel_check_in', 'cancel_check_out'] as const
+type ValidStatus = typeof VALID_STATUSES[number]
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Facility not found' }, { status: 404 })
     }
 
-    const { child_id, date, status } = await request.json()
+    const { child_id, date, status } = await request.json() as { child_id: string; date: string; status: ValidStatus }
 
     if (!child_id || !date || !status) {
       return NextResponse.json({ success: false, error: 'child_id, date and status are required' }, { status: 400 })
@@ -57,6 +58,12 @@ export async function POST(request: NextRequest) {
 
     if (childError || !child) {
       return NextResponse.json({ success: false, error: 'Child not found for facility' }, { status: 404 })
+    }
+
+    if (status === 'cancel_check_in' || status === 'cancel_check_out') {
+      if (!hasPermission(metadata, ['site_admin', 'company_admin', 'facility_admin'])) {
+        return NextResponse.json({ success: false, error: 'Forbidden: insufficient permissions' }, { status: 403 })
+      }
     }
 
     const { data: dailyRecord, error: dailyError } = await supabase
@@ -108,6 +115,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const dayStart = `${date}T00:00:00+09:00`
+    const nextDateObj = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
+    const nextY = nextDateObj.getUTCFullYear()
+    const nextM = String(nextDateObj.getUTCMonth() + 1).padStart(2, '0')
+    const nextD = String(nextDateObj.getUTCDate()).padStart(2, '0')
+    const dayEnd = `${nextY}-${nextM}-${nextD}T00:00:00+09:00`
+
     if (status === 'cancel') {
       const { error: dailyDeleteError } = await supabase
         .from('r_daily_attendance')
@@ -124,19 +138,90 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, data: { status: 'canceled', attendance_date: date } })
     }
 
+    if (status === 'cancel_check_in') {
+      const { data: hRecord, error: hFetchError } = await supabase
+        .from('h_attendance')
+        .select('id')
+        .eq('child_id', child_id)
+        .eq('facility_id', facility_id)
+        .gte('checked_in_at', dayStart)
+        .lt('checked_in_at', dayEnd)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (hFetchError) {
+        console.error('h_attendance fetch error:', hFetchError)
+        return NextResponse.json({ success: false, error: 'Failed to fetch attendance record' }, { status: 500 })
+      }
+
+      if (!hRecord) {
+        return NextResponse.json({ success: false, error: 'Attendance record not found' }, { status: 404 })
+      }
+
+      const { error: hSoftDeleteError } = await supabase
+        .from('h_attendance')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', hRecord.id)
+
+      if (hSoftDeleteError) {
+        console.error('h_attendance soft delete error:', hSoftDeleteError)
+        return NextResponse.json({ success: false, error: 'Failed to cancel check-in' }, { status: 500 })
+      }
+
+      if (dailyRecord) {
+        const { error: dailyResetError } = await supabase
+          .from('r_daily_attendance')
+          .update({ status: 'scheduled', updated_by: user_id, updated_at: timestamp })
+          .eq('id', dailyRecord.id)
+
+        if (dailyResetError) {
+          console.error('Daily attendance reset error:', dailyResetError)
+          return NextResponse.json({ success: false, error: 'Failed to reset daily attendance' }, { status: 500 })
+        }
+      }
+
+      return NextResponse.json({ success: true, data: { status: 'cancelled', attendance_date: date } })
+    }
+
+    if (status === 'cancel_check_out') {
+      const { data: hRecord, error: hFetchError } = await supabase
+        .from('h_attendance')
+        .select('id')
+        .eq('child_id', child_id)
+        .eq('facility_id', facility_id)
+        .gte('checked_in_at', dayStart)
+        .lt('checked_in_at', dayEnd)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (hFetchError) {
+        console.error('h_attendance fetch error:', hFetchError)
+        return NextResponse.json({ success: false, error: 'Failed to fetch attendance record' }, { status: 500 })
+      }
+
+      if (!hRecord) {
+        return NextResponse.json({ success: false, error: 'Attendance record not found' }, { status: 404 })
+      }
+
+      const { error: hCancelCheckOutError } = await supabase
+        .from('h_attendance')
+        .update({ checked_out_at: null, check_out_method: null, checked_out_by: null })
+        .eq('id', hRecord.id)
+
+      if (hCancelCheckOutError) {
+        console.error('h_attendance cancel check-out error:', hCancelCheckOutError)
+        return NextResponse.json({ success: false, error: 'Failed to cancel check-out' }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true, data: { status: 'checkout_cancelled', attendance_date: date } })
+    }
+
     if (status === 'absent') {
       const upsertResult = await upsertDailyAttendance('absent')
       if (upsertResult) return upsertResult
 
       // 過去日付の場合: h_attendance のチェックイン記録を削除
       if (isPastDate(date)) {
-        const dayStart = `${date}T00:00:00+09:00`
-        const nextDateObj = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
-        const nextY = nextDateObj.getUTCFullYear()
-        const nextM = String(nextDateObj.getUTCMonth() + 1).padStart(2, '0')
-        const nextD = String(nextDateObj.getUTCDate()).padStart(2, '0')
-        const dayEnd = `${nextY}-${nextM}-${nextD}T00:00:00+09:00`
-
         const { error: hDeleteError } = await supabase
           .from('h_attendance')
           .delete()
