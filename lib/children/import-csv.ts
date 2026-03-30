@@ -28,7 +28,7 @@ export type ImportPreviewRow = {
   duplicates?: DuplicateInfo[];
 };
 
-const headerLabels = {
+export const CHILD_IMPORT_HEADER_LABELS = {
   child_id: 'ID',
   family_name: '姓',
   given_name: '名',
@@ -56,6 +56,77 @@ const headerLabels = {
   emergency_contact_2_relation: '緊急連絡先2_続柄',
   emergency_contact_2_phone: '緊急連絡先2_電話',
 } as const;
+
+const headerLabels = CHILD_IMPORT_HEADER_LABELS;
+
+export const CHILD_IMPORT_HEADERS = [
+  headerLabels.child_id,
+  headerLabels.family_name,
+  headerLabels.given_name,
+  headerLabels.family_name_kana,
+  headerLabels.given_name_kana,
+  headerLabels.nickname,
+  headerLabels.gender,
+  headerLabels.birth_date,
+  headerLabels.enrollment_status,
+  headerLabels.enrollment_type,
+  headerLabels.enrolled_at,
+  headerLabels.withdrawn_at,
+  headerLabels.parent_name,
+  headerLabels.parent_phone,
+  headerLabels.parent_email,
+  headerLabels.allergies,
+  headerLabels.child_characteristics,
+  headerLabels.parent_characteristics,
+  headerLabels.photo_permission_public,
+  headerLabels.photo_permission_share,
+  headerLabels.emergency_contact_1_name,
+  headerLabels.emergency_contact_1_relation,
+  headerLabels.emergency_contact_1_phone,
+  headerLabels.emergency_contact_2_name,
+  headerLabels.emergency_contact_2_relation,
+  headerLabels.emergency_contact_2_phone,
+] as const;
+
+export const REQUIRED_CHILD_IMPORT_HEADERS = [
+  headerLabels.family_name,
+  headerLabels.given_name,
+  headerLabels.birth_date,
+  headerLabels.enrolled_at,
+  headerLabels.parent_name,
+  headerLabels.parent_phone,
+] as const;
+
+export const FORBIDDEN_CHILD_IMPORT_HEADERS = ['学校名', 'クラス名'] as const;
+
+export const CHILD_IMPORT_TEMPLATE_SAMPLE_ROW = [
+  'sample-child-001',
+  '山田',
+  '花子',
+  'ヤマダ',
+  'ハナコ',
+  '',
+  '女',
+  '2019-04-12',
+  '在籍',
+  '通年',
+  '2024-04-01',
+  '',
+  '山田 太郎',
+  '090-1234-5678',
+  'taro@example.com',
+  '',
+  '',
+  '',
+  'true',
+  'true',
+  '山田 次郎',
+  '叔父',
+  '090-0000-0000',
+  '',
+  '',
+  '',
+] as const;
 
 export function parseCsvText(text: string): { headers: string[]; rows: CsvRow[] } {
   const sanitized = text.startsWith('\ufeff') ? text.slice(1) : text;

@@ -1,6 +1,7 @@
 import { GET } from '@/app/api/children/export/route';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
+import { CHILD_IMPORT_HEADERS } from '@/lib/children/import-csv';
 import { NextRequest } from 'next/server';
 
 const makeRequest = (url = 'http://localhost/api/children/export') =>
@@ -147,13 +148,12 @@ describe('GET /api/children/export', () => {
     const text = await response.text();
     const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
 
-    // Check header starts with ID
-    expect(lines[0].startsWith('ID,')).toBe(true);
+    // Check header matches the import template format exactly
+    expect(lines[0]).toBe(CHILD_IMPORT_HEADERS.join(','));
 
     // Check data row starts with child UUID
     expect(lines[1].startsWith('child-uuid-1,')).toBe(true);
 
-    // Check header contains expected columns
     expect(lines[0]).toContain('姓');
     expect(lines[0]).toContain('名');
     expect(lines[0]).toContain('生年月日');
@@ -309,7 +309,7 @@ describe('GET /api/children/export', () => {
 
     // Only header row, no data
     expect(lines.length).toBe(1);
-    expect(lines[0].startsWith('ID,')).toBe(true);
+    expect(lines[0]).toBe(CHILD_IMPORT_HEADERS.join(','));
   });
 
   it('should preserve leading zeros in phone numbers using ="value" format', async () => {

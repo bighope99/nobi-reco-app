@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, kana, phone, relationship, notes, child_id, photo_path } = body;
+    const { name, kana, phone, notes, child_id, photo_path } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: '氏名は必須です' }, { status: 400 });
@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
     }
 
     // child_id が自施設に属するか確認（INSERT前に検証してレコード孤立を防ぐ）
-    if (child_id && relationship) {
+    if (child_id) {
       const { data: childCheck } = await supabase
         .from('m_children')
         .select('id')
@@ -323,13 +323,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 子どもと紐づけ
-    if (child_id && relationship) {
+    if (child_id) {
       const { error: linkError } = await supabase
         .from('_child_guardian')
         .upsert({
           child_id,
           guardian_id: guardian.id,
-          relationship,
+          relationship: '保護者',
           is_primary: true,
           is_emergency_contact: true,
         }, { onConflict: 'child_id,guardian_id' });
@@ -370,7 +370,7 @@ export async function POST(request: NextRequest) {
           const siblingUpserts = validSiblings.map((s: { id: string }) => ({
             child_id: s.id,
             guardian_id: guardian.id,
-            relationship,
+            relationship: '保護者',
             is_primary: false,
             is_emergency_contact: true,
           }));

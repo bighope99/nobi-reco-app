@@ -2,35 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrEmpty } from '@/utils/crypto/decryption-helper';
-
-const exportHeaders = [
-  'ID',
-  '姓',
-  '名',
-  'セイ',
-  'メイ',
-  'ニックネーム',
-  '性別',
-  '生年月日',
-  '入所状況',
-  '入所種別',
-  '入所日',
-  '退所日',
-  '保護者氏名',
-  '保護者電話',
-  '保護者メール',
-  'アレルギー',
-  '子どもの特性',
-  '保護者の状況・要望',
-  '写真公開許可',
-  '写真共有許可',
-  '緊急連絡先1_氏名',
-  '緊急連絡先1_続柄',
-  '緊急連絡先1_電話',
-  '緊急連絡先2_氏名',
-  '緊急連絡先2_続柄',
-  '緊急連絡先2_電話',
-];
+import { CHILD_IMPORT_HEADERS } from '@/lib/children/import-csv';
 
 function formatGender(gender: string | null): string {
   if (!gender) return '';
@@ -183,7 +155,7 @@ export async function GET(request: NextRequest) {
 
     // CSV行を構築
     const csvRows: string[] = [];
-    csvRows.push(exportHeaders.map(escapeCsvField).join(','));
+    csvRows.push(CHILD_IMPORT_HEADERS.map(escapeCsvField).join(','));
 
     for (const child of children || []) {
       const guardians = child._child_guardian || [];

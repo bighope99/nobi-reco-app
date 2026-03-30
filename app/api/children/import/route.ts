@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { saveChild, type ChildPayload } from '@/app/api/children/save/route';
-import { buildChildPayload, buildPreviewRow, normalizePhone, parseCsvText, type DuplicateInfo } from '@/lib/children/import-csv';
+import {
+  buildChildPayload,
+  buildPreviewRow,
+  FORBIDDEN_CHILD_IMPORT_HEADERS,
+  normalizePhone,
+  parseCsvText,
+  REQUIRED_CHILD_IMPORT_HEADERS,
+  type DuplicateInfo,
+} from '@/lib/children/import-csv';
 import { buildSiblingCandidateGroups, type ExistingSiblingRow, type IncomingSiblingRow, type RegisteredSiblingPair } from '@/lib/children/import-siblings';
 import { decryptOrFallback, formatName } from '@/utils/crypto/decryption-helper';
 import { deleteSearchIndex, searchByName, searchByPhone, updateSearchIndex } from '@/utils/pii/searchIndex';
@@ -256,10 +264,8 @@ export async function POST(request: NextRequest) {
     const { headers, rows } = parseCsvText(text);
 
     // フォーマット検証: 必須列の不足 または 廃止列の混入
-    const REQUIRED_HEADERS = ['姓', '名', '生年月日', '入所日', '保護者氏名', '保護者電話'];
-    const FORBIDDEN_HEADERS = ['学校名', 'クラス名'];
-    const missingHeaders = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
-    const foundForbidden = FORBIDDEN_HEADERS.filter((h) => headers.includes(h));
+    const missingHeaders = REQUIRED_CHILD_IMPORT_HEADERS.filter((h) => !headers.includes(h));
+    const foundForbidden = FORBIDDEN_CHILD_IMPORT_HEADERS.filter((h) => headers.includes(h));
     if (missingHeaders.length > 0 || foundForbidden.length > 0) {
       const reasons: string[] = [];
       if (missingHeaders.length > 0) reasons.push(`必須列が不足しています: ${missingHeaders.join(', ')}`);
