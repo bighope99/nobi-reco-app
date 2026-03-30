@@ -9,9 +9,11 @@ import { syncGuardiansToSiblings, syncGuardiansBidirectional } from '@/lib/child
 // guardian-sync.ts が実行するクエリシーケンス:
 //   1. _child_sibling  : .select('sibling_id').eq('child_id', childId)
 //   2. m_children      : .select('id').in('id', siblingIds).eq('facility_id', facilityId).is('deleted_at', null)
-//   3. _child_guardian : .select('guardian_id, relationship, is_emergency_contact').eq('child_id', childId)
+//   3. _child_guardian : .select('guardian_id, relationship, is_emergency_contact, is_primary').eq('child_id', childId)
 //   4. _child_guardian : .select('child_id, guardian_id').in('child_id', validSiblingIds)
 //   5. _child_guardian : .upsert(newLinks, { onConflict: ..., ignoreDuplicates: true })
+//   6. _child_guardian : .update({ is_primary: true }).eq('child_id', siblingId).eq('guardian_id', primaryGuardianId)  [兄弟×1]
+//   7. _child_guardian : .update({ is_primary: false }).eq('child_id', siblingId).neq('guardian_id', primaryGuardianId) [兄弟×1]
 // ---------------------------------------------------------------------------
 
 interface CreateSupabaseMockOptions {
@@ -23,11 +25,14 @@ interface CreateSupabaseMockOptions {
     guardian_id: string;
     relationship: string;
     is_emergency_contact: boolean;
+    is_primary: boolean;
   }> | null;
   childGuardiansError?: { message: string } | null;
   existingLinksData?: Array<{ child_id: string; guardian_id: string }> | null;
   existingLinksError?: { message: string } | null;
   upsertError?: { message: string } | null;
+  primaryUpdateError?: { message: string } | null;
+  otherUpdateError?: { message: string } | null;
 }
 
 const createSupabaseMock = (options: CreateSupabaseMockOptions = {}) => {
@@ -41,15 +46,31 @@ const createSupabaseMock = (options: CreateSupabaseMockOptions = {}) => {
     existingLinksData = [],
     existingLinksError = null,
     upsertError = null,
+    primaryUpdateError = null,
+    otherUpdateError = null,
   } = options;
 
-  // _child_guardian は2回 from が呼ばれる:
-  //   1回目: .select('guardian_id, relationship, is_emergency_contact').eq('child_id', childId)
-  //   2回目: .select('child_id, guardian_id').in('child_id', validSiblingIds)
+  // _child_guardian は複数回 from が呼ばれる:
+  //   1回目: .select(...).eq('child_id', childId) → 子どもの保護者取得
+  //   2回目: .select(...).in('child_id', validSiblingIds) → 既存リンク取得
+  //   3回目: upsert 呼び出し用（.from('_child_guardian').upsert(...)）
+  //   4回目以降: .update({ is_primary: true/false }).eq(...).eq/neq(...) → is_primary 同期
   // from が呼ばれるたびに呼び出し回数をカウントして分岐する。
   let childGuardianFromCount = 0;
 
+  // update チェーンのカウント（primaryUpdate → otherUpdate の順）
+  let updateCallCount = 0;
+
   const upsertMockFn = jest.fn().mockResolvedValue({ error: upsertError });
+
+  // update チェーン: .update({...}).eq(...).eq/neq(...)
+  const buildUpdateChain = (error: { message: string } | null) =>
+    jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error }),
+        neq: jest.fn().mockResolvedValue({ error }),
+      }),
+    });
 
   return {
     from: jest.fn((table: string) => {
@@ -109,8 +130,18 @@ const createSupabaseMock = (options: CreateSupabaseMockOptions = {}) => {
           };
         }
 
-        // 3回目: upsert 呼び出し用（.from('_child_guardian').upsert(...)）
-        return { upsert: upsertMockFn };
+        if (callIndex === 3) {
+          // 3回目: upsert 呼び出し用
+          return { upsert: upsertMockFn };
+        }
+
+        // 4回目以降: is_primary 同期の update チェーン
+        // updateCallCount を交互に使って primaryUpdate / otherUpdate を分岐
+        updateCallCount += 1;
+        const isPrimaryUpdate = updateCallCount % 2 === 1;
+        return {
+          update: buildUpdateChain(isPrimaryUpdate ? primaryUpdateError : otherUpdateError),
+        };
       }
 
       return {};
@@ -209,7 +240,7 @@ describe('syncGuardiansToSiblings', () => {
         siblingLinksData: [{ sibling_id: 'child-b' }],
         validSiblingsData: [{ id: 'child-b' }],
         childGuardiansData: [
-          { guardian_id: 'guardian-1', relationship: '父', is_emergency_contact: true },
+          { guardian_id: 'guardian-1', relationship: '父', is_emergency_contact: true, is_primary: true },
         ],
         existingLinksData: [
           // child-b にはすでに guardian-1 が紐付いている
@@ -223,12 +254,12 @@ describe('syncGuardiansToSiblings', () => {
       expect((supabase as any)._upsertMock).not.toHaveBeenCalled();
     });
 
-    it('兄弟あり・既存リンクなし → 新規 upsert される', async () => {
+    it('兄弟あり・既存リンクなし → 新規 upsert され is_primary がソースからコピーされる', async () => {
       const supabase = createSupabaseMock({
         siblingLinksData: [{ sibling_id: 'child-b' }],
         validSiblingsData: [{ id: 'child-b' }],
         childGuardiansData: [
-          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false },
+          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false, is_primary: false },
         ],
         existingLinksData: [], // 既存リンクなし
       });
@@ -250,12 +281,35 @@ describe('syncGuardiansToSiblings', () => {
       );
     });
 
+    it('is_primary=true の保護者がいる場合 → upsert 後に is_primary 同期が実行される', async () => {
+      const supabase = createSupabaseMock({
+        siblingLinksData: [{ sibling_id: 'child-b' }],
+        validSiblingsData: [{ id: 'child-b' }],
+        childGuardiansData: [
+          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false, is_primary: true },
+        ],
+        existingLinksData: [],
+      });
+
+      await syncGuardiansToSiblings(supabase as any, CHILD_ID, FACILITY_ID);
+
+      // upsert が呼ばれる
+      expect((supabase as any)._upsertMock).toHaveBeenCalledTimes(1);
+
+      // is_primary 同期のための update チェーンが _child_guardian で呼ばれる
+      const childGuardianCalls = supabase.from.mock.calls.filter(
+        (c: string[]) => c[0] === '_child_guardian'
+      );
+      // 1:保護者取得, 2:既存リンク取得, 3:upsert, 4:primaryUpdate, 5:otherUpdate = 5回
+      expect(childGuardianCalls).toHaveLength(5);
+    });
+
     it('全保護者が既存リンク済みの場合 → newLinks が空なので upsert は呼ばれない', async () => {
       const supabase = createSupabaseMock({
         siblingLinksData: [{ sibling_id: 'child-b' }],
         validSiblingsData: [{ id: 'child-b' }],
         childGuardiansData: [
-          { guardian_id: 'guardian-1', relationship: '父', is_emergency_contact: true },
+          { guardian_id: 'guardian-1', relationship: '父', is_emergency_contact: true, is_primary: true },
         ],
         existingLinksData: [{ child_id: 'child-b', guardian_id: 'guardian-1' }], // 全員既存
       });
@@ -305,7 +359,7 @@ describe('syncGuardiansToSiblings', () => {
         siblingLinksData: [{ sibling_id: 'child-b' }],
         validSiblingsData: [{ id: 'child-b' }],
         childGuardiansData: [
-          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false },
+          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false, is_primary: false },
         ],
         existingLinksError: { message: 'Existing links query failed' },
       });
@@ -320,7 +374,7 @@ describe('syncGuardiansToSiblings', () => {
         siblingLinksData: [{ sibling_id: 'child-b' }],
         validSiblingsData: [{ id: 'child-b' }],
         childGuardiansData: [
-          { guardian_id: 'guardian-1', relationship: '父', is_emergency_contact: true },
+          { guardian_id: 'guardian-1', relationship: '父', is_emergency_contact: true, is_primary: false },
         ],
         existingLinksData: [], // 既存リンクなし → upsert が走る
         upsertError: { message: 'Upsert conflict' },
@@ -329,6 +383,38 @@ describe('syncGuardiansToSiblings', () => {
       await expect(
         syncGuardiansToSiblings(supabase as any, CHILD_ID, FACILITY_ID)
       ).rejects.toThrow('Failed to sync guardian links to siblings: Upsert conflict');
+    });
+
+    it('筆頭保護者の is_primary=true 更新エラー時 → エラーをthrow する', async () => {
+      const supabase = createSupabaseMock({
+        siblingLinksData: [{ sibling_id: 'child-b' }],
+        validSiblingsData: [{ id: 'child-b' }],
+        childGuardiansData: [
+          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false, is_primary: true },
+        ],
+        existingLinksData: [],
+        primaryUpdateError: { message: 'Primary update failed' },
+      });
+
+      await expect(
+        syncGuardiansToSiblings(supabase as any, CHILD_ID, FACILITY_ID)
+      ).rejects.toThrow('Failed to sync primary guardian for sibling child-b: Primary update failed');
+    });
+
+    it('他保護者の is_primary=false 更新エラー時 → エラーをthrow する', async () => {
+      const supabase = createSupabaseMock({
+        siblingLinksData: [{ sibling_id: 'child-b' }],
+        validSiblingsData: [{ id: 'child-b' }],
+        childGuardiansData: [
+          { guardian_id: 'guardian-1', relationship: '母', is_emergency_contact: false, is_primary: true },
+        ],
+        existingLinksData: [],
+        otherUpdateError: { message: 'Other update failed' },
+      });
+
+      await expect(
+        syncGuardiansToSiblings(supabase as any, CHILD_ID, FACILITY_ID)
+      ).rejects.toThrow('Failed to clear primary guardian for sibling child-b: Other update failed');
     });
   });
 });

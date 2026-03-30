@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * 指定した子どもの保護者を兄弟姉妹に同期する
- * 既存のリンクは保持し、新規リンクのみ追加する（is_primary は上書きしない）
+ * 既存のリンクは保持し、新規リンクのみ追加する。その後 is_primary を強制同期する
  *
  * @param supabase         Supabase クライアント（RLS 有効）
  * @param childId          起点となる子どもの ID
@@ -61,7 +61,7 @@ export async function syncGuardiansToSiblings(
   // この子どもに紐づく保護者を取得
   const { data: childGuardians, error: guardianError } = await supabase
     .from('_child_guardian')
-    .select('guardian_id, relationship, is_emergency_contact')
+    .select('guardian_id, relationship, is_emergency_contact, is_primary')
     .eq('child_id', childId);
 
   if (guardianError) {
@@ -95,11 +95,11 @@ export async function syncGuardiansToSiblings(
     const existing = existingMap.get(siblingId) ?? new Set<string>();
     return childGuardians
       .filter((g: { guardian_id: string }) => !existing.has(g.guardian_id))
-      .map((g: { guardian_id: string; relationship: string; is_emergency_contact: boolean }) => ({
+      .map((g: { guardian_id: string; relationship: string; is_emergency_contact: boolean; is_primary: boolean }) => ({
         child_id: siblingId,
         guardian_id: g.guardian_id,
         relationship: g.relationship,
-        is_primary: false,
+        is_primary: g.is_primary,
         is_emergency_contact: g.is_emergency_contact,
       }));
   });
@@ -113,6 +113,38 @@ export async function syncGuardiansToSiblings(
 
   if (upsertError) {
     throw new Error(`Failed to sync guardian links to siblings: ${upsertError.message}`);
+  }
+
+  // is_primary 同期: ソースの筆頭保護者をターゲット兄弟にも反映
+  // ignoreDuplicates: true のため既存リンクは upsert では更新されないので別途 UPDATE する
+  const primaryGuardianId = childGuardians.find(
+    (g: { is_primary: boolean }) => g.is_primary
+  )?.guardian_id;
+
+  if (primaryGuardianId) {
+    for (const siblingId of validSiblingIds) {
+      // 筆頭保護者を is_primary=true に更新
+      const { error: primaryUpdateError } = await supabase
+        .from('_child_guardian')
+        .update({ is_primary: true })
+        .eq('child_id', siblingId)
+        .eq('guardian_id', primaryGuardianId);
+
+      if (primaryUpdateError) {
+        throw new Error(`Failed to sync primary guardian for sibling ${siblingId}: ${primaryUpdateError.message}`);
+      }
+
+      // 他の保護者を is_primary=false に更新
+      const { error: otherUpdateError } = await supabase
+        .from('_child_guardian')
+        .update({ is_primary: false })
+        .eq('child_id', siblingId)
+        .neq('guardian_id', primaryGuardianId);
+
+      if (otherUpdateError) {
+        throw new Error(`Failed to clear primary guardian for sibling ${siblingId}: ${otherUpdateError.message}`);
+      }
+    }
   }
 }
 
