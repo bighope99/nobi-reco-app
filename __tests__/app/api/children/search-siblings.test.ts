@@ -39,21 +39,26 @@ const mockSearchByPhone = searchByPhone as jest.MockedFunction<typeof searchByPh
 /**
  * Supabase Mock Builder for POST /api/children/search-siblings
  *
- * The route executes two queries in sequence:
- *   1. m_guardians: .select('id, _child_guardian(child_id)').eq('facility_id', ...).in('id', guardianIds).is('deleted_at', null)
- *   2. m_children:  .select(...).eq(...).eq(...).in(...).is(...)
+ * The route executes queries in sequence:
+ *   1. m_guardians:     .select('id, _child_guardian(child_id)').eq('facility_id', ...).in('id', guardianIds).is('deleted_at', null)
+ *   2. m_children:      .select(...).eq(...).eq(...).in(...).is(...)
+ *   3. _child_guardian: .select(...).in('child_id', ...).eq('is_primary', false).eq('is_emergency_contact', true).is('deleted_at', null)
  */
 const createSupabaseMock = (options: {
   childrenData?: any[];
   childrenError?: any;
   guardiansData?: Array<{ id: string; _child_guardian: Array<{ child_id: string }> }>;
   guardiansError?: any;
+  guardianLinksData?: any[];
+  guardianLinksError?: any;
 }) => {
   const {
     childrenData = [],
     childrenError = null,
     guardiansData,
     guardiansError = null,
+    guardianLinksData = [],
+    guardianLinksError = null,
   } = options;
 
   return {
@@ -81,6 +86,22 @@ const createSupabaseMock = (options: {
                   is: jest.fn().mockResolvedValue({
                     data: childrenData,
                     error: childrenError,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === '_child_guardian') {
+        return {
+          select: jest.fn().mockReturnValue({
+            in: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  is: jest.fn().mockResolvedValue({
+                    data: guardianLinksData,
+                    error: guardianLinksError,
                   }),
                 }),
               }),
