@@ -90,6 +90,8 @@ export const CHILD_IMPORT_HEADERS = [
   headerLabels.emergency_contact_2_phone,
 ] as const;
 
+export const CHILD_IMPORT_TEMPLATE_HEADERS = CHILD_IMPORT_HEADERS.slice(1);
+
 export const REQUIRED_CHILD_IMPORT_HEADERS = [
   headerLabels.family_name,
   headerLabels.given_name,
@@ -130,6 +132,9 @@ export const CHILD_IMPORT_TEMPLATE_SAMPLE_ROW = [
   '',
   '',
 ] as const;
+
+export const CHILD_IMPORT_TEMPLATE_SAMPLE_ROW_WITHOUT_ID =
+  CHILD_IMPORT_TEMPLATE_SAMPLE_ROW.slice(1);
 
 export function parseCsvText(text: string): { headers: string[]; rows: CsvRow[] } {
   const sanitized = text.startsWith('\ufeff') ? text.slice(1) : text;
@@ -358,13 +363,25 @@ function parseBoolean(value: string, defaultValue: boolean): boolean {
 }
 
 export function normalizePhone(value: string): string {
+  let normalized = value
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+
+  // 旧エクスポートの ="090..." 形式も受け付ける
+  if (/^=".*"$/.test(normalized)) {
+    normalized = normalized.slice(2, -1);
+  }
+
+  // 先頭のアポストロフィなど、表計算向けの文字列化プレフィックスを除去
+  normalized = normalized.replace(/^'+/, '');
+
   // First, convert full-width digits (０-９) to half-width (0-9)
-  let normalized = value.replace(/[０-９]/g, (char) => {
+  normalized = normalized.replace(/[０-９]/g, (char) => {
     return String.fromCharCode(char.charCodeAt(0) - 0xfee0);
   });
   
-  // Then remove separators (spaces, hyphens, full-width hyphen/dash, etc.)
-  normalized = normalized.replace(/[-‐‑–—―ー－\s\u3000]/g, '').trim();
+  // Then remove separators and CSV/export artifacts
+  normalized = normalized.replace(/[-‐‑–—―ー－\s\u3000"'=]/g, '').trim();
   
   return normalized;
 }

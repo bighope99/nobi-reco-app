@@ -46,10 +46,10 @@ function escapeCsvField(value: string): string {
   return sanitized;
 }
 
-// 電話番号をExcel/Googleスプレッドシートで文字列として認識させるため ="値" 形式で出力
+// 電話番号を見た目を崩さず文字列として扱わせるため、不可視のゼロ幅スペースを先頭に付ける
 function escapePhoneField(value: string): string {
   if (!value) return '';
-  return `="${value}"`;
+  return `\u200B${value}`;
 }
 
 export async function GET(request: NextRequest) {

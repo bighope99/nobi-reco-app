@@ -148,7 +148,7 @@ describe('GET /api/children/export', () => {
     const text = await response.text();
     const lines = text.replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
 
-    // Check header matches the import template format exactly
+    // 一覧エクスポートは更新用なので ID 列を含む
     expect(lines[0]).toBe(CHILD_IMPORT_HEADERS.join(','));
 
     // Check data row starts with child UUID
@@ -389,10 +389,10 @@ describe('GET /api/children/export', () => {
     expect(parentPhoneIndex).toBeGreaterThan(-1);
     expect(ec1PhoneIndex).toBeGreaterThan(-1);
 
-    // ="値" 形式で出力されること（Excelで先頭0が保持される）
+    // ゼロ幅スペース付きで出力されること（見た目を崩さず先頭0を保持）
     const dataFields = lines[1].split(',');
-    expect(dataFields[parentPhoneIndex]).toBe('="09012345678"');
-    expect(dataFields[ec1PhoneIndex]).toBe('="08087654321"');
+    expect(dataFields[parentPhoneIndex]).toBe('\u200B09012345678');
+    expect(dataFields[ec1PhoneIndex]).toBe('\u200B08087654321');
   });
 
   it('should output empty string for empty phone numbers', async () => {
@@ -441,7 +441,7 @@ describe('GET /api/children/export', () => {
     const ec1PhoneIndex = headers.indexOf('保護者連絡先1_電話');
     const ec2PhoneIndex = headers.indexOf('保護者連絡先2_電話');
 
-    // 電話番号が空の場合は空文字（="" 形式にならない）
+    // 電話番号が空の場合は空文字
     const dataFields = lines[1].split(',');
     expect(dataFields[parentPhoneIndex]).toBe('');
     expect(dataFields[ec1PhoneIndex]).toBe('');
