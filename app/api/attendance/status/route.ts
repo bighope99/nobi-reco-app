@@ -175,6 +175,15 @@ export async function POST(request: NextRequest) {
 
         if (dailyResetError) {
           console.error('Daily attendance reset error:', dailyResetError)
+          const { error: restoreAttendanceError } = await supabase
+            .from('h_attendance')
+            .update({ deleted_at: null })
+            .eq('id', hRecord.id)
+
+          if (restoreAttendanceError) {
+            console.error('h_attendance restore error after daily reset failure:', restoreAttendanceError)
+          }
+
           return NextResponse.json({ success: false, error: 'Failed to reset daily attendance' }, { status: 500 })
         }
       }

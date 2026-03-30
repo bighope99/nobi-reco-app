@@ -115,6 +115,7 @@ const EditableTimeField = ({
   const textClassName = field === 'in' ? 'text-emerald-600' : 'text-slate-600'
   const editTitle = field === 'in' ? 'クリックして出席時刻を修正' : 'クリックして帰宅時刻を修正'
   const settingLabel = field === 'in' ? '出席時刻を設定' : '帰宅時刻を設定'
+  const cancelOnBlurRef = useRef(false)
 
   if (isUpdating) {
     return (
@@ -132,6 +133,14 @@ const EditableTimeField = ({
         defaultValue={timestamp ? formatTime(timestamp) : ''}
         className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
         onBlur={(e) => {
+          const cancelled = cancelOnBlurRef.current
+          cancelOnBlurRef.current = false
+
+          if (cancelled) {
+            onCancel()
+            return
+          }
+
           if (editingTime?.childId === child.child_id && editingTime.field === field) {
             if (e.target.value) onCommit(child.child_id, field, e.target.value)
             else onCancel()
@@ -140,6 +149,8 @@ const EditableTimeField = ({
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           if (e.key === 'Escape') {
+            e.preventDefault()
+            cancelOnBlurRef.current = true
             onCancel()
             e.currentTarget.blur()
           }
@@ -315,7 +326,7 @@ export default function AttendanceListPage() {
   const formatTime = (dateString: string | null) => {
     if (!dateString) return ''
     const date = new Date(dateString)
-    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
   const formatDisplayDate = (dateString: string) => {
