@@ -172,6 +172,7 @@ export async function GET(request: NextRequest) {
 
       // 保護者情報の復号化
       let parentName = '';
+      let parentRelationship = '';
       let parentPhone = '';
       let parentEmail = '';
       if (primaryGuardian?.m_guardians) {
@@ -179,6 +180,7 @@ export async function GET(request: NextRequest) {
         const gFamily = decryptOrEmpty(g.family_name);
         const gGiven = decryptOrEmpty(g.given_name);
         parentName = `${gFamily} ${gGiven}`.trim() || gFamily;
+        parentRelationship = primaryGuardian.relationship || '';
         parentPhone = decryptOrEmpty(g.phone);
         parentEmail = decryptOrEmpty(g.email);
       }
@@ -213,6 +215,7 @@ export async function GET(request: NextRequest) {
         escapeCsvField(formatDate(child.enrolled_at)),
         escapeCsvField(formatDate(child.withdrawn_at)),
         escapeCsvField(parentName),
+        escapeCsvField(parentRelationship),
         escapePhoneField(parentPhone),
         escapeCsvField(parentEmail),
         escapeCsvField(decryptOrEmpty(child.allergies)),

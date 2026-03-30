@@ -37,6 +37,7 @@ export interface ChildPayload {
   };
   contact?: {
     parent_name?: string;           // 保護者名（追加）
+    parent_relationship?: string;
     parent_phone?: string;
     parent_email?: string;
     emergency_contacts?: Array<{    // 緊急連絡先リスト（追加）
@@ -350,13 +351,14 @@ export async function saveChild(
       }
 
       if (guardianId) {
+        const primaryGuardianRelationship = contact.parent_relationship?.trim() || '保護者';
         // 児童と保護者を紐付け（upsert）
         const { error: linkError } = await supabase
           .from('_child_guardian')
           .upsert({
             child_id: result.id,
             guardian_id: guardianId,
-            relationship: '保護者',
+            relationship: primaryGuardianRelationship,
             is_primary: true,
             is_emergency_contact: true,
           }, {

@@ -34,6 +34,7 @@ describe('children import csv helpers', () => {
       入所日: '2024-04-01',
       性別: '女',
       保護者氏名: '山田 太郎',
+      筆頭保護者_続柄: '父',
       保護者電話: '090-1234-5678',
     };
 
@@ -44,6 +45,7 @@ describe('children import csv helpers', () => {
     expect(result.payload?.affiliation?.class_id).toBe('class-1');
     expect(result.payload?.basic_info?.gender).toBe('female');
     expect(result.payload?.affiliation?.enrollment_status).toBe('enrolled');
+    expect(result.payload?.contact?.parent_relationship).toBe('父');
     expect(result.payload?.contact?.parent_phone).toBe('09012345678');
   });
 

@@ -157,6 +157,12 @@ describe('GET /api/children/export', () => {
     expect(lines[0]).toContain('姓');
     expect(lines[0]).toContain('名');
     expect(lines[0]).toContain('生年月日');
+    expect(lines[0]).toContain('筆頭保護者_続柄');
+    expect(lines[0]).toContain('保護者連絡先1_氏名');
+
+    const dataFields = lines[1].split(',');
+    const parentRelationshipIndex = CHILD_IMPORT_HEADERS.indexOf('筆頭保護者_続柄');
+    expect(dataFields[parentRelationshipIndex]).toBe('保護者');
   });
 
   it('should return JSON error when DB query fails', async () => {
@@ -378,7 +384,7 @@ describe('GET /api/children/export', () => {
 
     const headers = lines[0].split(',');
     const parentPhoneIndex = headers.indexOf('保護者電話');
-    const ec1PhoneIndex = headers.indexOf('緊急連絡先1_電話');
+    const ec1PhoneIndex = headers.indexOf('保護者連絡先1_電話');
 
     expect(parentPhoneIndex).toBeGreaterThan(-1);
     expect(ec1PhoneIndex).toBeGreaterThan(-1);
@@ -432,8 +438,8 @@ describe('GET /api/children/export', () => {
 
     const headers = lines[0].split(',');
     const parentPhoneIndex = headers.indexOf('保護者電話');
-    const ec1PhoneIndex = headers.indexOf('緊急連絡先1_電話');
-    const ec2PhoneIndex = headers.indexOf('緊急連絡先2_電話');
+    const ec1PhoneIndex = headers.indexOf('保護者連絡先1_電話');
+    const ec2PhoneIndex = headers.indexOf('保護者連絡先2_電話');
 
     // 電話番号が空の場合は空文字（="" 形式にならない）
     const dataFields = lines[1].split(',');
