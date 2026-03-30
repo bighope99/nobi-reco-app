@@ -1374,29 +1374,39 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                           <Trash2 size={16} />
                         </button>
                       </div>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <Input
-                          placeholder="氏名"
-                          className="h-9 py-1"
-                          value={contact.name}
-                          onChange={(e: any) => updateGuardianContact(index, 'name', e.target.value)}
-                          disabled={readOnly}
-                        />
-                        <Input
-                          placeholder="ふりがな（不明の場合は空白）"
-                          className="h-9 py-1"
-                          value={contact.kana}
-                          onChange={(e: any) => updateGuardianContact(index, 'kana', e.target.value)}
-                          disabled={readOnly}
-                        />
-                        <Input
-                          placeholder="続柄（例: 母、叔母など）"
-                          className="h-9 py-1 sm:w-32"
-                          value={contact.relation}
-                          onChange={(e: any) => updateGuardianContact(index, 'relation', e.target.value)}
-                          disabled={readOnly}
-                        />
-                        <FieldGroup error={index < 2 ? fieldErrors[`ec_phone_${index}`] : undefined} className="flex-1 min-w-0">
+                      <div className="flex flex-wrap gap-3 items-end">
+                        <div className="flex-1 min-w-[120px] min-w-0">
+                          <label className="text-xs font-medium text-slate-500 mb-1 block">氏名</label>
+                          <Input
+                            placeholder="氏名"
+                            className="h-9 py-1"
+                            value={contact.name}
+                            onChange={(e: any) => updateGuardianContact(index, 'name', e.target.value)}
+                            disabled={readOnly}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-[120px] min-w-0">
+                          <label className="text-xs font-medium text-slate-500 mb-1 block">ふりがな</label>
+                          <Input
+                            placeholder="ふりがな"
+                            className="h-9 py-1"
+                            value={contact.kana}
+                            onChange={(e: any) => updateGuardianContact(index, 'kana', e.target.value)}
+                            disabled={readOnly}
+                          />
+                        </div>
+                        <div className="w-full sm:w-24 shrink-0">
+                          <label className="text-xs font-medium text-slate-500 mb-1 block">続柄</label>
+                          <Input
+                            placeholder="続柄"
+                            className="h-9 py-1"
+                            value={contact.relation}
+                            onChange={(e: any) => updateGuardianContact(index, 'relation', e.target.value)}
+                            disabled={readOnly}
+                          />
+                        </div>
+                        <FieldGroup error={index < 2 ? fieldErrors[`ec_phone_${index}`] : undefined} className="flex-1 min-w-[120px] min-w-0">
+                          <label className="text-xs font-medium text-slate-500 mb-1 block">電話番号</label>
                           <Input
                             placeholder="電話番号"
                             className={`h-9 py-1 ${index < 2 && fieldErrors[`ec_phone_${index}`] ? 'border-red-500 focus:border-red-500' : ''}`}

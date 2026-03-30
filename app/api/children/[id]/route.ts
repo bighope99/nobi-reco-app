@@ -86,7 +86,8 @@ export async function GET(
             given_name_kana,
             phone,
             email,
-            photo_path
+            photo_path,
+            deleted_at
           )
         )
       `)
@@ -141,8 +142,9 @@ export async function GET(
     }
     const photoSignedUrl: string | null = signedUrlData?.data?.signedUrl ?? null;
 
-    // 保護者情報の整形
-    const guardians: GuardianRelation[] = childData._child_guardian || [];
+    // 保護者情報の整形（論理削除済み保護者を除外）
+    const guardians: GuardianRelation[] = (childData._child_guardian || [])
+      .filter((g: any) => g.m_guardians && g.m_guardians.deleted_at === null);
     const primaryGuardian = guardians.find((g: GuardianRelation) => g.is_primary);
     const emergencyContacts = guardians.filter((g: GuardianRelation) => g.is_emergency_contact && !g.is_primary);
 

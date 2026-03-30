@@ -201,7 +201,8 @@ export async function GET(request: NextRequest) {
             family_name,
             given_name,
             phone,
-            email
+            email,
+            deleted_at
           )
         )
       `)
@@ -322,8 +323,9 @@ export async function GET(request: NextRequest) {
       const currentClass = child._child_class?.find((cc: any) => cc.is_current);
       const classInfo = currentClass?.m_classes;
 
-      // 保護者情報の整形（復号化）
-      const guardians = child._child_guardian || [];
+      // 保護者情報の整形（復号化・論理削除済み保護者を除外）
+      const guardians = (child._child_guardian || [])
+        .filter((g: any) => g.m_guardians && g.m_guardians.deleted_at === null);
       const primaryGuardian = guardians.find((g: any) => g.is_primary);
       const decryptedPrimaryGuardian = primaryGuardian?.m_guardians ? {
         ...primaryGuardian,
