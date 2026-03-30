@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt'
-import { getCurrentDateJST } from '@/lib/utils/timezone'
 
 /**
  * チェックイン・チェックアウト時刻の修正API
@@ -78,12 +77,40 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to fetch attendance record' }, { status: 500 })
     }
 
-    if (!attendance) {
-      return NextResponse.json({ success: false, error: 'No attendance record found for this date' }, { status: 404 })
-    }
-
     // 修正する時刻のISO文字列を構築（JSTベース）
     const newTimestamp = new Date(`${targetDate}T${time}:00+09:00`).toISOString()
+
+    if (!attendance) {
+      if (field === 'checked_in_at') {
+        const { error: insertError } = await supabase
+          .from('h_attendance')
+          .insert({
+            child_id,
+            facility_id,
+            checked_in_at: newTimestamp,
+            check_in_method: 'manual',
+            checked_in_by: user_id,
+            created_at: new Date().toISOString(),
+          })
+
+        if (insertError) {
+          console.error('Attendance time insert error:', insertError)
+          return NextResponse.json({ success: false, error: 'Failed to create attendance time' }, { status: 500 })
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            child_id,
+            date: targetDate,
+            field,
+            new_time: newTimestamp,
+          },
+        })
+      }
+
+      return NextResponse.json({ success: false, error: 'No attendance record found for this date' }, { status: 404 })
+    }
 
     // チェックアウト修正時のバリデーション: チェックイン後である必要がある
     if (field === 'checked_out_at' && attendance.checked_in_at) {
