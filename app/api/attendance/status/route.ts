@@ -115,12 +115,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // JST の日付文字列から直接翌日を計算（UTC成分から組み立てると dayStart==dayEnd になるバグを回避）
     const dayStart = `${date}T00:00:00+09:00`
-    const nextDateObj = new Date(new Date(`${date}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000)
-    const nextY = nextDateObj.getUTCFullYear()
-    const nextM = String(nextDateObj.getUTCMonth() + 1).padStart(2, '0')
-    const nextD = String(nextDateObj.getUTCDate()).padStart(2, '0')
-    const dayEnd = `${nextY}-${nextM}-${nextD}T00:00:00+09:00`
+    const [dy, dm, dd] = date.split('-').map(Number)
+    const nextDay = new Date(Date.UTC(dy, dm - 1, dd + 1))
+    const dayEnd = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, '0')}-${String(nextDay.getUTCDate()).padStart(2, '0')}T00:00:00+09:00`
 
     if (status === 'cancel') {
       const { error: dailyDeleteError } = await supabase

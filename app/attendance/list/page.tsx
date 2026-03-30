@@ -760,6 +760,14 @@ export default function AttendanceListPage() {
                           >
                             {formatTime(child.checked_out_at)}
                           </span>
+                        ) : canEditTime && child.checked_in_at && !actionLoading[child.child_id] ? (
+                          <span
+                            className="text-slate-400 cursor-pointer hover:text-indigo-500 hover:underline"
+                            onClick={() => setEditingTime({ childId: child.child_id, field: 'out', value: '' })}
+                            title="クリックして帰宅時刻を入力"
+                          >
+                            -
+                          </span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
@@ -835,6 +843,14 @@ export default function AttendanceListPage() {
                               </span>
                             ) : child.checked_out_at ? (
                               <span className="font-medium">{formatTime(child.checked_out_at)}</span>
+                            ) : canEditTime && child.checked_in_at && !actionLoading[child.child_id] ? (
+                              <span
+                                className="text-slate-400 cursor-pointer hover:text-indigo-500 hover:underline"
+                                onClick={() => setEditingTime({ childId: child.child_id, field: 'out', value: '' })}
+                                title="クリックして帰宅時刻を入力"
+                              >
+                                -
+                              </span>
                             ) : (
                               <span className="text-slate-400">-</span>
                             )}
