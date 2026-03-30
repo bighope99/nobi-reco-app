@@ -42,7 +42,7 @@ export const CHILD_IMPORT_HEADER_LABELS = {
   enrolled_at: '入所日',
   withdrawn_at: '退所日',
   parent_name: '保護者氏名',
-  parent_relation: '筆頭保護者_続柄',
+  parent_relation: '保護者_続柄',
   parent_phone: '保護者電話',
   parent_email: '保護者メール',
   allergies: 'アレルギー',

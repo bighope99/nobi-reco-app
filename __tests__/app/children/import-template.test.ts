@@ -10,7 +10,7 @@ describe('GET /children/import/template', () => {
 
     expect(headerLine.startsWith('ID,')).toBe(false);
     expect(headerLine.split(',')[0]).toBe('姓');
-    expect(headerLine).toContain('筆頭保護者_続柄');
+    expect(headerLine).toContain('保護者_続柄');
     expect(headerLine).toContain('保護者連絡先1_氏名');
     expect(sampleLine.startsWith('sample-child-001,')).toBe(false);
     expect(sampleLine.split(',')[0]).toBe('山田');

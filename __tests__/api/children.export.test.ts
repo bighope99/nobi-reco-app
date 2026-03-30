@@ -157,11 +157,11 @@ describe('GET /api/children/export', () => {
     expect(lines[0]).toContain('姓');
     expect(lines[0]).toContain('名');
     expect(lines[0]).toContain('生年月日');
-    expect(lines[0]).toContain('筆頭保護者_続柄');
+    expect(lines[0]).toContain('保護者_続柄');
     expect(lines[0]).toContain('保護者連絡先1_氏名');
 
     const dataFields = lines[1].split(',');
-    const parentRelationshipIndex = CHILD_IMPORT_HEADERS.indexOf('筆頭保護者_続柄');
+    const parentRelationshipIndex = CHILD_IMPORT_HEADERS.indexOf('保護者_続柄');
     expect(dataFields[parentRelationshipIndex]).toBe('保護者');
   });
 
