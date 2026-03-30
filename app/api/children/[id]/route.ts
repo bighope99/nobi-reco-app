@@ -18,10 +18,11 @@ interface Guardian {
   facility_id: string;
   family_name: string;
   given_name: string;
-  family_name_kana?: string;
-  given_name_kana?: string;
+  family_name_kana?: string | null;
+  given_name_kana?: string | null;
   phone?: string;
   email?: string;
+  photo_path?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -73,15 +74,19 @@ export async function GET(
           )
         ),
         _child_guardian (
+          guardian_id,
           relationship,
           is_primary,
           is_emergency_contact,
           m_guardians (
             id,
             family_name,
+            family_name_kana,
             given_name,
+            given_name_kana,
             phone,
-            email
+            email,
+            photo_path
           )
         )
       `)
@@ -103,7 +108,9 @@ export async function GET(
       return {
         ...guardian,
         family_name: decryptOrFallback(guardian.family_name),
+        family_name_kana: guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
         given_name: decryptOrFallback(guardian.given_name),
+        given_name_kana: guardian.given_name_kana ? decryptOrFallback(guardian.given_name_kana) : null,
         phone: decryptOrFallback(guardian.phone),
         email: decryptOrFallback(guardian.email),
       };
@@ -144,9 +151,44 @@ export async function GET(
       m_guardians: primaryGuardian.m_guardians ? decryptGuardian(primaryGuardian.m_guardians) : null,
     } : null;
 
+    // 筆頭保護者と緊急連絡先の写真署名URLを並列生成
+    const ecPhotoPaths = emergencyContacts
+      .map((ec: GuardianRelation) => ec.m_guardians?.photo_path)
+      .filter((p): p is string => !!p);
+
+    const [parentPhotoResult, ecSignedResult] = await Promise.all([
+      decryptedPrimaryGuardian?.m_guardians?.photo_path
+        ? supabase.storage
+            .from('guardian-photos')
+            .createSignedUrl(decryptedPrimaryGuardian.m_guardians.photo_path, 3600)
+        : Promise.resolve({ data: null, error: null }),
+      ecPhotoPaths.length > 0
+        ? supabase.storage.from('guardian-photos').createSignedUrls(ecPhotoPaths, 3600)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (parentPhotoResult.error) {
+      console.error('Failed to create signed URL for primary guardian photo:', parentPhotoResult.error.message);
+    }
+    const parentPhotoSignedUrl = parentPhotoResult.data && 'signedUrl' in parentPhotoResult.data
+      ? (parentPhotoResult.data as { signedUrl: string }).signedUrl
+      : null;
+
+    if (ecSignedResult.error) {
+      console.error('Failed to create signed URLs for guardian photos:', ecSignedResult.error.message);
+    }
+    const ecUrlMap = new Map<string, string>();
+    ((ecSignedResult.data as Array<{ path: string; signedUrl: string }> | null) ?? []).forEach((u) => {
+      if (u.path && u.signedUrl) ecUrlMap.set(u.path, u.signedUrl);
+    });
+
+    // 同期 map に変更
     const decryptedEmergencyContacts = emergencyContacts.map((ec: GuardianRelation) => ({
       ...ec,
       m_guardians: ec.m_guardians ? decryptGuardian(ec.m_guardians) : null,
+      guardian_photo_url: ec.m_guardians?.photo_path
+        ? ecUrlMap.get(ec.m_guardians.photo_path) ?? null
+        : null,
     }));
 
     // データ整形
@@ -185,18 +227,32 @@ export async function GET(
                 null
               )
             : decryptOrFallback(childData.parent_name) || null, // 後方互換性のためフォールバック
+          parent_kana: decryptedPrimaryGuardian?.m_guardians
+            ? formatName([
+                decryptedPrimaryGuardian.m_guardians.family_name_kana ?? null,
+                decryptedPrimaryGuardian.m_guardians.given_name_kana ?? null,
+              ], null)
+            : null,
           parent_phone: decryptedPrimaryGuardian?.m_guardians?.phone || decryptOrFallback(childData.parent_phone) || null,
           parent_email: decryptedPrimaryGuardian?.m_guardians?.email || decryptOrFallback(childData.parent_email) || null,
+          parent_relation: decryptedPrimaryGuardian?.relationship || null,
+          parent_photo_url: parentPhotoSignedUrl,
           emergency_contacts: (() => {
             const formattedContacts = decryptedEmergencyContacts
               .filter((ec) => ec.m_guardians !== null)
               .map((ec) => ({
+                guardian_id: ec.m_guardians!.id,
                 name: formatName(
                   [ec.m_guardians!.family_name, ec.m_guardians!.given_name],
                   ''
                 ) || '',
+                kana: formatName([
+                  ec.m_guardians!.family_name_kana ?? null,
+                  ec.m_guardians!.given_name_kana ?? null,
+                ], null) || null,
                 relation: ec.relationship,
                 phone: ec.m_guardians!.phone || '',
+                photo_url: ec.guardian_photo_url ?? null,
               }));
             return formattedContacts;
           })(),
@@ -220,6 +276,22 @@ export async function GET(
             relationship: s.relationship,
           };
         }),
+        guardians: guardians
+          .filter((g: GuardianRelation) => g.m_guardians !== null)
+          .map((g: GuardianRelation) => {
+            const decrypted = decryptGuardian(g.m_guardians);
+            return {
+              guardian_id: g.guardian_id,
+              name: decrypted
+                ? formatName([decrypted.family_name, decrypted.given_name], '')
+                : '',
+              phone: decrypted?.phone || '',
+              email: decrypted?.email || '',
+              relationship: g.relationship || '',
+              is_primary: g.is_primary,
+              is_emergency_contact: g.is_emergency_contact,
+            };
+          }),
         created_at: childData.created_at,
         updated_at: childData.updated_at,
       },

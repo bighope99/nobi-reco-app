@@ -42,7 +42,7 @@ export const CHILD_IMPORT_HEADER_LABELS = {
   enrolled_at: '入所日',
   withdrawn_at: '退所日',
   parent_name: '保護者氏名',
-  parent_relationship: '筆頭保護者_続柄',
+  parent_relation: '筆頭保護者_続柄',
   parent_phone: '保護者電話',
   parent_email: '保護者メール',
   allergies: 'アレルギー',
@@ -74,7 +74,7 @@ export const CHILD_IMPORT_HEADERS = [
   headerLabels.enrolled_at,
   headerLabels.withdrawn_at,
   headerLabels.parent_name,
-  headerLabels.parent_relationship,
+  headerLabels.parent_relation,
   headerLabels.parent_phone,
   headerLabels.parent_email,
   headerLabels.allergies,
@@ -189,13 +189,13 @@ export function buildChildPayload(
 
   const emergencyContacts = buildEmergencyContacts(row);
 
-  // 緊急連絡先の電話番号バリデーション
+  // 保護者連絡先の電話番号バリデーション
   for (let ecIdx = 0; ecIdx < emergencyContacts.length; ecIdx++) {
     const ec = emergencyContacts[ecIdx];
     if (ec.name?.trim() && ec.phone?.trim()) {
       const normalizedEcPhone = normalizePhone(ec.phone);
       if (normalizedEcPhone.length < 10 || normalizedEcPhone.length > 15) {
-        errors.push(`緊急連絡先${ecIdx + 1}の電話番号が不正です（10〜15桁で入力してください）`);
+        errors.push(`保護者連絡先${ecIdx + 1}の電話番号が不正です（10〜15桁で入力してください）`);
       }
     }
   }
@@ -221,7 +221,7 @@ export function buildChildPayload(
     },
     contact: {
       parent_name: parentName || undefined,
-      parent_relationship: getValue(row, headerLabels.parent_relationship) || undefined,
+      parent_relation: getValue(row, headerLabels.parent_relation) || undefined,
       parent_phone: parentPhone,
       parent_email: getValue(row, headerLabels.parent_email),
       emergency_contacts: emergencyContacts.length > 0 ? emergencyContacts : undefined,

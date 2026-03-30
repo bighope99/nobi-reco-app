@@ -7,6 +7,7 @@ import { normalizePhone } from '@/lib/children/import-csv';
 import {
   updateSearchIndex,
   searchByName,
+  searchByPhone,
 } from '@/utils/pii/searchIndex';
 import { toKatakana, toHiragana, normalizeSearch } from '@/lib/utils/kana';
 import { calculateGrade, formatGradeLabel } from '@/utils/grade';
@@ -288,38 +289,105 @@ export async function POST(request: NextRequest) {
 
     const normalizedPhone = phone ? normalizePhone(phone) : null;
 
-    const { data: guardian, error } = await supabase
-      .from('m_guardians')
-      .insert({
-        facility_id: current_facility_id,
-        family_name: encryptPII(name.trim()),
-        given_name: '',
-        family_name_kana: kana?.trim() ? encryptPII(kana.trim()) : null,
-        phone: normalizedPhone ? encryptPII(normalizedPhone) : null,
-        notes: notes?.trim() || null,
-        photo_path: photo_path || null,
-      })
-      .select('id')
-      .single();
+    // 電話番号重複チェック: 同じ電話番号の保護者が既に存在すれば既存レコードを使う
+    let guardianId: string | null = null;
 
-    if (error || !guardian) {
-      console.error('Guardian creation error:', error?.message);
-      return NextResponse.json({ error: '保護者の登録に失敗しました' }, { status: 500 });
+    if (normalizedPhone) {
+      try {
+        const entityIds = await searchByPhone(supabase, 'guardian', normalizedPhone);
+        if (entityIds.length > 0) {
+          const { data: existingGuardians } = await supabase
+            .from('m_guardians')
+            .select('id')
+            .eq('facility_id', current_facility_id)
+            .in('id', entityIds)
+            .is('deleted_at', null)
+            .limit(1);
+          if (existingGuardians && existingGuardians.length > 0) {
+            guardianId = existingGuardians[0].id;
+            // 既存保護者の情報を更新
+            const { error: updateError } = await supabase
+              .from('m_guardians')
+              .update({
+                family_name: encryptPII(name.trim()),
+                given_name: '',
+                family_name_kana: kana?.trim() ? encryptPII(kana.trim()) : null,
+                notes: notes?.trim() || null,
+                ...(photo_path ? { photo_path } : {}),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', guardianId);
+
+            if (updateError) {
+              console.error('Guardian update error:', updateError.message, 'guardianId:', guardianId);
+            }
+
+            // 検索インデックス更新
+            const updateIdxPromises = [];
+            if (name.trim()) {
+              updateIdxPromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'name', name.trim()));
+            }
+            if (kana?.trim()) {
+              updateIdxPromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'name_kana', kana.trim()));
+            }
+            if (normalizedPhone) {
+              updateIdxPromises.push(updateSearchIndex(supabase, 'guardian', guardianId!, 'phone', normalizedPhone));
+            }
+            if (updateIdxPromises.length > 0) {
+              try {
+                await Promise.all(updateIdxPromises);
+              } catch (indexError) {
+                console.error('Search index update failed (guardian update):', guardianId, indexError);
+              }
+            }
+          }
+        }
+      } catch (searchError) {
+        console.error('Guardian phone search failed, skipping dedup:', searchError);
+      }
     }
 
-    // 検索インデックス更新
-    try {
-      await Promise.all([
-        updateSearchIndex(supabase, 'guardian', guardian.id, 'name', name.trim()),
-        kana?.trim()
-          ? updateSearchIndex(supabase, 'guardian', guardian.id, 'name_kana', kana.trim())
-          : Promise.resolve(),
-        normalizedPhone
-          ? updateSearchIndex(supabase, 'guardian', guardian.id, 'phone', normalizedPhone)
-          : Promise.resolve(),
-      ]);
-    } catch (indexError) {
-      console.error('Search index update failed (guardian created):', guardian.id, indexError);
+    if (!guardianId) {
+      const { data: guardian, error } = await supabase
+        .from('m_guardians')
+        .insert({
+          facility_id: current_facility_id,
+          family_name: encryptPII(name.trim()),
+          given_name: '',
+          family_name_kana: kana?.trim() ? encryptPII(kana.trim()) : null,
+          phone: normalizedPhone ? encryptPII(normalizedPhone) : null,
+          notes: notes?.trim() || null,
+          photo_path: photo_path || null,
+        })
+        .select('id')
+        .single();
+
+      if (error || !guardian) {
+        console.error('Guardian creation error:', error?.message);
+        return NextResponse.json({ error: '保護者の登録に失敗しました' }, { status: 500 });
+      }
+
+      guardianId = guardian.id;
+
+      // 検索インデックス更新
+      const newGuardianId: string = guardian.id;
+      try {
+        await Promise.all([
+          updateSearchIndex(supabase, 'guardian', newGuardianId, 'name', name.trim()),
+          kana?.trim()
+            ? updateSearchIndex(supabase, 'guardian', newGuardianId, 'name_kana', kana.trim())
+            : Promise.resolve(),
+          normalizedPhone
+            ? updateSearchIndex(supabase, 'guardian', newGuardianId, 'phone', normalizedPhone)
+            : Promise.resolve(),
+        ]);
+      } catch (indexError) {
+        console.error('Search index update failed (guardian created):', newGuardianId, indexError);
+      }
+    }
+
+    if (!guardianId) {
+      return NextResponse.json({ error: '保護者の登録に失敗しました' }, { status: 500 });
     }
 
     // 子どもと紐づけ
@@ -328,7 +396,7 @@ export async function POST(request: NextRequest) {
         .from('_child_guardian')
         .upsert({
           child_id,
-          guardian_id: guardian.id,
+          guardian_id: guardianId,
           relationship: '保護者',
           is_primary: true,
           is_emergency_contact: true,
@@ -338,7 +406,7 @@ export async function POST(request: NextRequest) {
         console.error('Child-guardian link error:', linkError.message);
         return NextResponse.json(
           {
-            guardianId: guardian.id,
+            guardianId,
             warning: '保護者は登録されましたが、子どもとの紐づけに失敗しました',
             linkError: linkError.message,
           },
@@ -369,7 +437,7 @@ export async function POST(request: NextRequest) {
         if (validSiblings && validSiblings.length > 0) {
           const siblingUpserts = validSiblings.map((s: { id: string }) => ({
             child_id: s.id,
-            guardian_id: guardian.id,
+            guardian_id: guardianId,
             relationship: '保護者',
             is_primary: false,
             is_emergency_contact: true,
@@ -386,7 +454,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, data: { id: guardian.id } }, { status: 201 });
+    return NextResponse.json({ success: true, data: { id: guardianId } }, { status: 201 });
   } catch (error) {
     console.error('Guardians POST error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

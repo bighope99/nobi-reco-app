@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { Edit, FileText, BarChart3 } from "lucide-react"
+import { Edit, FileText, BarChart3, User } from "lucide-react"
 
 interface ChildSummary {
   child_info: {
@@ -54,6 +54,8 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
   const [summary, setSummary] = useState<ChildSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [guardianContact, setGuardianContact] = useState<any>(null)
+  const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -81,6 +83,26 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
 
     fetchSummary()
   }, [id])
+
+  useEffect(() => {
+    const fetchGuardianInfo = async () => {
+      const response = await fetch(`/api/children/${id}`)
+      if (!response.ok) return
+      const result = await response.json()
+      if (result.success) {
+        setGuardianContact(result.data.contact)
+      }
+    }
+    if (id) fetchGuardianInfo()
+  }, [id])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomPhotoUrl(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -173,6 +195,48 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-sm font-medium">保護者情報</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {guardianContact?.parent_name && (
+              <div className="flex items-center gap-3">
+                {guardianContact.parent_photo_url ? (
+                  <button type="button" onClick={() => setZoomPhotoUrl(guardianContact.parent_photo_url)}>
+                    <img src={guardianContact.parent_photo_url} className="w-12 h-12 rounded-lg object-cover cursor-zoom-in" alt="保護者写真" />
+                  </button>
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <User size={20} className="text-slate-400" />
+                  </div>
+                )}
+                <div>
+                  <p className="font-medium text-sm">{guardianContact.parent_name}</p>
+                  <p className="text-xs text-muted-foreground">{guardianContact.parent_phone}</p>
+                </div>
+              </div>
+            )}
+            {guardianContact?.emergency_contacts?.map((ec: any, idx: number) => (
+              <div key={idx} className="flex items-center gap-3">
+                {ec.photo_url ? (
+                  <button type="button" onClick={() => setZoomPhotoUrl(ec.photo_url)}>
+                    <img src={ec.photo_url} className="w-10 h-10 rounded-lg object-cover cursor-zoom-in" alt="緊急連絡先写真" />
+                  </button>
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <User size={16} className="text-slate-400" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium">{ec.name} <span className="text-xs text-muted-foreground">({ec.relation})</span></p>
+                  <p className="text-xs text-muted-foreground">{ec.phone}</p>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>観点別評価 ({summary.period.display_label})</CardTitle>
           </CardHeader>
           <CardContent>
@@ -226,6 +290,19 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
           </CardContent>
         </Card>
       </div>
+      {zoomPhotoUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setZoomPhotoUrl(null)}
+        >
+          <img
+            src={zoomPhotoUrl}
+            alt="保護者写真"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </StaffLayout>
   )
 }

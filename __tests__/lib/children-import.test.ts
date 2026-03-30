@@ -45,7 +45,7 @@ describe('children import csv helpers', () => {
     expect(result.payload?.affiliation?.class_id).toBe('class-1');
     expect(result.payload?.basic_info?.gender).toBe('female');
     expect(result.payload?.affiliation?.enrollment_status).toBe('enrolled');
-    expect(result.payload?.contact?.parent_relationship).toBe('父');
+    expect(result.payload?.contact?.parent_relation).toBe('父');
     expect(result.payload?.contact?.parent_phone).toBe('09012345678');
   });
 
