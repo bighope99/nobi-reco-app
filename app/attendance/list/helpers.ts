@@ -26,6 +26,8 @@ export interface StatusPresentation {
   className: string
 }
 
+export type TimeField = 'in' | 'out'
+
 export interface AttendanceData {
   date: string
   weekday: string
@@ -154,6 +156,24 @@ export const getStatusAction = (child: ChildAttendance, currentDate: string): 'a
 }
 
 /**
+ * 時間欄に「設定」導線を表示するかどうか判定
+ */
+export const canDisplayTimeSetting = (
+  child: ChildAttendance,
+  field: TimeField,
+  currentDate: string,
+  canEditTime: boolean
+): boolean => {
+  if (!canEditTime || !isPastDate(currentDate)) return false
+
+  if (field === 'in') {
+    return !child.checked_in_at && (child.status === 'present' || child.status === 'late')
+  }
+
+  return !child.checked_out_at && Boolean(child.checked_in_at)
+}
+
+/**
  * 楽観的更新: attendanceData を即座に更新する純粋関数
  */
 export const applyOptimisticStatusUpdate = (
@@ -170,6 +190,10 @@ export const applyOptimisticStatusUpdate = (
         ...child,
         status: 'absent' as const,
         is_expected: false,
+        checked_in_at: null,
+        checked_out_at: null,
+        check_in_method: null,
+        is_unexpected: false,
       }
     }
 

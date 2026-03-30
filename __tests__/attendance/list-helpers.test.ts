@@ -2,6 +2,7 @@ import {
   isPastDate,
   getStatusPresentation,
   getStatusAction,
+  canDisplayTimeSetting,
   applyOptimisticStatusUpdate,
   getCancelActions,
   applyOptimisticCancelUpdate,
@@ -225,6 +226,27 @@ describe('applyOptimisticStatusUpdate', () => {
     expect(result.summary.present_count).toBe(1)
   })
 
+  it('過去日付で欠席にするとチェックイン・チェックアウト時刻をクリアする', () => {
+    const children = [
+      makeChild({
+        child_id: 'child-1',
+        status: 'present',
+        checked_in_at: '2020-01-01T09:00:00Z',
+        checked_out_at: '2020-01-01T17:00:00Z',
+        check_in_method: 'manual',
+        is_unexpected: true,
+      }),
+    ]
+    const data = makeAttendanceData(children)
+
+    const result = applyOptimisticStatusUpdate(data, 'child-1', 'absent', PAST)
+
+    expect(result.children[0].checked_in_at).toBeNull()
+    expect(result.children[0].checked_out_at).toBeNull()
+    expect(result.children[0].check_in_method).toBeNull()
+    expect(result.children[0].is_unexpected).toBe(false)
+  })
+
   it('今日: 欠席予定の児童を出席にすると is_expected が true になり status は absent のまま（出席予定表示）', () => {
     const children = [
       makeChild({ child_id: 'child-1', status: 'absent', is_expected: false }),
@@ -282,6 +304,45 @@ describe('applyOptimisticStatusUpdate', () => {
 
     expect(result.summary.present_count).toBe(1)
     expect(result.summary.absent_count).toBe(2)
+  })
+})
+
+describe('canDisplayTimeSetting', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(FIXED_NOW)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('過去日付でチェックイン未設定の出席児童はチェックイン時刻に設定を出す', () => {
+    const child = makeChild({ status: 'present', checked_in_at: null })
+    expect(canDisplayTimeSetting(child, 'in', PAST_DATE, true)).toBe(true)
+  })
+
+  it('過去日付でチェックイン済みかつチェックアウト未設定ならチェックアウト時刻に設定を出す', () => {
+    const child = makeChild({
+      status: 'present',
+      checked_in_at: '2020-01-01T09:00:00Z',
+      checked_out_at: null,
+    })
+    expect(canDisplayTimeSetting(child, 'out', PAST_DATE, true)).toBe(true)
+  })
+
+  it('権限がなければ設定を出さない', () => {
+    const child = makeChild({
+      status: 'present',
+      checked_in_at: '2020-01-01T09:00:00Z',
+      checked_out_at: null,
+    })
+    expect(canDisplayTimeSetting(child, 'out', PAST_DATE, false)).toBe(false)
+  })
+
+  it('今日の日付では設定を出さない', () => {
+    const child = makeChild({ status: 'present', checked_in_at: null })
+    expect(canDisplayTimeSetting(child, 'in', TODAY, true)).toBe(false)
   })
 })
 
