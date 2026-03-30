@@ -131,6 +131,7 @@ describe('GET /api/children/export', () => {
                 given_name: '太郎',
                 phone: '09012345678',
                 email: 'taro@example.com',
+                deleted_at: null,
               },
             },
           ],
@@ -356,6 +357,7 @@ describe('GET /api/children/export', () => {
                 given_name: '花子',
                 phone: '09012345678',
                 email: 'hanako@example.com',
+                deleted_at: null,
               },
             },
             {
@@ -367,6 +369,7 @@ describe('GET /api/children/export', () => {
                 given_name: '太郎',
                 phone: '08087654321',
                 email: null,
+                deleted_at: null,
               },
             },
           ],
