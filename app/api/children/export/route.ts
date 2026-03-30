@@ -151,7 +151,8 @@ export async function GET(request: NextRequest) {
             family_name,
             given_name,
             phone,
-            email
+            email,
+            deleted_at
           )
         )
       `)
@@ -169,7 +170,7 @@ export async function GET(request: NextRequest) {
     csvRows.push(CHILD_IMPORT_HEADERS.map(escapeCsvField).join(','));
 
     for (const child of children || []) {
-      const guardians = child._child_guardian || [];
+      const guardians = (child._child_guardian || []).filter((g: any) => g.m_guardians && g.m_guardians.deleted_at === null);
       const primaryGuardian = guardians.find((g: any) => g.is_primary);
       const emergencyContacts = guardians
         .filter((g: any) => g.is_emergency_contact && !g.is_primary)
