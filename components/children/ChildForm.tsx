@@ -144,6 +144,23 @@ type GuardianContact = {
   phone: string;
 };
 
+type SiblingCandidate = {
+  child_id: string;
+  name: string;
+  kana?: string;
+  class_name?: string;
+  age?: number;
+  enrollment_status?: string;
+  guardian_contacts?: Array<{
+    guardian_id: string;
+    name: string;
+    kana: string | null;
+    phone: string;
+    relation: string;
+    is_primary: boolean;
+  }>;
+};
+
 export default function ChildForm({ mode, childId, onSuccess, readOnly = false }: ChildFormProps) {
   const router = useRouter();
   const isEditMode = mode === 'edit';
@@ -151,11 +168,11 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const contactIdRef = useRef(1);
   const [activeSection, setActiveSection] = useState('basic');
   const [isSearchingSibling, setIsSearchingSibling] = useState(false);
-  const [siblingCandidates, setSiblingCandidates] = useState<any[]>([]);
+  const [siblingCandidates, setSiblingCandidates] = useState<SiblingCandidate[]>([]);
   const [siblingSearchDismissed, setSiblingSearchDismissed] = useState(false);
   const [showNameSearch, setShowNameSearch] = useState(false);
   const [nameSearchQuery, setNameSearchQuery] = useState('');
-  const [nameSearchResults, setNameSearchResults] = useState<any[]>([]);
+  const [nameSearchResults, setNameSearchResults] = useState<SiblingCandidate[]>([]);
   const [isSearchingByName, setIsSearchingByName] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
@@ -171,6 +188,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
   const [emergencyPhotoUrls, setEmergencyPhotoUrls] = useState<Record<string, string | null>>({});
   const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
   const [primaryGuardianId, setPrimaryGuardianId] = useState<string | null>(null);
+  const [pendingSiblingIds, setPendingSiblingIds] = useState<string[]>([]);
 
   // 未保存変更アラート
   const { reset: resetUnsavedChanges } = useUnsavedChanges(isDirty);
@@ -456,7 +474,35 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
     candidateGuardianContacts?: Array<{ guardian_id: string; name: string; kana: string | null; phone: string; relation: string; is_primary: boolean }>
   ) => {
     if (!isEditMode) {
-      console.warn('handleSiblingLink called in create mode');
+      setSiblingCandidates(prev => prev.filter(c => c.child_id !== siblingId));
+      setNameSearchResults(prev => prev.filter(c => c.child_id !== siblingId));
+      setSiblings(prev => prev.some(s => s.child_id === siblingId)
+        ? prev
+        : [...prev, { child_id: siblingId, name: siblingName, relationship: '兄弟' }]
+      );
+      setPendingSiblingIds(prev => prev.includes(siblingId) ? prev : [...prev, siblingId]);
+
+      if (candidateGuardianContacts && candidateGuardianContacts.length > 0) {
+        setGuardianContacts(prev => {
+          const existingIds = new Set(prev.map(c => c.guardianId).filter(Boolean));
+          const newContacts = candidateGuardianContacts
+            .filter(gc => !existingIds.has(gc.guardian_id))
+            .map(gc => ({
+              id: ++contactIdRef.current,
+              guardianId: gc.guardian_id,
+              name: gc.name,
+              kana: gc.kana || '',
+              relation: gc.relation,
+              phone: gc.phone,
+            }));
+          if (newContacts.length === 0) return prev;
+          const merged = [...newContacts, ...prev].slice(0, MAX_GUARDIAN_CONTACTS);
+          const maxId = merged.reduce((max, c) => Math.max(max, c.id), contactIdRef.current);
+          contactIdRef.current = maxId;
+          return merged;
+        });
+      }
+
       return;
     }
 
@@ -615,6 +661,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
 
       const requestBody = {
         child_id: isEditMode ? childId : undefined,
+        sibling_ids: pendingSiblingIds,
         basic_info: {
           family_name: formData.family_name,
           given_name: formData.given_name,
@@ -675,6 +722,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
       }
 
       if (result.success) {
+        setPendingSiblingIds([]);
         setIsDirty(false);
         resetUnsavedChanges(); // refを即座にfalseにして遷移時の警告を抑止
         if (onSuccess) {
@@ -1112,9 +1160,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                               <button
                                 type="button"
                                 onClick={() => handleSiblingLink(candidate.child_id, candidate.name, candidate.guardian_contacts)}
-                                disabled={!isEditMode}
-                                title={!isEditMode ? '先に「保存する」で児童情報を保存してください' : undefined}
-                                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm"
                               >
                                 紐付ける
                               </button>
@@ -1136,9 +1182,6 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       >
                         すべて兄弟として登録しない
                       </button>
-                      {!isEditMode && (
-                        <p className="text-xs text-amber-600 mt-2">※保存後に「紐付ける」ボタンが有効になります</p>
-                      )}
                     </div>
                   )}
 
@@ -1197,9 +1240,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                                   <button
                                     type="button"
                                     onClick={() => handleSiblingLink(candidate.child_id, candidate.name, candidate.guardian_contacts)}
-                                    disabled={!isEditMode}
-                                    title={!isEditMode ? '先に「保存する」で児童情報を保存してください' : undefined}
-                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 font-medium shadow-sm shrink-0"
                                   >
                                     紐付ける
                                   </button>

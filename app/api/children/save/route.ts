@@ -17,6 +17,7 @@ import { syncGuardiansToSiblings } from '@/lib/children/guardian-sync';
 
 export interface ChildPayload {
   child_id?: string;
+  sibling_ids?: string[];
   basic_info?: {
     family_name?: string;
     given_name?: string;
@@ -68,7 +69,7 @@ export async function saveChild(
   targetChildId?: string,
   options?: { skipParentLegacy?: boolean },
 ) {
-  const { basic_info, affiliation, contact, care_info, permissions } = payload;
+  const { basic_info, affiliation, contact, care_info, permissions, sibling_ids } = payload;
 
   if (!basic_info?.family_name || !basic_info?.given_name || !basic_info?.birth_date || !affiliation?.enrolled_at) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -233,6 +234,50 @@ export async function saveChild(
 
     if (classError) {
       console.error('Class assignment error:', classError?.message);
+    }
+  }
+
+  const pendingSiblingIds = Array.from(
+    new Set((sibling_ids || []).filter((id): id is string => !!id && id !== result.id))
+  );
+
+  if (pendingSiblingIds.length > 0) {
+    const { data: siblingChildren, error: siblingChildrenError } = await supabase
+      .from('m_children')
+      .select('id')
+      .in('id', pendingSiblingIds)
+      .eq('facility_id', facilityId)
+      .is('deleted_at', null);
+
+    if (siblingChildrenError) {
+      console.error('Sibling validation error:', siblingChildrenError.message);
+      return NextResponse.json({ error: 'Failed to validate sibling links' }, { status: 500 });
+    }
+
+    if (!siblingChildren || siblingChildren.length !== pendingSiblingIds.length) {
+      return NextResponse.json({ error: 'One or more sibling children were not found in current facility' }, { status: 404 });
+    }
+
+    const siblingRecords = pendingSiblingIds.flatMap((siblingId) => ([
+      {
+        child_id: result.id,
+        sibling_id: siblingId,
+        relationship: '兄弟',
+      },
+      {
+        child_id: siblingId,
+        sibling_id: result.id,
+        relationship: '兄弟',
+      },
+    ]));
+
+    const { error: siblingUpsertError } = await supabase
+      .from('_child_sibling')
+      .upsert(siblingRecords, { onConflict: 'child_id,sibling_id' });
+
+    if (siblingUpsertError) {
+      console.error('Sibling link upsert error:', siblingUpsertError.message);
+      return NextResponse.json({ error: 'Failed to save sibling links' }, { status: 500 });
     }
   }
 
