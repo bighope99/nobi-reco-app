@@ -46,10 +46,21 @@ function escapeCsvField(value: string): string {
   return sanitized;
 }
 
-// 電話番号をダブルクォートで囲み、先頭0をExcel/スプレッドシートで保持させる
-function escapePhoneField(value: string): string {
+// 電話番号をハイフン付きでフォーマットし、Excelの数値自動変換を防ぐ
+function formatPhoneForCsv(value: string): string {
   if (!value) return '';
-  return `"${value}"`;
+  // 数字のみ抽出（既にハイフン付きの場合も安全）
+  const digits = value.replace(/[^0-9]/g, '');
+  if (digits.length === 11) {
+    // 携帯: 090-1234-5678
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    // 固定: 03-1234-5678
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  // その他: そのまま返す
+  return digits || value;
 }
 
 export async function GET(request: NextRequest) {
@@ -200,7 +211,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 電話番号フィールドは escapePhoneField で先頭0を保持、その他は escapeCsvField
+      // 電話番号フィールドはハイフン付きでフォーマット、その他は escapeCsvField
       const row = [
         escapeCsvField(child.id),
         escapeCsvField(decryptedFamilyName),
@@ -216,7 +227,7 @@ export async function GET(request: NextRequest) {
         escapeCsvField(formatDate(child.withdrawn_at)),
         escapeCsvField(parentName),
         escapeCsvField(parentRelationship),
-        escapePhoneField(parentPhone),
+        formatPhoneForCsv(parentPhone),
         escapeCsvField(parentEmail),
         escapeCsvField(decryptOrEmpty(child.allergies)),
         escapeCsvField(decryptOrEmpty(child.child_characteristics)),
@@ -225,10 +236,10 @@ export async function GET(request: NextRequest) {
         escapeCsvField(formatBoolean(child.photo_permission_share)),
         escapeCsvField(ecData[0]?.name || ''),
         escapeCsvField(ecData[0]?.relation || ''),
-        escapePhoneField(ecData[0]?.phone || ''),
+        formatPhoneForCsv(ecData[0]?.phone || ''),
         escapeCsvField(ecData[1]?.name || ''),
         escapeCsvField(ecData[1]?.relation || ''),
-        escapePhoneField(ecData[1]?.phone || ''),
+        formatPhoneForCsv(ecData[1]?.phone || ''),
       ];
 
       csvRows.push(row.join(','));
