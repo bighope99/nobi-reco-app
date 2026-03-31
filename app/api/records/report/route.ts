@@ -143,14 +143,23 @@ export async function POST(request: NextRequest) {
         // タグ取得失敗は致命的でないため続行
       } else {
         // タグをobservation_idでグループ化
+        // Supabaseのジョイン結果はオブジェクト or 配列どちらになる場合もあるため unknown 経由でキャスト
+        type TagLink = {
+          observation_id: string;
+          m_observation_tags: { name: string } | Array<{ name: string }> | null;
+        };
         const tagsByObsId = new Map<string, Array<{ name: string }>>();
-        for (const link of (tagLinks ?? []) as Array<{ observation_id: string; m_observation_tags: { name: string } | null }>) {
+        for (const link of (tagLinks ?? []) as unknown as TagLink[]) {
           const obsId = link.observation_id;
           const tagData = link.m_observation_tags;
           if (!tagsByObsId.has(obsId)) {
             tagsByObsId.set(obsId, []);
           }
-          if (tagData?.name) {
+          if (Array.isArray(tagData)) {
+            for (const t of tagData) {
+              if (t?.name) tagsByObsId.get(obsId)!.push({ name: t.name });
+            }
+          } else if (tagData?.name) {
             tagsByObsId.get(obsId)!.push({ name: tagData.name });
           }
         }
