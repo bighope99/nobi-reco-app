@@ -58,6 +58,14 @@ export async function PUT(
 
     const body = await request.json();
 
+    // site_admin 以外は同一 company のユーザーのみ操作可能
+    if (role !== 'site_admin' && targetUser.company_id !== company_id) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
+      );
+    }
+
     // 権限チェック
     const isSelf = user.id === targetUserId;
     const isStaff = role === 'staff';

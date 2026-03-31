@@ -225,7 +225,14 @@ export default function CompanyDetailPage(props: {
     if (accountSortField === 'name') { aVal = a.name; bVal = b.name }
     else if (accountSortField === 'email') { aVal = a.email || ''; bVal = b.email || '' }
     else if (accountSortField === 'role') { aVal = a.role; bVal = b.role }
-    else if (accountSortField === 'status') { aVal = a.is_active ? 'active' : 'inactive'; bVal = b.is_active ? 'active' : 'inactive' }
+    else if (accountSortField === 'status') {
+      const getStatusOrder = (acc: Account) => {
+        if (!acc.email_confirmed) return 'invited'
+        return acc.is_active ? 'active' : 'inactive'
+      }
+      aVal = getStatusOrder(a)
+      bVal = getStatusOrder(b)
+    }
     return accountSortDirection === 'asc' ? aVal.localeCompare(bVal, 'ja') : bVal.localeCompare(aVal, 'ja')
   })
 
@@ -418,26 +425,36 @@ export default function CompanyDetailPage(props: {
                       ].map(({ label, field }) => (
                         <th
                           key={field}
-                          className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
-                          onClick={() => toggleAccountSort(field)}
+                          className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                          aria-sort={accountSortField === field ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                         >
-                          <span className="flex items-center gap-1">
+                          <button
+                            className="flex items-center gap-1 hover:text-slate-700 focus:outline-none"
+                            onClick={() => toggleAccountSort(field)}
+                          >
                             {label}
-                            {accountSortField === field ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
-                          </span>
+                            <span aria-hidden="true">
+                              {accountSortField === field ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                            </span>
+                          </button>
                         </th>
                       ))}
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         所属施設
                       </th>
                       <th
-                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
-                        onClick={() => toggleAccountSort('status')}
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                        aria-sort={accountSortField === 'status' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        <span className="flex items-center gap-1">
+                        <button
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none"
+                          onClick={() => toggleAccountSort('status')}
+                        >
                           ステータス
-                          {accountSortField === 'status' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
-                        </span>
+                          <span aria-hidden="true">
+                            {accountSortField === 'status' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </button>
                       </th>
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         操作
@@ -489,6 +506,18 @@ export default function CompanyDetailPage(props: {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditAccountStart(account)
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                              編集
+                            </Button>
                             {account.email && !account.email_confirmed && (
                               <Button
                                 size="sm"
