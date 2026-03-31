@@ -318,7 +318,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { role, current_facility_id } = metadata;
+    const { role, current_facility_id, company_id } = metadata;
 
     // 権限チェック（staffは更新不可）
     if (role === 'staff') {
@@ -370,6 +370,23 @@ export async function PATCH(request: NextRequest) {
         { success: false, error: 'Permission denied' },
         { status: 403 }
       );
+    }
+
+    // company_adminの場合、指定施設が自社のものかを確認
+    if (role === 'company_admin' && targetFacilityId !== current_facility_id) {
+      const { data: facilityCheck } = await supabase
+        .from('m_facilities')
+        .select('company_id')
+        .eq('id', targetFacilityId)
+        .is('deleted_at', null)
+        .single();
+
+      if (!facilityCheck || facilityCheck.company_id !== company_id) {
+        return NextResponse.json(
+          { success: false, error: 'Permission denied' },
+          { status: 403 }
+        );
+      }
     }
 
     // _school_facilityの存在確認
