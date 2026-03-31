@@ -101,7 +101,7 @@ export default function SelfCheckInPage() {
   const [checkinHour, setCheckinHour] = useState<number>(0)
   const [checkinAction, setCheckinAction] = useState<'check_in' | 'check_out'>('check_in')
   const [attendanceId, setAttendanceId] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(3)
+  const [countdown, setCountdown] = useState(5)
 
   const fetchChildren = useCallback(async () => {
     try {
@@ -169,7 +169,7 @@ export default function SelfCheckInPage() {
     setCheckinTime(timeStr)
     setCheckinHour(jstHour)
     setCheckinAction(action)
-    setCountdown(3)
+    setCountdown(5)
     setView('feedback')
 
     // Fire-and-forget API call（Promiseをrefに保持してundo時に利用）
