@@ -4,10 +4,11 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-// 00:00 〜 23:55 の5分刻み候補
-const TIME_OPTIONS: string[] = Array.from({ length: 24 * 12 }, (_, i) => {
-  const h = Math.floor(i / 12).toString().padStart(2, '0')
-  const m = ((i % 12) * 5).toString().padStart(2, '0')
+// 08:00 〜 22:00 の15分刻み候補
+const TIME_OPTIONS: string[] = Array.from({ length: (22 - 8) * 4 + 1 }, (_, i) => {
+  const total = 8 * 60 + i * 15
+  const h = Math.floor(total / 60).toString().padStart(2, '0')
+  const m = (total % 60).toString().padStart(2, '0')
   return `${h}:${m}`
 })
 
