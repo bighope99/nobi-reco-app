@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { role, current_facility_id } = metadata;
+    const { role, company_id, current_facility_id } = metadata;
 
     // リクエストパラメータ取得
     const searchParams = request.nextUrl.searchParams;
@@ -47,11 +47,46 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 学校一覧取得
+    // company_adminとfacility_admin/staffでは対象company_idが異なる
+    // company_adminは自社のcompany_idを使い、facility_admin/staffは施設経由で取得
+    let targetCompanyId: string;
+
+    if (role === 'site_admin' || role === 'company_admin') {
+      // site_admin/company_adminは自分のcompany_idを使用
+      targetCompanyId = company_id;
+    } else {
+      // facility_admin/staffは施設からcompany_idを解決
+      const { data: facility, error: facilityError } = await supabase
+        .from('m_facilities')
+        .select('company_id')
+        .eq('id', targetFacilityId)
+        .single();
+
+      if (facilityError || !facility) {
+        return NextResponse.json(
+          { success: false, error: 'Facility not found' },
+          { status: 404 }
+        );
+      }
+      targetCompanyId = facility.company_id;
+    }
+
+    // 学校と施設紐付けを取得（対象施設に紐付いている学校のみ）
     const { data: schools, error: schoolsError } = await supabase
       .from('m_schools')
-      .select('id, name, address, phone, late_threshold_minutes, created_at, updated_at')
-      .eq('facility_id', targetFacilityId)
+      .select(`
+        id,
+        name,
+        name_kana,
+        address,
+        phone,
+        is_active,
+        created_at,
+        updated_at,
+        _school_facility!inner(facility_id, late_threshold_minutes)
+      `)
+      .eq('company_id', targetCompanyId)
+      .eq('_school_facility.facility_id', targetFacilityId)
       .is('deleted_at', null)
       .order('name', { ascending: true });
 
@@ -59,9 +94,22 @@ export async function GET(request: NextRequest) {
       throw schoolsError;
     }
 
+    type SchoolFacilityRow = { facility_id: string; late_threshold_minutes: number };
+    type SchoolRow = {
+      id: string;
+      name: string;
+      name_kana: string | null;
+      address: string | null;
+      phone: string | null;
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
+      _school_facility: SchoolFacilityRow | SchoolFacilityRow[];
+    };
+
     // 各学校のスケジュールを取得
     const schoolsWithSchedules = await Promise.all(
-      (schools || []).map(async (school) => {
+      (schools as unknown as SchoolRow[] || []).map(async (school) => {
         const { data: schedules } = await supabase
           .from('s_school_schedules')
           .select('*')
@@ -69,12 +117,18 @@ export async function GET(request: NextRequest) {
           .is('deleted_at', null)
           .order('grades', { ascending: true });
 
+        // _school_facilityのlate_threshold_minutesを使用（対象施設の設定）
+        const schoolFacility = Array.isArray(school._school_facility)
+          ? school._school_facility[0]
+          : school._school_facility;
+        const lateThresholdMinutes = schoolFacility?.late_threshold_minutes ?? 30;
+
         return {
           school_id: school.id,
           name: school.name,
           address: school.address,
           phone: school.phone,
-          late_threshold_minutes: school.late_threshold_minutes ?? 30,
+          late_threshold_minutes: lateThresholdMinutes,
           schedules: (schedules || []).map((s) => ({
             schedule_id: s.id,
             grades: s.grades || [],
@@ -134,7 +188,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { role, current_facility_id } = metadata;
+    const { role, company_id, current_facility_id } = metadata;
 
     // 権限チェック（staffは作成不可）
     if (role === 'staff') {
@@ -161,12 +215,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // company_adminとfacility_adminでは対象company_idが異なる
+    let targetCompanyId: string;
+
+    if (role === 'site_admin' || role === 'company_admin') {
+      targetCompanyId = company_id;
+    } else {
+      // facility_adminは施設からcompany_idを解決
+      const { data: facility, error: facilityError } = await supabase
+        .from('m_facilities')
+        .select('company_id')
+        .eq('id', current_facility_id)
+        .single();
+
+      if (facilityError || !facility) {
+        return NextResponse.json(
+          { success: false, error: 'Facility not found' },
+          { status: 404 }
+        );
+      }
+      targetCompanyId = facility.company_id;
+    }
+
     // 学校作成
     const { data: newSchool, error: createError } = await supabase
       .from('m_schools')
       .insert({
-        facility_id: current_facility_id,
+        company_id: targetCompanyId,
         name: body.name,
+        name_kana: body.name_kana || null,
+        postal_code: body.postal_code || null,
         address: body.address || null,
         phone: body.phone || null,
         is_active: true,
@@ -178,6 +256,24 @@ export async function POST(request: NextRequest) {
       throw createError;
     }
 
+    // 中間テーブルに追加（作成者の施設に紐付け）
+    const { error: linkError } = await supabase
+      .from('_school_facility')
+      .insert({
+        school_id: newSchool.id,
+        facility_id: current_facility_id,
+        late_threshold_minutes: body.late_threshold_minutes ?? 30,
+      });
+
+    if (linkError) {
+      // 中間テーブルの追加に失敗した場合は学校も削除してロールバック
+      await supabase
+        .from('m_schools')
+        .delete()
+        .eq('id', newSchool.id);
+      throw linkError;
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -185,6 +281,7 @@ export async function POST(request: NextRequest) {
         name: newSchool.name,
         address: newSchool.address,
         phone: newSchool.phone,
+        late_threshold_minutes: body.late_threshold_minutes ?? 30,
         schedules: [],
         created_at: newSchool.created_at,
       },
@@ -205,7 +302,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/schools
- * 学校の late_threshold_minutes を更新
+ * 学校の late_threshold_minutes を更新（施設単位）
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -221,7 +318,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { role, current_facility_id } = metadata;
+    const { role, current_facility_id, company_id } = metadata;
 
     // 権限チェック（staffは更新不可）
     if (role === 'staff') {
@@ -257,38 +354,67 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 学校の存在確認と権限チェック
-    const { data: school, error: schoolError } = await supabase
-      .from('m_schools')
-      .select('id, facility_id')
-      .eq('id', body.school_id)
-      .is('deleted_at', null)
-      .single();
+    // 施設IDの決定（パラメータがある場合はそちらを優先、site_admin/company_admin向け）
+    const targetFacilityId = body.facility_id || current_facility_id;
 
-    if (schoolError || !school) {
+    if (!targetFacilityId) {
       return NextResponse.json(
-        { success: false, error: 'School not found' },
+        { success: false, error: 'Facility not found' },
         { status: 404 }
       );
     }
 
-    // 施設アクセス権限チェック
-    if (role === 'facility_admin' && current_facility_id !== school.facility_id) {
+    // 施設アクセス権限チェック（facility_adminは自施設のみ）
+    if (role === 'facility_admin' && targetFacilityId !== current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
       );
     }
 
-    // m_schools を更新
-    const { data: updatedSchool, error: updateError } = await supabase
-      .from('m_schools')
+    // company_adminの場合、指定施設が自社のものかを確認
+    if (role === 'company_admin' && targetFacilityId !== current_facility_id) {
+      const { data: facilityCheck } = await supabase
+        .from('m_facilities')
+        .select('company_id')
+        .eq('id', targetFacilityId)
+        .is('deleted_at', null)
+        .single();
+
+      if (!facilityCheck || facilityCheck.company_id !== company_id) {
+        return NextResponse.json(
+          { success: false, error: 'Permission denied' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // _school_facilityの存在確認
+    const { data: schoolFacility, error: sfError } = await supabase
+      .from('_school_facility')
+      .select('id')
+      .eq('school_id', body.school_id)
+      .eq('facility_id', targetFacilityId)
+      .is('deleted_at', null)
+      .single();
+
+    if (sfError || !schoolFacility) {
+      return NextResponse.json(
+        { success: false, error: 'School not found for this facility' },
+        { status: 404 }
+      );
+    }
+
+    // _school_facility を更新
+    const { data: updatedSF, error: updateError } = await supabase
+      .from('_school_facility')
       .update({
         late_threshold_minutes: threshold,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', body.school_id)
-      .select('id, late_threshold_minutes, updated_at')
+      .eq('school_id', body.school_id)
+      .eq('facility_id', targetFacilityId)
+      .select('school_id, late_threshold_minutes, updated_at')
       .single();
 
     if (updateError) {
@@ -298,9 +424,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        school_id: updatedSchool.id,
-        late_threshold_minutes: updatedSchool.late_threshold_minutes,
-        updated_at: updatedSchool.updated_at,
+        school_id: updatedSF.school_id,
+        late_threshold_minutes: updatedSF.late_threshold_minutes,
+        updated_at: updatedSF.updated_at,
       },
       message: '遅刻閾値を更新しました',
     });
