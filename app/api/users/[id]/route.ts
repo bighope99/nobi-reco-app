@@ -44,7 +44,7 @@ export async function PUT(
     // 対象ユーザーの存在確認
     const { data: targetUser, error: targetUserError } = await supabase
       .from('m_users')
-      .select('id, name, role, company_id, email')
+      .select('id, name, role, company_id, email, password_set')
       .eq('id', targetUserId)
       .is('deleted_at', null)
       .single();
@@ -91,6 +91,14 @@ export async function PUT(
       return NextResponse.json(
         { success: false, error: 'Staff cannot modify role or class assignments' },
         { status: 403 }
+      );
+    }
+
+    // パスワード設定済みの場合、メールアドレス変更を拒否
+    if (body.email !== undefined && body.email !== (targetUser.email || '') && targetUser.password_set) {
+      return NextResponse.json(
+        { success: false, error: 'パスワード設定済みのためメールアドレスは変更できません' },
+        { status: 400 }
       );
     }
 

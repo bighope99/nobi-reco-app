@@ -674,7 +674,7 @@ export default function CompanyDetailPage(props: {
               <Button
                 type="button"
                 className="flex-1"
-                disabled={isEditingAccount}
+                disabled={isEditingAccount || !editAccountForm.name.trim()}
                 onClick={handleSaveAccount}
               >
                 {isEditingAccount ? (
