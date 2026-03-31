@@ -164,7 +164,7 @@ export default function SelfCheckInPage() {
     optimisticIdsRef.current.add(child.id)
 
     const timeStr = getCurrentTimeJST()
-    const jstHour = parseInt(new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }), 10)
+    const jstHour = parseInt(timeStr.split(':')[0], 10)
     setSelectedChild(child)
     setCheckinTime(timeStr)
     setCheckinHour(jstHour)
