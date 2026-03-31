@@ -908,9 +908,12 @@ export default function UsersSettingsPage() {
                     placeholder="example@email.com"
                     value={editForm.email}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, email: e.target.value })}
+                    disabled={!!editingUser.password_set}
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    メールアドレスを入力すると招待メールが送信されログインアカウントが作成されます（既にアカウントがある場合は更新のみ）
+                    {editingUser.password_set
+                      ? 'パスワード設定済みのため、メールアドレスの変更はできません'
+                      : 'メールアドレスを入力すると招待メールが送信されログインアカウントが作成されます（既にアカウントがある場合は更新のみ）'}
                   </p>
                 </FieldGroup>
 

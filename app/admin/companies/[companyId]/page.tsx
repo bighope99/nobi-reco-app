@@ -75,6 +75,16 @@ export default function CompanyDetailPage(props: {
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // アカウントソート
+  const [accountSortField, setAccountSortField] = useState<'name' | 'email' | 'role' | 'status'>('name')
+  const [accountSortDirection, setAccountSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // アカウント編集モーダル
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+  const [editAccountForm, setEditAccountForm] = useState({ name: '', role: '', is_active: true })
+  const [isEditingAccount, setIsEditingAccount] = useState(false)
+  const [editAccountError, setEditAccountError] = useState<string | null>(null)
+
   // アカウント追加モーダル
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
   const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
@@ -208,6 +218,58 @@ export default function CompanyDetailPage(props: {
 
   const needsFacility = addAdminForm.role === "facility_admin" || addAdminForm.role === "staff"
   const needsEmail = addAdminForm.role !== "staff"
+
+  const sortedAccounts = [...accounts].sort((a, b) => {
+    let aVal = ''
+    let bVal = ''
+    if (accountSortField === 'name') { aVal = a.name; bVal = b.name }
+    else if (accountSortField === 'email') { aVal = a.email || ''; bVal = b.email || '' }
+    else if (accountSortField === 'role') { aVal = a.role; bVal = b.role }
+    else if (accountSortField === 'status') { aVal = a.is_active ? 'active' : 'inactive'; bVal = b.is_active ? 'active' : 'inactive' }
+    return accountSortDirection === 'asc' ? aVal.localeCompare(bVal, 'ja') : bVal.localeCompare(aVal, 'ja')
+  })
+
+  const toggleAccountSort = (field: 'name' | 'email' | 'role' | 'status') => {
+    if (accountSortField === field) {
+      setAccountSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setAccountSortField(field)
+      setAccountSortDirection('asc')
+    }
+  }
+
+  const handleEditAccountStart = (account: Account) => {
+    setEditingAccount(account)
+    setEditAccountForm({ name: account.name, role: account.role, is_active: account.is_active })
+    setEditAccountError(null)
+  }
+
+  const handleSaveAccount = async () => {
+    if (!editingAccount) return
+    setIsEditingAccount(true)
+    setEditAccountError(null)
+    try {
+      const response = await fetch(`/api/users/${editingAccount.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editAccountForm.name,
+          role: editAccountForm.role,
+          is_active: editAccountForm.is_active,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '更新に失敗しました')
+      }
+      setEditingAccount(null)
+      await fetchCompanyDetail()
+    } catch (err) {
+      setEditAccountError(err instanceof Error ? err.message : '更新に失敗しました')
+    } finally {
+      setIsEditingAccount(false)
+    }
+  }
 
   // Loading state
   if (isLoading) {
@@ -349,20 +411,33 @@ export default function CompanyDetailPage(props: {
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        氏名
-                      </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        メールアドレス
-                      </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        権限
-                      </th>
+                      {[
+                        { label: '氏名', field: 'name' as const },
+                        { label: 'メールアドレス', field: 'email' as const },
+                        { label: '権限', field: 'role' as const },
+                      ].map(({ label, field }) => (
+                        <th
+                          key={field}
+                          className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
+                          onClick={() => toggleAccountSort(field)}
+                        >
+                          <span className="flex items-center gap-1">
+                            {label}
+                            {accountSortField === field ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </th>
+                      ))}
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         所属施設
                       </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        ステータス
+                      <th
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
+                        onClick={() => toggleAccountSort('status')}
+                      >
+                        <span className="flex items-center gap-1">
+                          ステータス
+                          {accountSortField === 'status' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                        </span>
                       </th>
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         操作
@@ -370,8 +445,12 @@ export default function CompanyDetailPage(props: {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {accounts.map((account) => (
-                      <tr key={account.id} className="hover:bg-gray-50/50 transition-colors">
+                    {sortedAccounts.map((account) => (
+                      <tr
+                        key={account.id}
+                        className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                        onClick={() => handleEditAccountStart(account)}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="font-medium text-slate-900">{account.name}</span>
                         </td>
@@ -408,7 +487,7 @@ export default function CompanyDetailPage(props: {
                             </Badge>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
                             {account.email && !account.email_confirmed && (
                               <Button
@@ -526,6 +605,89 @@ export default function CompanyDetailPage(props: {
           </CardContent>
         </Card>
       </div>
+
+      {/* アカウント編集モーダル */}
+      {editingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold mb-4">アカウント編集</h2>
+            {editAccountError && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
+                {editAccountError}
+              </div>
+            )}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-account-name">氏名</Label>
+                <Input
+                  id="edit-account-name"
+                  value={editAccountForm.name}
+                  onChange={(e) => setEditAccountForm(f => ({ ...f, name: e.target.value }))}
+                  disabled={isEditingAccount}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>メールアドレス</Label>
+                <p className="text-sm text-slate-600 bg-gray-50 px-3 py-2 rounded-md border">
+                  {editingAccount.email || '-'}
+                </p>
+                <p className="text-xs text-slate-500">メールアドレスは変更できません</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-account-role">権限</Label>
+                <select
+                  id="edit-account-role"
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
+                  value={editAccountForm.role}
+                  onChange={(e) => setEditAccountForm(f => ({ ...f, role: e.target.value }))}
+                  disabled={isEditingAccount}
+                >
+                  <option value="company_admin">会社管理者</option>
+                  <option value="facility_admin">施設管理者</option>
+                  <option value="staff">職員</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-account-status">ステータス</Label>
+                <select
+                  id="edit-account-status"
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
+                  value={editAccountForm.is_active ? 'active' : 'inactive'}
+                  onChange={(e) => setEditAccountForm(f => ({ ...f, is_active: e.target.value === 'active' }))}
+                  disabled={isEditingAccount}
+                >
+                  <option value="active">有効</option>
+                  <option value="inactive">無効</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                disabled={isEditingAccount}
+                onClick={() => setEditingAccount(null)}
+              >
+                キャンセル
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                disabled={isEditingAccount}
+                onClick={handleSaveAccount}
+              >
+                {isEditingAccount ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    保存中...
+                  </>
+                ) : '保存'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* アカウント追加モーダル */}
       {showAddAdminModal && (
