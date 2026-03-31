@@ -121,6 +121,7 @@ export default function ScheduleSettingsPage() {
   const [deleteScheduleConfirm, setDeleteScheduleConfirm] = useState<{ schoolId: string; scheduleId: string } | null>(null);
   const [deleteSchoolConfirm, setDeleteSchoolConfirm] = useState<string | null>(null);
   const [schoolLateThresholds, setSchoolLateThresholds] = useState<Record<string, number>>({});
+  const [savedSchoolLateThresholds, setSavedSchoolLateThresholds] = useState<Record<string, number>>({});
 
   // 初期ロード
   useEffect(() => {
@@ -159,6 +160,7 @@ export default function ScheduleSettingsPage() {
         thresholds[school.school_id] = school.late_threshold_minutes ?? 30;
       });
       setSchoolLateThresholds(thresholds);
+      setSavedSchoolLateThresholds(thresholds);
     } catch (err) {
       console.error('Error fetching schools:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -479,13 +481,12 @@ export default function ScheduleSettingsPage() {
     try {
       setSaving(true);
 
-      // すべてのスケジュールを集めて一括更新（遅刻閾値は学校レベルの値を適用）
+      // すべてのスケジュールを集めて一括更新
       const updates = schools.flatMap((school) =>
         school.schedules.map((schedule) => ({
           schedule_id: schedule.scheduleId,
           grades: schedule.gradeIds,
           weekday_times: frontendToApi(schedule.weekdayTimes),
-          late_threshold_minutes: schoolLateThresholds[school.id] ?? 30,
         }))
       );
 
@@ -499,6 +500,26 @@ export default function ScheduleSettingsPage() {
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to save changes');
+      }
+
+      // 変更された遅刻閾値を_school_facilityに保存
+      const changedThresholds = Object.entries(schoolLateThresholds)
+        .filter(([schoolId, minutes]) => savedSchoolLateThresholds[schoolId] !== minutes);
+
+      if (changedThresholds.length > 0) {
+        await Promise.all(
+          changedThresholds.map(([schoolId, minutes]) =>
+            fetch('/api/schools', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                school_id: schoolId,
+                late_threshold_minutes: minutes,
+              }),
+            })
+          )
+        );
+        setSavedSchoolLateThresholds({ ...schoolLateThresholds });
       }
 
       setHasChanges(false);

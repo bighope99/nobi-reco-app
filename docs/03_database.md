@@ -871,7 +871,7 @@ CREATE INDEX idx_attendance_schedule_is_active ON s_attendance_schedule(is_activ
 ```sql
 CREATE TABLE IF NOT EXISTS m_schools (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  facility_id UUID NOT NULL REFERENCES m_facilities(id),
+  company_id UUID NOT NULL REFERENCES m_companies(id) ON DELETE CASCADE,
 
   -- 基本情報
   name VARCHAR(200) NOT NULL,                      -- 学校名（例: 第一小学校）
@@ -880,21 +880,18 @@ CREATE TABLE IF NOT EXISTS m_schools (
   address VARCHAR(500),                            -- 住所
   phone VARCHAR(20),                               -- 電話番号
 
-  -- 遅刻設定
-  late_threshold_minutes INTEGER NOT NULL DEFAULT 30,  -- 遅刻とみなす閾値（分）。学校全体に適用。
-
   -- ステータス
   is_active BOOLEAN NOT NULL DEFAULT true,         -- 有効/無効
 
   -- タイムスタンプ
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  deleted_at TIMESTAMP WITH TIME ZONE
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
 -- インデックス
-CREATE INDEX idx_m_schools_facility
-  ON m_schools(facility_id)
+CREATE INDEX idx_m_schools_company_id
+  ON m_schools(company_id)
   WHERE deleted_at IS NULL;
 
 CREATE INDEX idx_m_schools_name
@@ -903,8 +900,9 @@ CREATE INDEX idx_m_schools_name
 ```
 
 **説明**:
-- 学童保育施設が連携する小学校を管理
-- 1施設に複数の学校が紐づく可能性がある
+- 学童保育施設が連携する小学校を会社単位（`company_id`）で管理
+- 同一会社内の複数施設で学校を共有できる
+- 施設ごとの遅刻閾値設定は `_school_facility` 中間テーブルで管理
 - 学校ごとに登校時刻のパターンを設定
 
 ---
@@ -1288,7 +1286,35 @@ CREATE INDEX idx_child_sibling_sibling_id ON _child_sibling(sibling_id);
 
 ---
 
-### 8.6 観察記録-タグ（`_record_tag`）
+### 8.6 学校-施設（`_school_facility`）
+
+```sql
+CREATE TABLE _school_facility (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES m_schools(id) ON DELETE CASCADE,
+  facility_id UUID NOT NULL REFERENCES m_facilities(id) ON DELETE CASCADE,
+  late_threshold_minutes INTEGER NOT NULL DEFAULT 30,  -- 施設ごとの遅刻閾値（分）
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(school_id, facility_id)
+);
+
+-- インデックス
+CREATE INDEX idx_school_facility_school_id ON _school_facility(school_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_school_facility_facility_id ON _school_facility(facility_id) WHERE deleted_at IS NULL;
+```
+
+**説明**:
+- 会社単位で管理される学校と、施設の多対多リレーションを管理
+- `late_threshold_minutes`: 施設ごとに遅刻とみなす閾値（分）を設定できる
+  - 同じ学校でも施設によって閾値を変えられる
+  - デフォルト値は30分
+- 学校を複数施設で共有しつつ、施設ごとの設定を保持する
+
+---
+
+### 8.7 観察記録-タグ（`_record_tag`）
 
 ```sql
 CREATE TABLE IF NOT EXISTS _record_tag (
@@ -1337,7 +1363,12 @@ m_companies (会社)
   │   │
   │   ├─ r_activity (活動記録) ← facility_id
   │   ├─ r_daily_attendance (日次出席予定) ← facility_id
-  │   └─ _user_facility (職員-施設)
+  │   ├─ _user_facility (職員-施設)
+  │   └─ _school_facility (学校-施設) ← facility_id
+  │
+  ├─ m_schools (学校) ← company_id
+  │   ├─ s_school_schedules (学校登校スケジュール) ← school_id
+  │   └─ _school_facility (学校-施設) ← school_id
   │
   └─ m_users (職員) ← company_id
       ├─ _user_facility (職員-施設)
