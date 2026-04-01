@@ -61,6 +61,7 @@ export default function DashboardClient() {
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [checkedInDialogOpen, setCheckedInDialogOpen] = useState(false);
+  const [checkedInSortBy, setCheckedInSortBy] = useState<'grade' | 'time'>('grade');
 
   // 二次データ取得済みフラグ（無限ループ防止）
   const hasFetchedSecondaryData = useRef(false);
@@ -407,24 +408,24 @@ export default function DashboardClient() {
       ...(priorityData?.action_required || []),
       ...otherChildren,
     ];
-    return allChildren
-      .filter((child) => child.status === 'checked_in')
-      .sort((a, b) => {
-        const classCompare = a.class_name.localeCompare(b.class_name, 'ja');
-        if (classCompare !== 0) return classCompare;
-        return a.kana.localeCompare(b.kana, 'ja');
-      });
-  }, [priorityData?.action_required, otherChildren]);
+    const filtered = allChildren.filter((child) => child.status === 'checked_in');
 
-  const checkedInByClass = useMemo((): Record<string, Child[]> => {
-    const groups: Record<string, Child[]> = {};
-    for (const child of checkedInChildren) {
-      const key = child.class_name || '';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(child);
+    if (checkedInSortBy === 'time') {
+      return filtered.sort((a, b) => {
+        const timeA = a.actual_in_time || '99:99';
+        const timeB = b.actual_in_time || '99:99';
+        return timeA.localeCompare(timeB);
+      });
     }
-    return groups;
-  }, [checkedInChildren]);
+
+    // Default: grade descending
+    return filtered.sort((a, b) => {
+      const gradeA = a.grade ?? -1;
+      const gradeB = b.grade ?? -1;
+      if (gradeA !== gradeB) return gradeB - gradeA;
+      return a.kana.localeCompare(b.kana, 'ja');
+    });
+  }, [priorityData?.action_required, otherChildren, checkedInSortBy]);
 
   // --- UI Components ---
   const StatusBadge = ({ child }: { child: Child }) => {
@@ -765,6 +766,28 @@ export default function DashboardClient() {
                       </span>
                     </DialogTitle>
                   </DialogHeader>
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                        checkedInSortBy === 'grade'
+                          ? 'bg-emerald-100 text-emerald-700 font-medium'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      onClick={() => setCheckedInSortBy('grade')}
+                    >
+                      学年順
+                    </button>
+                    <button
+                      className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                        checkedInSortBy === 'time'
+                          ? 'bg-emerald-100 text-emerald-700 font-medium'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      onClick={() => setCheckedInSortBy('time')}
+                    >
+                      登所時間順
+                    </button>
+                  </div>
                   <div className="mt-2">
                     {otherChildrenLoading && checkedInChildren.length === 0 ? (
                       <div className="flex items-center justify-center py-8 text-slate-400 gap-2">
@@ -776,29 +799,18 @@ export default function DashboardClient() {
                         <p>現在、在所している児童はいません</p>
                       </div>
                     ) : (
-                      <div className="space-y-4">
-                        {Object.entries(checkedInByClass).map(([className, children]) => (
-                          <div key={className}>
-                            {className && (
-                              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-                                {className}
-                              </h4>
-                            )}
-                            <div className="divide-y divide-slate-100 bg-white rounded-lg border">
-                              {children.map((child) => (
-                                <div key={child.child_id} className="px-3 py-2 flex items-center justify-between">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="font-medium text-slate-700 truncate">{child.name}</span>
-                                    <span className="text-xs text-slate-400 shrink-0">{child.grade_label}</span>
-                                  </div>
-                                  {child.actual_in_time && (
-                                    <span className="text-xs text-emerald-600 shrink-0 ml-2">
-                                      {child.actual_in_time} 登所
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
+                      <div className="divide-y divide-slate-100 bg-white rounded-lg border">
+                        {checkedInChildren.map((child) => (
+                          <div key={child.child_id} className="px-3 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium text-slate-700 truncate">{child.name}</span>
+                              <span className="text-xs text-slate-400 shrink-0">{child.grade_label}</span>
                             </div>
+                            {child.actual_in_time && (
+                              <span className="text-xs text-emerald-600 shrink-0 ml-2">
+                                {child.actual_in_time} 登所
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
