@@ -663,6 +663,7 @@ CREATE TABLE IF NOT EXISTS r_activity (
   handover_completed BOOLEAN DEFAULT false,       -- 引き継ぎ完了フラグ
   handover_completed_at TIMESTAMP WITH TIME ZONE, -- 完了日時
   handover_completed_by UUID REFERENCES m_users(id), -- 完了操作者
+  todo_items JSONB,                                  -- 明日やることリスト（配列）
 
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
@@ -683,6 +684,7 @@ CREATE INDEX idx_activity_recorded_by ON r_activity(recorded_by) WHERE recorded_
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
 CREATE INDEX idx_activity_handover_completed ON r_activity(handover_completed) WHERE deleted_at IS NULL AND handover IS NOT NULL;
+CREATE INDEX idx_activity_todo_items ON r_activity(id) WHERE deleted_at IS NULL AND todo_items IS NOT NULL;
 
 -- 同一施設×クラス×日付での活動記録重複を防ぐPartial Unique Index（削除済みレコードは除外）
 CREATE UNIQUE INDEX idx_r_activity_unique_facility_class_date
@@ -702,6 +704,7 @@ CREATE UNIQUE INDEX idx_r_activity_unique_facility_null_class_date
 | `daily_schedule` | `[{time: string, content: string}, ...]` | 1日の流れを時刻順に記録 |
 | `role_assignments` | `[{user_id: string, user_name: string, role: string}, ...]` | 職員の役割分担 |
 | `meal` | `{menu: string, items_to_bring: string, notes: string}` | ごはん情報 |
+| `todo_items` | `[{id: string, content: string, completed: boolean}, ...]` | 明日やることリスト |
 
 **daily_schedule の例**:
 ```json
@@ -1126,6 +1129,9 @@ CREATE TABLE IF NOT EXISTS h_attendance (
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
+  -- ソフトデリート（登所取り消し時に使用）
+  deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+
   -- JST日付（チェックイン日、自動生成）
   checked_in_date DATE GENERATED ALWAYS AS (
     (checked_in_at AT TIME ZONE 'Asia/Tokyo')::date
@@ -1137,6 +1143,7 @@ CREATE INDEX idx_h_attendance_child_id ON h_attendance(child_id);
 CREATE INDEX idx_h_attendance_facility_id ON h_attendance(facility_id);
 CREATE INDEX idx_h_attendance_checked_in_at ON h_attendance(checked_in_at);
 CREATE INDEX idx_h_attendance_facility_date ON h_attendance(facility_id, DATE(checked_in_at));
+CREATE INDEX idx_h_attendance_deleted_at ON h_attendance(deleted_at) WHERE deleted_at IS NULL;
 
 -- ユニーク制約（同一児童・施設・日付でチェックインは1件のみ）
 ALTER TABLE h_attendance

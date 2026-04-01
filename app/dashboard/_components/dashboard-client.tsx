@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   ChevronRight,
   Loader2,
+  Undo2,
 } from 'lucide-react';
 import type { Child, PriorityData, RecordSupport, SortKey, SortOrder } from './types';
 import {
@@ -203,6 +204,10 @@ export default function DashboardClient() {
                     return { ...child, is_scheduled_today: true };
                   case 'confirm_unexpected':
                     return { ...child, is_scheduled_today: true, alert_type: null };
+                  case 'cancel_check_out':
+                    return { ...child, status: 'checked_in' as const, actual_out_time: null };
+                  case 'cancel_check_in':
+                    return { ...child, status: 'absent' as const, actual_in_time: null, actual_out_time: null };
                   default:
                     return child;
                 }
@@ -231,6 +236,10 @@ export default function DashboardClient() {
                 return { ...child, is_scheduled_today: true };
               case 'confirm_unexpected':
                 return { ...child, is_scheduled_today: true };
+              case 'cancel_check_out':
+                return { ...child, status: 'checked_in' as const, actual_out_time: null };
+              case 'cancel_check_in':
+                return { ...child, status: 'absent' as const, actual_in_time: null, actual_out_time: null };
               default:
                 return child;
             }
@@ -293,6 +302,14 @@ export default function DashboardClient() {
 
   const handleConfirmUnexpected = async (childId: string) => {
     await postAttendanceAction('confirm_unexpected', childId);
+  };
+
+  const handleCancelCheckIn = async (childId: string) => {
+    await postAttendanceAction('cancel_check_in', childId);
+  };
+
+  const handleCancelCheckOut = async (childId: string) => {
+    await postAttendanceAction('cancel_check_out', childId);
   };
 
   // --- Utility Functions ---
@@ -477,12 +494,33 @@ export default function DashboardClient() {
 
     if (child.status === 'checked_in') {
       return (
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={() => handleCheckOut(child.child_id)}
+            className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+            disabled={isPending}
+          >
+            帰宅
+          </button>
+          <button
+            onClick={() => handleCancelCheckIn(child.child_id)}
+            className="flex items-center gap-0.5 text-xs text-red-300 hover:text-red-500 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+            disabled={isPending}
+          >
+            <Undo2 size={12} /> 登所取消
+          </button>
+        </div>
+      );
+    }
+
+    if (child.status === 'checked_out') {
+      return (
         <button
-          onClick={() => handleCheckOut(child.child_id)}
-          className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+          onClick={() => handleCancelCheckOut(child.child_id)}
+          className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
           disabled={isPending}
         >
-          帰宅
+          <Undo2 size={12} /> 帰宅取消
         </button>
       );
     }
@@ -615,11 +653,7 @@ export default function DashboardClient() {
       )}
 
       <div className="min-h-screen text-slate-900 font-sans">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-[1600px] mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-[1600px] mx-auto">
           {/* Header */}
           <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6 border-b border-gray-200 pb-4 sm:pb-6">
             <div>

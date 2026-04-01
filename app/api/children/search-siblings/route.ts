@@ -109,6 +109,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to search children' }, { status: 500 });
     }
 
+    // 各児童の保護者連絡先（緊急連絡先フラグあり、主保護者含む全件）を取得
+    const filteredChildIds = childIds.filter((id) => !child_id || id !== child_id);
+
+    let guardianContactsMap: Map<string, Array<{
+      guardian_id: string;
+      name: string;
+      kana: string | null;
+      phone: string;
+      relation: string;
+      is_primary: boolean;
+    }>> = new Map();
+
+    if (filteredChildIds.length > 0) {
+      const { data: guardianLinksData, error: guardianLinksError } = await supabase
+        .from('_child_guardian')
+        .select(`
+          child_id,
+          relationship,
+          is_primary,
+          m_guardians (
+            id,
+            family_name,
+            family_name_kana,
+            given_name,
+            given_name_kana,
+            phone,
+            deleted_at
+          )
+        `)
+        .in('child_id', filteredChildIds)
+        .eq('is_emergency_contact', true);
+
+      if (guardianLinksError) {
+        console.error('Guardian links search error:', guardianLinksError);
+        return NextResponse.json({ error: 'Failed to load guardian contacts' }, { status: 500 });
+      }
+
+      for (const link of (guardianLinksData || []).filter((g: any) => g.m_guardians && g.m_guardians.deleted_at === null)) {
+        const guardian = link.m_guardians as unknown as {
+          id: string;
+          family_name: string;
+          family_name_kana: string | null;
+          given_name: string;
+          given_name_kana: string | null;
+          phone: string;
+          deleted_at: string | null;
+        } | null;
+        if (!guardian) continue;
+
+        const childContacts = guardianContactsMap.get(link.child_id) || [];
+        childContacts.push({
+          guardian_id: guardian.id,
+          name: formatName([
+            decryptOrFallback(guardian.family_name),
+            decryptOrFallback(guardian.given_name),
+          ]) || '',
+          kana: formatName([
+            guardian.family_name_kana ? decryptOrFallback(guardian.family_name_kana) : null,
+            guardian.given_name_kana ? decryptOrFallback(guardian.given_name_kana) : null,
+          ]) || null,
+          phone: decryptOrFallback(guardian.phone) || '',
+          relation: link.relationship || '',
+          is_primary: link.is_primary ?? false,
+        });
+        guardianContactsMap.set(link.child_id, childContacts);
+      }
+    }
+
     // フィルタリング（編集モードの場合は本人を除外）
     const candidates = (childrenData || [])
       .filter((child: any) => {
@@ -139,6 +207,7 @@ export async function POST(request: NextRequest) {
         age_group: classInfo?.age_group || '',
         enrollment_status: child.enrollment_status,
         photo_url: child.photo_url,
+        guardian_contacts: guardianContactsMap.get(child.id) || [],
       };
     });
 

@@ -30,6 +30,12 @@ interface CheckInResult {
   error?: string
 }
 
+type OverlayPhase =
+  | { phase: 'idle' }
+  | { phase: 'scanning'; cachedName: string | null }
+  | { phase: 'success'; data: NonNullable<CheckInResult['data']>; countdown: number }
+  | { phase: 'error'; message: string; countdown: number }
+
 export default function QRAttendanceScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const codeReaderRef = useRef<BrowserQRCodeReader | null>(null)
@@ -37,10 +43,26 @@ export default function QRAttendanceScannerPage() {
 
   const [scanStatus, setScanStatus] = useState<ScanStatus>("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null)
-  const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [facingMode, setFacingMode] = useState<CameraFacingMode>("environment")
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false)
+  const [overlay, setOverlay] = useState<OverlayPhase>({ phase: 'idle' })
+  const [childCache, setChildCache] = useState<Map<string, string>>(new Map())
+
+  // 子ども一覧をプリフェッチしてキャッシュ（id → kanaName）
+  useEffect(() => {
+    fetch('/api/attendance/self-checkin/children')
+      .then(r => r.json())
+      .then((data: { groups?: Record<string, Array<{ id: string; kanaName: string }>> }) => {
+        const cache = new Map<string, string>()
+        for (const children of Object.values(data.groups ?? {})) {
+          for (const child of children) {
+            cache.set(child.id, child.kanaName)
+          }
+        }
+        setChildCache(cache)
+      })
+      .catch(() => {}) // silent fail
+  }, [])
 
   const stopScanner = useCallback(async () => {
     if (controlsRef.current) {
@@ -104,6 +126,22 @@ export default function QRAttendanceScannerPage() {
     }
   }, [])
 
+  // カウントダウン（success/errorフェーズのみ動作）
+  useEffect(() => {
+    if (overlay.phase !== 'success' && overlay.phase !== 'error') return
+    if (overlay.countdown <= 0) {
+      setOverlay({ phase: 'idle' })
+      return
+    }
+    const timer = setTimeout(() => {
+      setOverlay(prev => {
+        if (prev.phase !== 'success' && prev.phase !== 'error') return prev
+        return { ...prev, countdown: prev.countdown - 1 }
+      })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [overlay])
+
   const parsePayload = (raw: string): AttendanceQrPayload | null => {
     try {
       const parsed = JSON.parse(raw) as AttendanceQrPayload
@@ -117,15 +155,14 @@ export default function QRAttendanceScannerPage() {
   }
 
   const handleCheckIn = async (payload: AttendanceQrPayload) => {
-    setIsCheckingIn(true)
-    setCheckInResult(null)
+    // QRスキャン直後にオーバーレイを即表示（キャッシュから名前を出す）
+    const cachedName = childCache.get(payload.child_id) ?? null
+    setOverlay({ phase: 'scanning', cachedName })
 
     try {
       const response = await fetch('/api/attendance/checkin', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: payload.signature,
           child_id: payload.child_id,
@@ -134,28 +171,24 @@ export default function QRAttendanceScannerPage() {
       })
 
       const result: CheckInResult = await response.json()
-      setCheckInResult(result)
+
+      if (result.success && result.data) {
+        setOverlay({ phase: 'success', data: result.data, countdown: 3 })
+      } else {
+        setOverlay({ phase: 'error', message: result.error ?? 'チェックイン処理中にエラーが発生しました', countdown: 3 })
+      }
     } catch (error) {
       console.error('Check-in error:', error)
-      setCheckInResult({
-        success: false,
-        error: 'チェックイン処理中にエラーが発生しました',
-      })
-    } finally {
-      setIsCheckingIn(false)
+      setOverlay({ phase: 'error', message: 'チェックイン処理中にエラーが発生しました', countdown: 3 })
     }
   }
 
   const processDetection = (rawValue: string) => {
     const payload = parsePayload(rawValue)
     if (payload) {
-      // QR読取り後、自動的に出席記録を行う
       handleCheckIn(payload)
     } else {
-      setCheckInResult({
-        success: false,
-        error: 'QRコードの形式が正しくありません',
-      })
+      setOverlay({ phase: 'error', message: 'QRコードの形式が正しくありません', countdown: 3 })
     }
   }
 
@@ -176,7 +209,6 @@ export default function QRAttendanceScannerPage() {
         throw new Error("ビデオ要素が見つかりません")
       }
 
-      // ZXingのBrowserQRCodeReaderを初期化
       if (!codeReaderRef.current) {
         codeReaderRef.current = new BrowserQRCodeReader()
       }
@@ -195,7 +227,6 @@ export default function QRAttendanceScannerPage() {
           if (result) {
             processDetection(result.getText())
           } else if (error && error.name !== "NotFoundException") {
-            // NotFoundExceptionはQRコードが見つからないだけなので無視
             console.error("QR code decode error", error)
           }
         }
@@ -228,23 +259,24 @@ export default function QRAttendanceScannerPage() {
     }
   }
 
+  const getGreetingMessage = (data: NonNullable<CheckInResult['data']>): string => {
+    if (data.action_type === 'check_out') return 'またね！'
+    const hour = new Date(data.checked_in_at).getHours()
+    return hour < 12 ? 'おはよう！' : 'おかえり！'
+  }
+
   const isScanning = scanStatus === "scanning" || scanStatus === "starting"
+  const hasOverlay = overlay.phase !== 'idle'
 
   return (
     <div className="h-screen overflow-y-auto bg-background p-4 sm:p-6">
       <div className="space-y-6">
         {/* QRコード読み取りエリア */}
         <div className="relative overflow-hidden rounded-2xl border-4 border-primary/20 bg-black">
-          {!isScanning && !isCheckingIn && !checkInResult && (
+          {!isScanning && !hasOverlay && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/80 text-center text-white">
               <Camera className="h-16 w-16" />
               <p className="text-2xl font-bold">カメラを起動してください</p>
-            </div>
-          )}
-          {isCheckingIn && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/80 text-center text-white">
-              <Loader2 className="h-16 w-16 animate-spin" />
-              <p className="text-2xl font-bold">出席を記録中...</p>
             </div>
           )}
           <video
@@ -256,25 +288,74 @@ export default function QRAttendanceScannerPage() {
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="h-56 w-56 sm:h-48 sm:w-48 border-4 border-white/80 shadow-lg" />
           </div>
-          {isScanning && (
+          {isScanning && !hasOverlay && (
             <button
               type="button"
               onClick={handleToggleCamera}
-              disabled={isCheckingIn}
               aria-label="カメラを切り替え"
-              className="absolute right-3 top-3 z-20 rounded-full bg-black/50 p-3 text-white backdrop-blur-sm transition hover:bg-black/70 active:scale-95 disabled:opacity-50"
+              className="absolute right-3 top-3 z-20 rounded-full bg-black/50 p-3 text-white backdrop-blur-sm transition hover:bg-black/70 active:scale-95"
             >
               <SwitchCamera className="h-6 w-6" />
             </button>
           )}
+
+          {/* スキャン中オーバーレイ（即時表示） */}
+          {overlay.phase === 'scanning' && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 text-center p-6">
+              <Loader2 className="h-12 w-12 animate-spin text-white mb-4" />
+              {overlay.cachedName && (
+                <p className="text-3xl font-bold text-white mb-2">{overlay.cachedName}</p>
+              )}
+              <p className="text-xl text-white/80">かくにん中...</p>
+            </div>
+          )}
+
+          {/* 成功オーバーレイ */}
+          {overlay.phase === 'success' && (() => {
+            const { data, countdown } = overlay
+            const isCheckOut = data.action_type === 'check_out'
+            const displayTime = isCheckOut && data.checked_out_at ? data.checked_out_at : data.checked_in_at
+            return (
+              <div className={`absolute inset-0 z-30 flex flex-col items-center justify-center text-center p-6 ${isCheckOut ? 'bg-blue-900/85' : 'bg-green-900/85'}`}>
+                <div className={`rounded-full ${isCheckOut ? 'bg-blue-500' : 'bg-green-500'} p-5 mb-4`}>
+                  {isCheckOut ? (
+                    <Home className="h-12 w-12 text-white" />
+                  ) : (
+                    <Check className="h-12 w-12 text-white" />
+                  )}
+                </div>
+                <p className="text-2xl font-bold text-white mb-2">{getGreetingMessage(data)}</p>
+                <div className="space-y-1 mt-2">
+                  <p className="text-3xl font-bold text-white">{data.child_name}</p>
+                  <p className="text-xl font-semibold text-white/90">{data.class_name}</p>
+                  <p className="text-lg text-white/80">
+                    {new Date(displayTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+                <p className="text-xl text-white/70 mt-4">{countdown}びょうで もどります</p>
+              </div>
+            )
+          })()}
+
+          {/* エラーオーバーレイ */}
+          {overlay.phase === 'error' && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center p-6 bg-red-900/85">
+              <div className="rounded-full bg-red-500 p-5 mb-4">
+                <TriangleAlert className="h-12 w-12 text-white" />
+              </div>
+              <p className="text-2xl font-bold text-white mb-2">エラーが はっせい しました</p>
+              <p className="text-lg text-white/90">{overlay.message}</p>
+              <p className="text-xl text-white/70 mt-4">{overlay.countdown}びょうで もどります</p>
+            </div>
+          )}
         </div>
 
         {/* コントロールボタン */}
-        {!checkInResult && (
+        {!hasOverlay && (
           <div className="flex flex-wrap justify-center gap-4">
             <Button
               onClick={() => startScanner()}
-              disabled={isScanning || isCheckingIn}
+              disabled={isScanning}
               size="lg"
               className="text-lg"
             >
@@ -291,7 +372,7 @@ export default function QRAttendanceScannerPage() {
             <Button
               variant="outline"
               onClick={stopScanner}
-              disabled={scanStatus === "idle" || scanStatus === "stopped" || isCheckingIn}
+              disabled={scanStatus === "idle" || scanStatus === "stopped"}
               size="lg"
               className="text-lg"
             >
@@ -300,93 +381,11 @@ export default function QRAttendanceScannerPage() {
           </div>
         )}
 
-        {/* エラーメッセージ */}
+        {/* カメラエラーメッセージ */}
         {errorMessage && (
           <div className="flex items-start gap-3 rounded-lg border-2 border-destructive/30 bg-destructive/10 p-4 text-destructive">
             <TriangleAlert className="mt-1 h-6 w-6" />
             <p className="text-lg font-medium">{errorMessage}</p>
-          </div>
-        )}
-
-        {/* 出席記録結果 */}
-        {checkInResult && (
-          <div className="space-y-4">
-            {checkInResult.success ? (
-              (() => {
-                const isCheckOut = checkInResult.data?.action_type === 'check_out'
-                const borderColor = isCheckOut ? 'border-blue-500' : 'border-green-500'
-                const bgColor = isCheckOut ? 'bg-blue-50 dark:bg-blue-950' : 'bg-green-50 dark:bg-green-950'
-                const iconBg = isCheckOut ? 'bg-blue-500' : 'bg-green-500'
-                const titleColor = isCheckOut ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200'
-                const nameColor = isCheckOut ? 'text-blue-900 dark:text-blue-100' : 'text-green-900 dark:text-green-100'
-                const classColor = isCheckOut ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200'
-                const timeColor = isCheckOut ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300'
-                const displayTime = isCheckOut && checkInResult.data?.checked_out_at
-                  ? checkInResult.data.checked_out_at
-                  : checkInResult.data?.checked_in_at
-                return (
-                  <div className={`rounded-2xl border-4 ${borderColor} ${bgColor} p-8 text-center`}>
-                    <div className="mb-6 flex justify-center">
-                      <div className={`rounded-full ${iconBg} p-6`}>
-                        {isCheckOut ? (
-                          <Home className="h-16 w-16 text-white" />
-                        ) : (
-                          <Check className="h-16 w-16 text-white" />
-                        )}
-                      </div>
-                    </div>
-                    <p className={`mb-2 text-2xl font-bold ${titleColor}`}>
-                      {isCheckOut ? 'おかえり！ きをつけてね' : 'しゅっせき かんりょう！'}
-                    </p>
-                    {checkInResult.data && (
-                      <div className="mt-6 space-y-3">
-                        <p className={`text-4xl font-bold ${nameColor}`}>
-                          {checkInResult.data.child_name}
-                        </p>
-                        <p className={`text-2xl font-semibold ${classColor}`}>
-                          {checkInResult.data.class_name}
-                        </p>
-                        <p className={`text-xl ${timeColor}`}>
-                          {displayTime && new Date(displayTime).toLocaleTimeString('ja-JP', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                      </div>
-                    )}
-                    <Button
-                      onClick={() => setCheckInResult(null)}
-                      size="lg"
-                      className="mt-6 text-lg"
-                    >
-                      つぎのおともだち
-                    </Button>
-                  </div>
-                )
-              })()
-            ) : (
-              <div className="rounded-2xl border-4 border-red-500 bg-red-50 p-8 text-center dark:bg-red-950">
-                <div className="mb-6 flex justify-center">
-                  <div className="rounded-full bg-red-500 p-6">
-                    <TriangleAlert className="h-16 w-16 text-white" />
-                  </div>
-                </div>
-                <p className="mb-4 text-2xl font-bold text-red-800 dark:text-red-200">
-                  エラーが はっせい しました
-                </p>
-                <p className="text-lg text-red-700 dark:text-red-300">
-                  {checkInResult.error}
-                </p>
-                <Button
-                  onClick={() => setCheckInResult(null)}
-                  variant="outline"
-                  size="lg"
-                  className="mt-6 text-lg"
-                >
-                  もういちど やってみる
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </div>

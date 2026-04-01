@@ -17,6 +17,7 @@ type SupabaseMock = {
   __childInsert: jest.Mock;
   __guardianInsert: jest.Mock;
   __childGuardianUpsert: jest.Mock;
+  __childSiblingUpsert: jest.Mock;
 };
 
 const createSupabaseMock = (childId = 'child-1', guardianId = 'guardian-1'): SupabaseMock => {
@@ -50,15 +51,42 @@ const createSupabaseMock = (childId = 'child-1', guardianId = 'guardian-1'): Sup
   });
 
   const childGuardianUpsert = jest.fn().mockResolvedValue({ error: null });
+  const childSiblingUpsert = jest.fn().mockResolvedValue({ error: null });
+  const childSelect = jest.fn(() => ({
+    in: jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        is: jest.fn().mockResolvedValue({ data: [{ id: 'sibling-1' }, { id: 'sibling-2' }] }),
+      }),
+    }),
+  }));
+
+  const childGuardianUpdate = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      eq: jest.fn().mockResolvedValue({ error: null }),
+      neq: jest.fn().mockResolvedValue({ error: null }),
+    }),
+  });
 
   const from = jest.fn((table: string) => {
     switch (table) {
       case 'm_children':
-        return { insert: childInsert };
+        return { insert: childInsert, select: childSelect };
       case 'm_guardians':
         return { insert: guardianInsert };
       case '_child_guardian':
-        return { upsert: childGuardianUpsert };
+        return { upsert: childGuardianUpsert, update: childGuardianUpdate };
+      case '_child_sibling':
+        return {
+          upsert: childSiblingUpsert,
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: [] }),
+            in: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                is: jest.fn().mockResolvedValue({ data: [] }),
+              }),
+            }),
+          }),
+        };
       default:
         return {};
     }
@@ -69,6 +97,7 @@ const createSupabaseMock = (childId = 'child-1', guardianId = 'guardian-1'): Sup
     __childInsert: childInsert,
     __guardianInsert: guardianInsert,
     __childGuardianUpsert: childGuardianUpsert,
+    __childSiblingUpsert: childSiblingUpsert,
   };
 };
 
@@ -80,6 +109,7 @@ type SupabaseUpdateMock = {
   __childGuardianUpsert: jest.Mock;
   __childGuardianSelect: jest.Mock;
   __childGuardianDelete: jest.Mock;
+  __childSiblingUpsert: jest.Mock;
 };
 
 const createSupabaseUpdateMock = (
@@ -95,6 +125,11 @@ const createSupabaseUpdateMock = (
             error: null,
           }),
         }),
+      }),
+    }),
+    in: jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        is: jest.fn().mockResolvedValue({ data: [{ id: 'sibling-1' }, { id: 'sibling-2' }] }),
       }),
     }),
   });
@@ -134,6 +169,14 @@ const createSupabaseUpdateMock = (
     eq: jest.fn().mockResolvedValue({ data: [{ guardian_id: 'guardian-1' }] }),
   });
   const childGuardianDelete = jest.fn();
+  const childSiblingUpsert = jest.fn().mockResolvedValue({ error: null });
+
+  const childGuardianUpdate = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      eq: jest.fn().mockResolvedValue({ error: null }),
+      neq: jest.fn().mockResolvedValue({ error: null }),
+    }),
+  });
 
   const from = jest.fn((table: string) => {
     switch (table) {
@@ -142,7 +185,19 @@ const createSupabaseUpdateMock = (
       case 'm_guardians':
         return { insert: guardianInsert };
       case '_child_guardian':
-        return { select: childGuardianSelect, delete: childGuardianDelete, upsert: childGuardianUpsert };
+        return { select: childGuardianSelect, delete: childGuardianDelete, upsert: childGuardianUpsert, update: childGuardianUpdate };
+      case '_child_sibling':
+        return {
+          upsert: childSiblingUpsert,
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: [] }),
+            in: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                is: jest.fn().mockResolvedValue({ data: [] }),
+              }),
+            }),
+          }),
+        };
       default:
         return {};
     }
@@ -156,6 +211,7 @@ const createSupabaseUpdateMock = (
     __childGuardianUpsert: childGuardianUpsert,
     __childGuardianSelect: childGuardianSelect,
     __childGuardianDelete: childGuardianDelete,
+    __childSiblingUpsert: childSiblingUpsert,
   };
 };
 
@@ -275,6 +331,72 @@ describe('saveChild PII暗号化', () => {
     expect(supabase.__childGuardianDelete).not.toHaveBeenCalled();
   });
 
+  describe('is_primary cleanup on save', () => {
+    it('resets is_primary on other guardians when saving primary guardian', async () => {
+      const supabase = createSupabaseUpdateMock();
+      const payload: ChildPayload = {
+        basic_info: {
+          family_name: '田中',
+          given_name: '太郎',
+          birth_date: '2020-01-01',
+        },
+        affiliation: {
+          enrolled_at: '2024-04-01',
+        },
+        contact: {
+          parent_name: '田中太郎',
+          parent_phone: '090-1234-5678',
+          parent_email: 'test@example.com',
+        },
+      };
+
+      await saveChild(payload, 'facility-1', supabase as any, 'child-1');
+
+      // _child_guardian への update 呼び出しを取得
+      const childGuardianCalls = supabase.from.mock.calls
+        .map((args: string[], i: number) => ({ table: args[0], result: supabase.from.mock.results[i].value }))
+        .filter(({ table }: { table: string }) => table === '_child_guardian');
+
+      const updateMock = childGuardianCalls.find(
+        ({ result }: { result: any }) => typeof result.update === 'function'
+      )?.result.update as jest.Mock | undefined;
+
+      // is_primary=false のリセットが呼ばれること
+      expect(updateMock).toHaveBeenCalledWith({ is_primary: false });
+    });
+
+    it('sets is_primary=true for primary guardian after reset', async () => {
+      const supabase = createSupabaseUpdateMock();
+      const payload: ChildPayload = {
+        basic_info: {
+          family_name: '田中',
+          given_name: '太郎',
+          birth_date: '2020-01-01',
+        },
+        affiliation: {
+          enrolled_at: '2024-04-01',
+        },
+        contact: {
+          parent_name: '田中太郎',
+          parent_phone: '090-1234-5678',
+        },
+      };
+
+      await saveChild(payload, 'facility-1', supabase as any, 'child-1');
+
+      const childGuardianCalls = supabase.from.mock.calls
+        .map((args: string[], i: number) => ({ table: args[0], result: supabase.from.mock.results[i].value }))
+        .filter(({ table }: { table: string }) => table === '_child_guardian');
+
+      const updateMock = childGuardianCalls.find(
+        ({ result }: { result: any }) => typeof result.update === 'function'
+      )?.result.update as jest.Mock | undefined;
+
+      // is_primary=true のセットも呼ばれること
+      expect(updateMock).toHaveBeenCalledWith({ is_primary: true });
+    });
+  });
+
   it('保護者保存に失敗した更新でも既存の紐付けを削除しないこと', async () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = createSupabaseUpdateMock('child-1', { guardianInsertError: true });
@@ -358,5 +480,29 @@ describe('saveChild PII暗号化', () => {
 
     // given_nameは空文字列（暗号化されていない）
     expect(guardianInsertValues.given_name).toBe('');
+  });
+
+  it('sibling_ids が渡された新規保存では兄弟リンクを双方向で upsert すること', async () => {
+    const supabase = createSupabaseMock();
+    const payload: ChildPayload = {
+      sibling_ids: ['sibling-1', 'sibling-2'],
+      basic_info: {
+        family_name: '山田',
+        given_name: '太郎',
+        birth_date: '2020-01-01',
+      },
+      affiliation: {
+        enrolled_at: '2024-04-01',
+      },
+    };
+
+    await saveChild(payload, 'facility-1', supabase as any);
+
+    expect(supabase.__childSiblingUpsert).toHaveBeenCalledWith([
+      { child_id: 'child-1', sibling_id: 'sibling-1', relationship: '兄弟' },
+      { child_id: 'sibling-1', sibling_id: 'child-1', relationship: '兄弟' },
+      { child_id: 'child-1', sibling_id: 'sibling-2', relationship: '兄弟' },
+      { child_id: 'sibling-2', sibling_id: 'child-1', relationship: '兄弟' },
+    ], { onConflict: 'child_id,sibling_id' });
   });
 });

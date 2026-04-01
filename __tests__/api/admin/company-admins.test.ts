@@ -53,7 +53,28 @@ describe('POST /api/admin/company-admins', () => {
     expect(json.error).toBe('Unauthorized');
   });
 
-  it('should return 403 when user is not site_admin', async () => {
+  it('should return 403 when user is not site_admin or company_admin', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'staff',
+      company_id: 'company-1',
+      current_facility_id: 'facility-1',
+    });
+
+    const request = buildRequest({
+      company_id: 'company-1',
+      admin_user: { name: '管理者太郎', email: 'admin@example.com' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(json.success).toBe(false);
+    expect(json.error).toBe('Permission denied');
+  });
+
+  it('should return 403 when company_admin tries to add to another company', async () => {
     mockedGetMetadata.mockResolvedValue({
       user_id: 'test-user-id',
       role: 'company_admin',
@@ -62,7 +83,7 @@ describe('POST /api/admin/company-admins', () => {
     });
 
     const request = buildRequest({
-      company_id: 'company-1',
+      company_id: 'company-2',
       admin_user: { name: '管理者太郎', email: 'admin@example.com' },
     });
 
@@ -115,7 +136,7 @@ describe('POST /api/admin/company-admins', () => {
     expect(json.error).toContain('admin_user.name');
   });
 
-  it('should return 400 when admin_user.email is missing', async () => {
+  it('should return 400 when admin_user.email is missing for company_admin role', async () => {
     mockedGetMetadata.mockResolvedValue({
       user_id: 'test-user-id',
       role: 'site_admin',
@@ -125,6 +146,7 @@ describe('POST /api/admin/company-admins', () => {
 
     const request = buildRequest({
       company_id: 'company-1',
+      role: 'company_admin',
       admin_user: { name: '管理者太郎' },
     });
 
@@ -134,6 +156,50 @@ describe('POST /api/admin/company-admins', () => {
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
     expect(json.error).toContain('admin_user.email');
+  });
+
+  it('should return 400 when facility_id is missing for staff role', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'site_admin',
+      company_id: 'test-company-id',
+      current_facility_id: null,
+    });
+
+    const request = buildRequest({
+      company_id: 'company-1',
+      role: 'staff',
+      admin_user: { name: 'スタッフ太郎' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('facility_id');
+  });
+
+  it('should return 400 for invalid role', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'site_admin',
+      company_id: 'test-company-id',
+      current_facility_id: null,
+    });
+
+    const request = buildRequest({
+      company_id: 'company-1',
+      role: 'invalid_role',
+      admin_user: { name: '管理者太郎', email: 'admin@example.com' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('Invalid role');
   });
 
   it('should return 400 for invalid email format', async () => {
@@ -644,7 +710,7 @@ describe('POST /api/admin/company-admins', () => {
     expect(json.data.company_id).toBe('company-1');
     expect(json.data.company_name).toBe('テスト会社');
     expect(json.data.admin_user_id).toBe('user-1');
-    expect(json.message).toBe('会社管理者を登録しました');
+    expect(json.message).toContain('登録しました');
 
     // Verify sendWithGas was called
     expect(mockedSendWithGas).toHaveBeenCalledWith(
@@ -665,6 +731,101 @@ describe('POST /api/admin/company-admins', () => {
         }),
       })
     );
+  });
+
+  it('should create staff without email successfully', async () => {
+    mockedGetMetadata.mockResolvedValue({
+      user_id: 'test-user-id',
+      role: 'company_admin',
+      company_id: 'company-1',
+      current_facility_id: 'facility-1',
+    });
+
+    const companyCheckQuery: any = {
+      select: jest.fn(() => companyCheckQuery),
+      eq: jest.fn(() => companyCheckQuery),
+      is: jest.fn(() => companyCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'company-1', name: 'テスト会社' },
+        error: null,
+      }),
+    };
+
+    const facilityCheckQuery: any = {
+      select: jest.fn(() => facilityCheckQuery),
+      eq: jest.fn(() => facilityCheckQuery),
+      is: jest.fn(() => facilityCheckQuery),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'facility-1' },
+        error: null,
+      }),
+    };
+
+    const userInsertQuery: any = {
+      insert: jest.fn(() => userInsertQuery),
+      select: jest.fn(() => userInsertQuery),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'staff-uuid',
+          name: 'スタッフ太郎',
+          email: null,
+          role: 'staff',
+          company_id: 'company-1',
+          hire_date: '2026-03-28',
+        },
+        error: null,
+      }),
+    };
+
+    const facilityLinkQuery: any = {
+      insert: jest.fn().mockResolvedValue({ error: null }),
+    };
+
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyCheckQuery;
+        if (table === 'm_facilities') return facilityCheckQuery;
+        if (table === 'm_users') return userInsertQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        if (table === '_user_facility') return facilityLinkQuery;
+        throw new Error(`Unexpected admin table: ${table}`);
+      }),
+    };
+
+    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
+
+    const request = buildRequest({
+      company_id: 'company-1',
+      role: 'staff',
+      facility_id: 'facility-1',
+      admin_user: { name: 'スタッフ太郎' },
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.data.admin_user_name).toBe('スタッフ太郎');
+    expect(json.data.admin_user_email).toBeNull();
+    expect(json.message).toBe('スタッフを登録しました');
+
+    // _user_facility にINSERTされたこと
+    expect(facilityLinkQuery.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        facility_id: 'facility-1',
+        is_primary: true,
+      })
+    );
+
+    // メール送信されないこと
+    expect(mockedSendWithGas).not.toHaveBeenCalled();
   });
 
   it('should return 500 when auth user creation fails', async () => {

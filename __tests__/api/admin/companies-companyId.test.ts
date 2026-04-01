@@ -85,7 +85,7 @@ describe('GET /api/admin/companies/[companyId]', () => {
       from: jest.fn(() => companyQuery),
     };
 
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockSupabase as any);
 
     const request = new NextRequest('http://localhost/api/admin/companies/company-1');
     const response = await GET(request, createParams('company-1'));
@@ -160,13 +160,23 @@ describe('GET /api/admin/companies/[companyId]', () => {
             email: 'admin@co.jp',
             role: 'company_admin',
             is_active: true,
-            _user_facility: [
-              {
-                facility_id: 'facility-1',
-                is_primary: true,
-                m_facilities: { id: 'facility-1', name: '施設A' },
-              },
-            ],
+            // _user_facility removed - fetched separately now
+          },
+        ],
+        error: null,
+      }),
+    };
+
+    const userFacilitiesQuery: any = {
+      select: jest.fn(() => userFacilitiesQuery),
+      in: jest.fn().mockResolvedValue({
+        data: [
+          {
+            user_id: 'user-1',
+            facility_id: 'facility-1',
+            is_primary: true,
+            is_current: true,
+            m_facilities: { id: 'facility-1', name: '施設A' },
           },
         ],
         error: null,
@@ -174,18 +184,16 @@ describe('GET /api/admin/companies/[companyId]', () => {
     };
 
     let fromCallCount = 0;
-    const mockSupabase = {
+
+    mockedCreateAdminClient.mockResolvedValue({
       from: jest.fn((table: string) => {
         fromCallCount++;
         if (fromCallCount === 1 && table === 'm_companies') return companyQuery;
         if (fromCallCount === 2 && table === 'm_facilities') return facilitiesQuery;
         if (fromCallCount === 3 && table === 'm_users') return accountsQuery;
+        if (fromCallCount === 4 && table === '_user_facility') return userFacilitiesQuery;
         throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
       }),
-    };
-
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
-    mockedCreateAdminClient.mockResolvedValue({
       auth: {
         admin: {
           listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
@@ -229,7 +237,7 @@ describe('GET /api/admin/companies/[companyId]', () => {
       from: jest.fn(() => companyQuery),
     };
 
-    mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockSupabase as any);
 
     const request = new NextRequest('http://localhost/api/admin/companies/company-1');
     const response = await GET(request, createParams('company-1'));

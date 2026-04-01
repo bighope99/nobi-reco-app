@@ -135,7 +135,8 @@ export async function GET(request: NextRequest) {
                 is_primary,
                 guardian:m_guardians (
                   id,
-                  phone
+                  phone,
+                  deleted_at
                 )
               `
               )
@@ -209,7 +210,11 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. バッチ復号化（電話番号）- 施設IDでキャッシュ分離
-    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(guardianLinksResult.data as unknown as Array<{ child_id: string; is_primary?: boolean; guardian?: { phone?: string | null } | null }> || [], facility_id);
+    const guardianPhoneMap = cachedBatchDecryptGuardianPhones(
+      ((guardianLinksResult.data || []) as unknown as Array<{ child_id: string; is_primary?: boolean; guardian?: { phone?: string | null; deleted_at: string | null } | null }>)
+        .filter((g) => g.guardian && g.guardian.deleted_at === null),
+      facility_id
+    );
 
     // 5. ヘルパー関数
     const getSchoolStartTime = (schoolId: string | null, grade: number | null): string | null => {

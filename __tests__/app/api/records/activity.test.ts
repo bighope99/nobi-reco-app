@@ -252,15 +252,14 @@ describe('/api/records/activity', () => {
           }
           if (tableName === 'r_observation') {
             return {
-              insert: jest.fn(() => {
-                observationInsertCount++;
+              insert: jest.fn((rows) => {
+                observationInsertCount = Array.isArray(rows) ? rows.length : 1;
+                const insertedData = Array.isArray(rows)
+                  ? rows.map((row, i) => ({ id: `test-observation-id-${i + 1}`, content: '抽出された内容', ...row }))
+                  : [{ id: 'test-observation-id-1', content: '抽出された内容', ...rows }];
                 return {
-                  select: jest.fn().mockReturnThis(),
-                  single: jest.fn().mockResolvedValue({
-                    data: {
-                      id: `test-observation-id-${observationInsertCount}`,
-                      content: '抽出された内容',
-                    },
+                  select: jest.fn().mockResolvedValue({
+                    data: insertedData,
                     error: null,
                   }),
                 };
@@ -371,14 +370,13 @@ describe('/api/records/activity', () => {
           if (tableName === 'r_observation') {
             return {
               insert: jest.fn((data) => {
-                observationData = data;
+                observationData = Array.isArray(data) ? data[0] : data;
+                const insertedData = Array.isArray(data)
+                  ? data.map((row, i) => ({ id: `test-observation-id-${i + 1}`, ...row }))
+                  : [{ id: 'test-observation-id', ...data }];
                 return {
-                  select: jest.fn().mockReturnThis(),
-                  single: jest.fn().mockResolvedValue({
-                    data: {
-                      id: 'test-observation-id',
-                      ...data,
-                    },
+                  select: jest.fn().mockResolvedValue({
+                    data: insertedData,
                     error: null,
                   }),
                 };
@@ -1242,6 +1240,186 @@ describe('/api/records/activity', () => {
         expect(updatedActivity.special_notes).toBeNull();
         expect(updatedActivity.meal).toBeNull();
       });
+    });
+  });
+
+  describe('todo_items の保存・更新', () => {
+    it('POST: todo_itemsを含む保存リクエストでDBに正しく挿入される', async () => {
+      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+      let insertedActivity: any = null;
+      const mockSupabase: Record<string, unknown> = {
+        auth: {
+          getUser: jest.fn().mockResolvedValue({
+            data: { user: mockUser },
+            error: null,
+          }),
+        },
+        from: jest.fn((tableName: string) => {
+          if (tableName === 'r_activity') {
+            return {
+              insert: jest.fn((data) => {
+                insertedActivity = data;
+                return {
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: { id: 'test-activity-id', ...data },
+                    error: null,
+                  }),
+                };
+              }),
+            };
+          }
+          if (tableName === 'r_observation') {
+            return {
+              insert: jest.fn(() => ({
+                select: jest.fn().mockReturnThis(),
+                single: jest.fn().mockResolvedValue({
+                  data: { id: 'test-observation-id', content: '抽出された内容' },
+                  error: null,
+                }),
+              })),
+            };
+          }
+          return mockSupabase;
+        }),
+      };
+      (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+      const todoItems = [{ id: 'todo-1', content: 'テスト項目', completed: false }];
+      const request = new NextRequest('http://localhost:3000/api/records/activity', {
+        method: 'POST',
+        body: JSON.stringify({ ...mockActivityData, todo_items: todoItems }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(insertedActivity).toBeDefined();
+      expect(insertedActivity.todo_items).toEqual(todoItems);
+    });
+
+    it('POST: todo_itemsを省略した場合、todo_items: nullとして保存される', async () => {
+      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+
+      let insertedActivity: any = null;
+      const mockSupabase: Record<string, unknown> = {
+        auth: {
+          getUser: jest.fn().mockResolvedValue({
+            data: { user: mockUser },
+            error: null,
+          }),
+        },
+        from: jest.fn((tableName: string) => {
+          if (tableName === 'r_activity') {
+            return {
+              insert: jest.fn((data) => {
+                insertedActivity = data;
+                return {
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValue({
+                    data: { id: 'test-activity-id', ...data },
+                    error: null,
+                  }),
+                };
+              }),
+            };
+          }
+          if (tableName === 'r_observation') {
+            return {
+              insert: jest.fn(() => ({
+                select: jest.fn().mockReturnThis(),
+                single: jest.fn().mockResolvedValue({
+                  data: { id: 'test-observation-id', content: '抽出された内容' },
+                  error: null,
+                }),
+              })),
+            };
+          }
+          return mockSupabase;
+        }),
+      };
+      (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+      // todo_items を省略（クライアント側で空 content を除外してから送信するため、APIには undefined/null を渡す）
+      const request = new NextRequest('http://localhost:3000/api/records/activity', {
+        method: 'POST',
+        body: JSON.stringify({ ...mockActivityData }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(insertedActivity).toBeDefined();
+      expect(insertedActivity.todo_items).toBeNull();
+    });
+
+    it('PUT: todo_itemsを含む更新リクエストでDBに正しく更新される', async () => {
+      const { PUT } = await import('@/app/api/records/activity/route');
+      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+
+      let updatedActivity: any = null;
+      const mockSupabase: Record<string, unknown> = {
+        auth: {
+          getUser: jest.fn().mockResolvedValue({
+            data: { user: mockUser },
+            error: null,
+          }),
+        },
+        from: jest.fn((tableName: string) => {
+          if (tableName === 'r_activity') {
+            return {
+              select: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  is: jest.fn(() => ({
+                    single: jest.fn().mockResolvedValue({
+                      data: {
+                        id: 'existing-activity-id',
+                        facility_id: mockSession.current_facility_id,
+                        created_by: mockSession.user_id,
+                      },
+                      error: null,
+                    }),
+                  })),
+                })),
+              })),
+              update: jest.fn((data) => {
+                updatedActivity = data;
+                return {
+                  eq: jest.fn(() => ({
+                    select: jest.fn().mockReturnThis(),
+                    single: jest.fn().mockResolvedValue({
+                      data: { id: 'existing-activity-id', ...data },
+                      error: null,
+                    }),
+                  })),
+                };
+              }),
+            };
+          }
+          return mockSupabase;
+        }),
+      };
+      (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+
+      const todoItems = [{ id: 'todo-1', content: 'テスト項目', completed: true }];
+      const updateData = {
+        activity_id: 'existing-activity-id',
+        activity_date: '2025-01-03',
+        content: '更新された内容',
+        mentioned_children: [],
+        todo_items: todoItems,
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/records/activity', {
+        method: 'PUT',
+        body: JSON.stringify(updateData),
+      });
+
+      const response = await PUT(request);
+      expect(response.status).toBe(200);
+      expect(updatedActivity).toBeDefined();
+      expect(updatedActivity.todo_items).toEqual(todoItems);
     });
   });
 });

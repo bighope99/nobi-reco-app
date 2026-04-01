@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 beforeEach(() => {
   jest.useFakeTimers();
   global.fetch = jest.fn(async (input) => {
@@ -63,6 +67,9 @@ describe('ChildForm new', () => {
     });
     fireEvent.change(screen.getByPlaceholderText('日'), {
       target: { value: '10' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('090-0000-0000'), {
+      target: { value: '090-1234-5678' },
     });
     const dateInputs = document.querySelectorAll('input[type="date"]');
     fireEvent.change(dateInputs[0], {
@@ -148,13 +155,11 @@ describe('ChildForm new', () => {
   it('automatically searches siblings when phone number is entered', async () => {
     render(<ChildForm mode="new" />);
 
-    fireEvent.change(screen.getByPlaceholderText('090-0000-0000'), {
+    const phoneInput = screen.getByPlaceholderText('090-0000-0000');
+    fireEvent.change(phoneInput, {
       target: { value: '090-9876-5432' },
     });
-
-    await act(async () => {
-      jest.advanceTimersByTime(600);
-    });
+    fireEvent.blur(phoneInput);
 
     await waitFor(() => {
       const siblingSearchCalls = (global.fetch as jest.Mock).mock.calls.filter(

@@ -52,6 +52,7 @@ export async function GET() {
     .eq('facility_id', facilityId)
     .gte('checked_in_at', startOfDayUTC)
     .lte('checked_in_at', endOfDayUTC)
+    .is('deleted_at', null)
     .in('child_id', childIds)
 
   if (attendanceError) {

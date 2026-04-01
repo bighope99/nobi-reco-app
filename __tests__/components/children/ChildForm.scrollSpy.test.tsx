@@ -1,6 +1,10 @@
 import { render, screen, act } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 beforeEach(() => {
   global.fetch = jest.fn(async (input) => {
     const url = typeof input === 'string' ? input : (input as Request).url;

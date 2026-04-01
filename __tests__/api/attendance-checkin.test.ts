@@ -63,6 +63,8 @@ const createSelectQueryWithFilters = (): MockSelectQueryWithFilters => {
   query.gte = jest.fn().mockReturnValue(query);
   query.lte = jest.fn().mockReturnValue(query);
   query.order = jest.fn().mockReturnValue(query);
+  (query as any).is = jest.fn().mockReturnValue(query);
+  (query as any).not = jest.fn().mockReturnValue(query);
   return query;
 };
 
@@ -163,6 +165,13 @@ describe('POST /api/attendance/checkin', () => {
         error: null,
       });
 
+      // Mock soft-deleted attendance query
+      const softDeletedQuery = createSelectQueryWithFilters();
+      softDeletedQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
+
       // Mock attendance insert query
       const attendanceInsertQuery = createInsertQuery();
       attendanceInsertQuery.single.mockResolvedValue({
@@ -181,7 +190,8 @@ describe('POST /api/attendance/checkin', () => {
         from: jest.fn<MockSelectQuery | MockInsertQuery, [string]>()
           .mockReturnValueOnce(childQuery) // First call: m_children
           .mockReturnValueOnce(attendanceCheckQuery) // Second call: h_attendance (check)
-          .mockReturnValueOnce(attendanceInsertQuery), // Third call: h_attendance (insert)
+          .mockReturnValueOnce(softDeletedQuery) // Third call: h_attendance (soft-deleted check)
+          .mockReturnValueOnce(attendanceInsertQuery), // Fourth call: h_attendance (insert)
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
@@ -441,6 +451,13 @@ describe('POST /api/attendance/checkin', () => {
         data: null,
         error: null,
       });
+      // Mock soft-deleted attendance query
+      const softDeletedQuery = createSelectQueryWithFilters();
+      softDeletedQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
+
 
       const attendanceInsertQuery = createInsertQuery();
       attendanceInsertQuery.single.mockResolvedValue({
@@ -459,7 +476,10 @@ describe('POST /api/attendance/checkin', () => {
         from: jest.fn<MockSelectQuery | MockInsertQuery, [string]>()
           .mockReturnValueOnce(childQuery) // First call: m_children
           .mockReturnValueOnce(attendanceCheckQuery) // Second call: h_attendance (check)
-          .mockReturnValueOnce(attendanceInsertQuery), // Third call: h_attendance (insert)
+
+          .mockReturnValueOnce(softDeletedQuery) // Third call: h_attendance (soft-deleted check)
+
+          .mockReturnValueOnce(attendanceInsertQuery), // Fourth call: h_attendance (insert)
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
@@ -1060,6 +1080,13 @@ describe('POST /api/attendance/checkin', () => {
         error: { message: 'db error' },
       });
 
+      // Mock soft-deleted attendance query
+      const softDeletedQuery = createSelectQueryWithFilters();
+      softDeletedQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
+
       const mockSupabase: Record<string, unknown> = {
         auth: authQuery,
         from: jest.fn((table: string) => {
@@ -1068,7 +1095,7 @@ describe('POST /api/attendance/checkin', () => {
             const callCount: number = (mockSupabase.from as jest.Mock).mock.calls.filter(
               (call: unknown[]) => call[0] === 'h_attendance'
             ).length;
-            return callCount === 1 ? attendanceCheckQuery : attendanceInsertQuery;
+                        return callCount === 1 ? attendanceCheckQuery : callCount === 2 ? softDeletedQuery : attendanceInsertQuery;
           }
           throw new Error(`Unexpected table: ${table}`);
         }),
