@@ -76,7 +76,7 @@ export default function LoginPage() {
 
       const sessionData = await response.json()
 
-      // 3. sessionStorage にセッション情報を保存
+      // 3. localStorage にセッション情報を保存
       localStorage.setItem("user_session", JSON.stringify(sessionData))
 
       // 4. ロールに応じてリダイレクト

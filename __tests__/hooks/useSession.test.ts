@@ -3,7 +3,7 @@
  *
  * テスト対象: hooks/useSession.ts
  *
- * useSession は sessionStorage からセッションを読み込み、
+ * useSession は localStorage からセッションを読み込み、
  * 存在しない場合は Supabase Auth + /api/auth/session API で復旧する Client Hook。
  */
 import { renderHook, waitFor } from '@testing-library/react'
@@ -45,7 +45,7 @@ const mockSession: UserSession = {
 }
 
 // localStorage のモック
-const mockSessionStorage = (() => {
+const mockLocalStorage = (() => {
   let store: Record<string, string> = {}
   return {
     getItem: jest.fn((key: string) => store[key] ?? null),
@@ -56,7 +56,7 @@ const mockSessionStorage = (() => {
 })()
 
 Object.defineProperty(window, 'localStorage', {
-  value: mockSessionStorage,
+  value: mockLocalStorage,
   writable: true,
 })
 
@@ -74,10 +74,10 @@ describe('useSession', () => {
 
   beforeEach(() => {
     originalFetch = global.fetch
-    mockSessionStorage.clear()
-    mockSessionStorage.getItem.mockClear()
-    mockSessionStorage.setItem.mockClear()
-    mockSessionStorage.removeItem.mockClear()
+    mockLocalStorage.clear()
+    mockLocalStorage.getItem.mockClear()
+    mockLocalStorage.setItem.mockClear()
+    mockLocalStorage.removeItem.mockClear()
     ;(createClient as jest.Mock).mockClear()
   })
 
@@ -87,12 +87,12 @@ describe('useSession', () => {
   })
 
   // ------------------------------------------------------------------
-  // Given: sessionStorage に有効な UserSession JSON が保存されている
+  // Given: localStorage に有効な UserSession JSON が保存されている
   // When:  useSession フックを呼び出す
   // Then:  即座にその UserSession が返されること
   // ------------------------------------------------------------------
   it('sessionStorage に有効なセッションがある場合、即座にそのセッションを返すこと', async () => {
-    mockSessionStorage.getItem.mockReturnValue(JSON.stringify(mockSession))
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockSession))
 
     // このテストでは API が呼ばれないことを確認するためにフェッチをモック化
     const fetchMock = jest.fn()
@@ -104,17 +104,17 @@ describe('useSession', () => {
       expect(result.current).toEqual(mockSession)
     })
 
-    // API は呼ばれていないこと（sessionStorage から即時返却されるため）
+    // API は呼ばれていないこと（localStorage から即時返却されるため）
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   // ------------------------------------------------------------------
-  // Given: sessionStorage が空で Supabase Auth に有効なユーザーが存在する
+  // Given: localStorage が空で Supabase Auth に有効なユーザーが存在する
   // When:  useSession フックを呼び出す
   // Then:  /api/auth/session API からセッションを復旧してセットすること
   // ------------------------------------------------------------------
   it('sessionStorage が空で Supabase Auth にユーザーがいる場合、APIからセッションを復旧すること', async () => {
-    mockSessionStorage.getItem.mockReturnValue(null as unknown as string)
+    mockLocalStorage.getItem.mockReturnValue(null as unknown as string)
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase({ id: 'user-abc-123' })
     )
@@ -140,20 +140,20 @@ describe('useSession', () => {
       })
     )
 
-    // sessionStorage に保存されていること
-    expect(mockSessionStorage.setItem).toHaveBeenCalledWith(
+    // localStorage に保存されていること
+    expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
       'user_session',
       JSON.stringify(mockSession)
     )
   })
 
   // ------------------------------------------------------------------
-  // Given: sessionStorage が空で Supabase Auth にユーザーが存在しない
+  // Given: localStorage が空で Supabase Auth にユーザーが存在しない
   // When:  useSession フックを呼び出す
   // Then:  null が返され続けること
   // ------------------------------------------------------------------
   it('sessionStorage が空で Supabase Auth にユーザーがいない場合、null を返すこと', async () => {
-    mockSessionStorage.getItem.mockReturnValue(null as unknown as string)
+    mockLocalStorage.getItem.mockReturnValue(null as unknown as string)
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase(null)
     )
@@ -173,12 +173,12 @@ describe('useSession', () => {
   })
 
   // ------------------------------------------------------------------
-  // Given: sessionStorage に壊れた JSON が保存されている
+  // Given: localStorage に壊れた JSON が保存されている
   // When:  useSession フックを呼び出す
-  // Then:  sessionStorage から削除し、API での復旧を試みること
+  // Then:  localStorage から削除し、API での復旧を試みること
   // ------------------------------------------------------------------
   it('sessionStorage の JSON が壊れている場合、削除してAPIで復旧を試みること', async () => {
-    mockSessionStorage.getItem.mockReturnValue('{ INVALID JSON %%%')
+    mockLocalStorage.getItem.mockReturnValue('{ INVALID JSON %%%')
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase({ id: 'user-abc-123' })
     )
@@ -195,7 +195,7 @@ describe('useSession', () => {
     })
 
     // 壊れたデータが削除されていること
-    expect(mockSessionStorage.removeItem).toHaveBeenCalledWith('user_session')
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user_session')
 
     // その後 API で復旧されていること
     expect(global.fetch).toHaveBeenCalledWith(
@@ -205,12 +205,12 @@ describe('useSession', () => {
   })
 
   // ------------------------------------------------------------------
-  // Given: sessionStorage が空で Supabase Auth にユーザーが存在する
+  // Given: localStorage が空で Supabase Auth にユーザーが存在する
   // When:  /api/auth/session API がエラーレスポンス（ok: false）を返す
   // Then:  session は null のまま維持されること
   // ------------------------------------------------------------------
   it('/api/auth/session API が失敗する場合、null のまま維持すること', async () => {
-    mockSessionStorage.getItem.mockReturnValue(null as unknown as string)
+    mockLocalStorage.getItem.mockReturnValue(null as unknown as string)
     ;(createClient as jest.Mock).mockReturnValue(
       buildMockSupabase({ id: 'user-abc-123' })
     )
@@ -230,7 +230,7 @@ describe('useSession', () => {
 
     // セッションは null のまま
     expect(result.current).toBeNull()
-    // sessionStorage には保存されていないこと
-    expect(mockSessionStorage.setItem).not.toHaveBeenCalled()
+    // localStorage には保存されていないこと
+    expect(mockLocalStorage.setItem).not.toHaveBeenCalled()
   })
 })

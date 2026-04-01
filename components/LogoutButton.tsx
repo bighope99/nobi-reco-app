@@ -23,7 +23,7 @@ export function LogoutButton({
         setIsLoading(true);
 
         try {
-            // 1. sessionStorage を先にクリア（リダイレクト前に確実に削除）
+            // 1. localStorage を先にクリア（リダイレクト前に確実に削除）
             localStorage.removeItem('user_session');
 
             // 2. サーバー側でセッションとCookieをクリア（signOutもサーバーで実行）
