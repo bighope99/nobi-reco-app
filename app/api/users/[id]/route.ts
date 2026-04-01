@@ -14,7 +14,6 @@ export async function PUT(
   const params = await props.params;
   try {
     const supabase = await createClient();
-    const supabaseAdmin = await createAdminClient();
 
     // JWTメタデータから認証情報を取得
     const metadata = await getAuthenticatedUserMetadata();
@@ -42,30 +41,16 @@ export async function PUT(
 
     const { id: targetUserId } = params;
 
-    // 対象ユーザーの存在確認（RLSをバイパスしてsite_adminでも参照可能に）
-    const { data: targetUser, error: targetUserError } = await supabaseAdmin
+    // 対象ユーザーの存在確認
+    const { data: targetUser, error: targetUserError } = await supabase
       .from('m_users')
       .select('id, name, role, company_id, email, password_set')
       .eq('id', targetUserId)
       .is('deleted_at', null)
       .single();
 
-    if (targetUserError) {
-      // PGRST116 = no rows found (正常な404)、それ以外はサーバーエラー
-      if (targetUserError.code === 'PGRST116') {
-        return NextResponse.json(
-          { success: false, error: 'User not found' },
-          { status: 404 }
-        );
-      }
+    if (targetUserError || !targetUser) {
       console.error('Error fetching target user:', targetUserError);
-      return NextResponse.json(
-        { success: false, error: 'Internal Server Error', message: targetUserError.message },
-        { status: 500 }
-      );
-    }
-
-    if (!targetUser) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
@@ -143,7 +128,7 @@ export async function PUT(
     if (body.role !== undefined && !isStaff) updateData.role = body.role;
 
     // ユーザー情報更新
-    const { data: updatedUser, error: updateError } = await supabaseAdmin
+    const { data: updatedUser, error: updateError } = await supabase
       .from('m_users')
       .update(updateData)
       .eq('id', targetUserId)
@@ -157,6 +142,7 @@ export async function PUT(
     // emailが新規追加された場合はauth招待を送信
     const existingEmail = targetUser.email;
     if (body.email && !existingEmail) {
+      const supabaseAdmin = await createAdminClient();
       // まずauth.usersにユーザーが既にいるか確認
       const { data: existingAuthUser } = await supabaseAdmin.auth.admin.getUserById(targetUserId);
       if (!existingAuthUser?.user?.email) {
