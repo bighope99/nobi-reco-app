@@ -1169,12 +1169,6 @@ export default function ActivityRecordClient() {
       const sanitizedFields = getSanitizedExtendedFields()
       const validTodoItems = todoItems.filter(item => item.content.trim().length > 0)
 
-      // 記録者をCookieに保存（30日間）
-      if (selectedRecorder) {
-        const secure = window.location.protocol === 'https:' ? '; Secure' : ''
-        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`
-      }
-
       const response = await fetch('/api/activities', {
         method: 'POST',
         headers: {

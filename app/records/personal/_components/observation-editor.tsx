@@ -1183,12 +1183,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '保存に失敗しました');
       }
 
-      // 記録者をCookieに保存（30日間）
-      if (selectedRecorder) {
-        const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`;
-      }
-
       // 保存成功時、観察記録を設定
       // selectedChildIdと一致する場合のみlockedChildNameを使用（別の児童を選択した場合は上書きしない）
       const resolvedChildName = selectedChild?.name || (selectedChildId === lockedChildId ? lockedChildName : '') || '不明';
