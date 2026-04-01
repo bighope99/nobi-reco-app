@@ -766,7 +766,12 @@ export default function DashboardClient() {
                     </DialogTitle>
                   </DialogHeader>
                   <div className="mt-2">
-                    {checkedInChildren.length === 0 ? (
+                    {otherChildrenLoading && checkedInChildren.length === 0 ? (
+                      <div className="flex items-center justify-center py-8 text-slate-400 gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <p>児童データを読み込み中...</p>
+                      </div>
+                    ) : checkedInChildren.length === 0 ? (
                       <div className="text-center py-8 text-slate-400">
                         <p>現在、在所している児童はいません</p>
                       </div>
@@ -795,9 +800,6 @@ export default function DashboardClient() {
                           </div>
                         ))}
                       </div>
-                    )}
-                    {otherChildrenLoading && (
-                      <p className="text-xs text-slate-400 text-center mt-3">他の児童を読み込み中...</p>
                     )}
                   </div>
                 </DialogContent>
