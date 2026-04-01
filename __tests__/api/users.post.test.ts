@@ -125,7 +125,28 @@ describe('POST /api/users (email invite flow)', () => {
       error: null,
     });
 
+    const mockNewUser = {
+      id: 'auth-user-id',
+      email: 'newuser@example.com',
+      name: 'New User',
+      role: 'staff',
+      hire_date: '2024-01-01',
+      created_at: '2024-01-01T00:00:00.000Z',
+    };
+
+    const mUsersAdminQuery: any = {
+      insert: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          single: jest.fn().mockResolvedValue({ data: mockNewUser, error: null }),
+        }),
+      }),
+    };
+
     const mockAdmin = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_users') return mUsersAdminQuery;
+        return {};
+      }),
       auth: {
         admin: {
           inviteUserByEmail,
@@ -172,7 +193,7 @@ describe('POST /api/users (email invite flow)', () => {
     );
     expect(inviteUserByEmail).not.toHaveBeenCalled();
     expect(updateUserById).not.toHaveBeenCalled();
-    expect(mUsersQuery.insert).toHaveBeenCalledWith(
+    expect(mUsersAdminQuery.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'auth-user-id',
         email: 'newuser@example.com',
