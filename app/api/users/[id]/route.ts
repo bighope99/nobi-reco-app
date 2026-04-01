@@ -102,10 +102,10 @@ export async function PUT(
       );
     }
 
-    // パスワード設定済みの場合、メールアドレス変更を拒否
-    if (body.email !== undefined && body.email !== (targetUser.email || '') && targetUser.password_set) {
+    // 既存のメールアドレスが設定済みの場合、変更を拒否
+    if (body.email !== undefined && targetUser.email && body.email !== targetUser.email) {
       return NextResponse.json(
-        { success: false, error: 'パスワード設定済みのためメールアドレスは変更できません' },
+        { success: false, error: 'メールアドレスは変更できません' },
         { status: 400 }
       );
     }
