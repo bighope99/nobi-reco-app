@@ -3,10 +3,10 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { DatePicker } from '@/components/ui/date-picker';
-import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getJSTTodayAsDate } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -376,7 +376,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   // 日付の初期化（クライアント側でのみ実行）
   useEffect(() => {
     if (!observationDate) {
-      setObservationDate(parseISO(getCurrentDateJST()));
+      setObservationDate(getJSTTodayAsDate());
     }
   }, [observationDate]);
 
