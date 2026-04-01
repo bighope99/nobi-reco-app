@@ -233,7 +233,7 @@ export async function DELETE(
       );
     }
 
-    const { role } = metadata;
+    const { role, company_id } = metadata;
 
     // 認証済みユーザーIDを取得
     const {
@@ -268,7 +268,7 @@ export async function DELETE(
     // 対象ユーザーの存在確認（emailも取得してメールなしスタッフを判定）
     const { data: targetUser, error: targetUserError } = await supabase
       .from('m_users')
-      .select('id, name, role, email')
+      .select('id, name, role, email, company_id')
       .eq('id', targetUserId)
       .is('deleted_at', null)
       .single();
@@ -277,6 +277,14 @@ export async function DELETE(
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
+      );
+    }
+
+    // site_admin 以外は同一 company のユーザーのみ操作可能
+    if (role !== 'site_admin' && targetUser.company_id !== company_id) {
+      return NextResponse.json(
+        { success: false, error: 'Permission denied' },
+        { status: 403 }
       );
     }
 

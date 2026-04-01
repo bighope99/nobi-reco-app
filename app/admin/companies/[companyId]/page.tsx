@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus, Mail, UserPlus, Trash2 } from "lucide-react"
 
 interface Facility {
@@ -429,7 +430,7 @@ export default function CompanyDetailPage(props: {
                           aria-sort={accountSortField === field ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                         >
                           <button
-                            className="flex items-center gap-1 hover:text-slate-700 focus:outline-none"
+                            className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                             onClick={() => toggleAccountSort(field)}
                           >
                             {label}
@@ -447,7 +448,7 @@ export default function CompanyDetailPage(props: {
                         aria-sort={accountSortField === 'status' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
                         <button
-                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none"
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                           onClick={() => toggleAccountSort('status')}
                         >
                           ステータス
@@ -636,87 +637,89 @@ export default function CompanyDetailPage(props: {
       </div>
 
       {/* アカウント編集モーダル */}
-      {editingAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">アカウント編集</h2>
-            {editAccountError && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
-                {editAccountError}
-              </div>
-            )}
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-account-name">氏名</Label>
-                <Input
-                  id="edit-account-name"
-                  value={editAccountForm.name}
-                  onChange={(e) => setEditAccountForm(f => ({ ...f, name: e.target.value }))}
-                  disabled={isEditingAccount}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>メールアドレス</Label>
-                <p className="text-sm text-slate-600 bg-gray-50 px-3 py-2 rounded-md border">
-                  {editingAccount.email || '-'}
-                </p>
-                <p className="text-xs text-slate-500">メールアドレスは変更できません</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-account-role">権限</Label>
-                <select
-                  id="edit-account-role"
-                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
-                  value={editAccountForm.role}
-                  onChange={(e) => setEditAccountForm(f => ({ ...f, role: e.target.value }))}
-                  disabled={isEditingAccount}
-                >
-                  <option value="company_admin">会社管理者</option>
-                  <option value="facility_admin">施設管理者</option>
-                  <option value="staff">職員</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-account-status">ステータス</Label>
-                <select
-                  id="edit-account-status"
-                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
-                  value={editAccountForm.is_active ? 'active' : 'inactive'}
-                  onChange={(e) => setEditAccountForm(f => ({ ...f, is_active: e.target.value === 'active' }))}
-                  disabled={isEditingAccount}
-                >
-                  <option value="active">有効</option>
-                  <option value="inactive">無効</option>
-                </select>
-              </div>
+      <Dialog open={!!editingAccount} onOpenChange={(open) => { if (!open) { setEditingAccount(null); setEditAccountError(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>アカウント編集</DialogTitle>
+          </DialogHeader>
+          {editAccountError && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
+              {editAccountError}
             </div>
-            <div className="flex gap-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
+          )}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-name">氏名</Label>
+              <Input
+                id="edit-account-name"
+                value={editAccountForm.name}
+                onChange={(e) => setEditAccountForm(f => ({ ...f, name: e.target.value }))}
                 disabled={isEditingAccount}
-                onClick={() => setEditingAccount(null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>メールアドレス</Label>
+              <p className="text-sm text-slate-600 bg-gray-50 px-3 py-2 rounded-md border">
+                {editingAccount?.email || '-'}
+              </p>
+              <p className="text-xs text-slate-500">メールアドレスは変更できません</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-role">権限</Label>
+              <select
+                id="edit-account-role"
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
+                value={editAccountForm.role}
+                onChange={(e) => setEditAccountForm(f => ({ ...f, role: e.target.value }))}
+                disabled={isEditingAccount}
               >
-                キャンセル
-              </Button>
-              <Button
-                type="button"
-                className="flex-1"
-                disabled={isEditingAccount || !editAccountForm.name.trim()}
-                onClick={handleSaveAccount}
+                <option value="company_admin">会社管理者</option>
+                <option value="facility_admin" disabled={!editingAccount?.email}>
+                  施設管理者{!editingAccount?.email ? '（メール登録が必要）' : ''}
+                </option>
+                <option value="staff">職員</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-status">ステータス</Label>
+              <select
+                id="edit-account-status"
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
+                value={editAccountForm.is_active ? 'active' : 'inactive'}
+                onChange={(e) => setEditAccountForm(f => ({ ...f, is_active: e.target.value === 'active' }))}
+                disabled={isEditingAccount}
               >
-                {isEditingAccount ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    保存中...
-                  </>
-                ) : '保存'}
-              </Button>
+                <option value="active">有効</option>
+                <option value="inactive">無効</option>
+              </select>
             </div>
           </div>
-        </div>
-      )}
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              disabled={isEditingAccount}
+              onClick={() => setEditingAccount(null)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={isEditingAccount || !editAccountForm.name.trim()}
+              onClick={handleSaveAccount}
+            >
+              {isEditingAccount ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : '保存'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* アカウント追加モーダル */}
       {showAddAdminModal && (
