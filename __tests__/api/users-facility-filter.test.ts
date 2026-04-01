@@ -351,6 +351,27 @@ describe('POST /api/users - facility_id 指定', () => {
     });
 
     const mockAdmin = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_users') {
+          return {
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({ 
+                  data: {
+                    id: 'new-user-id',
+                    email: 'newuser@example.com',
+                    name: 'New User',
+                    role: 'staff',
+                    hire_date: '2026-04-01',
+                  }, 
+                  error: null 
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
       auth: { admin: { createUser, generateLink, inviteUserByEmail: jest.fn(), updateUserById: jest.fn() } },
     };
 
@@ -473,6 +494,27 @@ describe('POST /api/users - facility_id 指定', () => {
     });
 
     const mockAdmin = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_users') {
+          return {
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({ 
+                  data: {
+                    id: 'new-user-id',
+                    email: 'newuser@example.com',
+                    name: 'New User',
+                    role: 'staff',
+                    hire_date: '2026-04-01',
+                  }, 
+                  error: null 
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
       auth: { admin: { createUser, generateLink, inviteUserByEmail: jest.fn(), updateUserById: jest.fn() } },
     };
 
