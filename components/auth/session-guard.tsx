@@ -43,7 +43,7 @@ export function SessionGuard() {
         const isLogoutApi = url.pathname === '/api/auth/logout'
         if (!isLogoutApi) {
           isRedirectingRef.current = true
-          sessionStorage.removeItem(SESSION_STORAGE_KEY)
+          localStorage.removeItem(SESSION_STORAGE_KEY)
           originalFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
           router.push('/login')
         }
