@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ObservationEditor } from '@/app/records/personal/_components/observation-editor';
 
@@ -5,6 +6,46 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
   useSearchParams: () => ({ get: () => null }),
 }));
+
+// @/components/ui/select を JSDOM 環境で動作するネイティブ <select> に置き換える。
+// Radix UI Select は JSDOM ではポータルが機能しないため、
+// Select/SelectTrigger/SelectContent/SelectItem を native <select>/<option> にマッピングする。
+jest.mock('@/components/ui/select', () => {
+  const SelectContext = React.createContext<{ onValueChange?: (v: string) => void; value?: string }>({});
+
+  const Select = ({ value, onValueChange, children }: { value?: string; onValueChange?: (v: string) => void; children?: React.ReactNode }) =>
+    React.createElement(SelectContext.Provider, { value: { onValueChange, value } }, children);
+
+  const SelectTrigger = ({ children, className }: { children?: React.ReactNode; className?: string }) =>
+    React.createElement('div', { role: 'combobox', className }, children);
+
+  const SelectValue = ({ placeholder }: { placeholder?: string }) => {
+    const ctx = React.useContext(SelectContext);
+    return React.createElement('span', { 'data-testid': 'select-value' }, ctx.value || placeholder);
+  };
+
+  const SelectContent = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement('div', { 'data-testid': 'select-content' }, children);
+
+  const SelectItem = ({ value: itemValue, children }: { value?: string; children?: React.ReactNode }) => {
+    const ctx = React.useContext(SelectContext);
+    return React.createElement('div', {
+      role: 'option',
+      'data-value': itemValue,
+      onClick: () => ctx.onValueChange?.(itemValue ?? ''),
+    }, children);
+  };
+
+  const SelectGroup = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement('div', {}, children);
+  const SelectLabel = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement('span', {}, children);
+  const SelectSeparator = () => React.createElement('hr', {});
+  const SelectScrollUpButton = () => null;
+  const SelectScrollDownButton = () => null;
+
+  return { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator, SelectScrollUpButton, SelectScrollDownButton };
+});
 
 let tagData: Array<{ id: string; name: string; description: string | null; color: string | null; sort_order: number }> = [];
 
@@ -207,6 +248,51 @@ describe('ObservationEditor new', () => {
     fireEvent.click(screen.getByTestId('observation-save'));
 
     expect(await screen.findByText('自立')).toBeInTheDocument();
+  });
+
+  it('スタッフAPI成功時に記録者が未選択のままで保存するとエラーになり、選択後は保存できる', async () => {
+    // beforeEach の global.fetch はスタッフAPIが成功するよう設定済み
+    render(<ObservationEditor mode="new" initialChildId="child-1" />);
+
+    // スタッフ一覧のロードを待つ（記録者Selectが表示されるまで）
+    await waitFor(() => {
+      const selectTriggers = screen.getAllByRole('combobox');
+      expect(selectTriggers.length).toBeGreaterThanOrEqual(2);
+    });
+
+    // 記録者が未選択（デフォルト）であることを確認
+    // SelectTrigger に placeholder が表示されていることを確認
+    expect(screen.getByText('記録者を選択')).toBeInTheDocument();
+
+    // 本文を入力して記録者未選択のまま保存しようとする
+    fireEvent.change(screen.getByLabelText('本文'), {
+      target: { value: 'テスト観察本文です。' },
+    });
+
+    fireEvent.click(screen.getByTestId('observation-save'));
+
+    // 記録者未選択バリデーションエラーが表示されることを確認
+    expect(await screen.findByText('記録者を選択してください')).toBeInTheDocument();
+
+    // モックの SelectContent 内に SelectItem が常に表示されているため、
+    // テスト職員A の option を直接クリックして記録者を選択する
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'テスト職員A' })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('option', { name: 'テスト職員A' }));
+
+    // 記録者が選択されたことを確認（SelectValue に staff-1 の値が反映される）
+    await waitFor(() => {
+      // placeholder が消えて選択した職員名が表示されるか、
+      // または「記録者を選択してください」エラーなしで保存できることで確認する
+      expect(screen.queryByText('記録者を選択')).not.toBeInTheDocument();
+    });
+
+    // 保存する
+    fireEvent.click(screen.getByTestId('observation-save'));
+
+    // 保存成功後、AI解析結果が表示される
+    await screen.findByText(/積み木で高い塔/, { exact: false });
   });
 
   it('記録者未選択で保存しようとするとエラーを表示する', async () => {
