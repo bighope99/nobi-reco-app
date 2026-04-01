@@ -26,6 +26,12 @@ import {
 } from 'lucide-react';
 import type { Child, PriorityData, RecordSupport, SortKey, SortOrder } from './types';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   KpiSkeleton,
   AlertSkeleton,
   AttendanceListSkeleton,
@@ -54,6 +60,7 @@ export default function DashboardClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+  const [checkedInDialogOpen, setCheckedInDialogOpen] = useState(false);
 
   // 二次データ取得済みフラグ（無限ループ防止）
   const hasFetchedSecondaryData = useRef(false);
@@ -394,6 +401,31 @@ export default function DashboardClient() {
     return sortChildren(result);
   }, [otherChildren, filterClass, showUnscheduled, sortChildren]);
 
+  // Checked-in children for dialog
+  const checkedInChildren = useMemo(() => {
+    const allChildren = [
+      ...(priorityData?.action_required || []),
+      ...otherChildren,
+    ];
+    return allChildren
+      .filter((child) => child.status === 'checked_in')
+      .sort((a, b) => {
+        const classCompare = a.class_name.localeCompare(b.class_name, 'ja');
+        if (classCompare !== 0) return classCompare;
+        return a.kana.localeCompare(b.kana, 'ja');
+      });
+  }, [priorityData?.action_required, otherChildren]);
+
+  const checkedInByClass = useMemo((): Record<string, Child[]> => {
+    const groups: Record<string, Child[]> = {};
+    for (const child of checkedInChildren) {
+      const key = child.class_name || '未所属';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(child);
+    }
+    return groups;
+  }, [checkedInChildren]);
+
   // --- UI Components ---
   const StatusBadge = ({ child }: { child: Child }) => {
     if (!priorityData) return null;
@@ -694,7 +726,13 @@ export default function DashboardClient() {
                       <span className="text-xs text-slate-400">名</span>
                     </div>
                   </div>
-                  <div className="bg-white rounded-lg p-4 border border-emerald-100 shadow-sm relative overflow-hidden">
+                  <div
+                    className="bg-white rounded-lg p-4 border border-emerald-100 shadow-sm relative overflow-hidden cursor-pointer hover:border-emerald-300 transition-colors"
+                    onClick={() => setCheckedInDialogOpen(true)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCheckedInDialogOpen(true); } }}
+                  >
                     <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full -mr-4 -mt-4"></div>
                     <h3 className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1 relative z-10">
                       現在の在所人数
@@ -715,6 +753,55 @@ export default function DashboardClient() {
                   </div>
                 </div>
               ) : null}
+
+              {/* Checked-in Children Dialog */}
+              <Dialog open={checkedInDialogOpen} onOpenChange={setCheckedInDialogOpen}>
+                <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      現在の在所児童
+                      <span className="text-sm font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        {checkedInChildren.length}名
+                      </span>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="mt-2">
+                    {checkedInChildren.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400">
+                        <p>現在、在所している児童はいません</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {Object.entries(checkedInByClass).map(([className, children]) => (
+                          <div key={className}>
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
+                              {className}
+                            </h4>
+                            <div className="divide-y divide-slate-100 bg-white rounded-lg border">
+                              {children.map((child) => (
+                                <div key={child.child_id} className="px-3 py-2 flex items-center justify-between">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-medium text-slate-700 truncate">{child.name}</span>
+                                    <span className="text-xs text-slate-400 shrink-0">{child.grade_label}</span>
+                                  </div>
+                                  {child.actual_in_time && (
+                                    <span className="text-xs text-emerald-600 shrink-0 ml-2">
+                                      {child.actual_in_time} 登所
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {otherChildrenLoading && (
+                      <p className="text-xs text-slate-400 text-center mt-3">他の児童を読み込み中...</p>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Alert Section */}
               {priorityLoading ? (
