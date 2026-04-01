@@ -442,14 +442,7 @@ export default function ActivityRecordClient() {
           }))
           setStaffList(mapped)
 
-          // Cookie から前回選択した記録者を復元
-          const lastRecorder = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('nobi_last_recorder='))
-            ?.split('=')[1]
-          if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
-            setSelectedRecorder(lastRecorder)
-          }
+
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)

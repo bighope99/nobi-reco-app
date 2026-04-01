@@ -99,13 +99,48 @@ beforeAll(() => {
 
 describe('ObservationEditor new', () => {
   it('saves a new record and auto-fills AI analysis', async () => {
-    // 記録者をCookieで事前選択
-    document.cookie = 'nobi_last_recorder=staff-1; path=/';
+    // スタッフAPIを失敗させ、staffLoadError=true にすることで記録者選択なしで保存フローをテストする
+    global.fetch = jest.fn(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url === '/api/records/personal/tags') {
+        return { ok: true, json: async () => ({ success: true, data: tagData }) } as unknown as Response;
+      }
+      if (url === '/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200') {
+        return {
+          ok: true,
+          json: async () => ({ success: true, data: { children: [{ child_id: '1', name: 'テスト児童', class_name: 'さくら組' }] } }),
+        } as unknown as Response;
+      }
+      if (url.startsWith('/api/records/personal/child/')) {
+        return { ok: true, json: async () => ({ success: true, data: { recent_observations: [] } }) } as unknown as Response;
+      }
+      if (url === '/api/records/personal/ai') {
+        return {
+          ok: true,
+          json: async () => ({ success: true, data: { objective: '今日は積み木で高い塔を作っていました。', subjective: '', flags: {} } }),
+        } as unknown as Response;
+      }
+      if (url === '/api/records/personal') {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { id: 'obs-1', observation_date: '2025-01-03', content: '今日は積み木で高い塔を作っていました。集中して取り組んでいました。' },
+          }),
+        } as unknown as Response;
+      }
+      // スタッフAPIは失敗させて staffLoadError=true にする
+      if (url === '/api/users?is_active=true') {
+        return { ok: false, json: async () => ({ success: false, error: 'error' }) } as unknown as Response;
+      }
+      return { ok: false, json: async () => ({ success: false, error: 'not found' }) } as unknown as Response;
+    });
+
     render(<ObservationEditor mode="new" initialChildId="1" />);
 
-    // スタッフ一覧のロード＆Cookie復元を待つ
+    // スタッフ取得失敗エラーメッセージが表示されるまで待つ
     await waitFor(() => {
-      expect(screen.getByText('テスト職員A')).toBeInTheDocument();
+      expect(screen.getByText('記録者情報の取得に失敗しました')).toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByLabelText('本文'), {
@@ -121,13 +156,48 @@ describe('ObservationEditor new', () => {
   it('loads observation tags from m_observation_tags', async () => {
     tagData = [{ id: 'tag-1', name: '自立', description: null, color: null, sort_order: 1 }];
 
-    // 記録者をCookieで事前選択
-    document.cookie = 'nobi_last_recorder=staff-1; path=/';
+    // スタッフAPIを失敗させ、staffLoadError=true にすることで記録者選択なしで保存フローをテストする
+    global.fetch = jest.fn(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url === '/api/records/personal/tags') {
+        return { ok: true, json: async () => ({ success: true, data: tagData }) } as unknown as Response;
+      }
+      if (url === '/api/children?status=enrolled&sort_by=name&sort_order=asc&limit=200') {
+        return {
+          ok: true,
+          json: async () => ({ success: true, data: { children: [{ child_id: '1', name: 'テスト児童', class_name: 'さくら組' }] } }),
+        } as unknown as Response;
+      }
+      if (url.startsWith('/api/records/personal/child/')) {
+        return { ok: true, json: async () => ({ success: true, data: { recent_observations: [] } }) } as unknown as Response;
+      }
+      if (url === '/api/records/personal/ai') {
+        return {
+          ok: true,
+          json: async () => ({ success: true, data: { objective: '今日は積み木で高い塔を作っていました。', subjective: '', flags: { '自立': true } } }),
+        } as unknown as Response;
+      }
+      if (url === '/api/records/personal') {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { id: 'obs-1', observation_date: '2025-01-03', content: '今日は積み木で高い塔を作っていました。' },
+          }),
+        } as unknown as Response;
+      }
+      // スタッフAPIは失敗させて staffLoadError=true にする
+      if (url === '/api/users?is_active=true') {
+        return { ok: false, json: async () => ({ success: false, error: 'error' }) } as unknown as Response;
+      }
+      return { ok: false, json: async () => ({ success: false, error: 'not found' }) } as unknown as Response;
+    });
+
     render(<ObservationEditor mode="new" initialChildId="1" />);
 
-    // スタッフ一覧のロード＆Cookie復元を待つ
+    // スタッフ取得失敗エラーメッセージが表示されるまで待つ
     await waitFor(() => {
-      expect(screen.getByText('テスト職員A')).toBeInTheDocument();
+      expect(screen.getByText('記録者情報の取得に失敗しました')).toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByLabelText('本文'), {

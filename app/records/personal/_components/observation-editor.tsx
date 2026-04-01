@@ -376,7 +376,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   // 日付の初期化（クライアント側でのみ実行）
   useEffect(() => {
     if (!observationDate) {
-      setObservationDate(new Date());
+      setObservationDate(parseISO(getCurrentDateJST()));
     }
   }, [observationDate]);
 
@@ -394,16 +394,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           }));
           setStaffList(mapped);
 
-          // Cookie から前回選択した記録者を復元（新規作成時のみ）
-          if (isNew) {
-            const lastRecorder = document.cookie
-              .split('; ')
-              .find(row => row.startsWith('nobi_last_recorder='))
-              ?.split('=')[1];
-            if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
-              setSelectedRecorder(lastRecorder);
-            }
-          }
+
         } else {
           setStaffLoadError(true);
         }
@@ -1083,7 +1074,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(contentToSave !== undefined ? { content: contentToSave } : {}),
-          observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
+          observation_date: observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST(),
           recorded_by: selectedRecorder || null,
           child_id: selectedChildId || undefined,
         }),
@@ -1095,7 +1086,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      const nextObservationDate = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const nextObservationDate = observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST();
       const nextRecorderName =
         staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
       const nextChildName = childOptions.find((c) => c.id === selectedChildId)?.name;
@@ -1168,7 +1159,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDateStr = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const observationDateStr = observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST();
 
       // APIに保存
       const response = await fetch('/api/records/personal', {

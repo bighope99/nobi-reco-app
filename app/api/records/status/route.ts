@@ -20,8 +20,10 @@ export async function GET(request: NextRequest) {
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const todayJST = getCurrentDateJST();
+    const [todayYear, todayMonth] = todayJST.split('-').map(Number);
+    const year = parseInt(searchParams.get('year') || todayYear.toString());
+    const month = parseInt(searchParams.get('month') || todayMonth.toString());
     const class_id = searchParams.get('class_id') || null;
     // チケット3: 児童名フィールドは暗号化されているため、サーバー側のilike検索は機能しない。
     // 検索はクライアント側で復号化済みデータに対して行う。

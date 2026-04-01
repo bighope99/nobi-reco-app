@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptOrEmpty } from '@/utils/crypto/decryption-helper';
 import { CHILD_IMPORT_HEADERS } from '@/lib/children/import-csv';
+import { getCurrentDateJST } from '@/lib/utils/timezone';
 
 function formatGender(gender: string | null): string {
   if (!gender) return '';
@@ -249,8 +250,7 @@ export async function GET(request: NextRequest) {
     const csv = `\ufeff${csvRows.join('\r\n')}\r\n`;
 
     // ファイル名: YYYYMMDD_[施設名].csv
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    const dateStr = getCurrentDateJST().replace(/-/g, '');
     const exportFileName = facilityName ? `${dateStr}_${facilityName}.csv` : `${dateStr}_児童データ.csv`;
 
     return new Response(csv, {
