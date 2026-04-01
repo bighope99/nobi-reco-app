@@ -419,7 +419,7 @@ export default function DashboardClient() {
   const checkedInByClass = useMemo((): Record<string, Child[]> => {
     const groups: Record<string, Child[]> = {};
     for (const child of checkedInChildren) {
-      const key = child.class_name || '未所属';
+      const key = child.class_name || '';
       if (!groups[key]) groups[key] = [];
       groups[key].push(child);
     }
@@ -779,9 +779,11 @@ export default function DashboardClient() {
                       <div className="space-y-4">
                         {Object.entries(checkedInByClass).map(([className, children]) => (
                           <div key={className}>
-                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-                              {className}
-                            </h4>
+                            {className && (
+                              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
+                                {className}
+                              </h4>
+                            )}
                             <div className="divide-y divide-slate-100 bg-white rounded-lg border">
                               {children.map((child) => (
                                 <div key={child.child_id} className="px-3 py-2 flex items-center justify-between">
