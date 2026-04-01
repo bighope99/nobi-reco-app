@@ -84,7 +84,7 @@ export async function GET(
       // アカウント一覧（company_admin + facility_admin + staff）
       supabaseAdmin
         .from('m_users')
-        .select('id, name, name_kana, email, role, is_active')
+        .select('id, name, name_kana, email, role, is_active, hire_date')
         .eq('company_id', companyId)
         .in('role', ['company_admin', 'facility_admin', 'staff'])
         .is('deleted_at', null)
@@ -150,6 +150,7 @@ export async function GET(
       email: user.email,
       role: user.role,
       is_active: user.is_active,
+      hire_date: user.hire_date ?? null,
       email_confirmed: user.email ? (emailConfirmedMap.get(user.id) ?? false) : false,
       facilities: facilityMap.get(user.id) || [],
     }));

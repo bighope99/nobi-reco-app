@@ -35,6 +35,7 @@ interface Account {
   email: string | null
   role: string
   is_active: boolean
+  hire_date: string | null
   email_confirmed: boolean
   facilities: AccountFacility[]
 }
@@ -77,7 +78,7 @@ export default function CompanyDetailPage(props: {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // アカウントソート
-  const [accountSortField, setAccountSortField] = useState<'name' | 'email' | 'role' | 'status'>('name')
+  const [accountSortField, setAccountSortField] = useState<'role' | 'status' | 'facility'>('role')
   const [accountSortDirection, setAccountSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // アカウント編集モーダル
@@ -220,24 +221,46 @@ export default function CompanyDetailPage(props: {
   const needsFacility = addAdminForm.role === "facility_admin" || addAdminForm.role === "staff"
   const needsEmail = addAdminForm.role !== "staff"
 
+  const getRoleOrder = (role: string) => {
+    if (role === 'company_admin') return 0
+    if (role === 'facility_admin') return 1
+    return 2 // staff
+  }
+
+  const sortByRoleThenHire = (a: Account, b: Account) => {
+    const roleDiff = getRoleOrder(a.role) - getRoleOrder(b.role)
+    if (roleDiff !== 0) return roleDiff
+    return (a.hire_date ?? '9999').localeCompare(b.hire_date ?? '9999')
+  }
+
   const sortedAccounts = [...accounts].sort((a, b) => {
-    let aVal = ''
-    let bVal = ''
-    if (accountSortField === 'name') { aVal = a.name; bVal = b.name }
-    else if (accountSortField === 'email') { aVal = a.email || ''; bVal = b.email || '' }
-    else if (accountSortField === 'role') { aVal = a.role; bVal = b.role }
-    else if (accountSortField === 'status') {
-      const getStatusOrder = (acc: Account) => {
-        if (!acc.email_confirmed) return 'invited'
-        return acc.is_active ? 'active' : 'inactive'
-      }
-      aVal = getStatusOrder(a)
-      bVal = getStatusOrder(b)
+    if (accountSortField === 'role') {
+      const result = sortByRoleThenHire(a, b)
+      return accountSortDirection === 'asc' ? result : -result
     }
-    return accountSortDirection === 'asc' ? aVal.localeCompare(bVal, 'ja') : bVal.localeCompare(aVal, 'ja')
+    if (accountSortField === 'facility') {
+      const aFacility = a.facilities.find(f => f.is_current)?.facility_name ?? ''
+      const bFacility = b.facilities.find(f => f.is_current)?.facility_name ?? ''
+      const facilityDiff = accountSortDirection === 'asc'
+        ? aFacility.localeCompare(bFacility, 'ja')
+        : bFacility.localeCompare(aFacility, 'ja')
+      if (facilityDiff !== 0) return facilityDiff
+      return sortByRoleThenHire(a, b)
+    }
+    if (accountSortField === 'status') {
+      const getStatusOrder = (acc: Account) => {
+        if (!acc.email) return 3
+        if (!acc.email_confirmed) return 2
+        return acc.is_active ? 0 : 1
+      }
+      const statusDiff = getStatusOrder(a) - getStatusOrder(b)
+      if (statusDiff !== 0) return accountSortDirection === 'asc' ? statusDiff : -statusDiff
+      return sortByRoleThenHire(a, b)
+    }
+    return 0
   })
 
-  const toggleAccountSort = (field: 'name' | 'email' | 'role' | 'status') => {
+  const toggleAccountSort = (field: 'role' | 'status' | 'facility') => {
     if (accountSortField === field) {
       setAccountSortDirection(d => d === 'asc' ? 'desc' : 'asc')
     } else {
@@ -419,29 +442,39 @@ export default function CompanyDetailPage(props: {
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      {[
-                        { label: '氏名', field: 'name' as const },
-                        { label: 'メールアドレス', field: 'email' as const },
-                        { label: '権限', field: 'role' as const },
-                      ].map(({ label, field }) => (
-                        <th
-                          key={field}
-                          className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
-                          aria-sort={accountSortField === field ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-                        >
-                          <button
-                            className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                            onClick={() => toggleAccountSort(field)}
-                          >
-                            {label}
-                            <span aria-hidden="true">
-                              {accountSortField === field ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
-                            </span>
-                          </button>
-                        </th>
-                      ))}
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        所属施設
+                        氏名
+                      </th>
+                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        メールアドレス
+                      </th>
+                      <th
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                        aria-sort={accountSortField === 'role' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        <button
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          onClick={() => toggleAccountSort('role')}
+                        >
+                          権限
+                          <span aria-hidden="true">
+                            {accountSortField === 'role' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </button>
+                      </th>
+                      <th
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                        aria-sort={accountSortField === 'facility' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        <button
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          onClick={() => toggleAccountSort('facility')}
+                        >
+                          所属施設
+                          <span aria-hidden="true">
+                            {accountSortField === 'facility' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </button>
                       </th>
                       <th
                         className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
