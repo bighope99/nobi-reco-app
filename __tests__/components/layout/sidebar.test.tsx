@@ -102,5 +102,21 @@ describe("Sidebar", () => {
       expect(classesLink).toBeInTheDocument()
       expect(classesLink).toHaveClass("bg-sidebar-accent")
     })
+
+    it("highlights '児童記録' when pathname is /records/personal/history", () => {
+      mockPathname.mockReturnValue("/records/personal/history")
+      render(<Sidebar type="staff" />)
+
+      const personalLink = screen.getByRole("link", { name: "児童記録" })
+      expect(personalLink).toHaveClass("bg-sidebar-accent")
+    })
+
+    it("highlights '児童記録' when pathname is /records/personal/some-id/edit", () => {
+      mockPathname.mockReturnValue("/records/personal/some-id/edit")
+      render(<Sidebar type="staff" />)
+
+      const personalLink = screen.getByRole("link", { name: "児童記録" })
+      expect(personalLink).toHaveClass("bg-sidebar-accent")
+    })
   })
 })
