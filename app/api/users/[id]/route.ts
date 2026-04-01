@@ -44,7 +44,7 @@ export async function PUT(
     // 対象ユーザーの存在確認
     const { data: targetUser, error: targetUserError } = await supabase
       .from('m_users')
-      .select('id, name, role, company_id, email, password_set')
+      .select('id, name, role, company_id, email')
       .eq('id', targetUserId)
       .is('deleted_at', null)
       .single();
