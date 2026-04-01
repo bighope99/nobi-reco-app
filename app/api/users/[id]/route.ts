@@ -50,7 +50,22 @@ export async function PUT(
       .is('deleted_at', null)
       .single();
 
-    if (targetUserError || !targetUser) {
+    if (targetUserError) {
+      // PGRST116 = no rows found (正常な404)、それ以外はサーバーエラー
+      if (targetUserError.code === 'PGRST116') {
+        return NextResponse.json(
+          { success: false, error: 'User not found' },
+          { status: 404 }
+        );
+      }
+      console.error('Error fetching target user:', targetUserError);
+      return NextResponse.json(
+        { success: false, error: 'Internal Server Error', message: targetUserError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!targetUser) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
