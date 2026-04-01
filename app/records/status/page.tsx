@@ -167,9 +167,10 @@ export default function StatusPage() {
 
     // 日付の初期化（クライアント側でのみ実行）
     useEffect(() => {
-        const now = new Date()
-        setYear(now.getFullYear())
-        setMonth(now.getMonth() + 1)
+        const today = getCurrentDateJST()
+        const [y, m] = today.split('-').map(Number)
+        setYear(y)
+        setMonth(m)
     }, [])
 
     // 履歴モーダル用の状態

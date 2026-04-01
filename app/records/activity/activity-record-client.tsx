@@ -442,14 +442,7 @@ export default function ActivityRecordClient() {
           }))
           setStaffList(mapped)
 
-          // Cookie から前回選択した記録者を復元
-          const lastRecorder = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('nobi_last_recorder='))
-            ?.split('=')[1]
-          if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
-            setSelectedRecorder(lastRecorder)
-          }
+
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)
@@ -1175,12 +1168,6 @@ export default function ActivityRecordClient() {
 
       const sanitizedFields = getSanitizedExtendedFields()
       const validTodoItems = todoItems.filter(item => item.content.trim().length > 0)
-
-      // 記録者をCookieに保存（30日間）
-      if (selectedRecorder) {
-        const secure = window.location.protocol === 'https:' ? '; Secure' : ''
-        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`
-      }
 
       const response = await fetch('/api/activities', {
         method: 'POST',

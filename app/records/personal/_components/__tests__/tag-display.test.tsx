@@ -18,6 +18,7 @@ jest.mock("next/link", () => ({
 
 jest.mock("@/lib/utils/timezone", () => ({
   getCurrentDateJST: () => "2026-03-26",
+  getJSTTodayAsDate: () => new Date(2026, 2, 26),
 }))
 
 jest.mock("@/lib/drafts/aiDraftCookie", () => ({
