@@ -11,14 +11,14 @@ export function useSession(): UserSession | null {
         if (typeof window === 'undefined') return;
 
         // 1. まず sessionStorage から読む（既存ロジック）
-        const stored = sessionStorage.getItem('user_session');
+        const stored = localStorage.getItem('user_session');
         if (stored) {
             try {
                 setSession(JSON.parse(stored));
                 return; // データがあればそのまま使用
             } catch (e) {
                 console.error('Failed to parse session data', e);
-                sessionStorage.removeItem('user_session');
+                localStorage.removeItem('user_session');
             }
         }
 
@@ -42,7 +42,7 @@ export function useSession(): UserSession | null {
                 if (!response.ok) return;
 
                 const sessionData: UserSession = await response.json();
-                sessionStorage.setItem('user_session', JSON.stringify(sessionData));
+                localStorage.setItem('user_session', JSON.stringify(sessionData));
                 setSession(sessionData);
             } catch (e) {
                 console.error('Failed to restore session', e);

@@ -44,7 +44,7 @@ const mockSession: UserSession = {
   ],
 }
 
-// sessionStorage のモック
+// localStorage のモック
 const mockSessionStorage = (() => {
   let store: Record<string, string> = {}
   return {
@@ -55,7 +55,7 @@ const mockSessionStorage = (() => {
   }
 })()
 
-Object.defineProperty(window, 'sessionStorage', {
+Object.defineProperty(window, 'localStorage', {
   value: mockSessionStorage,
   writable: true,
 })

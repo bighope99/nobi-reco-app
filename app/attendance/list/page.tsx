@@ -263,9 +263,9 @@ export default function AttendanceListPage() {
     if (!selectedDate) {
       setSelectedDate(getTomorrowDateJST())
     }
-    // sessionStorageからロールを取得して時刻編集権限を判定
+    // localStorageからロールを取得して時刻編集権限を判定
     try {
-      const raw = sessionStorage.getItem('user_session')
+      const raw = localStorage.getItem('user_session')
       if (raw) {
         const session = JSON.parse(raw)
         const role = session.role as string
@@ -273,7 +273,7 @@ export default function AttendanceListPage() {
         setCanCancel(['site_admin', 'company_admin', 'facility_admin'].includes(role))
       }
     } catch {
-      // sessionStorageが使えない場合は権限なし
+      // localStorageが使えない場合は権限なし
     }
   }, [selectedDate])
 
