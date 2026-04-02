@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { createClient } from '@/utils/supabase/server'
-import { getUserSession } from '@/lib/auth/session'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 import { validateFile, uploadToStorage, getExtension } from '@/lib/storage/upload'
 
 // Private bucket for activity photos. URLs are signed and short-lived.
@@ -10,21 +10,12 @@ const BUCKET_NAME = 'private-activity-photos'
 
 export async function POST(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata()
+    if (!metadata?.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const session = await getUserSession(user.id)
-    if (!session?.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
     const formData = await request.formData()
     const file = formData.get('file')
     const activityDate = formData.get('activity_date')
@@ -47,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const fileId = randomUUID()
     const extension = getExtension(file.type)
-    const filePath = `${session.current_facility_id}/${activityDate}/${fileId}.${extension}`
+    const filePath = `${metadata.current_facility_id}/${activityDate}/${fileId}.${extension}`
     const captionValue = typeof caption === 'string' ? caption : undefined
 
     try {

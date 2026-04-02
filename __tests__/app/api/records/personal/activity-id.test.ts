@@ -7,68 +7,39 @@
 import { POST } from '@/app/api/records/personal/route';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 // モック
 jest.mock('@/utils/supabase/server');
-jest.mock('@/lib/auth/session');
+jest.mock('@/lib/auth/jwt');
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
+
+const BASE_METADATA = {
+  user_id: 'user-123',
+  role: 'staff' as const,
+  company_id: 'company-123',
+  current_facility_id: 'facility-123',
+};
 
 describe('POST /api/records/personal - activity_id機能', () => {
   let mockSupabase: any;
-
-  const mockUser = { id: 'user-123', email: 'test@example.com' };
-  const mockSession = {
-    user_id: 'user-123',
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'staff' as const,
-    company_id: 'company-123',
-    company_name: 'Test Company',
-    current_facility_id: 'facility-123',
-    facilities: [],
-    classes: [],
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     // Supabaseクライアントのモック
     mockSupabase = {
-      auth: {
-        getUser: jest.fn(),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: 'user-123',
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-123',
-                current_facility_id: 'facility-123',
-              },
-            },
-          },
-          error: null,
-        }),
-      },
       from: jest.fn(),
     };
 
     mockCreateClient.mockResolvedValue(mockSupabase);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(BASE_METADATA);
   });
 
   describe('activity_idの保存', () => {
     it('activity_idが指定された場合、r_observationに保存すること', async () => {
-      // 認証情報のモック
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: mockUser },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue(mockSession);
-
       // 子ども情報のモック
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
@@ -156,14 +127,6 @@ describe('POST /api/records/personal - activity_id機能', () => {
     });
 
     it('activity_idがnullの場合、r_observationにnullで保存すること', async () => {
-      // 認証情報のモック
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: mockUser },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue(mockSession);
-
       // 子ども情報のモック
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
@@ -247,14 +210,6 @@ describe('POST /api/records/personal - activity_id機能', () => {
     });
 
     it('activity_idが未指定の場合、nullとして保存すること（後方互換性）', async () => {
-      // 認証情報のモック
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: mockUser },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue(mockSession);
-
       // 子ども情報のモック
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
@@ -340,13 +295,6 @@ describe('POST /api/records/personal - activity_id機能', () => {
 
   describe('activity_idの検証', () => {
     it('activity_idが文字列の場合、そのまま保存すること', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: mockUser },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue(mockSession);
-
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
@@ -421,13 +369,6 @@ describe('POST /api/records/personal - activity_id機能', () => {
     });
 
     it('activity_idが空文字列の場合、nullとして保存すること', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: mockUser },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue(mockSession);
-
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),

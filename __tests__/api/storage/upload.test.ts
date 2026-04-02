@@ -1,22 +1,28 @@
 import { NextRequest } from 'next/server'
 import { POST } from '@/app/api/storage/upload/route'
 import { createClient } from '@/utils/supabase/server'
-import { getUserSession } from '@/lib/auth/session'
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt'
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }))
 
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }))
 
 describe('POST /api/storage/upload', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>
-  const mockedGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>
+  const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockGetAuthenticatedUserMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'staff',
+      company_id: 'company-1',
+      current_facility_id: 'facility-1',
+    })
   })
 
   it('uploadToSignedUrl に token を渡す（signedUrl ではなく）', async () => {
@@ -27,12 +33,6 @@ describe('POST /api/storage/upload', () => {
     })
 
     const supabaseMock = {
-      auth: {
-        getUser: jest.fn().mockResolvedValue({
-          data: { user: { id: 'user-1' } },
-          error: null,
-        }),
-      },
       storage: {
         from: jest.fn().mockReturnValue({
           createSignedUploadUrl: jest.fn().mockResolvedValue({
@@ -50,9 +50,6 @@ describe('POST /api/storage/upload', () => {
     }
 
     mockedCreateClient.mockResolvedValue(supabaseMock as any)
-    mockedGetUserSession.mockResolvedValue({
-      current_facility_id: 'facility-1',
-    } as any)
 
     const file = Object.assign(
       new File(['dummy'], 'test.jpg', { type: 'image/jpeg' }),

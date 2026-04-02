@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 
 /**
@@ -9,25 +9,16 @@ import { validateActivityExtendedFields } from '@/lib/validation/activityValidat
  */
 export async function GET() {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { data: templates, error } = await supabase
       .from('s_activity_templates')
       .select('id, name, event_name, daily_schedule, created_by, created_at')
-      .eq('facility_id', session.current_facility_id)
+      .eq('facility_id', metadata.current_facility_id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
@@ -49,21 +40,12 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { name, event_name, daily_schedule } = body;
 
@@ -90,11 +72,11 @@ export async function POST(request: NextRequest) {
     const { data: template, error } = await supabase
       .from('s_activity_templates')
       .insert({
-        facility_id: session.current_facility_id,
+        facility_id: metadata.current_facility_id,
         name: name.trim(),
         event_name: extendedFieldsResult.data.event_name,
         daily_schedule: extendedFieldsResult.data.daily_schedule,
-        created_by: session.user_id,
+        created_by: metadata.user_id,
       })
       .select()
       .single();

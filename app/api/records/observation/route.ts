@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 export async function POST(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { activity_id, child_id, observation_date, content } = body;
 
@@ -64,7 +55,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (activity.facility_id !== session.current_facility_id) {
+    if (activity.facility_id !== metadata.current_facility_id) {
       return NextResponse.json(
         { error: 'この保育日誌に個別記録を追加する権限がありません' },
         { status: 403 },
@@ -78,7 +69,7 @@ export async function POST(request: NextRequest) {
         activity_id,
         observation_date,
         content,
-        created_by: session.user_id,
+        created_by: metadata.user_id,
       })
       .select()
       .single();
@@ -104,21 +95,12 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { observation_id } = body;
 
@@ -195,7 +177,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (facilityId !== session.current_facility_id) {
+    if (facilityId !== metadata.current_facility_id) {
       return NextResponse.json(
         { success: false, error: 'この個別記録を削除する権限がありません' },
         { status: 403 },

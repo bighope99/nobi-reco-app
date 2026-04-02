@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { extractChildContent } from '@/lib/ai/contentExtractor';
 
 type ChildInfo = {
@@ -37,21 +37,12 @@ const replaceMentionTokens = (
 
 export async function POST(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const content = typeof body?.content === 'string' ? body.content.trim() : '';
     const activityDate = typeof body?.activity_date === 'string' ? body.activity_date : '';
@@ -74,7 +65,7 @@ export async function POST(request: NextRequest) {
       .from('m_children')
       .select('id, family_name, given_name, nickname')
       .in('id', mentionedChildren)
-      .eq('facility_id', session.current_facility_id)
+      .eq('facility_id', metadata.current_facility_id)
       .is('deleted_at', null);
 
     if (childrenError) {
