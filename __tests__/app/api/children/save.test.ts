@@ -168,7 +168,11 @@ const createSupabaseUpdateMock = (
   const childGuardianSelect = jest.fn().mockReturnValue({
     eq: jest.fn().mockResolvedValue({ data: [{ guardian_id: 'guardian-1' }] }),
   });
-  const childGuardianDelete = jest.fn();
+  const childGuardianDelete = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({
+      in: jest.fn().mockResolvedValue({ error: null }),
+    }),
+  });
   const childSiblingUpsert = jest.fn().mockResolvedValue({ error: null });
 
   const childGuardianUpdate = jest.fn().mockReturnValue({
