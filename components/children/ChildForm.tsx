@@ -1370,6 +1370,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                           onClick={() => removeGuardianContact(contact.id)}
                           className={`${contact.guardianId ? '' : 'ml-auto '}text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity`}
                           title="削除"
+                          disabled={readOnly}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -1497,7 +1498,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
                         <Switch
                           label="HP/SNSへの写真掲載"
-                          description="園だより等への顔写真掲載許可"
+                          description="HPやSNS等など外部への顔写真掲載許可"
                           checked={formData.photo_permission_public}
                           onChange={(checked: boolean) => updateFormData({ photo_permission_public: checked })}
                         />
@@ -1505,7 +1506,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
                         <Switch
                           label="レポートへの記名"
-                          description="クラス内共有物への名前記載"
+                          description="施設内共有物への顔写真記載"
                           checked={formData.photo_permission_share}
                           onChange={(checked: boolean) => updateFormData({ photo_permission_share: checked })}
                         />
