@@ -56,45 +56,59 @@ export async function GET(request: NextRequest) {
       throw facilitiesError;
     }
 
-    // 各施設の統計情報を取得
-    const facilitiesWithStats = await Promise.all(
-      (facilities || []).map(async (facility) => {
-        // クラス数
-        const { count: classCount } = await supabase
+    // 施設IDリストを取得して統計情報を一括取得（N+1クエリ解消）
+    const facilityIds = (facilities || []).map((f) => f.id);
+
+    const [classRowsResult, childrenRowsResult, staffRowsResult] =
+      await Promise.all([
+        // クラス数: 一括取得
+        supabase
           .from('m_classes')
-          .select('*', { count: 'exact', head: true })
-          .eq('facility_id', facility.id)
-          .is('deleted_at', null);
-
-        // 児童数
-        const { count: childrenCount } = await supabase
+          .select('facility_id')
+          .in('facility_id', facilityIds)
+          .is('deleted_at', null),
+        // 児童数: 一括取得（在籍中のみ）
+        supabase
           .from('m_children')
-          .select('*', { count: 'exact', head: true })
-          .eq('facility_id', facility.id)
+          .select('facility_id')
+          .in('facility_id', facilityIds)
           .eq('enrollment_status', 'enrolled')
-          .is('deleted_at', null);
-
-        // 職員数
-        const { count: staffCount } = await supabase
+          .is('deleted_at', null),
+        // 職員数: 一括取得（現職のみ）
+        supabase
           .from('_user_facility')
-          .select('*', { count: 'exact', head: true })
-          .eq('facility_id', facility.id)
-          .eq('is_current', true);
+          .select('facility_id')
+          .in('facility_id', facilityIds)
+          .eq('is_current', true),
+      ]);
 
-        return {
-          facility_id: facility.id,
-          name: facility.name,
-          address: facility.address,
-          phone: facility.phone,
-          email: facility.email,
-          class_count: classCount || 0,
-          children_count: childrenCount || 0,
-          staff_count: staffCount || 0,
-          created_at: facility.created_at,
-          updated_at: facility.updated_at,
-        };
-      })
-    );
+    const countByFacilityId = (
+      rows: { facility_id: string }[] | null
+    ): Record<string, number> =>
+      (rows || []).reduce(
+        (acc, row) => {
+          acc[row.facility_id] = (acc[row.facility_id] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+
+    const classCountMap = countByFacilityId(classRowsResult.data);
+    const childrenCountMap = countByFacilityId(childrenRowsResult.data);
+    const staffCountMap = countByFacilityId(staffRowsResult.data);
+
+    const facilitiesWithStats = (facilities || []).map((facility) => ({
+      facility_id: facility.id,
+      name: facility.name,
+      address: facility.address,
+      phone: facility.phone,
+      email: facility.email,
+      class_count: classCountMap[facility.id] || 0,
+      children_count: childrenCountMap[facility.id] || 0,
+      staff_count: staffCountMap[facility.id] || 0,
+      created_at: facility.created_at,
+      updated_at: facility.updated_at,
+    }));
 
     // 検索フィルタ（ひらがな/カタカナ表記ゆれ・全角半角スペース対応）
     let filteredFacilities = facilitiesWithStats;

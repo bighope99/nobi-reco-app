@@ -8,14 +8,9 @@ import {
   Building2,
   MapPin,
   Phone,
-  Save,
   Plus,
-  X,
-  Trash2,
   Users,
   ChevronLeft,
-  UserCheck,
-  ChevronRight,
   CheckCircle2,
   ArrowRight
 } from 'lucide-react';
@@ -226,7 +221,6 @@ export default function FacilityDetailPage() {
 
   const [facility, setFacility] = useState<Facility | null>(null);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -304,53 +298,6 @@ export default function FacilityDetailPage() {
     }
   };
 
-  const handleSave = async () => {
-    if (!facility) return;
-
-    try {
-      setSaving(true);
-      setError(null);
-
-      const isNew = facilityId === 'new';
-      const url = isNew ? '/api/facilities' : `/api/facilities/${facilityId}`;
-      const method = isNew ? 'POST' : 'PUT';
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: facility.name,
-          name_kana: facility.name_kana || null,
-          address: facility.address,
-          phone: facility.phone,
-          postal_code: facility.postal_code || null,
-          capacity: facility.capacity != null ? facility.capacity : null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to save facility');
-      }
-
-      alert(data.message || '施設情報を保存しました');
-
-      if (isNew) {
-        // 新規作成の場合は一覧ページに戻る
-        router.push('/settings/facility');
-      } else {
-        // 更新の場合はデータを再取得
-        fetchFacility();
-      }
-    } catch (err) {
-      console.error('Error saving facility:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save facility');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   // Load facility data
   useEffect(() => {
     if (facilityId && facilityId !== 'new') {
@@ -399,7 +346,7 @@ export default function FacilityDetailPage() {
 
   return (
     <StaffLayout title="施設詳細">
-      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans pb-24">
+      <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
           {/* Back Button */}
@@ -416,10 +363,10 @@ export default function FacilityDetailPage() {
             <div>
               <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <Building2 className="text-indigo-500" />
-                施設情報編集
+                施設情報
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                施設の基本情報を編集
+                施設の基本情報
               </p>
             </div>
           </div>
@@ -442,16 +389,14 @@ export default function FacilityDetailPage() {
                   <Input
                     icon={Building2}
                     value={facility.name}
-                    onChange={(e: any) => setFacility({ ...facility, name: e.target.value })}
-                    placeholder="例: ひまわり保育園 本園"
+                    readOnly
                   />
                 </FieldGroup>
 
                 <FieldGroup label="施設名カナ">
                   <Input
                     value={facility.name_kana || ''}
-                    onChange={(e: any) => setFacility({ ...facility, name_kana: e.target.value })}
-                    placeholder="例: ヒマワリホイクエン ホンエン"
+                    readOnly
                   />
                 </FieldGroup>
               </div>
@@ -460,8 +405,7 @@ export default function FacilityDetailPage() {
                 <FieldGroup label="郵便番号">
                   <Input
                     value={facility.postal_code || ''}
-                    onChange={(e: any) => setFacility({ ...facility, postal_code: e.target.value })}
-                    placeholder="150-0001"
+                    readOnly
                   />
                 </FieldGroup>
 
@@ -469,8 +413,7 @@ export default function FacilityDetailPage() {
                   <Input
                     type="number"
                     value={facility.capacity != null ? String(facility.capacity) : ''}
-                    onChange={(e: any) => setFacility({ ...facility, capacity: e.target.value ? Number(e.target.value) : null })}
-                    placeholder="例: 40"
+                    readOnly
                   />
                 </FieldGroup>
               </div>
@@ -479,8 +422,7 @@ export default function FacilityDetailPage() {
                 <Input
                   icon={MapPin}
                   value={facility.address}
-                  onChange={(e: any) => setFacility({ ...facility, address: e.target.value })}
-                  placeholder="東京都渋谷区〇〇町1-2-3"
+                  readOnly
                 />
               </FieldGroup>
 
@@ -489,8 +431,7 @@ export default function FacilityDetailPage() {
                   icon={Phone}
                   type="tel"
                   value={facility.phone}
-                  onChange={(e: any) => setFacility({ ...facility, phone: e.target.value })}
-                  placeholder="03-1234-5678"
+                  readOnly
                 />
               </FieldGroup>
             </div>
@@ -635,37 +576,6 @@ export default function FacilityDetailPage() {
             </DialogContent>
           </Dialog>}
 
-        </div>
-
-        {/* Sticky Action Bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-40">
-          <div className="max-w-5xl mx-auto flex items-center justify-between px-4 sm:px-6">
-            <button
-              type="button"
-              onClick={() => router.push('/settings/facility')}
-              className="text-slate-500 hover:text-slate-800 font-medium text-sm px-4 py-2 transition-colors"
-            >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !facility.name || !facility.address || !facility.phone}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  保存中...
-                </>
-              ) : (
-                <>
-                  <Save size={18} />
-                  変更を保存
-                </>
-              )}
-            </button>
-          </div>
         </div>
 
       </div>
