@@ -22,6 +22,7 @@
 | DB Naming & Migrations | `.claude/skills/docs-database-conventions` |
 | JWT Authentication | `.claude/skills/supabase-jwt-auth` |
 | Query Patterns | `.claude/skills/supabase-query-patterns` |
+| RLS Debug | `.claude/skills/supabase-rls-debug` |
 | Session Interface | `/lib/auth/session.ts` |
 | Role-based UI | `hooks/useRole.ts` — `useRole()` でロール判定。直接 `session.role` を比較しない |
 | Code Improvement | `.claude/skills/incremental-code-improvement` |
@@ -52,6 +53,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 
 # Workflow Rules
 - **Use a worktree for code changes**: Create a NEW worktree before starting any task that will modify code, docs, or other tracked files, or when parallel implementation may be useful. Notion確認・調査・チケット操作だけのような非コード作業では worktree は不要。
+- **Worktree path in subagents**: ワークツリー作成後は `cd <worktree-path>` を実行し、サブエージェントへの指示には必ずワークツリーの絶対パスを明示すること（例:「作業ディレクトリは `/path/to/worktree` です。ファイルの読み書き・検索はすべてそのパス配下で行うこと」）。メインリポジトリのパスを渡してはいけない。
 - **Worktree cleanup**: Delete the worktree when the user says the session/task is done (e.g., "終了"). Discard uncommitted `package-lock.json` and `settings.json` without committing them.
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
 - **PR fix workflow**: PR番号 (`/pull/123`) またはブランチ指定で修正する場合は `fix-pr` スキルを使う。原則、同じPRにプッシュ。新PRは「分けて」と明示された場合のみ。修正完了後、ユーザーから「終了」「完了」など作業終了の意思表示があればワークツリーを削除する。
