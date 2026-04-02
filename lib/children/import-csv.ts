@@ -21,7 +21,6 @@ export type ImportPreviewRow = {
   given_name: string;
   birth_date: string;
   gender: string;
-  enrollment_status: string;
   enrolled_at: string;
   parent_name: string;
   errors: string[];
@@ -37,8 +36,6 @@ export const CHILD_IMPORT_HEADER_LABELS = {
   nickname: 'ニックネーム',
   gender: '性別',
   birth_date: '生年月日',
-  enrollment_status: '入所状況',
-  enrollment_type: '入所種別',
   enrolled_at: '入所日',
   withdrawn_at: '退所日',
   parent_name: '保護者氏名',
@@ -69,8 +66,6 @@ export const CHILD_IMPORT_HEADERS = [
   headerLabels.nickname,
   headerLabels.gender,
   headerLabels.birth_date,
-  headerLabels.enrollment_status,
-  headerLabels.enrollment_type,
   headerLabels.enrolled_at,
   headerLabels.withdrawn_at,
   headerLabels.parent_name,
@@ -112,8 +107,6 @@ export const CHILD_IMPORT_TEMPLATE_SAMPLE_ROW = [
   '',
   '女',
   '2019-04-12',
-  '在籍',
-  '通年',
   '2024-04-01',
   '',
   '山田 太郎',
@@ -185,12 +178,6 @@ export function buildChildPayload(
   }
 
   const gender = normalizeGender(getValue(row, headerLabels.gender));
-  const enrollmentStatus = normalizeEnrollmentStatus(
-    getValue(row, headerLabels.enrollment_status)
-  );
-  const enrollmentType = normalizeEnrollmentType(
-    getValue(row, headerLabels.enrollment_type)
-  );
 
   const emergencyContacts = buildEmergencyContacts(row);
 
@@ -218,8 +205,8 @@ export function buildChildPayload(
       school_id: defaults.school_id || null,
     },
     affiliation: {
-      enrollment_status: enrollmentStatus,
-      enrollment_type: enrollmentType,
+      enrollment_status: 'enrolled',
+      enrollment_type: 'regular',
       enrolled_at: enrolledAt,
       withdrawn_at: getValue(row, headerLabels.withdrawn_at) || null,
       class_id: defaults.class_id || null,
@@ -258,9 +245,6 @@ export function buildPreviewRow(
   errors: string[]
 ): ImportPreviewRow {
   const gender = payload?.basic_info?.gender ?? normalizeGender(getValue(row, headerLabels.gender));
-  const enrollmentStatus =
-    payload?.affiliation?.enrollment_status ??
-    normalizeEnrollmentStatus(getValue(row, headerLabels.enrollment_status));
 
   return {
     row: rowNumber,
@@ -270,7 +254,6 @@ export function buildPreviewRow(
     given_name: payload?.basic_info?.given_name || getValue(row, headerLabels.given_name),
     birth_date: payload?.basic_info?.birth_date || getValue(row, headerLabels.birth_date),
     gender: formatGenderLabel(gender),
-    enrollment_status: formatEnrollmentStatusLabel(enrollmentStatus),
     enrolled_at: payload?.affiliation?.enrolled_at || getValue(row, headerLabels.enrolled_at),
     parent_name: payload?.contact?.parent_name || getValue(row, headerLabels.parent_name),
     errors,
@@ -290,34 +273,10 @@ export function normalizeGender(value: string): 'male' | 'female' | 'other' {
   return 'other';
 }
 
-export function normalizeEnrollmentStatus(value: string): 'enrolled' | 'withdrawn' | 'suspended' {
-  const normalized = normalizeText(value);
-  if (!normalized) return 'enrolled';
-  if (['withdrawn', '退所', '退園'].includes(normalized)) return 'withdrawn';
-  if (['suspended', '休所', '休園', '休所中', '休園中'].includes(normalized)) return 'suspended';
-  if (['enrolled', '在籍', '在籍中'].includes(normalized)) return 'enrolled';
-  return 'enrolled';
-}
-
-export function normalizeEnrollmentType(value: string): 'regular' | 'temporary' | 'spot' {
-  const normalized = normalizeText(value);
-  if (!normalized) return 'regular';
-  if (['temporary', '一時', '一時利用'].includes(normalized)) return 'temporary';
-  if (['spot', 'スポット', 'スポット利用'].includes(normalized)) return 'spot';
-  if (['regular', '通常'].includes(normalized)) return 'regular';
-  return 'regular';
-}
-
 export function formatGenderLabel(value: string): string {
   if (value === 'female') return '女';
   if (value === 'male') return '男';
   return 'その他';
-}
-
-export function formatEnrollmentStatusLabel(value: string): string {
-  if (value === 'withdrawn') return '退所';
-  if (value === 'suspended') return '休所';
-  return '在籍中';
 }
 
 function buildEmergencyContacts(row: CsvRow) {

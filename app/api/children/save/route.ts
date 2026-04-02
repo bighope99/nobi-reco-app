@@ -318,7 +318,48 @@ export async function saveChild(
       // 既存の保護者を検索（検索用ハッシュテーブル経由）
       let guardianId: string | null = null;
 
-      if (normalizedPhone || contact?.parent_email) {
+      // 更新時：電話番号検索の前に既存の筆頭保護者リンクから直接取得
+      if (isUpdate && !guardianId) {
+        const { data: existingPrimaryLink } = await supabase
+          .from('_child_guardian')
+          .select('guardian_id')
+          .eq('child_id', result.id)
+          .eq('is_primary', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingPrimaryLink) {
+          guardianId = existingPrimaryLink.guardian_id;
+
+          // 既存の保護者情報を上書き更新
+          const { error: guardianUpdateError } = await supabase
+            .from('m_guardians')
+            .update({
+              family_name: encryptPII(guardianName),
+              family_name_kana: guardianKana ? encryptPII(guardianKana) : null,
+              given_name: '',
+              phone: normalizedPhone ? encryptPII(normalizedPhone) : null,
+              email: encryptPII(contact?.parent_email || null),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', guardianId)
+            .eq('facility_id', facilityId);
+
+          if (guardianUpdateError) {
+            console.error('Failed to update primary guardian via link:', guardianUpdateError.message);
+          }
+
+          // 検索用ハッシュテーブルを更新
+          await Promise.all([
+            updateSearchIndex(supabase, 'guardian', guardianId!, 'phone', normalizedPhone),
+            updateSearchIndex(supabase, 'guardian', guardianId!, 'email', contact.parent_email || null),
+            updateSearchIndex(supabase, 'guardian', guardianId!, 'name', guardianName),
+          ]);
+        }
+      }
+
+      // リンク経由で取得できなかった場合のフォールバック：検索用ハッシュテーブルで検索
+      if (!guardianId && (normalizedPhone || contact?.parent_email)) {
         let entityIds: string[] = [];
 
         if (normalizedPhone) {

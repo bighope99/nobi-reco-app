@@ -165,8 +165,23 @@ const createSupabaseUpdateMock = (
     }),
   });
 
+  // _child_guardian の select は2パターンで使われる:
+  // 1. .select('guardian_id').eq('child_id', id)
+  //    → 既存リンク一覧取得（await で { data: [...] } を返す）
+  // 2. .select('guardian_id').eq('child_id', id).eq('is_primary', true).limit(1).maybeSingle()
+  //    → 筆頭保護者リンク取得
+  // 1番目の .eq() 戻り値が Promise-like でありつつ、.eq().limit().maybeSingle() チェーンにも対応する
+  const primaryLinkChain = {
+    limit: jest.fn().mockReturnValue({
+      maybeSingle: jest.fn().mockResolvedValue({ data: null }),
+    }),
+  };
+  const firstEqResult = Object.assign(
+    Promise.resolve({ data: [{ guardian_id: 'guardian-1' }] }),
+    { eq: jest.fn().mockReturnValue(primaryLinkChain) }
+  );
   const childGuardianSelect = jest.fn().mockReturnValue({
-    eq: jest.fn().mockResolvedValue({ data: [{ guardian_id: 'guardian-1' }] }),
+    eq: jest.fn().mockReturnValue(firstEqResult),
   });
   const childGuardianDelete = jest.fn();
   const childSiblingUpsert = jest.fn().mockResolvedValue({ error: null });
