@@ -103,7 +103,7 @@ describe('middleware', () => {
       );
     });
 
-    it('should redirect company_admin to /admin', async () => {
+    it('should redirect company_admin to /dashboard', async () => {
       // Setup: company_admin role in JWT token
       mockGetSession.mockResolvedValue({
         data: {
@@ -120,7 +120,7 @@ describe('middleware', () => {
       const response = await middleware(mockRequest as NextRequest);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
-        new URL('/admin', mockRequest.url)
+        new URL('/dashboard', mockRequest.url)
       );
     });
 
@@ -281,7 +281,7 @@ describe('middleware', () => {
       expect(NextResponse.redirect).not.toHaveBeenCalled();
     });
 
-    it('should allow company_admin to access /admin', async () => {
+    it('should redirect company_admin from /admin to /dashboard', async () => {
       // Setup: company_admin role in JWT token
       mockGetSession.mockResolvedValue({
         data: {
@@ -297,8 +297,9 @@ describe('middleware', () => {
 
       const response = await middleware(mockRequest as NextRequest);
 
-      expect(NextResponse.next).toHaveBeenCalled();
-      expect(NextResponse.redirect).not.toHaveBeenCalled();
+      expect(NextResponse.redirect).toHaveBeenCalledWith(
+        new URL('/dashboard', mockRequest.url)
+      );
     });
 
     it('should redirect facility_admin from /admin to /dashboard', async () => {

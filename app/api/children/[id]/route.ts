@@ -387,6 +387,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
+    if (metadata.role !== 'company_admin' && metadata.role !== 'site_admin') {
+      return NextResponse.json({ error: '子どもの削除はcompany_admin以上の権限が必要です' }, { status: 403 });
+    }
+
     const { id: child_id } = await params;
 
     // 論理削除

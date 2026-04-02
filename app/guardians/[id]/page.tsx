@@ -2,6 +2,7 @@
 import React, { useState, use, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { useRole } from '@/hooks/useRole';
 import { StaffLayout } from "@/components/layout/staff-layout";
 import {
   User,
@@ -92,6 +93,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
   const router = useRouter();
   const isNew = id === 'new';
+  const { isAdmin } = useRole();
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -579,7 +581,7 @@ export default function GuardianDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-4 pb-8">
-          {!isNew ? (
+          {!isNew && isAdmin ? (
             <button
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
               onClick={handleDelete}

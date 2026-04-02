@@ -137,17 +137,23 @@ export function Sidebar({ type, role, companyId, userName, isOpen = false, onClo
   const pathname = usePathname()
   const baseNavItems = type === "admin" ? adminNavItems : staffNavItems
 
-  // company_admin用の「会社情報」メニューを動的に追加
+  // company_admin用の「会社情報」メニューを「施設管理」の直前に挿入
   const allNavItems: NavItem[] = (role === "company_admin" && companyId)
-    ? [
-        ...baseNavItems,
-        {
+    ? (() => {
+        const facilityManagementIndex = baseNavItems.findIndex((item) => item.href === "/settings/facility")
+        const insertIndex = facilityManagementIndex >= 0 ? facilityManagementIndex : baseNavItems.length
+        const companyInfoItem: NavItem = {
           label: "会社情報",
           href: `/admin/companies/${companyId}`,
           icon: <Building2 className="h-5 w-5" />,
           roles: ["company_admin"],
-        },
-      ]
+        }
+        return [
+          ...baseNavItems.slice(0, insertIndex),
+          companyInfoItem,
+          ...baseNavItems.slice(insertIndex),
+        ]
+      })()
     : baseNavItems
 
   const navItems = allNavItems.filter((item) => !item.roles || (role !== undefined && item.roles.includes(role)))

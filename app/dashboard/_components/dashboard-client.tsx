@@ -23,7 +23,9 @@ import {
   ChevronRight,
   Loader2,
   Undo2,
+  Building2,
 } from 'lucide-react';
+import { useRole } from '@/hooks/useRole';
 import type { Child, PriorityData, RecordSupport, SortKey, SortOrder } from './types';
 import {
   Dialog,
@@ -39,7 +41,20 @@ import {
 } from './skeletons';
 import { updateAlertsAndKpi } from '@/lib/dashboard/optimistic-updates';
 
+interface FacilitySummary {
+  facility_id: string;
+  name: string;
+  children_count: number;
+  staff_count: number;
+}
+
 export default function DashboardClient() {
+  const { isAdmin } = useRole();
+
+  // company_admin向け: 全施設概要
+  const [facilitiesLoading, setFacilitiesLoading] = useState(false);
+  const [facilitiesSummary, setFacilitiesSummary] = useState<FacilitySummary[]>([]);
+
   // Phase 1: Priority data (KPI + Alerts + Action Required)
   const [priorityLoading, setPriorityLoading] = useState(true);
   const [priorityData, setPriorityData] = useState<PriorityData | null>(null);
@@ -87,6 +102,23 @@ export default function DashboardClient() {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
     } finally {
       setPriorityLoading(false);
+    }
+  }, []);
+
+  // company_admin向け: 全施設概要を取得
+  const fetchFacilitiesSummary = useCallback(async () => {
+    try {
+      setFacilitiesLoading(true);
+      const response = await fetch('/api/facilities', { cache: 'no-store' });
+      if (!response.ok) return;
+      const result = await response.json();
+      if (result.success) {
+        setFacilitiesSummary(result.data.facilities);
+      }
+    } catch (err) {
+      console.error('Facilities summary fetch error:', err);
+    } finally {
+      setFacilitiesLoading(false);
     }
   }, []);
 
@@ -142,6 +174,13 @@ export default function DashboardClient() {
   useEffect(() => {
     fetchPriorityData();
   }, [fetchPriorityData]);
+
+  // company_admin向け: 全施設概要を初期ロード
+  useEffect(() => {
+    if (isAdmin) {
+      fetchFacilitiesSummary();
+    }
+  }, [isAdmin, fetchFacilitiesSummary]);
 
   // After priority data loaded, fetch record support and prefetch other children
   // 依存配列を最小化し、フラグで一度だけ実行することで無限ループを防止
@@ -713,6 +752,41 @@ export default function DashboardClient() {
 
           <div className="grid grid-cols-1">
             <div className="flex flex-col gap-6">
+              {/* company_admin向け: 全施設概要 */}
+              {isAdmin && (
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 size={16} className="text-slate-500" />
+                    <h2 className="text-sm font-semibold text-slate-700">全施設概要</h2>
+                  </div>
+                  {facilitiesLoading ? (
+                    <div className="flex items-center gap-2 text-slate-400 text-sm py-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      読み込み中...
+                    </div>
+                  ) : facilitiesSummary.length === 0 ? (
+                    <p className="text-sm text-slate-400">施設データがありません</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {facilitiesSummary.map((facility) => (
+                        <Link
+                          key={facility.facility_id}
+                          href={`/settings/facility/${facility.facility_id}`}
+                          className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-3 hover:bg-slate-50 transition-colors"
+                        >
+                          <span className="font-medium text-slate-700 text-sm truncate">{facility.name}</span>
+                          <div className="flex items-center gap-3 shrink-0 ml-2 text-xs text-slate-500">
+                            <span>{facility.children_count}名</span>
+                            <span className="text-slate-300">|</span>
+                            <span>職員{facility.staff_count}名</span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* KPI Section */}
               {priorityLoading ? (
                 <KpiSkeleton />
