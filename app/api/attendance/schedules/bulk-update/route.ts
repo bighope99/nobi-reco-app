@@ -51,6 +51,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const MAX_BULK_SIZE = 300;
+
+    if (body.updates.length > MAX_BULK_SIZE) {
+      return NextResponse.json(
+        { success: false, error: `Too many updates: max ${MAX_BULK_SIZE}` },
+        { status: 400 }
+      );
+    }
+
     // 全child_idを一括で所属確認（N個のクエリ → 1クエリ）
     const childIds = body.updates.map(u => u.child_id);
 
@@ -75,6 +84,17 @@ export async function POST(request: NextRequest) {
 
     const validUpdates = body.updates.filter(u => validChildIds.has(u.child_id));
 
+    if (validUpdates.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          updated_count: 0,
+          failed_count: invalidResults.length,
+          results: invalidResults,
+        },
+      });
+    }
+
     // 既存スケジュールを一括取得（N個のクエリ → 1クエリ）
     const validChildIdList = validUpdates.map(u => u.child_id);
     const { data: existingSchedules } = await supabase
@@ -88,7 +108,7 @@ export async function POST(request: NextRequest) {
 
     // UPDATE/INSERT を Promise.all で並列実行
     const upsertResults = await Promise.all(
-      validUpdates.map(async ({ child_id, schedule }) => {
+      validUpdates.map(async ({ child_id, schedule }): Promise<{ child_id: string; status: 'success' | 'failed'; error?: string }> => {
         const existingId = existingScheduleMap.get(child_id);
         if (existingId) {
           const { error } = await supabase
