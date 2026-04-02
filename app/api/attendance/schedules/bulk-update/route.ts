@@ -51,44 +51,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const results: Array<{ child_id: string; status: 'success' | 'failed'; error?: string }> = [];
-    let updated_count = 0;
-    let failed_count = 0;
+    // 全child_idを一括で所属確認（N個のクエリ → 1クエリ）
+    const childIds = body.updates.map(u => u.child_id);
 
-    // 各児童の予定を更新
-    for (const update of body.updates) {
-      try {
-        const { child_id, schedule } = update;
+    const { data: validChildrenData } = await supabase
+      .from('m_children')
+      .select('id')
+      .eq('facility_id', facility_id)
+      .is('deleted_at', null)
+      .in('id', childIds);
 
-        // 児童が自施設に所属しているか確認
-        const { data: child, error: childError } = await supabase
-          .from('m_children')
-          .select('id')
-          .eq('id', child_id)
-          .eq('facility_id', facility_id)
-          .is('deleted_at', null)
-          .single();
+    const validChildIds = new Set(validChildrenData?.map(c => c.id) ?? []);
 
-        if (childError || !child) {
-          results.push({
-            child_id,
-            status: 'failed',
-            error: 'Child not found or access denied',
-          });
-          failed_count++;
-          continue;
-        }
+    // 所属外child_idをエラーとして集計
+    const invalidResults: Array<{ child_id: string; status: 'success' | 'failed'; error?: string }> =
+      body.updates
+        .filter(u => !validChildIds.has(u.child_id))
+        .map(u => ({
+          child_id: u.child_id,
+          status: 'failed' as const,
+          error: 'Child not found or access denied',
+        }));
 
-        // 既存のスケジュールを確認
-        const { data: existingSchedule } = await supabase
-          .from('s_attendance_schedule')
-          .select('id')
-          .eq('child_id', child_id)
-          .maybeSingle();
+    const validUpdates = body.updates.filter(u => validChildIds.has(u.child_id));
 
-        if (existingSchedule) {
-          // 更新
-          const { error: updateError } = await supabase
+    // 既存スケジュールを一括取得（N個のクエリ → 1クエリ）
+    const validChildIdList = validUpdates.map(u => u.child_id);
+    const { data: existingSchedules } = await supabase
+      .from('s_attendance_schedule')
+      .select('id, child_id')
+      .in('child_id', validChildIdList);
+
+    const existingScheduleMap = new Map(
+      existingSchedules?.map(s => [s.child_id, s.id]) ?? []
+    );
+
+    // UPDATE/INSERT を Promise.all で並列実行
+    const upsertResults = await Promise.all(
+      validUpdates.map(async ({ child_id, schedule }) => {
+        const existingId = existingScheduleMap.get(child_id);
+        if (existingId) {
+          const { error } = await supabase
             .from('s_attendance_schedule')
             .update({
               monday: schedule.monday,
@@ -100,23 +103,14 @@ export async function POST(request: NextRequest) {
               sunday: schedule.sunday,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', existingSchedule.id);
+            .eq('id', existingId);
 
-          if (updateError) {
-            console.error('Update error:', updateError);
-            results.push({
-              child_id,
-              status: 'failed',
-              error: updateError.message,
-            });
-            failed_count++;
-          } else {
-            results.push({ child_id, status: 'success' });
-            updated_count++;
+          if (error) {
+            console.error('Update error:', error);
+            return { child_id, status: 'failed' as const, error: error.message };
           }
         } else {
-          // 新規作成
-          const { error: insertError } = await supabase
+          const { error } = await supabase
             .from('s_attendance_schedule')
             .insert({
               child_id,
@@ -127,33 +121,22 @@ export async function POST(request: NextRequest) {
               friday: schedule.friday,
               saturday: schedule.saturday,
               sunday: schedule.sunday,
-              valid_from: getCurrentDateJST(), // 今日から有効
+              valid_from: getCurrentDateJST(),
               is_active: true,
             });
 
-          if (insertError) {
-            console.error('Insert error:', insertError);
-            results.push({
-              child_id,
-              status: 'failed',
-              error: insertError.message,
-            });
-            failed_count++;
-          } else {
-            results.push({ child_id, status: 'success' });
-            updated_count++;
+          if (error) {
+            console.error('Insert error:', error);
+            return { child_id, status: 'failed' as const, error: error.message };
           }
         }
-      } catch (err) {
-        console.error('Error processing update for child:', update.child_id, err);
-        results.push({
-          child_id: update.child_id,
-          status: 'failed',
-          error: err instanceof Error ? err.message : 'Unknown error',
-        });
-        failed_count++;
-      }
-    }
+        return { child_id, status: 'success' as const };
+      })
+    );
+
+    const results = [...invalidResults, ...upsertResults];
+    const updated_count = upsertResults.filter(r => r.status === 'success').length;
+    const failed_count = results.filter(r => r.status === 'failed').length;
 
     return NextResponse.json({
       success: true,

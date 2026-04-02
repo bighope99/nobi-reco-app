@@ -3,10 +3,9 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { normalizeKana } from '@/lib/utils/kana'
+import { cn } from "@/lib/utils"
 import { useRole } from "@/hooks/useRole"
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Search,
   Filter,
@@ -487,24 +486,37 @@ export default function AttendanceSchedulePage() {
                               <span className="text-sm text-slate-600">{child.class_name}</span>
                             </td>
                           )}
-                          {weekdays.map((day) => (
-                            <td key={day.key} className="px-4 py-4 text-center">
-                              <div className="flex justify-center">
-                                <Checkbox
-                                  checked={currentSchedule[day.key as keyof typeof currentSchedule]}
+                          {weekdays.map((day) => {
+                            const checked = currentSchedule[day.key as keyof typeof currentSchedule]
+                            return (
+                              <td key={day.key} className="px-2 py-2 text-center">
+                                <button
+                                  type="button"
                                   disabled={!editMode}
-                                  onCheckedChange={() =>
+                                  onClick={() =>
                                     handleCheckboxChange(
                                       child.child_id,
                                       day.key as keyof ChildSchedule['schedule'],
-                                      currentSchedule[day.key as keyof typeof currentSchedule]
+                                      checked
                                     )
                                   }
-                                  className={editMode ? 'cursor-pointer' : 'cursor-not-allowed'}
-                                />
-                              </div>
-                            </td>
-                          ))}
+                                  className={cn(
+                                    "w-full min-h-[44px] rounded-md flex items-center justify-center text-lg transition-colors",
+                                    checked
+                                      ? "bg-blue-100 text-blue-700 font-bold"
+                                      : "bg-gray-100 text-gray-400",
+                                    editMode
+                                      ? "cursor-pointer hover:opacity-80"
+                                      : "cursor-default opacity-70"
+                                  )}
+                                  aria-pressed={checked}
+                                  aria-label={`${child.name} ${day.label} ${checked ? '出席' : '欠席'}`}
+                                >
+                                  {checked ? "●" : "○"}
+                                </button>
+                              </td>
+                            )
+                          })}
                         </tr>
                       )
                     })}
