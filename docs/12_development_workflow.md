@@ -164,16 +164,16 @@ CodeRabbit から以下のコメントがありました：
 
 | ステップ | 実行者 | 内容 |
 |---------|--------|------|
-| チケット取得 | Planner | Notion から承認OK チケットを取得 |
-| グルーピング | Planner | パス別に分類・優先度順に並べ替え |
-| Worktree 作成 | Planner | `git gtr new <branch>` で作業環境を作成 |
+| チケット取得 | PM | Notion から承認OK チケットを取得 |
+| グルーピング | PM | パス別に分類・優先度順に並べ替え |
+| Worktree 作成 | PM | `git gtr new <branch>` で作業環境を作成 |
 | 実装 | Coder (×最大3) | TDD で並列実装 |
 | テスト | Coder | RED → GREEN → REFACTOR |
 | コミット | Coder | Conventional Commits 形式 |
 | レビュー | Coder/Reviewer | `/pr-review` 実行 |
 | PR 作成 | Coder | `/create-pr` → CodeRabbit ループ（最大3回） |
-| Notion 更新 | Planner | ステータスを「レビュー依頼」に更新 |
-| Worktree 削除 | Planner | マージ確認後に `git gtr rm` |
+| Notion 更新 | PM | ステータスを「レビュー依頼」に更新 |
+| Worktree 削除 | PM | マージ確認後に `git gtr rm` |
 
 ---
 
@@ -255,7 +255,7 @@ worktree が削除されます。
 | ロール | AIモデル | 人数 | 主な責務 |
 |--------|---------|------|---------|
 | **Leader** | Opus | 1 | ユーザーとの対話窓口。グルーピング承認、エスカレーション判断 |
-| **Planner** | Sonnet | 1 | チケット取得、グルーピング、worktree 管理、Coder への指示出し、Notion 更新 |
+| **PM** | Sonnet | 1 | チケット取得、グルーピング、worktree 管理、Coder への指示出し、Notion 更新 |
 | **Coder** | Sonnet | 最大3 | 実装、テスト、コミット、PR 作成、CodeRabbit 対応 |
 | **Reviewer** | Sonnet | 0〜2 | 大規模変更時のみ。`/pr-review` を複数観点で実行 |
 
@@ -276,11 +276,11 @@ worktree が削除されます。
 Coder で解決できない
     │
     ▼
-Planner に報告
+PM に報告
     │
-    ├── Planner が解決 → Coder に差し戻し
+    ├── PM が解決 → Coder に差し戻し
     │
-    └── Planner でも解決できない
+    └── PM でも解決できない
             │
             ▼
         Leader に報告 → ユーザーに判断を仰ぐ
@@ -465,7 +465,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
 | 原因 | 対処 |
 |------|------|
 | main が進んでいる | `git rebase main` してやり直し |
-| 他の Coder と競合 | Planner → Leader にエスカレーション |
+| 他の Coder と競合 | PM → Leader にエスカレーション |
 
 ### Plan モードが終わらない
 

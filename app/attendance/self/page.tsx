@@ -40,6 +40,7 @@ interface ChildRecord {
   kanjiName: string
   gradeLabel?: string
   status: ChildStatus
+  attendanceId?: string
   checkedInAt?: string
   checkedOutAt?: string
 }
@@ -152,6 +153,18 @@ export default function SelfCheckInPage() {
   }
 
   const goToFeedback = (child: ChildRecord) => {
+    if (child.status === 'checked_in' || child.status === 'checked_out') {
+      setSelectedChild(child)
+      setCheckinAction(child.status === 'checked_in' ? 'check_in' : 'check_out')
+      setCheckinTime(formatTimeJST(child.status === 'checked_out' ? child.checkedOutAt : child.checkedInAt) ?? '')
+      setCheckinHour(new Date().getHours())
+      setAttendanceId(child.attendanceId ?? null)
+      setCountdown(3)
+      setView('feedback')
+      pendingPostRef.current = null
+      return
+    }
+
     const action: 'check_in' | 'check_out' = child.status === 'not_checked_in' ? 'check_in' : 'check_out'
 
     // Optimistic update
@@ -224,10 +237,11 @@ export default function SelfCheckInPage() {
 
       const currentPendingPost = pendingPostRef.current
       pendingPostRef.current = null
+      const currentAttendanceId = attendanceId
 
-      if (attendanceId) {
+      if (currentAttendanceId) {
         // POSTレスポンス済み → すぐDELETE
-        sendDelete(attendanceId)
+        sendDelete(currentAttendanceId)
       } else if (currentPendingPost) {
         // POST応答待ち → 完了後にDELETE
         currentPendingPost.then(({ attendance_id }) => {

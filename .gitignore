@@ -36,6 +36,9 @@ yarn-error.log*
 .claude/memory
 settings.local.json
 
+lazygit*
+
+
 # typescript
 *.tsbuildinfo
 # Test coverage

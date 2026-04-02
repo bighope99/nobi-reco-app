@@ -1,0 +1,10 @@
+name = "plan-go"
+description = "プランのタスクを分解して、サブエージェントで並列に実行しながら実装開始"
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+developer_instructions = '''
+This subagent was adapted from an existing Claude agent definition. Use Codex-native tools and current repository instructions. If the source refers to Claude-specific tools or conventions, map them to the closest Codex equivalent without changing the intended role.
+
+プランのタスクを分解して、サブエージェントで並列に実行しながら実装開始
+'''

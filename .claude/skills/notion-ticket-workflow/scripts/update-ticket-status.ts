@@ -7,12 +7,14 @@
  *   npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
  *     --page-id <notion-page-uuid> \
  *     --status "レビュー依頼" \
- *     [--pr-url "https://github.com/bighope99/nobi-reco-app/pull/205"]
+ *     [--pr-url "https://github.com/bighope99/nobi-reco-app/pull/205"] \
+ *     [--assignee-name "中村"]
  *
  * Options:
- *   --page-id  (required) Notion ページの UUID
- *   --status   (required) 新しいステータス値 (例: "レビュー依頼", "進行中")
- *   --pr-url   (optional) PR URL。指定した場合はコメントとして追加される
+ *   --page-id       (required) Notion ページの UUID
+ *   --status        (required) 新しいステータス値 (例: "レビュー依頼", "進行中")
+ *   --pr-url        (optional) PR URL。指定した場合はコメントとして追加される
+ *   --assignee-name (optional) 担当者として設定する名前 (例: "中村", "尼崎")
  */
 
 import {
@@ -34,6 +36,7 @@ interface OutputResult {
   page_id: string;
   status: string;
   pr_url: string | null;
+  assignee_name: string | null;
   success: true;
 }
 
@@ -45,6 +48,7 @@ interface Args {
   pageId: string;
   status: string;
   prUrl: string | null;
+  assigneeName: string | null;
 }
 
 function parseArgs(): Args {
@@ -52,6 +56,7 @@ function parseArgs(): Args {
   let pageId: string | null = null;
   let status: string | null = null;
   let prUrl: string | null = null;
+  let assigneeName: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--page-id" && argv[i + 1]) {
@@ -62,6 +67,9 @@ function parseArgs(): Args {
       i++;
     } else if (argv[i] === "--pr-url" && argv[i + 1]) {
       prUrl = argv[i + 1];
+      i++;
+    } else if (argv[i] === "--assignee-name" && argv[i + 1]) {
+      assigneeName = argv[i + 1];
       i++;
     }
   }
@@ -76,7 +84,7 @@ function parseArgs(): Args {
     process.exit(1);
   }
 
-  return { pageId, status, prUrl };
+  return { pageId, status, prUrl, assigneeName };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +139,32 @@ async function updatePrUrl(
   process.stderr.write(`PR URL set successfully.\n`);
 }
 
+async function updateAssignee(
+  token: string,
+  pageId: string,
+  assigneeName: string
+): Promise<void> {
+  process.stderr.write(`Setting assignee to "${assigneeName}" for page ${pageId}...\n`);
+
+  await notionFetch<UpdatePageResponse>(
+    `${NOTION_API_BASE}/pages/${pageId}`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        properties: {
+          // NOTE: 既存の担当者を全て上書きする（追記ではなく置換）
+          担当者: {
+            multi_select: [{ name: assigneeName }],
+          },
+        },
+      }),
+    }
+  );
+
+  process.stderr.write(`Assignee updated successfully.\n`);
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -156,10 +190,16 @@ async function main(): Promise<void> {
     await updatePrUrl(token, args.pageId, args.prUrl);
   }
 
+  // Step 3: Update assignee if provided
+  if (args.assigneeName !== null) {
+    await updateAssignee(token, args.pageId, args.assigneeName);
+  }
+
   const output: OutputResult = {
     page_id: args.pageId,
     status: args.status,
     pr_url: args.prUrl,
+    assignee_name: args.assigneeName,
     success: true,
   };
 

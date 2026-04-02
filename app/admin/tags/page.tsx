@@ -204,12 +204,12 @@ export default function TagsPage() {
 
     // sort_orderが変化したタグのみ更新
     const updates = reordered
-      .map((tag, index) => ({ ...tag, newSortOrder: index + 1 }))
-      .filter((t) => t.sort_order !== t.newSortOrder)
+      .map((tag: Tag, index: number) => ({ ...tag, newSortOrder: index + 1 }))
+      .filter((t: Tag & { newSortOrder: number }) => t.sort_order !== t.newSortOrder)
 
     try {
       await Promise.all(
-        updates.map((t) =>
+        updates.map((t: Tag & { newSortOrder: number }) =>
           fetch(`/api/admin/tags/${t.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
