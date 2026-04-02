@@ -214,6 +214,26 @@ export default function AttendanceSchedulePage() {
     setModifiedSchedules(new Map(modifiedSchedules.set(childId, newSchedule)))
   }
 
+  const handleDayBulkToggle = (dayKey: keyof ChildSchedule['schedule']) => {
+    if (!editMode || !scheduleData) return
+
+    const allChecked = processedData.every(child => {
+      const current = modifiedSchedules.get(child.child_id) ?? child.schedule
+      return current[dayKey]
+    })
+
+    const newValue = !allChecked
+
+    setModifiedSchedules(prev => {
+      const next = new Map(prev)
+      processedData.forEach(child => {
+        const current = next.get(child.child_id) ?? { ...child.schedule }
+        next.set(child.child_id, { ...current, [dayKey]: newValue })
+      })
+      return next
+    })
+  }
+
   const getCurrentSchedule = (childId: string): ChildSchedule['schedule'] => {
     const modified = modifiedSchedules.get(childId)
     if (modified) return modified
@@ -452,8 +472,19 @@ export default function AttendanceSchedulePage() {
                         </th>
                       )}
                       {weekdays.map((day) => (
-                        <th key={day.key} className="px-4 py-3 text-center font-semibold text-slate-600 text-sm">
-                          {day.label}
+                        <th key={day.key} className="px-4 py-3 text-center text-sm font-medium text-slate-600">
+                          {editMode ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDayBulkToggle(day.key as keyof ChildSchedule['schedule'])}
+                              className="w-full px-2 py-1 rounded hover:bg-blue-50 hover:text-blue-700 transition-colors font-medium"
+                              title={`${day.label}曜日を全員一括切替`}
+                            >
+                              {day.label}
+                            </button>
+                          ) : (
+                            day.label
+                          )}
                         </th>
                       ))}
                     </tr>
