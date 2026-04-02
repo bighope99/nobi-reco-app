@@ -167,8 +167,9 @@ git gtr new <ブランチ名> --base main --yes
 > git fetch origin
 > git push origin --delete <ブランチ名> 2>/dev/null || true
 > git branch -D <ブランチ名> 2>/dev/null || true
-> git worktree add ../nobi-reco-app-<ブランチ名> -b <ブランチ名>
+> git worktree add ../nobi-reco-app-<ブランチ名> -b <ブランチ名> origin/main
 > ```
+> `origin/main` を省略すると現在のHEADからブランチが作成されるため、必ず指定すること。
 
 #### Step 2: 実装プランをユーザーに提示・承認
 
