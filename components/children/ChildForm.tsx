@@ -13,7 +13,6 @@ import {
   Shield,
   Camera,
   Plus,
-  Trash2,
   ChevronRight,
   Save,
   Building2,
@@ -1365,15 +1364,6 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                             詳細
                           </Link>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => removeGuardianContact(contact.id)}
-                          className={`${contact.guardianId ? '' : 'ml-auto '}text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity`}
-                          title="削除"
-                          disabled={readOnly}
-                        >
-                          <Trash2 size={16} />
-                        </button>
                       </div>
                       <div className="flex flex-wrap gap-3 items-end">
                         <div className="flex-1 min-w-[120px]">
