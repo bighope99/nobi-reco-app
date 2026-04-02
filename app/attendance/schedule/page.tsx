@@ -313,6 +313,31 @@ export default function AttendanceSchedulePage() {
     setEditMode(false)
   }
 
+  const handleChildBulkToggle = (childId: string) => {
+    if (!editMode || !scheduleData) return
+
+    const child = scheduleData.children.find(c => c.child_id === childId)
+    if (!child) return
+
+    const current = modifiedSchedules.get(childId) ?? child.schedule
+    const weekdayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const
+    const allChecked = weekdayKeys.every(k => current[k])
+    const newValue = !allChecked
+
+    setModifiedSchedules(prev => {
+      const next = new Map(prev)
+      next.set(childId, {
+        ...current,
+        monday: newValue,
+        tuesday: newValue,
+        wednesday: newValue,
+        thursday: newValue,
+        friday: newValue,
+      })
+      return next
+    })
+  }
+
   if (isStaff) return null
 
   return (
@@ -364,10 +389,10 @@ export default function AttendanceSchedulePage() {
               ) : (
                 <button
                   onClick={() => setEditMode(true)}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm"
+                  className="flex items-center gap-2 border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2.5 rounded-lg transition-colors font-bold text-sm"
                 >
                   <Users size={18} />
-                  編集モード
+                  編集
                 </button>
               )}
             </div>
@@ -422,11 +447,17 @@ export default function AttendanceSchedulePage() {
 
           {/* Edit Mode Notice */}
           {editMode && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6 flex items-center gap-3">
-              <CheckCircle2 className="text-indigo-600 shrink-0" size={20} />
-              <p className="text-indigo-700 text-sm font-medium">
-                編集モード: チェックボックスをクリックして予定を変更できます
-              </p>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4 flex items-start gap-3">
+              <CheckCircle2 className="text-indigo-600 shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="text-indigo-700 text-sm font-medium">
+                  編集モード: チェックボックスをクリックして予定を変更できます
+                </p>
+                <p className="text-indigo-600 text-xs mt-1">
+                  <strong>曜日名</strong>をクリック → 全員一括切替　／
+                  <strong>子ども名</strong>をクリック → 全曜日一括切替
+                </p>
+              </div>
             </div>
           )}
 
@@ -500,14 +531,30 @@ export default function AttendanceSchedulePage() {
                           className={`transition-colors ${hasChanges ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
                         >
                           <td className="px-3 py-4">
-                            <div>
-                              <div className="font-bold text-base text-slate-800">
-                                {child.name}
+                            {editMode ? (
+                              <button
+                                type="button"
+                                onClick={() => handleChildBulkToggle(child.child_id)}
+                                className="text-left hover:text-blue-700 hover:underline cursor-pointer transition-colors"
+                                title="クリックで全曜日を一括切替"
+                              >
+                                <div className="font-bold text-base text-slate-800 hover:text-blue-700">
+                                  {child.name}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                                  {child.kana}
+                                </div>
+                              </button>
+                            ) : (
+                              <div>
+                                <div className="font-bold text-base text-slate-800">
+                                  {child.name}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                                  {child.kana}
+                                </div>
                               </div>
-                              <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                                {child.kana}
-                              </div>
-                            </div>
+                            )}
                           </td>
                           <td className="px-2 py-4">
                             <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
