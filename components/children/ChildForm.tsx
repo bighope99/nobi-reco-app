@@ -1498,14 +1498,14 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                       <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
                         <Switch
                           label="HP/SNSへの写真掲載"
-                          description="HPやSNS等など外部への顔写真掲載許可"
+                          description="HPやSNS等、外部への顔写真掲載許可"
                           checked={formData.photo_permission_public}
                           onChange={(checked: boolean) => updateFormData({ photo_permission_public: checked })}
                         />
                       </div>
                       <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
                         <Switch
-                          label="レポートへの記名"
+                          label="施設内共有物への顔写真掲載"
                           description="施設内共有物への顔写真記載"
                           checked={formData.photo_permission_share}
                           onChange={(checked: boolean) => updateFormData({ photo_permission_share: checked })}
