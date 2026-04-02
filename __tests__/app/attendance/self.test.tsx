@@ -51,7 +51,7 @@ describe('SelfCheckInPage undo existing attendance', () => {
       if (url === '/api/attendance/self-checkin' && init?.method === 'POST') {
         return {
           ok: true,
-          json: async () => ({ attendance_id: 'unexpected-post' }),
+          json: async () => ({ action: 'check_out', time: '2026-03-30T10:00:00.000Z', attendance_id: 'att-checked-in' }),
         } as Response
       }
 
@@ -66,7 +66,7 @@ describe('SelfCheckInPage undo existing attendance', () => {
     jest.useRealTimers()
   })
 
-  it('今日すでに出席済みの児童を開いた場合はPOSTせずに出席取り消しできる', async () => {
+  it('今日すでに出席済みの児童をタップするとチェックアウトしてとりけすできる', async () => {
     render(<SelfCheckInPage />)
 
     await waitFor(() => {
@@ -77,8 +77,14 @@ describe('SelfCheckInPage undo existing attendance', () => {
     fireEvent.click(screen.getByRole('button', { name: /きたよ！ 09:00　タップでかえる/ }))
 
     await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/attendance/self-checkin', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ child_id: 'child-1' }),
+      }))
+    })
+
+    await waitFor(() => {
       expect(screen.getByRole('button', { name: 'とりけす' })).toBeInTheDocument()
-      expect(screen.getByText('09:00')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'とりけす' }))
@@ -86,13 +92,9 @@ describe('SelfCheckInPage undo existing attendance', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/attendance/self-checkin', expect.objectContaining({
         method: 'DELETE',
-        body: JSON.stringify({ attendance_id: 'att-checked-in', action: 'check_in' }),
+        body: JSON.stringify({ attendance_id: 'att-checked-in', action: 'check_out' }),
       }))
     })
-
-    expect((global.fetch as jest.Mock).mock.calls.some((call) =>
-      call[0] === '/api/attendance/self-checkin' && call[1]?.method === 'POST'
-    )).toBe(false)
   })
 
   it('今日すでに帰宅済みの児童を開いた場合はPOSTせずに帰宅取り消しできる', async () => {
