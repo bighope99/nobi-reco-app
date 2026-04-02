@@ -652,6 +652,9 @@ CREATE TABLE IF NOT EXISTS r_activity (
   handover_completed_at TIMESTAMP WITH TIME ZONE, -- 完了日時
   handover_completed_by UUID REFERENCES m_users(id), -- 完了操作者
 
+  -- 明日やることリスト
+  todo_items JSONB,                                  -- 明日やることリスト（配列）
+
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
   last_edited_at TIMESTAMP WITH TIME ZONE,       -- 最後の編集日時
@@ -671,6 +674,7 @@ CREATE INDEX idx_activity_recorded_by ON r_activity(recorded_by) WHERE recorded_
 CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date) WHERE deleted_at IS NULL;
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
 CREATE INDEX idx_activity_handover_completed ON r_activity(handover_completed) WHERE deleted_at IS NULL AND handover IS NOT NULL;
+CREATE INDEX idx_activity_todo_items ON r_activity(id) WHERE deleted_at IS NULL AND todo_items IS NOT NULL;
 ```
 
 **JSONBカラムのスキーマ定義**:
@@ -680,6 +684,7 @@ CREATE INDEX idx_activity_handover_completed ON r_activity(handover_completed) W
 | `daily_schedule` | `[{time: string, content: string}, ...]` | 1日の流れを時刻順に記録 |
 | `role_assignments` | `[{user_id: string, user_name: string, role: string}, ...]` | 職員の役割分担 |
 | `meal` | `{menu: string, items_to_bring: string, notes: string}` | ごはん情報 |
+| `todo_items` | `[{id: string, content: string, completed: boolean}, ...]` | 明日やることリスト |
 
 **daily_schedule の例**:
 ```json

@@ -21,6 +21,7 @@
 | Database Schema | `docs/03_database.md` (single source of truth) |
 | DB Naming & Migrations | `.claude/skills/docs-database-conventions` |
 | JWT Authentication | `.claude/skills/supabase-jwt-auth` |
+| Admin Client | `.claude/skills/supabase-admin-client` — `createAdminClient` は `@supabase/supabase-js` を使う（SSRクライアントはRLSをバイパスしない） |
 | Query Patterns | `.claude/skills/supabase-query-patterns` |
 | Session Interface | `/lib/auth/session.ts` |
 | Role-based UI | `hooks/useRole.ts` — `useRole()` でロール判定。直接 `session.role` を比較しない |
@@ -89,4 +90,4 @@ You are a manager and agent orchestrator. Never implement directly—delegate al
 | `db-schema-validator` | DBスキーマ使用の検証（`docs/03_database.md` 照合） |
 | `docs-fetcher` | 公式ドキュメント取得（Context7 / Web検索） |
 | `git-operator` | git操作（commit・push・branch・merge等） |
-| `skill-rule-creator` | スキル（`.claude/skills/`）・ルール（CLAUDE.md）の作成・更新 |
+| `skill-creator` | スキル（`.claude/skills/`）・ルール（CLAUDE.md）の作成・更新 |
