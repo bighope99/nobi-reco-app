@@ -3,10 +3,9 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { normalizeKana } from '@/lib/utils/kana'
+import { cn } from "@/lib/utils"
 import { useRole } from "@/hooks/useRole"
 import { StaffLayout } from "@/components/layout/staff-layout"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Search,
   Filter,
@@ -215,6 +214,26 @@ export default function AttendanceSchedulePage() {
     setModifiedSchedules(new Map(modifiedSchedules.set(childId, newSchedule)))
   }
 
+  const handleDayBulkToggle = (dayKey: keyof ChildSchedule['schedule']) => {
+    if (!editMode || !scheduleData) return
+
+    const allChecked = processedData.every(child => {
+      const current = modifiedSchedules.get(child.child_id) ?? child.schedule
+      return current[dayKey]
+    })
+
+    const newValue = !allChecked
+
+    setModifiedSchedules(prev => {
+      const next = new Map(prev)
+      processedData.forEach(child => {
+        const current = next.get(child.child_id) ?? { ...child.schedule }
+        next.set(child.child_id, { ...current, [dayKey]: newValue })
+      })
+      return next
+    })
+  }
+
   const getCurrentSchedule = (childId: string): ChildSchedule['schedule'] => {
     const modified = modifiedSchedules.get(childId)
     if (modified) return modified
@@ -294,6 +313,31 @@ export default function AttendanceSchedulePage() {
     setEditMode(false)
   }
 
+  const handleChildBulkToggle = (childId: string) => {
+    if (!editMode || !scheduleData) return
+
+    const child = scheduleData.children.find(c => c.child_id === childId)
+    if (!child) return
+
+    const current = modifiedSchedules.get(childId) ?? child.schedule
+    const weekdayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const
+    const allChecked = weekdayKeys.every(k => current[k])
+    const newValue = !allChecked
+
+    setModifiedSchedules(prev => {
+      const next = new Map(prev)
+      next.set(childId, {
+        ...current,
+        monday: newValue,
+        tuesday: newValue,
+        wednesday: newValue,
+        thursday: newValue,
+        friday: newValue,
+      })
+      return next
+    })
+  }
+
   if (isStaff) return null
 
   return (
@@ -345,10 +389,10 @@ export default function AttendanceSchedulePage() {
               ) : (
                 <button
                   onClick={() => setEditMode(true)}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg shadow-sm transition-colors font-bold text-sm"
+                  className="flex items-center gap-2 border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2.5 rounded-lg transition-colors font-bold text-sm"
                 >
                   <Users size={18} />
-                  編集モード
+                  編集
                 </button>
               )}
             </div>
@@ -403,11 +447,17 @@ export default function AttendanceSchedulePage() {
 
           {/* Edit Mode Notice */}
           {editMode && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6 flex items-center gap-3">
-              <CheckCircle2 className="text-indigo-600 shrink-0" size={20} />
-              <p className="text-indigo-700 text-sm font-medium">
-                編集モード: チェックボックスをクリックして予定を変更できます
-              </p>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4 flex items-start gap-3">
+              <CheckCircle2 className="text-indigo-600 shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="text-indigo-700 text-sm font-medium">
+                  編集モード: チェックボックスをクリックして予定を変更できます
+                </p>
+                <p className="text-indigo-600 text-xs mt-1">
+                  <strong>曜日名</strong>をクリック → 全員一括切替　／
+                  <strong>子ども名</strong>をクリック → 全曜日一括切替
+                </p>
+              </div>
             </div>
           )}
 
@@ -453,8 +503,19 @@ export default function AttendanceSchedulePage() {
                         </th>
                       )}
                       {weekdays.map((day) => (
-                        <th key={day.key} className="px-4 py-3 text-center font-semibold text-slate-600 text-sm">
-                          {day.label}
+                        <th key={day.key} className="px-4 py-3 text-center text-sm font-medium text-slate-600">
+                          {editMode ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDayBulkToggle(day.key as keyof ChildSchedule['schedule'])}
+                              className="w-full px-2 py-1 rounded hover:bg-blue-50 hover:text-blue-700 transition-colors font-medium"
+                              title={`${day.label}曜日を全員一括切替`}
+                            >
+                              {day.label}
+                            </button>
+                          ) : (
+                            day.label
+                          )}
                         </th>
                       ))}
                     </tr>
@@ -470,14 +531,30 @@ export default function AttendanceSchedulePage() {
                           className={`transition-colors ${hasChanges ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}
                         >
                           <td className="px-3 py-4">
-                            <div>
-                              <div className="font-bold text-base text-slate-800">
-                                {child.name}
+                            {editMode ? (
+                              <button
+                                type="button"
+                                onClick={() => handleChildBulkToggle(child.child_id)}
+                                className="text-left hover:text-blue-700 hover:underline cursor-pointer transition-colors"
+                                title="クリックで全曜日を一括切替"
+                              >
+                                <div className="font-bold text-base text-slate-800 hover:text-blue-700">
+                                  {child.name}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                                  {child.kana}
+                                </div>
+                              </button>
+                            ) : (
+                              <div>
+                                <div className="font-bold text-base text-slate-800">
+                                  {child.name}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                                  {child.kana}
+                                </div>
                               </div>
-                              <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                                {child.kana}
-                              </div>
-                            </div>
+                            )}
                           </td>
                           <td className="px-2 py-4">
                             <span className="text-sm font-medium text-slate-700">{child.grade_label || '-'}</span>
@@ -487,24 +564,37 @@ export default function AttendanceSchedulePage() {
                               <span className="text-sm text-slate-600">{child.class_name}</span>
                             </td>
                           )}
-                          {weekdays.map((day) => (
-                            <td key={day.key} className="px-4 py-4 text-center">
-                              <div className="flex justify-center">
-                                <Checkbox
-                                  checked={currentSchedule[day.key as keyof typeof currentSchedule]}
+                          {weekdays.map((day) => {
+                            const checked = currentSchedule[day.key as keyof typeof currentSchedule]
+                            return (
+                              <td key={day.key} className="px-2 py-2 text-center">
+                                <button
+                                  type="button"
                                   disabled={!editMode}
-                                  onCheckedChange={() =>
+                                  onClick={() =>
                                     handleCheckboxChange(
                                       child.child_id,
                                       day.key as keyof ChildSchedule['schedule'],
-                                      currentSchedule[day.key as keyof typeof currentSchedule]
+                                      checked
                                     )
                                   }
-                                  className={editMode ? 'cursor-pointer' : 'cursor-not-allowed'}
-                                />
-                              </div>
-                            </td>
-                          ))}
+                                  className={cn(
+                                    "w-full min-h-[44px] rounded-md flex items-center justify-center text-lg transition-colors",
+                                    checked
+                                      ? "bg-blue-100 text-blue-700 font-bold"
+                                      : "bg-gray-100 text-gray-400",
+                                    editMode
+                                      ? "cursor-pointer hover:opacity-80"
+                                      : "cursor-default opacity-70"
+                                  )}
+                                  aria-pressed={checked}
+                                  aria-label={`${child.name} ${day.label} ${checked ? '出席' : '欠席'}`}
+                                >
+                                  {checked ? "●" : "○"}
+                                </button>
+                              </td>
+                            )
+                          })}
                         </tr>
                       )
                     })}
