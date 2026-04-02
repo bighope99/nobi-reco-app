@@ -7,14 +7,21 @@
 import { POST } from '../route';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 // モック
 jest.mock('@/utils/supabase/server');
-jest.mock('@/lib/auth/session');
+jest.mock('@/lib/auth/jwt');
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
+
+const BASE_METADATA = {
+  user_id: 'user-123',
+  role: 'staff' as const,
+  company_id: 'company-123',
+  current_facility_id: 'facility-123',
+};
 
 describe('POST /api/records/personal', () => {
   let mockSupabase: any;
@@ -24,48 +31,15 @@ describe('POST /api/records/personal', () => {
 
     // Supabaseクライアントのモック
     mockSupabase = {
-      auth: {
-        getUser: jest.fn(),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: 'user-123',
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-123',
-                current_facility_id: 'facility-123',
-              },
-            },
-          },
-          error: null,
-        }),
-      },
       from: jest.fn(),
     };
 
     mockCreateClient.mockResolvedValue(mockSupabase);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(BASE_METADATA);
   });
 
   describe('正常系', () => {
     it('観察記録とAI解析結果（タグ）を正しく保存できる', async () => {
-      // 認証情報のモック
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'test@example.com' } },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue({
-        user_id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-123',
-        company_name: 'Test Company',
-        current_facility_id: 'facility-123',
-        facilities: [],
-        classes: [],
-      });
-
       // 子ども情報のモック
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
@@ -176,24 +150,6 @@ describe('POST /api/records/personal', () => {
     });
 
     it('タグがない場合でも観察記録を保存できる', async () => {
-      // 認証情報のモック
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'test@example.com' } },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue({
-        user_id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-123',
-        company_name: 'Test Company',
-        current_facility_id: 'facility-123',
-        facilities: [],
-        classes: [],
-      });
-
       // 子ども情報のモック
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),
@@ -271,23 +227,6 @@ describe('POST /api/records/personal', () => {
 
   describe('recorded_byバリデーション', () => {
     it('recorded_byが未指定の場合は400を返す', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'test@example.com' } },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue({
-        user_id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-123',
-        company_name: 'Test Company',
-        current_facility_id: 'facility-123',
-        facilities: [],
-        classes: [],
-      });
-
       const requestBody = {
         child_id: 'child-123',
         observation_date: '2024-01-15',
@@ -310,23 +249,6 @@ describe('POST /api/records/personal', () => {
     });
 
     it('recorded_byが空文字の場合は400を返す', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'test@example.com' } },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue({
-        user_id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-123',
-        company_name: 'Test Company',
-        current_facility_id: 'facility-123',
-        facilities: [],
-        classes: [],
-      });
-
       const requestBody = {
         child_id: 'child-123',
         observation_date: '2024-01-15',
@@ -351,14 +273,7 @@ describe('POST /api/records/personal', () => {
 
   describe('異常系', () => {
     it('未認証の場合は401を返す', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: null },
-        error: new Error('Unauthorized'),
-      });
-      mockSupabase.auth.getClaims.mockResolvedValue({
-        data: null,
-        error: { message: 'Unauthorized' },
-      });
+      mockGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
       const requestBody = {
         child_id: 'child-123',
@@ -381,23 +296,6 @@ describe('POST /api/records/personal', () => {
     });
 
     it('必須項目が不足している場合は400を返す', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'test@example.com' } },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue({
-        user_id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-123',
-        company_name: 'Test Company',
-        current_facility_id: 'facility-123',
-        facilities: [],
-        classes: [],
-      });
-
       // child_idが欠けているリクエスト
       const requestBody = {
         observation_date: '2024-01-15',
@@ -419,23 +317,6 @@ describe('POST /api/records/personal', () => {
     });
 
     it('他の施設の子どもの記録を作成しようとした場合は403を返す', async () => {
-      mockSupabase.auth.getUser.mockResolvedValue({
-        data: { user: { id: 'user-123', email: 'test@example.com' } },
-        error: null,
-      });
-
-      mockGetUserSession.mockResolvedValue({
-        user_id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-123',
-        company_name: 'Test Company',
-        current_facility_id: 'facility-123',
-        facilities: [],
-        classes: [],
-      });
-
       // 別の施設の子ども
       const mockChildQuery = {
         select: jest.fn().mockReturnThis(),

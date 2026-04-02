@@ -4,52 +4,32 @@
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/mentions/encrypt/route';
 import { encryptChildId, decryptChildId } from '@/utils/crypto/childIdEncryption';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 // モック
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-import { getUserSession } from '@/lib/auth/session';
 import { createClient } from '@/utils/supabase/server';
 
+const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
+
+const BASE_METADATA = {
+  user_id: 'test-user-id',
+  role: 'staff' as const,
+  company_id: 'test-company-id',
+  current_facility_id: 'test-facility-id',
+};
+
+const validChildId = '550e8400-e29b-41d4-a716-446655440000';
+
 describe('/api/mentions/encrypt', () => {
-  const mockSession = {
-    user_id: 'test-user-id',
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'teacher' as const,
-    company_id: 'test-company-id',
-    company_name: 'Test Company',
-    facilities: [
-      {
-        facility_id: 'test-facility-id',
-        facility_name: 'Test Facility',
-        is_primary: true,
-      },
-    ],
-    current_facility_id: 'test-facility-id',
-    classes: [],
-  };
-
-  const mockUser = {
-    id: 'test-user-id',
-    email: 'test@example.com',
-  };
-
-  const validChildId = '550e8400-e29b-41d4-a716-446655440000';
-
-  const createMockSupabase = (authUser: any, childData: any) => ({
-    auth: {
-      getUser: jest.fn().mockResolvedValue({
-        data: { user: authUser },
-        error: authUser ? null : new Error('Not authenticated'),
-      }),
-    },
+  const createMockSupabase = (childData: any) => ({
     from: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
@@ -58,12 +38,12 @@ describe('/api/mentions/encrypt', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(BASE_METADATA);
   });
 
   describe('認証テスト', () => {
     it('認証されていない場合は401を返すこと', async () => {
-      const mockSupabase = createMockSupabase(null, null);
-      (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+      mockGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost:3000/api/mentions/encrypt', {
         method: 'POST',
@@ -78,8 +58,7 @@ describe('/api/mentions/encrypt', () => {
     });
 
     it('認証されている場合は暗号化トークンを返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, {
+      const mockSupabase = createMockSupabase({
         data: [{ id: validChildId, facility_id: 'test-facility-id' }],
         error: null,
       });
@@ -102,8 +81,7 @@ describe('/api/mentions/encrypt', () => {
 
   describe('暗号化トークン検証', () => {
     it('暗号化されたトークンが復号化可能であること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, {
+      const mockSupabase = createMockSupabase({
         data: [{ id: validChildId, facility_id: 'test-facility-id' }],
         error: null,
       });
@@ -123,8 +101,7 @@ describe('/api/mentions/encrypt', () => {
     });
 
     it('URL-safe Base64形式であること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, {
+      const mockSupabase = createMockSupabase({
         data: [{ id: validChildId, facility_id: 'test-facility-id' }],
         error: null,
       });
@@ -145,8 +122,7 @@ describe('/api/mentions/encrypt', () => {
 
   describe('バリデーション', () => {
     it('childIdが未指定の場合は400を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, null);
+      const mockSupabase = createMockSupabase(null);
       (createClient as jest.Mock).mockResolvedValue(mockSupabase);
 
       const request = new NextRequest('http://localhost:3000/api/mentions/encrypt', {
@@ -162,8 +138,7 @@ describe('/api/mentions/encrypt', () => {
     });
 
     it('childIdが空文字の場合は400を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, null);
+      const mockSupabase = createMockSupabase(null);
       (createClient as jest.Mock).mockResolvedValue(mockSupabase);
 
       const request = new NextRequest('http://localhost:3000/api/mentions/encrypt', {
@@ -179,8 +154,7 @@ describe('/api/mentions/encrypt', () => {
     });
 
     it('UUIDでない場合は400を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, null);
+      const mockSupabase = createMockSupabase(null);
       (createClient as jest.Mock).mockResolvedValue(mockSupabase);
 
       const request = new NextRequest('http://localhost:3000/api/mentions/encrypt', {
@@ -198,8 +172,7 @@ describe('/api/mentions/encrypt', () => {
 
   describe('アクセス制御', () => {
     it('ユーザーの施設に属さない子供の暗号化を拒否すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, {
+      const mockSupabase = createMockSupabase({
         data: [{ id: validChildId, facility_id: 'other-facility-id' }],
         error: null,
       });
@@ -218,8 +191,7 @@ describe('/api/mentions/encrypt', () => {
     });
 
     it('存在しない子供IDの場合は404を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, {
+      const mockSupabase = createMockSupabase({
         data: [],
         error: null,
       });
@@ -240,8 +212,7 @@ describe('/api/mentions/encrypt', () => {
 
   describe('エラーハンドリング', () => {
     it('データベースエラーの場合は500を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-      const mockSupabase = createMockSupabase(mockUser, {
+      const mockSupabase = createMockSupabase({
         data: null,
         error: { message: 'Database error' },
       });

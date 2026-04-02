@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
 
 /**
@@ -13,21 +13,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { id } = await params;
 
     if (!id || typeof id !== 'string') {
@@ -72,7 +63,7 @@ export async function PUT(
       );
     }
 
-    if (existing.facility_id !== session.current_facility_id) {
+    if (existing.facility_id !== metadata.current_facility_id) {
       return NextResponse.json(
         { error: 'このテンプレートを更新する権限がありません' },
         { status: 403 }
@@ -81,7 +72,7 @@ export async function PUT(
 
     // staff 以上のみ編集可能（RLSとの二重防御）
     const allowedRoles = ['staff', 'facility_admin', 'company_admin', 'site_admin'];
-    if (!allowedRoles.includes(session.role)) {
+    if (!allowedRoles.includes(metadata.role)) {
       return NextResponse.json(
         { error: 'テンプレートの編集には staff 以上の権限が必要です' },
         { status: 403 }
@@ -122,30 +113,21 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // facility_admin 以上のみ削除可能
     const allowedRoles = ['facility_admin', 'company_admin', 'site_admin'];
-    if (!allowedRoles.includes(session.role)) {
+    if (!allowedRoles.includes(metadata.role)) {
       return NextResponse.json(
         { error: 'テンプレートの削除にはfacility_admin以上の権限が必要です' },
         { status: 403 }
       );
     }
 
+    const supabase = await createClient();
     const { id } = await params;
 
     if (!id || typeof id !== 'string') {
@@ -170,7 +152,7 @@ export async function DELETE(
       );
     }
 
-    if (existing.facility_id !== session.current_facility_id) {
+    if (existing.facility_id !== metadata.current_facility_id) {
       return NextResponse.json(
         { error: 'このテンプレートを削除する権限がありません' },
         { status: 403 }

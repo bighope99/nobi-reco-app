@@ -1,5 +1,4 @@
 import { createClient } from '@/utils/supabase/server';
-import type { JwtPayload } from '@supabase/supabase-js';
 
 /**
  * JWTメタデータの型定義
@@ -12,46 +11,65 @@ export interface JWTMetadata {
 }
 
 /**
+ * JWTトークン（Base64URL形式）をデコードしてペイロードを返す
+ * Node.js環境では Buffer を使用
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+    return payload as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 認証済みユーザーのJWTメタデータを取得
  *
- * Supabase Auth APIのgetClaims()を使用して、署名検証済みのJWTクレームを取得します。
- * これにより、トークンの改ざんを防ぎ、セキュアな認証を実現します。
+ * getSession() でアクセストークンを取得し、JWTペイロードを直接デコードして
+ * Custom Access Token Hook で追加されたカスタムクレームを取得します。
+ * session.user.app_metadata ではカスタムクレームが取得できないため、
+ * JWTトークンを直接デコードする必要があります。
  *
  * @returns JWTメタデータまたはnull（認証エラー時）
  */
 export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null> {
   const supabase = await createClient();
 
-  // getClaimsで署名検証済みのカスタムクレームを取得
-  const {
-    data,
-    error,
-  } = await supabase.auth.getClaims();
+  const { data: { session }, error } = await supabase.auth.getSession();
 
-  if (error || !data) {
+  if (error || !session) {
     if (error) {
-      console.error('Failed to get JWT claims:', error.message);
+      console.error('Failed to get session:', error.message);
     }
     return null;
   }
 
-  // getClaims()の戻り値は{ claims: JwtPayload }形式
-  const claims = data.claims;
-  if (!claims) {
+  const payload = decodeJwtPayload(session.access_token);
+  if (!payload) {
+    console.error('Failed to decode JWT payload');
     return null;
   }
 
-  // JWTペイロードを適切な型として使用
-  const payload: JwtPayload = claims;
-  const user_id = payload?.sub as string;
-  const role = payload?.app_metadata?.role as 'site_admin' | 'company_admin' | 'facility_admin' | 'staff';
-  const company_id = payload?.app_metadata?.company_id as string;
-  const current_facility_id = payload?.app_metadata?.current_facility_id as string | null;
+  const appMetadata = payload.app_metadata as Record<string, unknown> | undefined;
+  const user_id = payload.sub as string | undefined;
+  const role = appMetadata?.role as string | undefined;
+  const company_id = appMetadata?.company_id as string | undefined;
+  const current_facility_id = (appMetadata?.current_facility_id as string | null | undefined) ?? null;
+
+  const validRoles = ['site_admin', 'company_admin', 'facility_admin', 'staff'] as const;
+  type ValidRole = typeof validRoles[number];
 
   // 必須フィールドの検証
-  // site_adminの場合はcurrent_facility_idがnullでも許可
   if (!user_id || !role || !company_id) {
     console.error('Missing required JWT claims: user_id, role or company_id');
+    return null;
+  }
+
+  if (!validRoles.includes(role as ValidRole)) {
+    console.error('Invalid role in JWT claims:', role);
     return null;
   }
 
@@ -63,7 +81,7 @@ export async function getAuthenticatedUserMetadata(): Promise<JWTMetadata | null
 
   return {
     user_id,
-    role,
+    role: role as ValidRole,
     company_id,
     current_facility_id: current_facility_id || null,
   };

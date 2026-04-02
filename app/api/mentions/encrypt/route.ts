@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encryptChildId } from '@/utils/crypto/childIdEncryption';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 /**
  * 子供IDを暗号化してメンション用トークンを生成
@@ -12,22 +12,12 @@ import { getUserSession } from '@/lib/auth/session';
 export async function POST(request: NextRequest) {
   try {
     // 認証チェック
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // セッション情報取得
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { childId } = body;
 
@@ -70,7 +60,7 @@ export async function POST(request: NextRequest) {
     const child = children[0];
 
     // ユーザーの現在の施設IDと子供の施設IDが一致するか確認
-    if (child.facility_id !== session.current_facility_id) {
+    if (child.facility_id !== metadata.current_facility_id) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
