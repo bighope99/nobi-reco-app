@@ -159,6 +159,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('facility_id', facilityId)
       .is('deleted_at', null)
+      .eq('enrollment_status', 'enrolled')
       .order('family_name_kana', { ascending: true });
 
     if (childrenError) {
