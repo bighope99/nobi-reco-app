@@ -182,6 +182,10 @@ export default function SelfCheckInPage() {
     setCheckinTime(timeStr)
     setCheckinHour(jstHour)
     setCheckinAction(action)
+    // チェックアウト時は既存のattendanceIdが既知なので同期的にセット
+    if (action === 'check_out') {
+      setAttendanceId(child.attendanceId ?? null)
+    }
     setCountdown(5)
     setView('feedback')
 
