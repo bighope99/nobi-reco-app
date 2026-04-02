@@ -551,6 +551,9 @@ CREATE TABLE IF NOT EXISTS m_guardians (
   postal_code VARCHAR(10),                       -- 郵便番号
   address TEXT,                                  -- 住所
 
+  -- 写真
+  photo_path TEXT,                               -- 保護者顔写真のストレージパス（guardian-photosバケット内のパス）。署名URLで表示
+
   -- 備考
   notes TEXT,                                    -- 特記事項
 
@@ -604,11 +607,20 @@ CREATE TABLE m_role_presets (
 
 -- インデックス
 CREATE INDEX idx_role_presets_facility_id ON m_role_presets(facility_id) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_role_presets_facility_role ON m_role_presets(facility_id, role_name) WHERE deleted_at IS NULL;
+
+-- 制約
+ALTER TABLE m_role_presets
+  ADD CONSTRAINT chk_m_role_presets_role_name_not_blank
+  CHECK (char_length(trim(role_name)) > 0);
 ```
 
 **用途**: 活動記録の「役割分担」欄に対する施設単位のプリセット管理。
 固定ボタンを押すと役割テキストがここに保存され、次回作成時に自動プリセット表示される。
 `facility_admin` 以上が管理可能。RLS により他施設からの参照を防止。
+
+**`insert_role_preset()` 関数**: `sort_order` の競合を防ぐatomic insert関数。
+INSERT時に `SELECT MAX(sort_order)+1` をDB側でatomicに採番し、`role_name` 重複（UNIQUE制約違反）の場合は既存レコードを返す（`skipped=true`）。
 
 ---
 
@@ -651,6 +663,7 @@ CREATE TABLE IF NOT EXISTS r_activity (
   handover_completed BOOLEAN DEFAULT false,       -- 引き継ぎ完了フラグ
   handover_completed_at TIMESTAMP WITH TIME ZONE, -- 完了日時
   handover_completed_by UUID REFERENCES m_users(id), -- 完了操作者
+  todo_items JSONB,                                  -- 明日やることリスト（配列）
 
   -- 明日やることリスト
   todo_items JSONB,                                  -- 明日やることリスト（配列）
@@ -1071,7 +1084,8 @@ CREATE INDEX idx_s_activity_templates_facility
 **権限（RLS）**:
 - **SELECT**: 同一施設のスタッフのみ
 - **INSERT**: staff以上（同一施設）
-- **UPDATE**（論理削除）: facility_admin以上のみ
+- **UPDATE**（通常編集）: staff以上（同一施設）— migration 025で拡張
+- **UPDATE**（論理削除）: API層で `deleted_at` 更新か否かで分岐し、削除は facility_admin 以上に制限
 
 **`daily_schedule` のデータ例**:
 ```json
@@ -1108,6 +1122,9 @@ CREATE TABLE IF NOT EXISTS h_attendance (
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
+  -- ソフトデリート（登所取り消し時に使用）
+  deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+
   -- JST日付（チェックイン日、自動生成）
   checked_in_date DATE GENERATED ALWAYS AS (
     (checked_in_at AT TIME ZONE 'Asia/Tokyo')::date
@@ -1119,6 +1136,7 @@ CREATE INDEX idx_h_attendance_child_id ON h_attendance(child_id);
 CREATE INDEX idx_h_attendance_facility_id ON h_attendance(facility_id);
 CREATE INDEX idx_h_attendance_checked_in_at ON h_attendance(checked_in_at);
 CREATE INDEX idx_h_attendance_facility_date ON h_attendance(facility_id, DATE(checked_in_at));
+CREATE INDEX idx_h_attendance_deleted_at ON h_attendance(deleted_at) WHERE deleted_at IS NULL;
 
 -- ユニーク制約（同一児童・施設・日付でチェックインは1件のみ）
 ALTER TABLE h_attendance
@@ -1460,7 +1478,22 @@ CREATE POLICY facility_access ON r_activity
 
 ---
 
-## 14. パフォーマンス考慮事項
+## 14. Storageバケット
+
+Supabase Storage のプライベートバケット。全てのアクセスはJWT `app_metadata` を使った施設スコープのRLSで制限する。パスプレフィックスに `{facility_id}` を使い施設間のアクセスを分離している。写真はパスのみDBに保存し、表示時は署名URLを生成する。
+
+| バケット | 用途 | パス構造 | サイズ上限 | 許可MIME |
+|---|---|---|---|---|
+| `private-child-photos` | 子どもの顔写真 | `{facility_id}/children/{child_id}.{ext}` | 5MB | jpeg / png / webp |
+| `guardian-photos` | 保護者の顔写真 | `{facility_id}/{uuid}.{ext}` | 5MB | jpeg / png / webp |
+
+**RLSポリシー（両バケット共通）**: 認証済みユーザーの `current_facility_id` が path のプレフィックスと一致する場合のみ SELECT / INSERT / UPDATE / DELETE を許可。`guardian-photos` はさらに `role` が `staff` 以上であることを要求。
+
+**マイグレーション**: `029_create_child_photos_bucket.sql`, `031_create_guardian_photos_bucket.sql`
+
+---
+
+## 15. パフォーマンス考慮事項
 
 ### 14.1 想定データ量（5年後）
 
@@ -1658,6 +1691,36 @@ CREATE POLICY facility_access ON r_activity
 
 ---
 
+### Storageバケット・写真機能追加（2026年3月）
+
+#### `private-child-photos` バケット追加（migration 029）
+- 子どもの顔写真を管理するプライベートバケットを作成
+- パス構造: `{facility_id}/children/{child_id}.{ext}`
+- RLS: JWT `current_facility_id` でスコーピング
+
+#### `guardian-photos` バケット追加（migration 031）
+- 保護者の顔写真を管理するプライベートバケットを作成
+- パス構造: `{facility_id}/{uuid}.{ext}`
+- RLS: JWT `current_facility_id` + `role` (staff以上) でスコーピング
+
+#### `m_guardians` テーブルの変更（migration 030）
+- **追加**: `photo_path TEXT` — 保護者顔写真のストレージパス（guardian-photosバケット内のパス）
+
+### `r_activity` Partial Unique Index追加（migration 022）
+- **追加**: `idx_r_activity_unique_facility_class_date` — 同一施設×クラス×日付での重複防止（class_id IS NOT NULL）
+- **追加**: `idx_r_activity_unique_facility_null_class_date` — クラスなし施設での重複防止（class_id IS NULL）
+
+### `m_role_presets` 制約・関数追加（migration 026, 028）
+- **追加**: `idx_role_presets_facility_role` — `(facility_id, role_name)` UNIQUE インデックス
+- **追加**: `chk_m_role_presets_role_name_not_blank` — role_name の空白禁止 CHECK 制約
+- **追加**: `insert_role_preset()` 関数 — sort_order の atomic 採番と重複時の既存レコード返却
+
+### `s_activity_templates` RLS変更（migration 025）
+- **変更**: UPDATE権限を facility_admin 以上から staff 以上に拡張（通常編集）
+- 論理削除（deleted_at 更新）はAPI層で制御し facility_admin 以上のみ実行
+
+---
+
 **作成日**: 2025年1月
-**最終更新**: 2026年1月24日
+**最終更新**: 2026年3月27日
 **管理者**: プロジェクトリーダー

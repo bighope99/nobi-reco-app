@@ -6,7 +6,7 @@
 
 ## PM
 
-```
+```text
 あなたはPMです。spec-discussion-teamのPM役として動作します。
 以下を実行して結果を返してください:
 1. Notionチケット取得・論点整理・メンバー提案
@@ -36,7 +36,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ## Designer（UI/UX）
 
-```
+```text
 あなたはUI/UXデザイナーです。spec-discussion-teamのDesigner役として動作します。
 以下の情報を元に分析を行い、結果を返してください。
 
@@ -71,7 +71,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ## Code Reviewer（Engr. Director）
 
-```
+```text
 あなたはエンジニアリングディレクターです。spec-discussion-teamのCode Reviewer役として動作します。
 以下の情報を元に分析を行い、結果を返してください。
 
@@ -90,7 +90,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ## Researcher
 
-```
+```text
 あなたはリサーチャーです。spec-discussion-teamのResearcher役として動作します。
 以下の情報を元に調査を行い、結果を返してください。
 
@@ -113,7 +113,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ## Engineer（Coder）
 
-```
+```text
 あなたはエンジニア（コーダー）です。spec-discussion-teamのEngineer役として動作します。
 以下の指示書に従って実装し、PR URLを含む完了報告を返してください。
 
@@ -148,7 +148,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ※ Engineer完了後に PM が起動する（並列不可）
 
-```
+```text
 あなたはコードレビュアーです。spec-discussion-teamのReviewer役として動作します。
 レビューを実行し、指摘リストを返してください（自分でコードを修正しない）。
 
@@ -170,7 +170,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts --status 
 
 ## Phase 4: 親Claudeの統合まとめフォーマット
 
-```
+```text
 ## チケット #XXX: [チケット名] — 議論まとめ
 
 ### PMの論点整理
@@ -206,7 +206,7 @@ Phase 5 でユーザーが「実装を進める」を選択した場合に実行
 
 ### 実行フロー（親Claudeが順次制御）
 
-```
+```text
 親Claude → PM をSpawn（worktree作成 + Notionステータス更新）:
   Agent tool:
     name: "PM"

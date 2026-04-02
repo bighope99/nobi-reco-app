@@ -2,7 +2,7 @@
  * 保育日誌フィールドのバリデーションユーティリティ
  */
 
-import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
+import type { ActivityPhoto, DailyScheduleItem, RoleAssignment, Meal, TodoItem } from '@/types/activity';
 
 // 定数
 export const MAX_EVENT_NAME_LENGTH = 200;
@@ -328,6 +328,48 @@ export const validateHandover = (
 };
 
 /**
+ * todo_items の検証
+ */
+export const validateTodoItems = (
+  todoItems: unknown
+): { valid: true; data: TodoItem[] | null } | { valid: false; error: string } => {
+  if (todoItems === null || todoItems === undefined) {
+    return { valid: true, data: null };
+  }
+  if (!Array.isArray(todoItems)) {
+    return { valid: false, error: 'ToDoリストは配列である必要があります' };
+  }
+  if (todoItems.length > 20) {
+    return { valid: false, error: 'ToDoリストは20件以内にしてください' };
+  }
+  const validated: TodoItem[] = [];
+  for (const item of todoItems) {
+    if (typeof item !== 'object' || item === null) {
+      return { valid: false, error: 'ToDoアイテムの形式が不正です' };
+    }
+    const { id, content, completed } = item as Record<string, unknown>;
+    if (typeof id !== 'string' || !id) {
+      return { valid: false, error: 'ToDoアイテムのIDが不正です' };
+    }
+    if (typeof content !== 'string') {
+      return { valid: false, error: 'ToDoアイテムの内容が不正です' };
+    }
+    const trimmedContent = content.trim();
+    if (trimmedContent.length === 0) {
+      return { valid: false, error: 'ToDoアイテムの内容は空にできません' };
+    }
+    if (trimmedContent.length > 200) {
+      return { valid: false, error: 'ToDoアイテムは200文字以内にしてください' };
+    }
+    if (typeof completed !== 'boolean') {
+      return { valid: false, error: 'ToDoアイテムのcompletedフラグが不正です' };
+    }
+    validated.push({ id, content: trimmedContent, completed });
+  }
+  return { valid: true, data: validated.length > 0 ? validated : null };
+};
+
+/**
  * 保育日誌フォーム送信時のバリデーション
  *
  * - 記録者は必須
@@ -392,6 +434,7 @@ export const validateActivityExtendedFields = (body: {
   snack?: unknown;
   meal?: unknown;
   handover?: unknown;
+  todo_items?: unknown;
 }): {
   valid: true;
   data: {
@@ -402,6 +445,7 @@ export const validateActivityExtendedFields = (body: {
     snack: string | null;
     meal: Meal | null;
     handover: string | null;
+    todo_items: TodoItem[] | null;
   };
 } | { valid: false; error: string } => {
   const eventNameResult = validateEventName(body.event_name);
@@ -425,6 +469,9 @@ export const validateActivityExtendedFields = (body: {
   const handoverResult = validateHandover(body.handover);
   if (!handoverResult.valid) return handoverResult;
 
+  const todoItemsResult = validateTodoItems(body.todo_items);
+  if (!todoItemsResult.valid) return todoItemsResult;
+
   return {
     valid: true,
     data: {
@@ -435,6 +482,7 @@ export const validateActivityExtendedFields = (body: {
       snack: snackResult.data,
       meal: mealResult.data,
       handover: handoverResult.data,
+      todo_items: todoItemsResult.data,
     },
   };
 };

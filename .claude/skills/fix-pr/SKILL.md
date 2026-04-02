@@ -26,17 +26,20 @@ gh pr view <PR番号> --json headRefName -q .headRefName
 ```bash
 git fetch origin <branch>
 git worktree add /tmp/fix-pr-<branch-name> <branch>
+cd /tmp/fix-pr-<branch-name>
 ```
 
 - worktree-path は `/tmp/fix-pr-<branch-name>` 形式
+- `cd <worktree-path>` を実行してカレントディレクトリをワークツリーに移動する
 - 以降の作業はすべてこのワークツリー内で行う
+- **サブエージェントへの指示には必ずワークツリーの絶対パス（`/tmp/fix-pr-<branch-name>`）を明示すること**
 
 ---
 
 ## Step 3: 修正作業
 
 - ワークツリー内で修正を実施
-- サブエージェント（code-modifier 等）に委譲
+- サブエージェント（`frontend-implementer`, `backend-implementer` 等）に委譲する際は、プロンプトに **「作業ディレクトリは `/tmp/fix-pr-<branch-name>` です。ファイルの読み書き・検索はすべてそのパス配下で行うこと」** と明示する
 
 ---
 

@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     .eq('facility_id', facilityId)
     .gte('checked_in_at', startOfDayUTC)
     .lte('checked_in_at', endOfDayUTC)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (existingError) {
@@ -57,6 +58,36 @@ export async function POST(req: NextRequest) {
   }
 
   if (!existing) {
+    // ソフトデリート済みレコードがあれば UPDATE で復活（再チェックイン対応）
+    const { data: softDeleted } = await supabase
+      .from('h_attendance')
+      .select('id')
+      .eq('child_id', child_id)
+      .eq('facility_id', facilityId)
+      .gte('checked_in_at', startOfDayUTC)
+      .lte('checked_in_at', endOfDayUTC)
+      .not('deleted_at', 'is', null)
+      .maybeSingle()
+
+    if (softDeleted) {
+      const { error: updateError } = await supabase
+        .from('h_attendance')
+        .update({
+          checked_in_at: now,
+          check_in_method: 'self',
+          checked_in_by: userId,
+          checked_out_at: null,
+          check_out_method: null,
+          checked_out_by: null,
+          deleted_at: null,
+        })
+        .eq('id', softDeleted.id)
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+      return NextResponse.json({ action: 'check_in', time: now, attendance_id: softDeleted.id })
+    }
+
     // 1回目: チェックイン
     const { data: insertData, error } = await supabase
       .from('h_attendance')
@@ -79,6 +110,7 @@ export async function POST(req: NextRequest) {
           .eq('facility_id', facilityId)
           .gte('checked_in_at', startOfDayUTC)
           .lte('checked_in_at', endOfDayUTC)
+          .is('deleted_at', null)
           .maybeSingle()
         if (existing2) {
           return NextResponse.json({ action: 'check_in', time: existing2.checked_in_at, attendance_id: existing2.id })
@@ -127,6 +159,7 @@ export async function DELETE(req: NextRequest) {
     .select('id, checked_out_at')
     .eq('id', attendance_id)
     .eq('facility_id', facilityId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (recordError) {
@@ -145,10 +178,10 @@ export async function DELETE(req: NextRequest) {
   }
 
   if (record.checked_out_at === null) {
-    // チェックインのundo → レコードを削除
+    // チェックインのundo → ソフトデリート（RLS DELETE ポリシーなしのため物理削除不可）
     const { error } = await supabase
       .from('h_attendance')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', attendance_id)
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

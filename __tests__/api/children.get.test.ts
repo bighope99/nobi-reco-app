@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/children/route';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 jest.mock('@/utils/pii/searchIndex', () => ({
@@ -37,27 +37,23 @@ const buildRequest = (queryParams?: Record<string, string>) => {
 
 describe('GET /api/children', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-  const mockedGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+  const mockedGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+      user_id: 'user-1',
+      role: 'facility_admin',
+      company_id: 'company-1',
+      current_facility_id: 'facility-1',
+    });
   });
 
   describe('Authentication', () => {
     it('should return 401 when user is not authenticated', async () => {
-      const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: null },
-            error: { message: 'No session' },
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: null,
-            error: { message: 'No session' },
-          }),
-        },
-      };
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
+      const mockSupabase = {};
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = buildRequest();
@@ -69,19 +65,9 @@ describe('GET /api/children', () => {
     });
 
     it('should return 401 when session is null', async () => {
-      const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: null },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: null,
-            error: null,
-          }),
-        },
-      };
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
+      const mockSupabase = {};
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = buildRequest();
@@ -96,6 +82,13 @@ describe('GET /api/children', () => {
   describe('Facility Validation', () => {
     it('should return 404 when company_admin has no facilities in company', async () => {
       // company_adminで自社施設が存在しない場合は404
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-1',
+        role: 'company_admin',
+        company_id: 'company-1',
+        current_facility_id: null,
+      });
+
       const facilitiesQuery: any = {
         select: jest.fn(() => facilitiesQuery),
         eq: jest.fn(() => facilitiesQuery),
@@ -103,29 +96,6 @@ describe('GET /api/children', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'company_admin',
-                  company_id: 'company-1',
-                  current_facility_id: null,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn((table: string) => {
           if (table === 'm_facilities') return facilitiesQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -144,32 +114,9 @@ describe('GET /api/children', () => {
 
     it('should return 401 when staff has no current_facility_id (JWT returns null)', async () => {
       // staffでcurrent_facility_idがない場合、JWTメタデータがnullになり401になる
-      const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: null,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
-      };
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
+      const mockSupabase = {};
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = buildRequest();
@@ -181,23 +128,9 @@ describe('GET /api/children', () => {
     });
 
     it('should return 401 when getClaims returns error', async () => {
-      const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: null,
-            error: { message: 'JWT error' },
-          }),
-        },
-      };
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
+      const mockSupabase = {};
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = buildRequest();
@@ -293,44 +226,13 @@ describe('GET /api/children', () => {
         }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
 
       let callCount = 0;
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table} (call ${callCount})`);
@@ -338,23 +240,6 @@ describe('GET /api/children', () => {
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest();
       const response = await GET(request);
@@ -385,50 +270,10 @@ describe('GET /api/children', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn(() => childrenQuery),
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest();
       const response = await GET(request);
@@ -513,44 +358,12 @@ describe('GET /api/children', () => {
         }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
-
       let callCount = 0;
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -558,23 +371,6 @@ describe('GET /api/children', () => {
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest();
       const response = await GET(request);
@@ -604,50 +400,10 @@ describe('GET /api/children', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn(() => childrenQuery),
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest({ status: 'enrolled' });
       await GET(request);
@@ -670,50 +426,10 @@ describe('GET /api/children', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn(() => childrenQuery),
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest({ limit: '200' });
       await GET(request);
@@ -736,50 +452,10 @@ describe('GET /api/children', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn(() => childrenQuery),
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest();
       await GET(request);
@@ -804,50 +480,10 @@ describe('GET /api/children', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn(() => childrenQuery),
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest();
       const response = await GET(request);
@@ -858,13 +494,9 @@ describe('GET /api/children', () => {
     });
 
     it('should return 500 when unexpected error occurs', async () => {
-      const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockRejectedValue(new Error('Unexpected error')),
-          getClaims: jest.fn().mockRejectedValue(new Error('Unexpected error')),
-        },
-      };
+      mockedGetAuthenticatedUserMetadata.mockRejectedValue(new Error('Unexpected error'));
 
+      const mockSupabase = {};
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
       const request = buildRequest();
@@ -960,44 +592,13 @@ describe('GET /api/children', () => {
         }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
 
       let callCount = 0;
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: {
-              session: {
-                user: { id: 'user-1' },
-              },
-            },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'facility_admin',
-                  company_id: 'company-1',
-                  current_facility_id: 'facility-1',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn((table: string) => {
           callCount++;
           if (table === 'm_children' && callCount === 1) return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
-          if (table === 'm_children' && callCount === 3) return summaryQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -1005,23 +606,6 @@ describe('GET /api/children', () => {
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
-      mockedGetUserSession.mockResolvedValue({
-        user_id: 'user-1',
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'facility_admin',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        facilities: [
-          {
-            facility_id: 'facility-1',
-            facility_name: 'Test Facility',
-            is_primary: true,
-          },
-        ],
-        current_facility_id: 'facility-1',
-        classes: [],
-      });
 
       const request = buildRequest({ status: 'enrolled', sort_by: 'name', sort_order: 'asc', limit: '200' });
       const response = await GET(request);
@@ -1093,35 +677,11 @@ describe('GET /api/children', () => {
         in: jest.fn().mockResolvedValue({ data: [], error: null }),
       };
 
-      const siblingsQuery: any = {
-        select: jest.fn(() => siblingsQuery),
-        in: jest.fn().mockResolvedValue({ data: [], error: null }),
-      };
 
       return {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'user-1' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'company_admin',
-                  company_id: 'company-1',
-                  current_facility_id: null,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn((table: string) => {
           if (table === 'm_facilities') return facilityScopeQuery;
           if (table === 'm_children') return childrenQuery;
-          if (table === '_child_sibling') return siblingsQuery;
           if (table === 'm_classes') return classesQuery;
           if (table === '_child_class') return classChildrenQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -1130,6 +690,13 @@ describe('GET /api/children', () => {
     };
 
     it('should accept facility_id query param and return children for company_admin', async () => {
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-1',
+        role: 'company_admin',
+        company_id: 'company-1',
+        current_facility_id: null,
+      });
+
       const mockSupabase = buildCompanyAdminSupabase([]);
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
@@ -1143,6 +710,13 @@ describe('GET /api/children', () => {
 
     it('should return 404 when company_admin provides no facility_id and company has no facilities', async () => {
       // 自社に施設がない場合（全施設クエリで空配列）→ 404
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-1',
+        role: 'company_admin',
+        company_id: 'company-1',
+        current_facility_id: null,
+      });
+
       const emptyFacilitiesQuery: any = {
         select: jest.fn(() => emptyFacilitiesQuery),
         eq: jest.fn(() => emptyFacilitiesQuery),
@@ -1150,25 +724,6 @@ describe('GET /api/children', () => {
       };
 
       const supabaseWithNoClaims = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'user-1' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'user-1',
-                app_metadata: {
-                  role: 'company_admin',
-                  company_id: 'company-1',
-                  current_facility_id: null,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn((table: string) => {
           if (table === 'm_facilities') return emptyFacilitiesQuery;
           throw new Error(`Unexpected table: ${table}`);

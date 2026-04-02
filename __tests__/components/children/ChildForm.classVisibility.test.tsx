@@ -1,6 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import ChildForm from '@/components/children/ChildForm';
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 describe('ChildForm class selection visibility', () => {
   afterEach(() => {
     jest.restoreAllMocks();

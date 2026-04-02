@@ -131,6 +131,16 @@ export const getLastDayOfMonthJST = (year: number, month: number): string => {
 };
 
 /**
+ * Get current JST date as a Date object.
+ * Useful for date pickers where maxDate/minDate need to be JST-aware.
+ */
+export const getJSTTodayAsDate = (): Date => {
+  const jstDateStr = getCurrentDateJST(); // "YYYY-MM-DD"
+  const [year, month, day] = jstDateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/**
  * Extract date part from ISO string (for already UTC timestamps)
  * Use this when you have a UTC ISO string and want the UTC date portion
  */

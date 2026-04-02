@@ -12,21 +12,22 @@
  * - This ensures staff-initiated check-ins are not flagged as unexpected
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { POST } from '../attendance/route';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
+  hasPermission: jest.requireActual('@/lib/auth/jwt').hasPermission,
 }));
 
 const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockedGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+const mockedGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
 const buildRequest = (body: Record<string, unknown>) =>
   new NextRequest('http://localhost/api/dashboard/attendance', {
@@ -49,17 +50,12 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
-    // Mock user session
-    mockedGetUserSession.mockResolvedValue({
+    // Mock JWT metadata
+    mockedGetAuthenticatedUserMetadata.mockResolvedValue({
       user_id: userId,
-      email: 'staff@example.com',
-      name: 'Staff User',
       role: 'staff',
       company_id: 'company-1',
-      company_name: 'Test Company',
       current_facility_id: facilityId,
-      facilities: [],
-      classes: [],
     });
   });
 
@@ -111,25 +107,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
@@ -201,25 +178,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
@@ -294,25 +252,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
@@ -381,25 +320,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
       };
 
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') return childrenMock;
           if (table === 'r_daily_attendance') return dailyAttendanceMock;
@@ -432,25 +352,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
     it('should return 409 if already checked in', async () => {
       // Arrange: Existing attendance record
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') {
             return {
@@ -513,25 +414,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
     it('should return 400 if child_id is missing', async () => {
       // Arrange
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn(),
       };
 
@@ -553,18 +435,10 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
     });
 
     it('should return 401 if not authenticated', async () => {
-      // Arrange
+      // Arrange: getAuthenticatedUserMetadata returns null
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
+
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: null },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: null,
-            error: { message: 'No session' },
-          }),
-        },
         from: jest.fn(),
       };
 
@@ -588,25 +462,6 @@ describe('POST /api/dashboard/attendance - Manual Check-In Status', () => {
     it('should return 403 if child_id does not belong to facility', async () => {
       // Arrange: Child not found in facility
       const mockSupabase = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: userId } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: userId,
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'company-1',
-                  current_facility_id: facilityId,
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         from: jest.fn().mockImplementation((table: string) => {
           if (table === 'm_children') {
             return {

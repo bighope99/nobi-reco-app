@@ -11,6 +11,7 @@ import {
 } from '@/lib/qr/card-generator'
 import { decryptOrFallback } from '@/utils/crypto/decryption-helper'
 import { calculateGrade } from '@/utils/grade'
+import { getCurrentDateJST } from '@/lib/utils/timezone'
 
 interface BatchRequestBody {
   child_ids?: string[]
@@ -78,8 +79,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Children not found' }, { status: 404 })
     }
 
-    const generatedAt = new Date()
-
     // チャンク処理でメモリ使用量を抑制
     const entries: { filename: string; content: Buffer }[] = []
     for (let i = 0; i < childrenData.length; i += CONCURRENT_LIMIT) {
@@ -113,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     const zipBuffer = createZip(entries)
-    const dateSegment = generatedAt.toISOString().slice(0, 10).replace(/-/g, '')
+    const dateSegment = getCurrentDateJST().replace(/-/g, '')
     // ZIPファイル名: 施設名と日付
     const zipName = `${formatFileSegment(facilityData.name)}_QRコード_${dateSegment}.zip`
     const contentDisposition = createContentDisposition(zipName)

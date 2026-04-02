@@ -27,7 +27,7 @@ description: |
 
 ## 全体フロー
 
-```
+```text
 Phase 0: ユーザー特定
   AskUserQuestion で担当者名を番号選択 → ASSIGNEE_NAME を確定
 
@@ -102,7 +102,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/query-tickets.ts \
 - スコアが同じ場合はチケット数が多いグループを優先
 
 出力フォーマット（ユーザーに提示する）:
-```
+```text
 ## グループ1: fix/records-status-improvements  ← 処理順: 1番目
 パス: /records/status
 | チケットID | 名前 | トラッカー | 優先度 |
@@ -221,7 +221,7 @@ npx tsx .claude/skills/notion-ticket-workflow/scripts/update-ticket-status.ts \
 
 処理完了後、ユーザーに最終報告:
 
-```
+```text
 ## 処理完了
 
 ### グループ1: fix/records-status-improvements

@@ -22,8 +22,15 @@ import {
   ShieldAlert,
   ChevronRight,
   Loader2,
+  Undo2,
 } from 'lucide-react';
 import type { Child, PriorityData, RecordSupport, SortKey, SortOrder } from './types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   KpiSkeleton,
   AlertSkeleton,
@@ -53,6 +60,8 @@ export default function DashboardClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState<string>('');
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+  const [checkedInDialogOpen, setCheckedInDialogOpen] = useState(false);
+  const [checkedInSortBy, setCheckedInSortBy] = useState<'grade' | 'time'>('grade');
 
   // 二次データ取得済みフラグ（無限ループ防止）
   const hasFetchedSecondaryData = useRef(false);
@@ -203,6 +212,10 @@ export default function DashboardClient() {
                     return { ...child, is_scheduled_today: true };
                   case 'confirm_unexpected':
                     return { ...child, is_scheduled_today: true, alert_type: null };
+                  case 'cancel_check_out':
+                    return { ...child, status: 'checked_in' as const, actual_out_time: null };
+                  case 'cancel_check_in':
+                    return { ...child, status: 'absent' as const, actual_in_time: null, actual_out_time: null };
                   default:
                     return child;
                 }
@@ -231,6 +244,10 @@ export default function DashboardClient() {
                 return { ...child, is_scheduled_today: true };
               case 'confirm_unexpected':
                 return { ...child, is_scheduled_today: true };
+              case 'cancel_check_out':
+                return { ...child, status: 'checked_in' as const, actual_out_time: null };
+              case 'cancel_check_in':
+                return { ...child, status: 'absent' as const, actual_in_time: null, actual_out_time: null };
               default:
                 return child;
             }
@@ -293,6 +310,14 @@ export default function DashboardClient() {
 
   const handleConfirmUnexpected = async (childId: string) => {
     await postAttendanceAction('confirm_unexpected', childId);
+  };
+
+  const handleCancelCheckIn = async (childId: string) => {
+    await postAttendanceAction('cancel_check_in', childId);
+  };
+
+  const handleCancelCheckOut = async (childId: string) => {
+    await postAttendanceAction('cancel_check_out', childId);
   };
 
   // --- Utility Functions ---
@@ -376,6 +401,31 @@ export default function DashboardClient() {
 
     return sortChildren(result);
   }, [otherChildren, filterClass, showUnscheduled, sortChildren]);
+
+  // Checked-in children for dialog
+  const checkedInChildren = useMemo(() => {
+    const allChildren = [
+      ...(priorityData?.action_required || []),
+      ...otherChildren,
+    ];
+    const filtered = allChildren.filter((child) => child.status === 'checked_in');
+
+    if (checkedInSortBy === 'time') {
+      return filtered.sort((a, b) => {
+        const timeA = a.actual_in_time || '99:99';
+        const timeB = b.actual_in_time || '99:99';
+        return timeA.localeCompare(timeB);
+      });
+    }
+
+    // Default: grade descending
+    return filtered.sort((a, b) => {
+      const gradeA = a.grade ?? -1;
+      const gradeB = b.grade ?? -1;
+      if (gradeA !== gradeB) return gradeB - gradeA;
+      return a.kana.localeCompare(b.kana, 'ja');
+    });
+  }, [priorityData?.action_required, otherChildren, checkedInSortBy]);
 
   // --- UI Components ---
   const StatusBadge = ({ child }: { child: Child }) => {
@@ -477,12 +527,33 @@ export default function DashboardClient() {
 
     if (child.status === 'checked_in') {
       return (
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={() => handleCheckOut(child.child_id)}
+            className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+            disabled={isPending}
+          >
+            帰宅
+          </button>
+          <button
+            onClick={() => handleCancelCheckIn(child.child_id)}
+            className="flex items-center gap-0.5 text-xs text-red-300 hover:text-red-500 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+            disabled={isPending}
+          >
+            <Undo2 size={12} /> 登所取消
+          </button>
+        </div>
+      );
+    }
+
+    if (child.status === 'checked_out') {
+      return (
         <button
-          onClick={() => handleCheckOut(child.child_id)}
-          className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+          onClick={() => handleCancelCheckOut(child.child_id)}
+          className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
           disabled={isPending}
         >
-          帰宅
+          <Undo2 size={12} /> 帰宅取消
         </button>
       );
     }
@@ -615,11 +686,7 @@ export default function DashboardClient() {
       )}
 
       <div className="min-h-screen text-slate-900 font-sans">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-[1600px] mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-[1600px] mx-auto">
           {/* Header */}
           <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6 border-b border-gray-200 pb-4 sm:pb-6">
             <div>
@@ -660,7 +727,13 @@ export default function DashboardClient() {
                       <span className="text-xs text-slate-400">名</span>
                     </div>
                   </div>
-                  <div className="bg-white rounded-lg p-4 border border-emerald-100 shadow-sm relative overflow-hidden">
+                  <div
+                    className="bg-white rounded-lg p-4 border border-emerald-100 shadow-sm relative overflow-hidden cursor-pointer hover:border-emerald-300 transition-colors"
+                    onClick={() => setCheckedInDialogOpen(true)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCheckedInDialogOpen(true); } }}
+                  >
                     <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full -mr-4 -mt-4"></div>
                     <h3 className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1 relative z-10">
                       現在の在所人数
@@ -681,6 +754,70 @@ export default function DashboardClient() {
                   </div>
                 </div>
               ) : null}
+
+              {/* Checked-in Children Dialog */}
+              <Dialog open={checkedInDialogOpen} onOpenChange={setCheckedInDialogOpen}>
+                <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      現在の在所児童
+                      <span className="text-sm font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        {checkedInChildren.length}名
+                      </span>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                        checkedInSortBy === 'grade'
+                          ? 'bg-emerald-100 text-emerald-700 font-medium'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      onClick={() => setCheckedInSortBy('grade')}
+                    >
+                      学年順
+                    </button>
+                    <button
+                      className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                        checkedInSortBy === 'time'
+                          ? 'bg-emerald-100 text-emerald-700 font-medium'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      onClick={() => setCheckedInSortBy('time')}
+                    >
+                      登所時間順
+                    </button>
+                  </div>
+                  <div className="mt-2">
+                    {otherChildrenLoading && checkedInChildren.length === 0 ? (
+                      <div className="flex items-center justify-center py-8 text-slate-400 gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <p>児童データを読み込み中...</p>
+                      </div>
+                    ) : checkedInChildren.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400">
+                        <p>現在、在所している児童はいません</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100 bg-white rounded-lg border">
+                        {checkedInChildren.map((child) => (
+                          <div key={child.child_id} className="px-3 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium text-slate-700 truncate">{child.name}</span>
+                              <span className="text-xs text-slate-400 shrink-0">{child.grade_label}</span>
+                            </div>
+                            {child.actual_in_time && (
+                              <span className="text-xs text-emerald-600 shrink-0 ml-2">
+                                {child.actual_in_time} 登所
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Alert Section */}
               {priorityLoading ? (

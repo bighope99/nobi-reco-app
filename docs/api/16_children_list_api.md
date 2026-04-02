@@ -657,3 +657,4 @@ LIMIT $10 OFFSET $11;  -- limit, offset
 **関連ドキュメント**:
 - `03_database.md` - データベース設計
 - `04_api.md` - API基本設計
+- `27_guardian_info_api.md` - 保護者情報API仕様書（保護者管理の集約リファレンス）

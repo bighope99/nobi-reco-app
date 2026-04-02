@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Loader2, AlertCircle, ArrowLeft, Pencil, Building2, Users, MapPin, Plus, Mail, UserPlus, Trash2 } from "lucide-react"
 
 interface Facility {
@@ -25,6 +26,7 @@ interface AccountFacility {
   facility_id: string
   facility_name: string
   is_primary: boolean
+  is_current: boolean
 }
 
 interface Account {
@@ -33,6 +35,7 @@ interface Account {
   email: string | null
   role: string
   is_active: boolean
+  hire_date: string | null
   email_confirmed: boolean
   facilities: AccountFacility[]
 }
@@ -74,9 +77,19 @@ export default function CompanyDetailPage(props: {
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // 管理者追加モーダル
+  // アカウントソート
+  const [accountSortField, setAccountSortField] = useState<'role' | 'status' | 'facility'>('role')
+  const [accountSortDirection, setAccountSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // アカウント編集モーダル
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+  const [editAccountForm, setEditAccountForm] = useState({ name: '', role: '', is_active: true })
+  const [isEditingAccount, setIsEditingAccount] = useState(false)
+  const [editAccountError, setEditAccountError] = useState<string | null>(null)
+
+  // アカウント追加モーダル
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
-  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "" })
+  const [addAdminForm, setAddAdminForm] = useState({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
   const [isAddingAdmin, setIsAddingAdmin] = useState(false)
   const [addAdminError, setAddAdminError] = useState<string | null>(null)
 
@@ -178,24 +191,114 @@ export default function CompanyDetailPage(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           company_id: companyId,
+          role: addAdminForm.role,
+          facility_id: addAdminForm.facility_id || undefined,
           admin_user: {
             name: addAdminForm.name,
             name_kana: addAdminForm.name_kana || undefined,
-            email: addAdminForm.email,
+            email: addAdminForm.email || undefined,
+            phone: addAdminForm.phone || undefined,
+            hire_date: addAdminForm.hire_year && addAdminForm.hire_month && addAdminForm.hire_day
+              ? `${addAdminForm.hire_year}-${addAdminForm.hire_month.padStart(2, '0')}-${addAdminForm.hire_day.padStart(2, '0')}`
+              : undefined,
           },
         }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "管理者の追加に失敗しました")
+        throw new Error(data.error || "アカウントの追加に失敗しました")
       }
       setShowAddAdminModal(false)
-      setAddAdminForm({ name: "", name_kana: "", email: "" })
+      setAddAdminForm({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
       await fetchCompanyDetail()
     } catch (err) {
-      setAddAdminError(err instanceof Error ? err.message : "管理者の追加に失敗しました")
+      setAddAdminError(err instanceof Error ? err.message : "アカウントの追加に失敗しました")
     } finally {
       setIsAddingAdmin(false)
+    }
+  }
+
+  const needsFacility = addAdminForm.role === "facility_admin" || addAdminForm.role === "staff"
+  const needsEmail = addAdminForm.role !== "staff"
+
+  const getRoleOrder = (role: string) => {
+    if (role === 'company_admin') return 0
+    if (role === 'facility_admin') return 1
+    return 2 // staff
+  }
+
+  const sortByRoleThenHire = (a: Account, b: Account) => {
+    const roleDiff = getRoleOrder(a.role) - getRoleOrder(b.role)
+    if (roleDiff !== 0) return roleDiff
+    return (a.hire_date ?? '9999').localeCompare(b.hire_date ?? '9999')
+  }
+
+  const sortedAccounts = [...accounts].sort((a, b) => {
+    if (accountSortField === 'role') {
+      const result = sortByRoleThenHire(a, b)
+      return accountSortDirection === 'asc' ? result : -result
+    }
+    if (accountSortField === 'facility') {
+      const aFacility = a.facilities.find(f => f.is_current)?.facility_name ?? ''
+      const bFacility = b.facilities.find(f => f.is_current)?.facility_name ?? ''
+      const facilityDiff = accountSortDirection === 'asc'
+        ? aFacility.localeCompare(bFacility, 'ja')
+        : bFacility.localeCompare(aFacility, 'ja')
+      if (facilityDiff !== 0) return facilityDiff
+      return sortByRoleThenHire(a, b)
+    }
+    if (accountSortField === 'status') {
+      const getStatusOrder = (acc: Account) => {
+        if (!acc.email) return 3
+        if (!acc.email_confirmed) return 2
+        return acc.is_active ? 0 : 1
+      }
+      const statusDiff = getStatusOrder(a) - getStatusOrder(b)
+      if (statusDiff !== 0) return accountSortDirection === 'asc' ? statusDiff : -statusDiff
+      return sortByRoleThenHire(a, b)
+    }
+    return 0
+  })
+
+  const toggleAccountSort = (field: 'role' | 'status' | 'facility') => {
+    if (accountSortField === field) {
+      setAccountSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setAccountSortField(field)
+      setAccountSortDirection('asc')
+    }
+  }
+
+  const handleEditAccountStart = (account: Account) => {
+    setEditingAccount(account)
+    setEditAccountForm({ name: account.name, role: account.role, is_active: account.is_active })
+    setEditAccountError(null)
+  }
+
+  const handleSaveAccount = async () => {
+    if (!editingAccount) return
+    setIsEditingAccount(true)
+    setEditAccountError(null)
+    try {
+      const response = await fetch(`/api/users/${editingAccount.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editAccountForm.name,
+          role: editAccountForm.role,
+          is_active: editAccountForm.is_active,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '更新に失敗しました')
+      }
+      setEditingAccount(null)
+      await fetchCompanyDetail()
+    } catch (err) {
+      setEditAccountError(err instanceof Error ? err.message : '更新に失敗しました')
+    } finally {
+      setIsEditingAccount(false)
     }
   }
 
@@ -263,14 +366,14 @@ export default function CompanyDetailPage(props: {
         </div>
 
         {/* Company Information Card */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden py-0">
           <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-lg">会社情報</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="py-6">
             <dl className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <dt className="text-sm font-semibold text-muted-foreground mb-1">会社名</dt>
@@ -305,7 +408,7 @@ export default function CompanyDetailPage(props: {
         </Card>
 
         {/* Accounts List Card */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden py-0">
           <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-muted-foreground" />
@@ -317,7 +420,7 @@ export default function CompanyDetailPage(props: {
                 onClick={() => setShowAddAdminModal(true)}
               >
                 <UserPlus className="h-4 w-4" />
-                管理者を追加
+                アカウントを追加
               </Button>
               <Badge variant="outline">
                 {accounts.length}件
@@ -345,14 +448,47 @@ export default function CompanyDetailPage(props: {
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         メールアドレス
                       </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        権限
+                      <th
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                        aria-sort={accountSortField === 'role' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        <button
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          onClick={() => toggleAccountSort('role')}
+                        >
+                          権限
+                          <span aria-hidden="true">
+                            {accountSortField === 'role' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </button>
                       </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        所属施設
+                      <th
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                        aria-sort={accountSortField === 'facility' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        <button
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          onClick={() => toggleAccountSort('facility')}
+                        >
+                          所属施設
+                          <span aria-hidden="true">
+                            {accountSortField === 'facility' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </button>
                       </th>
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        ステータス
+                      <th
+                        className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                        aria-sort={accountSortField === 'status' ? (accountSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        <button
+                          className="flex items-center gap-1 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          onClick={() => toggleAccountSort('status')}
+                        >
+                          ステータス
+                          <span aria-hidden="true">
+                            {accountSortField === 'status' ? (accountSortDirection === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                          </span>
+                        </button>
                       </th>
                       <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         操作
@@ -360,8 +496,12 @@ export default function CompanyDetailPage(props: {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {accounts.map((account) => (
-                      <tr key={account.id} className="hover:bg-gray-50/50 transition-colors">
+                    {sortedAccounts.map((account) => (
+                      <tr
+                        key={account.id}
+                        className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                        onClick={() => handleEditAccountStart(account)}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="font-medium text-slate-900">{account.name}</span>
                         </td>
@@ -375,13 +515,20 @@ export default function CompanyDetailPage(props: {
                         </td>
                         <td className="px-6 py-4 min-w-[120px]">
                           <span className="text-sm text-slate-600">
-                            {account.facilities.length > 0
-                              ? account.facilities.map((f) => f.facility_name).join(", ")
-                              : "-"}
+                            {(() => {
+                              const sorted = [...account.facilities].sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+                              if (sorted.length === 0) return "-"
+                              if (sorted.length === 1) return sorted[0].facility_name
+                              return `${sorted[0].facility_name}..他${sorted.length - 1}施設`
+                            })()}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {account.email_confirmed ? (
+                          {!account.email ? (
+                            <Badge variant="secondary">
+                              ログインなし
+                            </Badge>
+                          ) : account.email_confirmed ? (
                             <Badge variant={account.is_active ? "default" : "destructive"}>
                               {account.is_active ? "有効" : "無効"}
                             </Badge>
@@ -391,9 +538,21 @@ export default function CompanyDetailPage(props: {
                             </Badge>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
-                            {!account.email_confirmed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditAccountStart(account)
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                              編集
+                            </Button>
+                            {account.email && !account.email_confirmed && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -435,7 +594,7 @@ export default function CompanyDetailPage(props: {
         </Card>
 
         {/* Facilities List Card */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden py-0">
           <CardHeader className="border-b bg-muted/30 rounded-none">
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
@@ -510,15 +669,132 @@ export default function CompanyDetailPage(props: {
         </Card>
       </div>
 
-      {/* 管理者追加モーダル */}
+      {/* アカウント編集モーダル */}
+      <Dialog open={!!editingAccount} onOpenChange={(open) => { if (!open) { setEditingAccount(null); setEditAccountError(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>アカウント編集</DialogTitle>
+          </DialogHeader>
+          {editAccountError && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
+              {editAccountError}
+            </div>
+          )}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-name">氏名</Label>
+              <Input
+                id="edit-account-name"
+                value={editAccountForm.name}
+                onChange={(e) => setEditAccountForm(f => ({ ...f, name: e.target.value }))}
+                disabled={isEditingAccount}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>メールアドレス</Label>
+              <p className="text-sm text-slate-600 bg-gray-50 px-3 py-2 rounded-md border">
+                {editingAccount?.email || '-'}
+              </p>
+              <p className="text-xs text-slate-500">メールアドレスは変更できません</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-role">権限</Label>
+              <select
+                id="edit-account-role"
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
+                value={editAccountForm.role}
+                onChange={(e) => setEditAccountForm(f => ({ ...f, role: e.target.value }))}
+                disabled={isEditingAccount}
+              >
+                <option value="company_admin">会社管理者</option>
+                <option value="facility_admin" disabled={!editingAccount?.email}>
+                  施設管理者{!editingAccount?.email ? '（メール登録が必要）' : ''}
+                </option>
+                <option value="staff">職員</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-status">ステータス</Label>
+              <select
+                id="edit-account-status"
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white"
+                value={editAccountForm.is_active ? 'active' : 'inactive'}
+                onChange={(e) => setEditAccountForm(f => ({ ...f, is_active: e.target.value === 'active' }))}
+                disabled={isEditingAccount}
+              >
+                <option value="active">有効</option>
+                <option value="inactive">無効</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              disabled={isEditingAccount}
+              onClick={() => setEditingAccount(null)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={isEditingAccount || !editAccountForm.name.trim()}
+              onClick={handleSaveAccount}
+            >
+              {isEditingAccount ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : '保存'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* アカウント追加モーダル */}
       {showAddAdminModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">管理者を追加</h2>
+            <h2 className="text-lg font-semibold mb-4">アカウントを追加</h2>
             <form onSubmit={handleAddAdmin} className="space-y-4">
               {addAdminError && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                   {addAdminError}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="admin-role">権限 <span className="text-destructive">*</span></Label>
+                <select
+                  id="admin-role"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  value={addAdminForm.role}
+                  onChange={(e) => setAddAdminForm((f) => ({ ...f, role: e.target.value, facility_id: "" }))}
+                  disabled={isAddingAdmin}
+                >
+                  <option value="company_admin">会社管理者</option>
+                  <option value="facility_admin">施設管理者</option>
+                  <option value="staff">職員</option>
+                </select>
+              </div>
+              {needsFacility && (
+                <div className="space-y-2">
+                  <Label htmlFor="admin-facility">所属施設 <span className="text-destructive">*</span></Label>
+                  <select
+                    id="admin-facility"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.facility_id}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, facility_id: e.target.value }))}
+                    required
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">施設を選択してください</option>
+                    {facilities.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
                 </div>
               )}
               <div className="space-y-2">
@@ -541,15 +817,72 @@ export default function CompanyDetailPage(props: {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="admin-email">メールアドレス <span className="text-destructive">*</span></Label>
+                <Label htmlFor="admin-email">
+                  メールアドレス
+                  {needsEmail && <span className="text-destructive"> *</span>}
+                  {!needsEmail && <span className="text-muted-foreground text-xs ml-1">（任意）</span>}
+                </Label>
                 <Input
                   id="admin-email"
                   type="email"
                   value={addAdminForm.email}
                   onChange={(e) => setAddAdminForm((f) => ({ ...f, email: e.target.value }))}
-                  required
+                  required={needsEmail}
                   disabled={isAddingAdmin}
+                  placeholder={!needsEmail ? "未入力の場合、ログインアカウントなしで登録" : ""}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-phone">
+                  電話番号
+                  <span className="text-muted-foreground text-xs ml-1">（任意）</span>
+                </Label>
+                <Input
+                  id="admin-phone"
+                  type="tel"
+                  value={addAdminForm.phone}
+                  onChange={(e) => setAddAdminForm((f) => ({ ...f, phone: e.target.value }))}
+                  disabled={isAddingAdmin}
+                  placeholder="090-1234-5678"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>入社年月日 <span className="text-destructive">*</span></Label>
+                <div className="flex gap-2">
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.hire_year}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, hire_year: e.target.value }))}
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">年</option>
+                    {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                      <option key={year} value={String(year)}>{year}年</option>
+                    ))}
+                  </select>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.hire_month}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, hire_month: e.target.value }))}
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">月</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+                      <option key={month} value={String(month)}>{month}月</option>
+                    ))}
+                  </select>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addAdminForm.hire_day}
+                    onChange={(e) => setAddAdminForm((f) => ({ ...f, hire_day: e.target.value }))}
+                    disabled={isAddingAdmin}
+                  >
+                    <option value="">日</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={String(day)}>{day}日</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex gap-3 pt-2">
                 <Button
@@ -560,12 +893,12 @@ export default function CompanyDetailPage(props: {
                   onClick={() => {
                     setShowAddAdminModal(false)
                     setAddAdminError(null)
-                    setAddAdminForm({ name: "", name_kana: "", email: "" })
+                    setAddAdminForm({ name: "", name_kana: "", email: "", phone: "", role: "company_admin", facility_id: "", hire_year: "", hire_month: "", hire_day: "" })
                   }}
                 >
                   キャンセル
                 </Button>
-                <Button type="submit" className="flex-1" disabled={isAddingAdmin}>
+                <Button type="submit" className="flex-1" disabled={isAddingAdmin || !addAdminForm.hire_year || !addAdminForm.hire_month || !addAdminForm.hire_day}>
                   {isAddingAdmin ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

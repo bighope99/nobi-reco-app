@@ -28,7 +28,7 @@ export type ImportPreviewRow = {
   duplicates?: DuplicateInfo[];
 };
 
-const headerLabels = {
+export const CHILD_IMPORT_HEADER_LABELS = {
   child_id: 'ID',
   family_name: '姓',
   given_name: '名',
@@ -42,6 +42,7 @@ const headerLabels = {
   enrolled_at: '入所日',
   withdrawn_at: '退所日',
   parent_name: '保護者氏名',
+  parent_relation: '保護者_続柄',
   parent_phone: '保護者電話',
   parent_email: '保護者メール',
   allergies: 'アレルギー',
@@ -49,13 +50,91 @@ const headerLabels = {
   parent_characteristics: '保護者の状況・要望',
   photo_permission_public: '写真公開許可',
   photo_permission_share: '写真共有許可',
-  emergency_contact_1_name: '緊急連絡先1_氏名',
-  emergency_contact_1_relation: '緊急連絡先1_続柄',
-  emergency_contact_1_phone: '緊急連絡先1_電話',
-  emergency_contact_2_name: '緊急連絡先2_氏名',
-  emergency_contact_2_relation: '緊急連絡先2_続柄',
-  emergency_contact_2_phone: '緊急連絡先2_電話',
+  emergency_contact_1_name: '保護者連絡先1_氏名',
+  emergency_contact_1_relation: '保護者連絡先1_続柄',
+  emergency_contact_1_phone: '保護者連絡先1_電話',
+  emergency_contact_2_name: '保護者連絡先2_氏名',
+  emergency_contact_2_relation: '保護者連絡先2_続柄',
+  emergency_contact_2_phone: '保護者連絡先2_電話',
 } as const;
+
+const headerLabels = CHILD_IMPORT_HEADER_LABELS;
+
+export const CHILD_IMPORT_HEADERS = [
+  headerLabels.child_id,
+  headerLabels.family_name,
+  headerLabels.given_name,
+  headerLabels.family_name_kana,
+  headerLabels.given_name_kana,
+  headerLabels.nickname,
+  headerLabels.gender,
+  headerLabels.birth_date,
+  headerLabels.enrollment_status,
+  headerLabels.enrollment_type,
+  headerLabels.enrolled_at,
+  headerLabels.withdrawn_at,
+  headerLabels.parent_name,
+  headerLabels.parent_relation,
+  headerLabels.parent_phone,
+  headerLabels.parent_email,
+  headerLabels.allergies,
+  headerLabels.child_characteristics,
+  headerLabels.parent_characteristics,
+  headerLabels.photo_permission_public,
+  headerLabels.photo_permission_share,
+  headerLabels.emergency_contact_1_name,
+  headerLabels.emergency_contact_1_relation,
+  headerLabels.emergency_contact_1_phone,
+  headerLabels.emergency_contact_2_name,
+  headerLabels.emergency_contact_2_relation,
+  headerLabels.emergency_contact_2_phone,
+] as const;
+
+export const CHILD_IMPORT_TEMPLATE_HEADERS = CHILD_IMPORT_HEADERS.slice(1);
+
+export const REQUIRED_CHILD_IMPORT_HEADERS = [
+  headerLabels.family_name,
+  headerLabels.given_name,
+  headerLabels.birth_date,
+  headerLabels.enrolled_at,
+  headerLabels.parent_name,
+  headerLabels.parent_phone,
+] as const;
+
+export const FORBIDDEN_CHILD_IMPORT_HEADERS = ['学校名', 'クラス名'] as const;
+
+export const CHILD_IMPORT_TEMPLATE_SAMPLE_ROW = [
+  'sample-child-001',
+  '山田',
+  '花子',
+  'ヤマダ',
+  'ハナコ',
+  '',
+  '女',
+  '2019-04-12',
+  '在籍',
+  '通年',
+  '2024-04-01',
+  '',
+  '山田 太郎',
+  '父',
+  '090-1234-5678',
+  'taro@example.com',
+  '',
+  '',
+  '',
+  'true',
+  'true',
+  '山田 次郎',
+  '叔父',
+  '090-0000-0000',
+  '',
+  '',
+  '',
+] as const;
+
+export const CHILD_IMPORT_TEMPLATE_SAMPLE_ROW_WITHOUT_ID =
+  CHILD_IMPORT_TEMPLATE_SAMPLE_ROW.slice(1);
 
 export function parseCsvText(text: string): { headers: string[]; rows: CsvRow[] } {
   const sanitized = text.startsWith('\ufeff') ? text.slice(1) : text;
@@ -115,13 +194,13 @@ export function buildChildPayload(
 
   const emergencyContacts = buildEmergencyContacts(row);
 
-  // 緊急連絡先の電話番号バリデーション
+  // 保護者連絡先の電話番号バリデーション
   for (let ecIdx = 0; ecIdx < emergencyContacts.length; ecIdx++) {
     const ec = emergencyContacts[ecIdx];
     if (ec.name?.trim() && ec.phone?.trim()) {
       const normalizedEcPhone = normalizePhone(ec.phone);
       if (normalizedEcPhone.length < 10 || normalizedEcPhone.length > 15) {
-        errors.push(`緊急連絡先${ecIdx + 1}の電話番号が不正です（10〜15桁で入力してください）`);
+        errors.push(`保護者連絡先${ecIdx + 1}の電話番号が不正です（10〜15桁で入力してください）`);
       }
     }
   }
@@ -147,6 +226,7 @@ export function buildChildPayload(
     },
     contact: {
       parent_name: parentName || undefined,
+      parent_relation: getValue(row, headerLabels.parent_relation) || undefined,
       parent_phone: parentPhone,
       parent_email: getValue(row, headerLabels.parent_email),
       emergency_contacts: emergencyContacts.length > 0 ? emergencyContacts : undefined,
@@ -283,13 +363,25 @@ function parseBoolean(value: string, defaultValue: boolean): boolean {
 }
 
 export function normalizePhone(value: string): string {
+  let normalized = value
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+
+  // 旧エクスポートの ="090..." 形式も受け付ける
+  if (/^=".*"$/.test(normalized)) {
+    normalized = normalized.slice(2, -1);
+  }
+
+  // 先頭のアポストロフィなど、表計算向けの文字列化プレフィックスを除去
+  normalized = normalized.replace(/^'+/, '');
+
   // First, convert full-width digits (０-９) to half-width (0-9)
-  let normalized = value.replace(/[０-９]/g, (char) => {
+  normalized = normalized.replace(/[０-９]/g, (char) => {
     return String.fromCharCode(char.charCodeAt(0) - 0xfee0);
   });
   
-  // Then remove separators (spaces, hyphens, full-width hyphen/dash, etc.)
-  normalized = normalized.replace(/[-‐‑–—―ー－\s\u3000]/g, '').trim();
+  // Then remove separators and CSV/export artifacts
+  normalized = normalized.replace(/[-‐‑–—―ー－\s\u3000"'=]/g, '').trim();
   
   return normalized;
 }

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { DatePicker } from '@/components/ui/date-picker';
-import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getJSTTodayAsDate } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -376,7 +376,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   // 日付の初期化（クライアント側でのみ実行）
   useEffect(() => {
     if (!observationDate) {
-      setObservationDate(new Date());
+      setObservationDate(getJSTTodayAsDate());
     }
   }, [observationDate]);
 
@@ -394,16 +394,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           }));
           setStaffList(mapped);
 
-          // Cookie から前回選択した記録者を復元（新規作成時のみ）
-          if (isNew) {
-            const lastRecorder = document.cookie
-              .split('; ')
-              .find(row => row.startsWith('nobi_last_recorder='))
-              ?.split('=')[1];
-            if (lastRecorder && mapped.some((s: StaffMember) => s.user_id === lastRecorder)) {
-              setSelectedRecorder(lastRecorder);
-            }
-          }
+
         } else {
           setStaffLoadError(true);
         }
@@ -1083,7 +1074,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(contentToSave !== undefined ? { content: contentToSave } : {}),
-          observation_date: format(observationDate ?? new Date(), 'yyyy-MM-dd'),
+          observation_date: observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST(),
           recorded_by: selectedRecorder || null,
           child_id: selectedChildId || undefined,
         }),
@@ -1095,7 +1086,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      const nextObservationDate = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const nextObservationDate = observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST();
       const nextRecorderName =
         staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
       const nextChildName = childOptions.find((c) => c.id === selectedChildId)?.name;
@@ -1168,7 +1159,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDateStr = format(observationDate ?? new Date(), 'yyyy-MM-dd');
+      const observationDateStr = observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST();
 
       // APIに保存
       const response = await fetch('/api/records/personal', {
@@ -1190,12 +1181,6 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
 
       if (!response.ok || !result.success) {
         throw new Error(result.error || '保存に失敗しました');
-      }
-
-      // 記録者をCookieに保存（30日間）
-      if (selectedRecorder) {
-        const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-        document.cookie = `nobi_last_recorder=${selectedRecorder}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`;
       }
 
       // 保存成功時、観察記録を設定

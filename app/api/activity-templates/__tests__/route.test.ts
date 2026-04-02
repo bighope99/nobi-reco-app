@@ -8,28 +8,23 @@
 import { GET, POST } from '../route';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server');
-jest.mock('@/lib/auth/session');
+jest.mock('@/lib/auth/jwt');
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
-const BASE_SESSION = {
+const BASE_METADATA = {
   user_id: 'user-123',
-  email: 'test@example.com',
-  name: 'Test User',
   role: 'staff' as const,
   company_id: 'company-123',
-  company_name: 'Test Company',
-  facilities: [{ facility_id: 'facility-123', facility_name: 'Test Facility', is_primary: true }],
   current_facility_id: 'facility-123',
-  classes: [],
 };
 
-const ADMIN_SESSION = {
-  ...BASE_SESSION,
+const ADMIN_METADATA = {
+  ...BASE_METADATA,
   role: 'facility_admin' as const,
 };
 
@@ -40,16 +35,10 @@ describe('GET /api/activity-templates', () => {
     jest.clearAllMocks();
 
     mockSupabase = {
-      auth: {
-        getUser: jest.fn().mockResolvedValue({
-          data: { user: { id: 'user-123' } },
-          error: null,
-        }),
-      },
       from: jest.fn(),
     };
     mockCreateClient.mockResolvedValue(mockSupabase);
-    mockGetUserSession.mockResolvedValue(BASE_SESSION);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(BASE_METADATA);
   });
 
   it('施設のテンプレート一覧を返す', async () => {
@@ -82,10 +71,7 @@ describe('GET /api/activity-templates', () => {
   });
 
   it('未認証の場合 401 を返す', async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: null },
-      error: new Error('Unauthorized'),
-    });
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
     const response = await GET();
     expect(response.status).toBe(401);
@@ -99,16 +85,10 @@ describe('POST /api/activity-templates', () => {
     jest.clearAllMocks();
 
     mockSupabase = {
-      auth: {
-        getUser: jest.fn().mockResolvedValue({
-          data: { user: { id: 'user-123' } },
-          error: null,
-        }),
-      },
       from: jest.fn(),
     };
     mockCreateClient.mockResolvedValue(mockSupabase);
-    mockGetUserSession.mockResolvedValue(BASE_SESSION);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(BASE_METADATA);
   });
 
   const makeRequest = (body: object) =>

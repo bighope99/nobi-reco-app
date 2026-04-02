@@ -583,7 +583,7 @@ export async function POST(request: NextRequest) {
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
     // m_users テーブルにユーザー情報を登録（auth.users.id と同じIDを使用）
-    const { data: newUser, error: createError } = await supabase
+    const { data: newUser, error: createError } = await supabaseAdmin
       .from('m_users')
       .insert({
         id: authData.user.id,

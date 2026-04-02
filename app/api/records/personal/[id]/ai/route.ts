@@ -1,27 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { id } = await params;
     const body = await request.json();
     const objective = typeof body?.ai_action === 'string' ? body.ai_action.trim() : '';
@@ -49,7 +40,7 @@ export async function PATCH(
     }
 
     const child = Array.isArray(existing.m_children) ? existing.m_children[0] : existing.m_children;
-    if (!child || child.facility_id !== session.current_facility_id) {
+    if (!child || child.facility_id !== metadata.current_facility_id) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
@@ -92,7 +83,7 @@ export async function PATCH(
         subjective: subjective || null,
         is_ai_analyzed: hasAiResult,
         ai_analyzed_at: hasAiResult ? new Date().toISOString() : null,
-        updated_by: user.id,
+        updated_by: metadata.user_id,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);

@@ -5,6 +5,7 @@ import { Hand, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { toKatakana } from "@/lib/utils/kana"
+import { formatTimeJST, getCurrentTimeJST } from '@/lib/utils/timezone'
 
 /** 濁音・半濁音を清音に変換（カタカナ1文字） */
 function stripDakuten(ch: string): string {
@@ -39,6 +40,7 @@ interface ChildRecord {
   kanjiName: string
   gradeLabel?: string
   status: ChildStatus
+  attendanceId?: string
   checkedInAt?: string
   checkedOutAt?: string
 }
@@ -74,13 +76,6 @@ const KANA_GRID: (string | null)[][] = [
   ['ん',  null,  null,  null, null,  null, null, null, null, null],
 ]
 
-function formatTime(isoString?: string): string {
-  if (!isoString) return ''
-  const d = new Date(isoString)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
 
 function updateChildInGroups(
   groups: Record<string, ChildRecord[]>,
@@ -107,7 +102,7 @@ export default function SelfCheckInPage() {
   const [checkinHour, setCheckinHour] = useState<number>(0)
   const [checkinAction, setCheckinAction] = useState<'check_in' | 'check_out'>('check_in')
   const [attendanceId, setAttendanceId] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(3)
+  const [countdown, setCountdown] = useState(5)
 
   const fetchChildren = useCallback(async () => {
     try {
@@ -158,6 +153,18 @@ export default function SelfCheckInPage() {
   }
 
   const goToFeedback = (child: ChildRecord) => {
+    if (child.status === 'checked_in' || child.status === 'checked_out') {
+      setSelectedChild(child)
+      setCheckinAction(child.status === 'checked_in' ? 'check_in' : 'check_out')
+      setCheckinTime(formatTimeJST(child.status === 'checked_out' ? child.checkedOutAt : child.checkedInAt) ?? '')
+      setCheckinHour(new Date().getHours())
+      setAttendanceId(child.attendanceId ?? null)
+      setCountdown(3)
+      setView('feedback')
+      pendingPostRef.current = null
+      return
+    }
+
     const action: 'check_in' | 'check_out' = child.status === 'not_checked_in' ? 'check_in' : 'check_out'
 
     // Optimistic update
@@ -169,13 +176,13 @@ export default function SelfCheckInPage() {
     })))
     optimisticIdsRef.current.add(child.id)
 
-    const now = new Date()
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const timeStr = getCurrentTimeJST()
+    const jstHour = parseInt(timeStr.split(':')[0], 10)
     setSelectedChild(child)
     setCheckinTime(timeStr)
-    setCheckinHour(now.getHours())
+    setCheckinHour(jstHour)
     setCheckinAction(action)
-    setCountdown(3)
+    setCountdown(5)
     setView('feedback')
 
     // Fire-and-forget API call（Promiseをrefに保持してundo時に利用）
@@ -230,10 +237,11 @@ export default function SelfCheckInPage() {
 
       const currentPendingPost = pendingPostRef.current
       pendingPostRef.current = null
+      const currentAttendanceId = attendanceId
 
-      if (attendanceId) {
+      if (currentAttendanceId) {
         // POSTレスポンス済み → すぐDELETE
-        sendDelete(attendanceId)
+        sendDelete(currentAttendanceId)
       } else if (currentPendingPost) {
         // POST応答待ち → 完了後にDELETE
         currentPendingPost.then(({ attendance_id }) => {
@@ -391,7 +399,7 @@ function ChildButton({
       >
         <div className="flex items-center justify-center gap-2">
           <Badge className="h-3 w-3 rounded-full bg-green-500 p-0 shrink-0" />
-          <span className="text-sm font-bold text-green-600">きたよ！ {formatTime(child.checkedInAt)}　タップでかえる</span>
+          <span className="text-sm font-bold text-green-600">きたよ！ {formatTimeJST(child.checkedInAt) ?? ''}　タップでかえる</span>
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>
@@ -411,7 +419,7 @@ function ChildButton({
       >
         <div className="flex items-center justify-center gap-2">
           <Badge className="h-3 w-3 rounded-full bg-blue-500 p-0 shrink-0" />
-          <span className="text-sm font-bold text-blue-600">かえったよ {formatTime(child.checkedOutAt)}</span>
+          <span className="text-sm font-bold text-blue-600">かえったよ {formatTimeJST(child.checkedOutAt) ?? ''}</span>
         </div>
         <p className="text-3xl font-bold text-gray-800 mt-1">{child.kanaName}</p>
         <p className="text-base text-gray-500">{child.kanjiName}</p>

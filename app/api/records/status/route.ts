@@ -20,8 +20,10 @@ export async function GET(request: NextRequest) {
 
     // クエリパラメータ取得
     const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const todayJST = getCurrentDateJST();
+    const [todayYear, todayMonth] = todayJST.split('-').map(Number);
+    const year = parseInt(searchParams.get('year') || todayYear.toString());
+    const month = parseInt(searchParams.get('month') || todayMonth.toString());
     const class_id = searchParams.get('class_id') || null;
     // チケット3: 児童名フィールドは暗号化されているため、サーバー側のilike検索は機能しない。
     // 検索はクライアント側で復号化済みデータに対して行う。
@@ -136,7 +138,8 @@ export async function GET(request: NextRequest) {
         .select('child_id, checked_in_at, checked_out_at')
         .in('child_id', childIds)
         .gte('checked_in_at', `${startDateStr}T00:00:00+09:00`)
-        .lte('checked_in_at', `${endDateStr}T23:59:59.999+09:00`),
+        .lte('checked_in_at', `${endDateStr}T23:59:59.999+09:00`)
+        .is('deleted_at', null),
 
       // 月間記録
       supabase
@@ -153,7 +156,8 @@ export async function GET(request: NextRequest) {
         .select('child_id, checked_in_at')
         .in('child_id', childIds)
         .gte('checked_in_at', `${yearStartStr}T00:00:00+09:00`)
-        .lte('checked_in_at', `${today}T23:59:59.999+09:00`),
+        .lte('checked_in_at', `${today}T23:59:59.999+09:00`)
+        .is('deleted_at', null),
 
       // 年間記録
       supabase
@@ -182,7 +186,8 @@ export async function GET(request: NextRequest) {
           .select('child_id, checked_in_at')
           .in('child_id', childIds)
           .gte('checked_in_at', `${heatmapStartDateStr}T00:00:00+09:00`)
-          .lte('checked_in_at', `${heatmapEndDateStr}T23:59:59.999+09:00`),
+          .lte('checked_in_at', `${heatmapEndDateStr}T23:59:59.999+09:00`)
+          .is('deleted_at', null),
         // ヒートマップ用記録（直近30日）
         supabase
           .from('r_observation')

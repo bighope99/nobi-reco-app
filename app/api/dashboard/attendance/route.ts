@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata, hasPermission } from '@/lib/auth/jwt';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
 
-type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out';
+type AttendanceAction = 'check_in' | 'mark_absent' | 'confirm_unexpected' | 'add_schedule' | 'check_out' | 'cancel_check_in' | 'cancel_check_out';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'child_id and action are required' }, { status: 400 });
     }
 
-    if (!['check_in', 'mark_absent', 'confirm_unexpected', 'add_schedule', 'check_out'].includes(action)) {
+    if (!['check_in', 'mark_absent', 'confirm_unexpected', 'add_schedule', 'check_out', 'cancel_check_in', 'cancel_check_out'].includes(action)) {
       return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
     }
     const attendanceDate = getCurrentDateJST(); // JST日付 (YYYY-MM-DD)
@@ -53,7 +53,8 @@ export async function POST(request: NextRequest) {
     // 並列でデータ取得
     const [
       { data: dailyRecord, error: dailyError },
-      { data: openAttendance, error: attendanceFetchError }
+      { data: openAttendance, error: attendanceFetchError },
+      { data: todayAttendance, error: todayAttendanceFetchError }
     ] = await Promise.all([
       supabase
         .from('r_daily_attendance')
@@ -69,6 +70,16 @@ export async function POST(request: NextRequest) {
         .gte('checked_in_at', startOfDayUTC)
         .lte('checked_in_at', endOfDayUTC)
         .is('checked_out_at', null)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      // 取り消し用: 当日の出席レコード（checkout済み・ソフトデリート済みも含む）
+      supabase
+        .from('h_attendance')
+        .select('*')
+        .eq('child_id', child_id)
+        .eq('facility_id', facility_id)
+        .gte('checked_in_at', startOfDayUTC)
+        .lte('checked_in_at', endOfDayUTC)
         .maybeSingle()
     ]);
 
@@ -78,6 +89,10 @@ export async function POST(request: NextRequest) {
     }
     if (attendanceFetchError) {
       console.error('Attendance fetch error:', attendanceFetchError);
+      return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
+    }
+    if (todayAttendanceFetchError) {
+      console.error('Today attendance fetch error:', todayAttendanceFetchError);
       return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
     }
 
@@ -133,19 +148,40 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Already checked in today' }, { status: 409 });
       }
 
-      const { error: insertError } = await supabase
-        .from('h_attendance')
-        .insert({
-          child_id,
-          facility_id: facility_id,
-          checked_in_at: resolvedTimestamp,
-          check_in_method: 'manual',
-          checked_in_by: user_id,
-        });
+      if (todayAttendance) {
+        // 既存レコードがある場合（帰宅済み・ソフトデリート済み等）→ 時刻を上書きして復活
+        const { error: updateError } = await supabase
+          .from('h_attendance')
+          .update({
+            checked_in_at: resolvedTimestamp,
+            check_in_method: 'manual',
+            checked_in_by: user_id,
+            checked_out_at: null,
+            check_out_method: null,
+            checked_out_by: null,
+            deleted_at: null,
+          })
+          .eq('id', todayAttendance.id);
 
-      if (insertError) {
-        console.error('Check-in insert error:', insertError);
-        return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
+        if (updateError) {
+          console.error('Check-in update error:', updateError);
+          return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from('h_attendance')
+          .insert({
+            child_id,
+            facility_id: facility_id,
+            checked_in_at: resolvedTimestamp,
+            check_in_method: 'manual',
+            checked_in_by: user_id,
+          });
+
+        if (insertError) {
+          console.error('Check-in insert error:', insertError);
+          return NextResponse.json({ success: false, error: 'Failed to record check-in' }, { status: 500 });
+        }
       }
 
       // 手動ボタンでは常にscheduled（irregularはQRコードのみ）
@@ -181,6 +217,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Child is already checked in' }, { status: 409 });
       }
 
+      // 帰宅済みの h_attendance レコードが残っている場合はソフトデリート
+      if (todayAttendance && !todayAttendance.deleted_at) {
+        const { error: softDeleteError } = await supabase
+          .from('h_attendance')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', todayAttendance.id);
+
+        if (softDeleteError) {
+          console.error('Attendance soft delete error on mark_absent:', softDeleteError);
+          return NextResponse.json({ success: false, error: 'Failed to clear attendance record' }, { status: 500 });
+        }
+      }
+
       await upsertDailyAttendance('absent');
       return NextResponse.json({ success: true });
     }
@@ -196,6 +245,76 @@ export async function POST(request: NextRequest) {
       }
 
       await upsertDailyAttendance('irregular');
+      return NextResponse.json({ success: true });
+    }
+
+    if (actionType === 'cancel_check_out') {
+      // 帰宅取り消し: checked_out_at をクリアして在所中に戻す
+      if (!todayAttendance || !todayAttendance.checked_out_at) {
+        return NextResponse.json({ success: false, error: 'No checked-out attendance to cancel' }, { status: 404 });
+      }
+
+      const { error: updateError } = await supabase
+        .from('h_attendance')
+        .update({
+          checked_out_at: null,
+          check_out_method: null,
+          checked_out_by: null,
+        })
+        .eq('id', todayAttendance.id);
+
+      if (updateError) {
+        console.error('Cancel check-out error:', updateError);
+        return NextResponse.json({ success: false, error: 'Failed to cancel check-out' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (actionType === 'cancel_check_in') {
+      // 登所取り消し: h_attendance をソフトデリートし、r_daily_attendance を元に戻す
+      if (!todayAttendance || todayAttendance.deleted_at) {
+        return NextResponse.json({ success: false, error: 'No attendance record to cancel' }, { status: 404 });
+      }
+
+      // checked_out済みの場合は先に帰宅取り消しが必要
+      if (todayAttendance.checked_out_at) {
+        return NextResponse.json({ success: false, error: 'Must cancel check-out first' }, { status: 409 });
+      }
+
+      const { error: softDeleteError } = await supabase
+        .from('h_attendance')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', todayAttendance.id);
+
+      if (softDeleteError) {
+        console.error('Cancel check-in soft delete error:', softDeleteError);
+        return NextResponse.json({ success: false, error: 'Failed to cancel check-in' }, { status: 500 });
+      }
+
+      // r_daily_attendance: 予定ありならscheduledに戻す、irregularなら削除
+      if (dailyRecord) {
+        if (dailyRecord.status === 'irregular') {
+          const { error: dailyDeleteError } = await supabase
+            .from('r_daily_attendance')
+            .delete()
+            .eq('id', dailyRecord.id);
+
+          if (dailyDeleteError) {
+            console.error('Daily attendance delete error:', dailyDeleteError);
+          }
+        } else {
+          const { error: dailyUpdateError } = await supabase
+            .from('r_daily_attendance')
+            .update({ status: 'scheduled', updated_by: user_id })
+            .eq('id', dailyRecord.id);
+
+          if (dailyUpdateError) {
+            console.error('Daily attendance update error:', dailyUpdateError);
+          }
+        }
+      }
+
       return NextResponse.json({ success: true });
     }
 

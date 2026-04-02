@@ -5,34 +5,23 @@ import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/activities/route';
 
 // モック
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { createClient } from '@/utils/supabase/server';
 
 describe('/api/activities GET - individual_records機能', () => {
-  const mockSession = {
+  const mockMetadata = {
     user_id: 'test-user-id',
-    email: 'test@example.com',
-    name: 'Test User',
     role: 'staff' as const,
     company_id: 'test-company-id',
-    company_name: 'Test Company',
-    facilities: [
-      {
-        facility_id: 'test-facility-id',
-        facility_name: 'Test Facility',
-        is_primary: true,
-      },
-    ],
     current_facility_id: 'test-facility-id',
-    classes: [],
   };
 
   const mockActivities = [
@@ -107,28 +96,9 @@ describe('/api/activities GET - individual_records機能', () => {
 
   describe('個別記録情報の取得', () => {
     it('保育日誌に紐づく個別記録をindividual_recordsとして返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(mockMetadata);
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'test-user-id' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'test-user-id',
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'test-company-id',
-                  current_facility_id: 'test-facility-id',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         storage: {
           from: jest.fn(() => ({
             createSignedUrl: jest.fn().mockResolvedValue({
@@ -200,28 +170,9 @@ describe('/api/activities GET - individual_records機能', () => {
     });
 
     it('個別記録がない保育日誌は空配列を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(mockMetadata);
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'test-user-id' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'test-user-id',
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'test-company-id',
-                  current_facility_id: 'test-facility-id',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         storage: {
           from: jest.fn(() => ({
             createSignedUrl: jest.fn().mockResolvedValue({
@@ -273,28 +224,9 @@ describe('/api/activities GET - individual_records機能', () => {
     });
 
     it('individual_record_countとindividual_recordsの件数が一致すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(mockMetadata);
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'test-user-id' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'test-user-id',
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'test-company-id',
-                  current_facility_id: 'test-facility-id',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         storage: {
           from: jest.fn(() => ({
             createSignedUrl: jest.fn().mockResolvedValue({
@@ -346,28 +278,9 @@ describe('/api/activities GET - individual_records機能', () => {
 
   describe('子ども名の表示ロジック', () => {
     it('nicknameがある場合はnicknameを使用すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(mockMetadata);
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'test-user-id' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'test-user-id',
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'test-company-id',
-                  current_facility_id: 'test-facility-id',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         storage: {
           from: jest.fn(() => ({
             createSignedUrl: jest.fn().mockResolvedValue({
@@ -414,28 +327,9 @@ describe('/api/activities GET - individual_records機能', () => {
     });
 
     it('nicknameがない場合は姓名を使用すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
+      (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(mockMetadata);
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getSession: jest.fn().mockResolvedValue({
-            data: { session: { user: { id: 'test-user-id' } } },
-            error: null,
-          }),
-          getClaims: jest.fn().mockResolvedValue({
-            data: {
-              claims: {
-                sub: 'test-user-id',
-                app_metadata: {
-                  role: 'staff',
-                  company_id: 'test-company-id',
-                  current_facility_id: 'test-facility-id',
-                },
-              },
-            },
-            error: null,
-          }),
-        },
         storage: {
           from: jest.fn(() => ({
             createSignedUrl: jest.fn().mockResolvedValue({

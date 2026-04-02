@@ -167,9 +167,10 @@ export default function StatusPage() {
 
     // 日付の初期化（クライアント側でのみ実行）
     useEffect(() => {
-        const now = new Date()
-        setYear(now.getFullYear())
-        setMonth(now.getMonth() + 1)
+        const today = getCurrentDateJST()
+        const [y, m] = today.split('-').map(Number)
+        setYear(y)
+        setMonth(m)
     }, [])
 
     // 履歴モーダル用の状態
@@ -560,7 +561,7 @@ export default function StatusPage() {
                                         className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-[120px] whitespace-nowrap cursor-pointer hover:bg-slate-100"
                                         onClick={() => handleSort('grade')}
                                     >
-                                        学年・クラス <SortIcon colKey="grade" currentSort={sortConfig} />
+                                        {recordsData.filters.classes.length > 0 ? '学年・クラス' : '学年'} <SortIcon colKey="grade" currentSort={sortConfig} />
                                     </th>
 
                                     <th
@@ -621,7 +622,9 @@ export default function StatusPage() {
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-medium text-slate-900">{child.grade_label || '-'}</span>
-                                                    <span className="text-xs text-slate-500">{child.class_name}</span>
+                                                    {recordsData.filters.classes.length > 0 && (
+                                                        <span className="text-xs text-slate-500">{child.class_name}</span>
+                                                    )}
                                                 </div>
                                             </td>
 

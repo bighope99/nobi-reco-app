@@ -144,8 +144,8 @@ describe('/api/handover GET', () => {
         eq: jest.fn().mockReturnThis(),
         is: jest.fn().mockReturnThis(),
         lt: jest.fn().mockReturnThis(),
-        not: jest.fn().mockReturnThis(),
-        neq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         then: jest.fn((resolve: (value: { data: never[]; error: null }) => void) =>
@@ -188,8 +188,8 @@ describe('/api/handover GET', () => {
         eq: jest.fn().mockReturnThis(),
         is: jest.fn().mockReturnThis(),
         lt: jest.fn().mockReturnThis(),
-        not: jest.fn().mockReturnThis(),
-        neq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         then: jest.fn((resolve: (value: { data: typeof mockActivities; error: null }) => void) =>
@@ -227,11 +227,75 @@ describe('/api/handover GET', () => {
       expect(data.data.items).toHaveLength(1);
       expect(data.data.items[0]).toEqual({
         activity_id: 'activity-1',
+        activity_date: '2026-02-28',
         handover: '明日は体育館を使います',
         handover_completed: false,
         class_name: 'ひまわり組',
         created_by_name: '山田太郎',
+        todo_items: null,
       });
+    });
+
+    it('todo_itemsのみ（handoverなし）の記録もバナーに表示される', async () => {
+      mockGetAuthenticatedUserMetadata.mockResolvedValue(mockMetadata);
+
+      const mockActivities = [
+        {
+          id: 'activity-2',
+          activity_date: '2026-02-28',
+          handover: null,
+          handover_completed: false,
+          todo_items: [{ id: 'todo-1', content: 'テスト項目', completed: false }],
+          class_id: 'class-1',
+          m_classes: { id: 'class-1', name: 'ひまわり組' },
+          m_users: { id: 'user-1', name: '山田太郎' },
+        },
+      ];
+
+      const mockHandoverQuery: Record<string, jest.Mock> = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        lt: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        then: jest.fn((resolve: (value: { data: typeof mockActivities; error: null }) => void) =>
+          resolve({ data: mockActivities, error: null })
+        ),
+      };
+
+      const mockNextRecordQuery: Record<string, jest.Mock> = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        gt: jest.fn().mockReturnThis(),
+        lt: jest.fn().mockResolvedValue({ count: 0, data: null, error: null }),
+      };
+
+      let fromCallCount = 0;
+      const mockSupabase = {
+        from: jest.fn().mockImplementation(() => {
+          fromCallCount++;
+          if (fromCallCount === 1) return mockHandoverQuery;
+          return mockNextRecordQuery;
+        }),
+      };
+      mockCreateClient.mockResolvedValue(mockSupabase);
+
+      const request = new NextRequest('http://localhost:3000/api/handover?date=2026-03-01');
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.handover_date).toBe('2026-02-28');
+      expect(data.data.items).toHaveLength(1);
+      expect(data.data.items[0].todo_items).toEqual([
+        { id: 'todo-1', content: 'テスト項目', completed: false },
+      ]);
+      expect(data.data.items[0].handover).toBeNull();
     });
 
     it('class_idフィルタリングが正しく動作する', async () => {
@@ -262,8 +326,8 @@ describe('/api/handover GET', () => {
         }),
         is: jest.fn().mockReturnThis(),
         lt: jest.fn().mockReturnThis(),
-        not: jest.fn().mockReturnThis(),
-        neq: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         then: jest.fn((resolve: (value: { data: never[]; error: null }) => void) =>
@@ -290,6 +354,72 @@ describe('/api/handover GET', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(classIdFilterApplied).toBe(true);
+    });
+
+    it('todo_itemsを含む活動記録をAPIレベルで取得できる', async () => {
+      mockGetAuthenticatedUserMetadata.mockResolvedValue(mockMetadata);
+
+      const mockActivities = [
+        {
+          id: 'activity-3',
+          activity_date: '2026-02-27',
+          handover: '引き継ぎメモ',
+          handover_completed: false,
+          todo_items: [
+            { id: 'todo-1', content: 'テスト項目1', completed: false },
+            { id: 'todo-2', content: 'テスト項目2', completed: true },
+          ],
+          class_id: 'class-1',
+          m_classes: { id: 'class-1', name: 'ひまわり組' },
+          m_users: { id: 'user-1', name: '山田太郎' },
+        },
+      ];
+
+      const mockHandoverQuery: Record<string, jest.Mock> = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        lt: jest.fn().mockReturnThis(),
+        gte: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        then: jest.fn((resolve: (value: { data: typeof mockActivities; error: null }) => void) =>
+          resolve({ data: mockActivities, error: null })
+        ),
+      };
+
+      const mockNextRecordQuery: Record<string, jest.Mock> = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        gt: jest.fn().mockReturnThis(),
+        lt: jest.fn().mockResolvedValue({ count: 0, data: null, error: null }),
+      };
+
+      let fromCallCount = 0;
+      const mockSupabase = {
+        from: jest.fn().mockImplementation(() => {
+          fromCallCount++;
+          if (fromCallCount === 1) return mockHandoverQuery;
+          return mockNextRecordQuery;
+        }),
+      };
+      mockCreateClient.mockResolvedValue(mockSupabase);
+
+      const request = new NextRequest('http://localhost:3000/api/handover?date=2026-03-01');
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.handover_date).toBe('2026-02-27');
+      expect(data.data.items).toHaveLength(1);
+      expect(data.data.items[0].todo_items).toEqual([
+        { id: 'todo-1', content: 'テスト項目1', completed: false },
+        { id: 'todo-2', content: 'テスト項目2', completed: true },
+      ]);
+      expect(data.data.items[0].handover).toBe('引き継ぎメモ');
     });
   });
 });

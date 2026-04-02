@@ -15,7 +15,7 @@
  */
 
 import { sanitizeText, sanitizeArrayFields, sanitizeObjectFields } from '@/lib/security/sanitize'
-import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity'
+import type { DailyScheduleItem, RoleAssignment, Meal, TodoItem } from '@/types/activity'
 
 export interface ExtendedFieldsInput {
   dailySchedule: DailyScheduleItem[]
@@ -25,6 +25,7 @@ export interface ExtendedFieldsInput {
   specialNotes: string
   eventName: string
   handover?: string
+  todoItems?: TodoItem[] | null
 }
 
 export interface SanitizedExtendedFields {
@@ -35,6 +36,7 @@ export interface SanitizedExtendedFields {
   role_assignments: RoleAssignment[] | null
   meal: Meal | null
   handover: string | null
+  todo_items: TodoItem[] | null
 }
 
 /**
@@ -95,5 +97,6 @@ export function getSanitizedExtendedFields(input: ExtendedFieldsInput): Sanitize
     role_assignments: sanitizedRoles,
     meal: sanitizedMeal,
     handover: sanitizedHandover,
+    todo_items: input.todoItems ?? null,
   }
 }

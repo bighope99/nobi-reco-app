@@ -150,7 +150,8 @@ export async function GET(request: NextRequest) {
               is_emergency_contact,
               guardian:m_guardians (
                 id,
-                phone
+                phone,
+                deleted_at
               )
             `)
             .in('child_id', childIds)
@@ -208,7 +209,9 @@ export async function GET(request: NextRequest) {
     const guardianPhoneMap = new Map<string, string | null>();
     for (const link of guardianLinksResult.data || []) {
       if (!link?.child_id) continue;
-      const encryptedPhone = (link.guardian as { phone?: string } | undefined | null)?.phone ?? null;
+      const guardian = link.guardian as { phone?: string; deleted_at?: string | null } | undefined | null;
+      if (guardian?.deleted_at !== null && guardian?.deleted_at !== undefined) continue;
+      const encryptedPhone = guardian?.phone ?? null;
       const decryptedPhone = decryptOrFallback(encryptedPhone);
       if (!guardianPhoneMap.has(link.child_id) || link.is_primary) {
         guardianPhoneMap.set(link.child_id, decryptedPhone);

@@ -396,11 +396,7 @@ export default function UsersSettingsPage() {
   return (
     <StaffLayout title="職員管理">
       <div className="min-h-screen text-slate-900 font-sans">
-        <style>
-          {`@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');`}
-        </style>
-
-        <div className="max-w-7xl mx-auto" style={{ fontFamily: '"Noto Sans JP", sans-serif' }}>
+        <div className="max-w-7xl mx-auto">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -897,25 +893,34 @@ export default function UsersSettingsPage() {
 
               {/* Modal Body */}
               <div className="p-6 space-y-4">
+                <FieldGroup label="メールアドレス">
+                  {editingUser.email ? (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                      <Mail size={16} className="text-slate-400 shrink-0" />
+                      <span className="text-sm text-slate-700">{editingUser.email}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <Input
+                        icon={Mail}
+                        type="email"
+                        placeholder="example@email.com"
+                        value={editForm.email}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, email: e.target.value })}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        メールアドレスを入力すると招待メールが送信されログインアカウントが作成されます（既にアカウントがある場合は更新のみ）
+                      </p>
+                    </>
+                  )}
+                </FieldGroup>
+
                 <FieldGroup label="氏名" required>
                   <Input
                     placeholder="例: 田中太郎"
                     value={editForm.name}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, name: e.target.value })}
                   />
-                </FieldGroup>
-
-                <FieldGroup label="メールアドレス">
-                  <Input
-                    icon={Mail}
-                    type="email"
-                    placeholder="example@email.com"
-                    value={editForm.email}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, email: e.target.value })}
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    メールアドレスを入力すると招待メールが送信されログインアカウントが作成されます（既にアカウントがある場合は更新のみ）
-                  </p>
                 </FieldGroup>
 
                 <FieldGroup label="電話番号">

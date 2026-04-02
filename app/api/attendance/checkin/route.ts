@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { getQrSignatureSecret } from '@/lib/qr/secrets';
 import { getCurrentDateJST } from '@/lib/utils/timezone';
+import { decryptOrFallback } from '@/utils/crypto/decryption-helper';
 
 export async function POST(request: NextRequest) {
   try {
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
       .eq('facility_id', facility_id)
       .gte('checked_in_at', startOfDayUTC)
       .lte('checked_in_at', endOfDayUTC)
+      .is('deleted_at', null)
       .order('checked_in_at', { ascending: true })
       .maybeSingle();
 
@@ -174,11 +176,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const decryptedFamilyName = decryptOrFallback(child.family_name);
+      const decryptedGivenName = decryptOrFallback(child.given_name);
       return NextResponse.json({
         success: true,
         data: {
           child_id,
-          child_name: `${child.family_name} ${child.given_name}`,
+          child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
           class_name: className,
           checked_in_at: existing.checked_in_at,
           checked_out_at: now.toISOString(),
@@ -186,6 +190,50 @@ export async function POST(request: NextRequest) {
           action_type: 'check_out',
         },
       });
+    }
+
+    // ソフトデリート済みレコードがあれば UPDATE で復活（再チェックイン対応）
+    const { data: softDeleted } = await supabase
+      .from('h_attendance')
+      .select('id')
+      .eq('child_id', child_id)
+      .eq('facility_id', facility_id)
+      .gte('checked_in_at', startOfDayUTC)
+      .lte('checked_in_at', endOfDayUTC)
+      .not('deleted_at', 'is', null)
+      .maybeSingle()
+
+    if (softDeleted) {
+      const { error: updateError } = await supabase
+        .from('h_attendance')
+        .update({
+          checked_in_at: now.toISOString(),
+          check_in_method: 'qr',
+          checked_out_at: null,
+          check_out_method: null,
+          checked_out_by: null,
+          deleted_at: null,
+        })
+        .eq('id', softDeleted.id)
+      if (updateError) {
+        return NextResponse.json(
+          { success: false, error: 'Failed to record check-in' },
+          { status: 500 }
+        )
+      }
+      const decryptedFamilyName = decryptOrFallback(child.family_name)
+      const decryptedGivenName = decryptOrFallback(child.given_name)
+      return NextResponse.json({
+        success: true,
+        data: {
+          child_id,
+          child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
+          class_name: className,
+          checked_in_at: now.toISOString(),
+          attendance_date: today,
+          action_type: 'check_in',
+        },
+      })
     }
 
     // Create attendance record
@@ -216,16 +264,19 @@ export async function POST(request: NextRequest) {
           .eq('facility_id', facility_id)
           .gte('checked_in_at', startOfDayUTC)
           .lte('checked_in_at', endOfDayUTC)
+          .is('deleted_at', null)
           .order('checked_in_at', { ascending: true })
           .maybeSingle();
 
         // If duplicate error but record exists, return success (idempotent behavior)
         if (existingAttendance) {
+          const decryptedFamilyName = decryptOrFallback(child.family_name);
+          const decryptedGivenName = decryptOrFallback(child.given_name);
           return NextResponse.json({
             success: true,
             data: {
               child_id,
-              child_name: `${child.family_name} ${child.given_name}`,
+              child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
               class_name: className,
               checked_in_at: existingAttendance.checked_in_at,
               attendance_date: today,
@@ -243,11 +294,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const decryptedFamilyName = decryptOrFallback(child.family_name);
+    const decryptedGivenName = decryptOrFallback(child.given_name);
     return NextResponse.json({
       success: true,
       data: {
         child_id,
-        child_name: `${child.family_name} ${child.given_name}`,
+        child_name: `${decryptedFamilyName ?? ''} ${decryptedGivenName ?? ''}`.trim(),
         class_name: className,
         checked_in_at: attendance.checked_in_at,
         attendance_date: today,

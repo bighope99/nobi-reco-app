@@ -12,6 +12,7 @@ type ChildEntry = {
   kanjiName: string
   gradeLabel?: string
   status: 'not_checked_in' | 'checked_in' | 'checked_out'
+  attendanceId?: string
   checkedInAt?: string
   checkedOutAt?: string
 }
@@ -47,10 +48,11 @@ export async function GET() {
   const childIds = children.map((c) => c.id)
   const { data: attendances, error: attendanceError } = await supabase
     .from('h_attendance')
-    .select('child_id, checked_in_at, checked_out_at')
+    .select('id, child_id, checked_in_at, checked_out_at')
     .eq('facility_id', facilityId)
     .gte('checked_in_at', startOfDayUTC)
     .lte('checked_in_at', endOfDayUTC)
+    .is('deleted_at', null)
     .in('child_id', childIds)
 
   if (attendanceError) {
@@ -88,6 +90,7 @@ export async function GET() {
       kanjiName: `${familyKanji} ${givenKanji}`.trim(),
       gradeLabel: gradeLabel !== '-' ? gradeLabel : undefined,
       status,
+      attendanceId: att?.id,
       checkedInAt: att?.checked_in_at,
       checkedOutAt: att?.checked_out_at,
     })

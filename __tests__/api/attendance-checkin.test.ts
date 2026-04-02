@@ -2,14 +2,14 @@ import { NextRequest } from 'next/server';
 import { createHmac } from 'crypto';
 import { POST } from '@/app/api/attendance/checkin/route';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 const QR_SIGNATURE_SECRET = 'test-secret-key';
@@ -40,13 +40,8 @@ interface MockInsertQuery {
   single: jest.Mock<Promise<{ data: unknown; error: unknown | null }>>;
 }
 
-interface MockAuthQuery {
-  getSession: jest.Mock<Promise<{ data: { session: { user: { id: string } } | null }; error: unknown | null }>>;
-  getClaims: jest.Mock<Promise<{ data: { claims: { sub: string; app_metadata: { role: string; company_id: string; current_facility_id: string } } } | null; error: unknown | null }>>;
-}
 
 interface MockSupabaseClient {
-  auth: MockAuthQuery;
   from: jest.Mock<MockSelectQuery | MockInsertQuery, [string]>;
 }
 
@@ -63,6 +58,8 @@ const createSelectQueryWithFilters = (): MockSelectQueryWithFilters => {
   query.gte = jest.fn().mockReturnValue(query);
   query.lte = jest.fn().mockReturnValue(query);
   query.order = jest.fn().mockReturnValue(query);
+  (query as any).is = jest.fn().mockReturnValue(query);
+  (query as any).not = jest.fn().mockReturnValue(query);
   return query;
 };
 
@@ -76,7 +73,7 @@ const createInsertQuery = (): MockInsertQuery => {
 
 describe('POST /api/attendance/checkin', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-  const mockedGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+  const mockedGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
   beforeAll(() => {
     process.env.QR_SIGNATURE_SECRET = QR_SIGNATURE_SECRET;
@@ -84,6 +81,12 @@ describe('POST /api/attendance/checkin', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+      user_id: 'user-789',
+      role: 'staff',
+      company_id: 'company-1',
+      current_facility_id: 'facility-456',
+    });
   });
 
   describe('Signature Verification', () => {
@@ -98,43 +101,8 @@ describe('POST /api/attendance/checkin', () => {
         .digest('hex');
 
       // Mock session
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
 
       // Mock Supabase auth session
-      const authQuery: MockAuthQuery = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       // Mock child query
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
@@ -163,6 +131,13 @@ describe('POST /api/attendance/checkin', () => {
         error: null,
       });
 
+      // Mock soft-deleted attendance query
+      const softDeletedQuery = createSelectQueryWithFilters();
+      softDeletedQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
+
       // Mock attendance insert query
       const attendanceInsertQuery = createInsertQuery();
       attendanceInsertQuery.single.mockResolvedValue({
@@ -177,11 +152,11 @@ describe('POST /api/attendance/checkin', () => {
 
       // Use mockReturnValueOnce for deterministic sequencing
       const mockSupabase: MockSupabaseClient = {
-        auth: authQuery,
         from: jest.fn<MockSelectQuery | MockInsertQuery, [string]>()
           .mockReturnValueOnce(childQuery) // First call: m_children
           .mockReturnValueOnce(attendanceCheckQuery) // Second call: h_attendance (check)
-          .mockReturnValueOnce(attendanceInsertQuery), // Third call: h_attendance (insert)
+          .mockReturnValueOnce(softDeletedQuery) // Third call: h_attendance (soft-deleted check)
+          .mockReturnValueOnce(attendanceInsertQuery), // Fourth call: h_attendance (insert)
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
@@ -201,8 +176,6 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.data?.child_name).toBe('Test Child');
       expect(json.data?.class_name).toBe('さくら組');
 
-      // Assert auth.getClaims was called (new JWT-based auth)
-      expect(authQuery.getClaims).toHaveBeenCalledTimes(1);
 
       // Assert m_children query structure
       expect(mockSupabase.from).toHaveBeenCalledWith('m_children');
@@ -239,44 +212,8 @@ describe('POST /api/attendance/checkin', () => {
       const userId = 'user-789';
 
       // Mock session
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn(),
       };
 
@@ -307,41 +244,6 @@ describe('POST /api/attendance/checkin', () => {
         .digest('hex');
 
       // Mock session
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
 
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
@@ -356,7 +258,6 @@ describe('POST /api/attendance/checkin', () => {
       });
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -388,42 +289,6 @@ describe('POST /api/attendance/checkin', () => {
         .update(`${childId}${facilityId}${QR_SIGNATURE_SECRET}`)
         .digest('hex');
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: MockAuthQuery = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
         data: {
@@ -441,6 +306,13 @@ describe('POST /api/attendance/checkin', () => {
         data: null,
         error: null,
       });
+      // Mock soft-deleted attendance query
+      const softDeletedQuery = createSelectQueryWithFilters();
+      softDeletedQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
+
 
       const attendanceInsertQuery = createInsertQuery();
       attendanceInsertQuery.single.mockResolvedValue({
@@ -455,11 +327,13 @@ describe('POST /api/attendance/checkin', () => {
 
       // Use mockReturnValueOnce for deterministic sequencing
       const mockSupabase: MockSupabaseClient = {
-        auth: authQuery,
         from: jest.fn<MockSelectQuery | MockInsertQuery, [string]>()
           .mockReturnValueOnce(childQuery) // First call: m_children
           .mockReturnValueOnce(attendanceCheckQuery) // Second call: h_attendance (check)
-          .mockReturnValueOnce(attendanceInsertQuery), // Third call: h_attendance (insert)
+
+          .mockReturnValueOnce(softDeletedQuery) // Third call: h_attendance (soft-deleted check)
+
+          .mockReturnValueOnce(attendanceInsertQuery), // Fourth call: h_attendance (insert)
       };
 
       mockedCreateClient.mockResolvedValue(mockSupabase as any);
@@ -492,22 +366,9 @@ describe('POST /api/attendance/checkin', () => {
       const childId = 'child-123';
       const facilityId = 'facility-456';
 
-      // Mock Supabase auth session returning null
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: null,
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'No session' },
-        }),
-      };
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn(),
       };
 
@@ -531,41 +392,14 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.error).toBe('Unauthorized');
     });
 
-    it('should return 401 when mockedGetUserSession returns a session without current_facility_id', async () => {
+    it('should return 401 when getAuthenticatedUserMetadata returns null', async () => {
       const childId = 'child-123';
       const facilityId = 'facility-456';
-      const userId = 'user-789';
 
-      // Mock session without current_facility_id
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: null as any,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'No facility' },
-        }),
-      };
+      // Mock JWT returning null (authentication failed)
+      mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn(),
       };
 
@@ -593,44 +427,7 @@ describe('POST /api/attendance/checkin', () => {
       const facilityId = 'facility-456';
       const userId = 'user-789';
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn(),
       };
 
@@ -659,44 +456,7 @@ describe('POST /api/attendance/checkin', () => {
       const facilityId = 'facility-456';
       const userId = 'user-789';
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn(),
       };
 
@@ -726,42 +486,6 @@ describe('POST /api/attendance/checkin', () => {
         .update(`${childId}${qrFacilityId}${QR_SIGNATURE_SECRET}`)
         .digest('hex');
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: userFacilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: userFacilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
         data: {
@@ -775,7 +499,6 @@ describe('POST /api/attendance/checkin', () => {
       });
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -806,42 +529,6 @@ describe('POST /api/attendance/checkin', () => {
       const signature = createHmac('sha256', QR_SIGNATURE_SECRET)
         .update(`${childId}${facilityId}${QR_SIGNATURE_SECRET}`)
         .digest('hex');
-
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
 
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
@@ -880,7 +567,6 @@ describe('POST /api/attendance/checkin', () => {
       };
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           if (table === 'h_attendance') {
@@ -922,42 +608,6 @@ describe('POST /api/attendance/checkin', () => {
         .update(`${childId}${facilityId}${QR_SIGNATURE_SECRET}`)
         .digest('hex');
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       // Mock child query returning error
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
@@ -966,7 +616,6 @@ describe('POST /api/attendance/checkin', () => {
       });
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           throw new Error(`Unexpected table: ${table}`);
@@ -998,42 +647,6 @@ describe('POST /api/attendance/checkin', () => {
         .update(`${childId}${facilityId}${QR_SIGNATURE_SECRET}`)
         .digest('hex');
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
         data: {
@@ -1060,15 +673,21 @@ describe('POST /api/attendance/checkin', () => {
         error: { message: 'db error' },
       });
 
+      // Mock soft-deleted attendance query
+      const softDeletedQuery = createSelectQueryWithFilters();
+      softDeletedQuery.maybeSingle.mockResolvedValue({
+        data: null,
+        error: null,
+      });
+
       const mockSupabase: Record<string, unknown> = {
-        auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           if (table === 'h_attendance') {
             const callCount: number = (mockSupabase.from as jest.Mock).mock.calls.filter(
               (call: unknown[]) => call[0] === 'h_attendance'
             ).length;
-            return callCount === 1 ? attendanceCheckQuery : attendanceInsertQuery;
+                        return callCount === 1 ? attendanceCheckQuery : callCount === 2 ? softDeletedQuery : attendanceInsertQuery;
           }
           throw new Error(`Unexpected table: ${table}`);
         }),
@@ -1099,42 +718,6 @@ describe('POST /api/attendance/checkin', () => {
         .update(`${childId}${facilityId}${QR_SIGNATURE_SECRET}`)
         .digest('hex');
 
-      mockedGetUserSession.mockResolvedValue({
-        user_id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        role: 'staff',
-        company_id: 'company-1',
-        company_name: 'Test Company',
-        current_facility_id: facilityId,
-        facilities: [],
-        classes: [],
-      });
-
-      const authQuery: any = {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: { id: userId },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: userId,
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: facilityId,
-              },
-            },
-          },
-          error: null,
-        }),
-      };
-
       // Mock child query returning null data and null error (child not found)
       const childQuery = createSelectQuery();
       childQuery.maybeSingle.mockResolvedValue({
@@ -1143,7 +726,6 @@ describe('POST /api/attendance/checkin', () => {
       });
 
       const mockSupabase = {
-        auth: authQuery,
         from: jest.fn((table: string) => {
           if (table === 'm_children') return childQuery;
           throw new Error(`Unexpected table: ${table}`);

@@ -82,6 +82,7 @@ export async function fetchAttendanceContext(
       .eq('facility_id', facilityId)
       .gte('checked_in_at', start)
       .lte('checked_in_at', end)
+      .is('deleted_at', null)
       .in('child_id', childIds),
   ]);
 

@@ -128,7 +128,8 @@ export async function GET(request: NextRequest) {
                 is_primary,
                 guardian:m_guardians (
                   id,
-                  phone
+                  phone,
+                  deleted_at
                 )
               `
               )
@@ -182,11 +183,11 @@ export async function GET(request: NextRequest) {
     // 4. バッチ復号化 - 施設IDでキャッシュ分離
     const decryptedChildren = cachedBatchDecryptChildren(childrenData, facility_id);
     const guardianPhoneMap = cachedBatchDecryptGuardianPhones(
-      (guardianLinksResult.data ?? []) as unknown as Array<{
+      ((guardianLinksResult.data ?? []) as unknown as Array<{
         child_id: string;
         is_primary?: boolean;
-        guardian?: { id: string; phone: string | null } | null;
-      }>,
+        guardian?: { id: string; phone: string | null; deleted_at: string | null } | null;
+      }>).filter((g) => g.guardian && g.guardian.deleted_at === null),
       facility_id
     );
 

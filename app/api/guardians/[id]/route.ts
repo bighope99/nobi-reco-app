@@ -307,6 +307,15 @@ export async function DELETE(
       return NextResponse.json({ error: '保護者の削除に失敗しました' }, { status: 500 });
     }
 
+    // _child_guardian リンク行をクリーンアップ（ベストエフォート）
+    const { error: linkDeleteError } = await supabase
+      .from('_child_guardian')
+      .delete()
+      .eq('guardian_id', id);
+    if (linkDeleteError) {
+      console.error('Failed to cleanup _child_guardian links:', linkDeleteError);
+    }
+
     await deleteSearchIndex(supabase, 'guardian', id);
 
     // Storageの写真ファイルを削除（失敗しても削除操作自体は成功扱い）

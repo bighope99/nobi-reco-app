@@ -7,28 +7,23 @@
 import { DELETE } from '../route';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server');
-jest.mock('@/lib/auth/session');
+jest.mock('@/lib/auth/jwt');
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
-const ADMIN_SESSION = {
+const ADMIN_METADATA = {
   user_id: 'user-123',
-  email: 'test@example.com',
-  name: 'Test Admin',
   role: 'facility_admin' as const,
   company_id: 'company-123',
-  company_name: 'Test Company',
-  facilities: [{ facility_id: 'facility-123', facility_name: 'Test Facility', is_primary: true }],
   current_facility_id: 'facility-123',
-  classes: [],
 };
 
-const STAFF_SESSION = {
-  ...ADMIN_SESSION,
+const STAFF_METADATA = {
+  ...ADMIN_METADATA,
   role: 'staff' as const,
 };
 
@@ -46,19 +41,13 @@ describe('DELETE /api/activity-templates/[id]', () => {
     jest.clearAllMocks();
 
     mockSupabase = {
-      auth: {
-        getUser: jest.fn().mockResolvedValue({
-          data: { user: { id: 'user-123' } },
-          error: null,
-        }),
-      },
       from: jest.fn(),
     };
     mockCreateClient.mockResolvedValue(mockSupabase);
   });
 
   it('facility_admin は自施設テンプレートを削除できる', async () => {
-    mockGetUserSession.mockResolvedValue(ADMIN_SESSION);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(ADMIN_METADATA);
 
     const mockChain = {
       select: jest.fn().mockReturnThis(),
@@ -87,14 +76,14 @@ describe('DELETE /api/activity-templates/[id]', () => {
   });
 
   it('staff は削除できず 403 を返す', async () => {
-    mockGetUserSession.mockResolvedValue(STAFF_SESSION);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(STAFF_METADATA);
 
     const response = await DELETE(makeRequest(), { params: makeParams('template-1') });
     expect(response.status).toBe(403);
   });
 
   it('他施設のテンプレートは削除できず 403 を返す', async () => {
-    mockGetUserSession.mockResolvedValue(ADMIN_SESSION);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(ADMIN_METADATA);
 
     const mockChain = {
       select: jest.fn().mockReturnThis(),
@@ -112,7 +101,7 @@ describe('DELETE /api/activity-templates/[id]', () => {
   });
 
   it('存在しないテンプレートは 404 を返す', async () => {
-    mockGetUserSession.mockResolvedValue(ADMIN_SESSION);
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(ADMIN_METADATA);
 
     const mockChain = {
       select: jest.fn().mockReturnThis(),
