@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { decryptChildId } from '@/utils/crypto/childIdEncryption';
 import { extractChildContent } from '@/lib/ai/contentExtractor';
 import { validateActivityExtendedFields } from '@/lib/validation/activityValidation';
@@ -18,22 +18,12 @@ import type { DailyScheduleItem, RoleAssignment, Meal } from '@/types/activity';
 export async function POST(request: NextRequest) {
   try {
     // 認証チェック
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // セッション情報取得
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const {
       content,
@@ -137,7 +127,7 @@ export async function POST(request: NextRequest) {
           return { error: '保育日誌が見つかりませんでした', status: 404 };
         }
 
-        if (existingActivity.facility_id !== session.current_facility_id) {
+        if (existingActivity.facility_id !== metadata.current_facility_id) {
           return { error: 'この保育日誌にアクセスする権限がありません', status: 403 };
         }
 
@@ -177,13 +167,13 @@ export async function POST(request: NextRequest) {
       }
 
       const insertPayload: Record<string, unknown> = {
-        facility_id: session.current_facility_id,
+        facility_id: metadata.current_facility_id,
         class_id: class_id || null,
         activity_date,
         title: title || null,
         content,
         mentioned_children,
-        created_by: session.user_id,
+        created_by: metadata.user_id,
         event_name: validatedFields.event_name,
         daily_schedule: validatedFields.daily_schedule,
         role_assignments: validatedFields.role_assignments,
@@ -288,7 +278,7 @@ export async function POST(request: NextRequest) {
           observation_date: activity_date,
           content: result.value.content,
           activity_id: activity.id,
-          created_by: session.user_id,
+          created_by: metadata.user_id,
         });
       } else {
         const err = result.reason as Error & { token?: string; childId?: string };
@@ -343,22 +333,12 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     // 認証チェック
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // セッション情報取得
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const {
       activity_id,
@@ -441,7 +421,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // 施設IDチェック
-    if (existingActivity.facility_id !== session.current_facility_id) {
+    if (existingActivity.facility_id !== metadata.current_facility_id) {
       return NextResponse.json(
         { error: 'この保育日誌を更新する権限がありません' },
         { status: 403 }
@@ -497,21 +477,12 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { activity_id } = body;
 
@@ -536,7 +507,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (existingActivity.facility_id !== session.current_facility_id) {
+    if (existingActivity.facility_id !== metadata.current_facility_id) {
       return NextResponse.json(
         { error: 'この保育日誌を削除する権限がありません' },
         { status: 403 }

@@ -1,27 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ childId: string }> },
 ) {
   try {
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata || !metadata.current_facility_id) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const session = await getUserSession(user.id);
-    if (!session || !session.current_facility_id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { childId } = await params;
     if (!childId) {
       return NextResponse.json({ success: false, error: 'childId is required' }, { status: 400 });
@@ -38,7 +29,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: '子どもが見つかりません' }, { status: 404 });
     }
 
-    if (childData.facility_id !== session.current_facility_id) {
+    if (childData.facility_id !== metadata.current_facility_id) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 

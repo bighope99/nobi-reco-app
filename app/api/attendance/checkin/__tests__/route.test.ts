@@ -1,11 +1,20 @@
 import { NextRequest } from 'next/server';
 import { POST } from '../route';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { createHmac } from 'crypto';
 
 jest.mock('@/utils/supabase/server');
-jest.mock('@/lib/auth/session');
+jest.mock('@/lib/auth/jwt');
+
+const mockGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
+
+const BASE_METADATA = {
+  user_id: 'user-123',
+  role: 'staff' as const,
+  company_id: 'company-1',
+  current_facility_id: 'facility-123',
+};
 
 describe('/api/attendance/checkin POST', () => {
   let mockSupabase: any;
@@ -14,6 +23,8 @@ describe('/api/attendance/checkin POST', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.QR_SIGNATURE_SECRET = qrSecret;
+
+    mockGetAuthenticatedUserMetadata.mockResolvedValue(BASE_METADATA);
 
     mockSupabase = {
       from: jest.fn().mockReturnThis(),
@@ -27,31 +38,6 @@ describe('/api/attendance/checkin POST', () => {
       maybeSingle: jest.fn(),
       single: jest.fn(),
       insert: jest.fn().mockReturnThis(),
-      auth: {
-        getSession: jest.fn().mockResolvedValue({
-          data: {
-            session: {
-              user: {
-                id: 'user-123',
-              },
-            },
-          },
-          error: null,
-        }),
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: 'user-123',
-              app_metadata: {
-                role: 'staff',
-                company_id: 'company-1',
-                current_facility_id: 'facility-123',
-              },
-            },
-          },
-          error: null,
-        }),
-      },
     };
 
     (createClient as jest.Mock).mockResolvedValue(mockSupabase);
@@ -59,14 +45,7 @@ describe('/api/attendance/checkin POST', () => {
 
   describe('認証チェック', () => {
     it('セッションがない場合は401を返す', async () => {
-      mockSupabase.auth.getSession.mockResolvedValue({
-        data: { session: null },
-        error: null,
-      });
-      mockSupabase.auth.getClaims.mockResolvedValue({
-        data: null,
-        error: { message: 'No session' },
-      });
+      mockGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
@@ -81,11 +60,12 @@ describe('/api/attendance/checkin POST', () => {
       expect(data.error).toBe('Unauthorized');
     });
 
-    it('current_facility_idがない場合は401を返す', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue({ user_id: 'user-123' });
-      mockSupabase.auth.getClaims.mockResolvedValue({
-        data: null,
-        error: { message: 'No facility' },
+    it('current_facility_idがない場合は404を返す', async () => {
+      mockGetAuthenticatedUserMetadata.mockResolvedValue({
+        user_id: 'user-123',
+        role: 'staff',
+        company_id: 'company-1',
+        current_facility_id: null,
       });
 
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
@@ -96,20 +76,13 @@ describe('/api/attendance/checkin POST', () => {
       const response = await POST(request);
       const data = await response.json();
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(404);
       expect(data.success).toBe(false);
-      expect(data.error).toBe('Unauthorized');
+      expect(data.error).toBe('Facility not found');
     });
   });
 
   describe('リクエストバリデーション', () => {
-    beforeEach(() => {
-      (getUserSession as jest.Mock).mockResolvedValue({
-        user_id: 'user-123',
-        current_facility_id: 'facility-123',
-      });
-    });
-
     it('tokenがない場合は400を返す', async () => {
       const request = new NextRequest('http://localhost:3000/api/attendance/checkin', {
         method: 'POST',
@@ -140,13 +113,6 @@ describe('/api/attendance/checkin POST', () => {
   });
 
   describe('JWT検証', () => {
-    beforeEach(() => {
-      (getUserSession as jest.Mock).mockResolvedValue({
-        user_id: 'user-123',
-        current_facility_id: 'facility-123',
-      });
-    });
-
     it('無効な署名の場合は401を返す', async () => {
       mockSupabase.maybeSingle.mockResolvedValueOnce({
         data: {
@@ -223,13 +189,6 @@ describe('/api/attendance/checkin POST', () => {
   });
 
   describe('子ども存在チェック', () => {
-    beforeEach(() => {
-      (getUserSession as jest.Mock).mockResolvedValue({
-        user_id: 'user-123',
-        current_facility_id: 'facility-123',
-      });
-    });
-
     it('子どもが見つからない場合は404を返す', async () => {
       mockSupabase.maybeSingle.mockResolvedValueOnce({
         data: null,
@@ -256,10 +215,6 @@ describe('/api/attendance/checkin POST', () => {
 
   describe('2回目QR読取り（帰宅）検証', () => {
     beforeEach(() => {
-      (getUserSession as jest.Mock).mockResolvedValue({
-        user_id: 'user-123',
-        current_facility_id: 'facility-123',
-      });
       mockSupabase.update = jest.fn().mockReturnThis();
     });
 
@@ -376,13 +331,6 @@ describe('/api/attendance/checkin POST', () => {
   });
 
   describe('チェックイン成功', () => {
-    beforeEach(() => {
-      (getUserSession as jest.Mock).mockResolvedValue({
-        user_id: 'user-123',
-        current_facility_id: 'facility-123',
-      });
-    });
-
     it('正常にチェックインできる', async () => {
       const now = new Date();
       const today = now.toLocaleDateString('ja-JP', {
@@ -518,13 +466,6 @@ describe('/api/attendance/checkin POST', () => {
   });
 
   describe('エラーハンドリング', () => {
-    beforeEach(() => {
-      (getUserSession as jest.Mock).mockResolvedValue({
-        user_id: 'user-123',
-        current_facility_id: 'facility-123',
-      });
-    });
-
     it('データベースエラー時は500を返す', async () => {
       mockSupabase.maybeSingle
         .mockResolvedValueOnce({

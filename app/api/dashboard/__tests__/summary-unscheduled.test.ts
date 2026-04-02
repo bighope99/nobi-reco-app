@@ -17,18 +17,18 @@
 import { NextRequest } from 'next/server';
 import { GET } from '../summary/route';
 import { createClient } from '@/utils/supabase/server';
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
 
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockedGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>;
+const mockedGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
 const buildRequest = (params: { date?: string; showUnscheduled?: string } = {}) => {
   const url = new URL('http://localhost/api/dashboard/summary');
@@ -45,16 +45,11 @@ describe('GET /api/dashboard/summary - Unscheduled Filter', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
-    mockedGetUserSession.mockResolvedValue({
+    mockedGetAuthenticatedUserMetadata.mockResolvedValue({
       user_id: userId,
-      email: 'staff@example.com',
-      name: 'Staff User',
       role: 'staff',
       company_id: 'company-1',
-      company_name: 'Test Company',
       current_facility_id: facilityId,
-      facilities: [],
-      classes: [],
     });
   });
 
@@ -274,25 +269,6 @@ function createMockSupabase(
   };
 
   return {
-    auth: {
-      getSession: jest.fn().mockResolvedValue({
-        data: { session: { user: { id: 'user-789' } } },
-        error: null,
-      }),
-      getClaims: jest.fn().mockResolvedValue({
-        data: {
-          claims: {
-            sub: 'user-789',
-            app_metadata: {
-              role: 'staff',
-              company_id: 'company-1',
-              current_facility_id: 'facility-123',
-            },
-          },
-        },
-        error: null,
-      }),
-    },
     from: jest.fn().mockImplementation((table: string) => {
       if (table === 'm_children') {
         return createMockQueryChain(children);

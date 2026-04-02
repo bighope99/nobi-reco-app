@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
@@ -25,10 +26,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 認証チェック: セッションが存在するか確認
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      // 未認証でも成功として返す（既にログアウト済みの可能性）
+    // 認証チェック: JWTメタデータが取得できない場合は既にログアウト済みとみなす
+    const metadata = await getAuthenticatedUserMetadata();
+    if (!metadata) {
       return NextResponse.json({ success: true, message: 'Already logged out' });
     }
 

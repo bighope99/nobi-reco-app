@@ -7,8 +7,8 @@ import { decryptChildId } from '@/utils/crypto/childIdEncryption';
 import { extractChildContent } from '@/lib/ai/contentExtractor';
 
 // モック
-jest.mock('@/lib/auth/session', () => ({
-  getUserSession: jest.fn(),
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
 }));
 
 jest.mock('@/utils/supabase/server', () => ({
@@ -24,31 +24,15 @@ jest.mock('@/utils/crypto/childIdEncryption', () => ({
   decryptChildId: jest.fn(),
 }));
 
-import { getUserSession } from '@/lib/auth/session';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 import { createClient } from '@/utils/supabase/server';
 
 describe('/api/records/activity', () => {
-  const mockSession = {
+  const mockMetadata = {
     user_id: 'test-user-id',
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'teacher' as const,
+    role: 'staff' as const,
     company_id: 'test-company-id',
-    company_name: 'Test Company',
-    facilities: [
-      {
-        facility_id: 'test-facility-id',
-        facility_name: 'Test Facility',
-        is_primary: true,
-      },
-    ],
     current_facility_id: 'test-facility-id',
-    classes: [],
-  };
-
-  const mockUser = {
-    id: 'test-user-id',
-    email: 'test@example.com',
   };
 
   const validChildId1 = '550e8400-e29b-41d4-a716-446655440001';
@@ -65,6 +49,8 @@ describe('/api/records/activity', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // デフォルトで認証済みメタデータを返す
+    (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(mockMetadata);
     // デフォルトでトークンを復号化できるように設定
     (decryptChildId as jest.Mock).mockImplementation((token: string) => {
       if (token === 'token1') return validChildId1;
@@ -76,15 +62,7 @@ describe('/api/records/activity', () => {
 
   describe('認証テスト', () => {
     it('認証されていない場合は401を返すこと', async () => {
-      const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: null },
-            error: new Error('Not authenticated'),
-          }),
-        },
-      };
-      (createClient as jest.Mock).mockResolvedValue(mockSupabase);
+      (getAuthenticatedUserMetadata as jest.Mock).mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost:3000/api/records/activity', {
         method: 'POST',
@@ -101,17 +79,10 @@ describe('/api/records/activity', () => {
 
   describe('保育日誌保存', () => {
     it('保育日誌を正しく保存できること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       let insertedActivity: any = null;
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -159,22 +130,15 @@ describe('/api/records/activity', () => {
 
       expect(response.status).toBe(200);
       expect(insertedActivity).toBeDefined();
-      expect(insertedActivity.facility_id).toBe(mockSession.current_facility_id);
-      expect(insertedActivity.created_by).toBe(mockSession.user_id);
+      expect(insertedActivity.facility_id).toBe(mockMetadata.current_facility_id);
+      expect(insertedActivity.created_by).toBe(mockMetadata.user_id);
       expect(insertedActivity.mentioned_children).toEqual(['token1', 'token2']);
     });
 
     it('保存された保育日誌のIDを返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -224,17 +188,10 @@ describe('/api/records/activity', () => {
 
   describe('個別記録自動生成', () => {
     it('メンションされた子供の個別記録を生成すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       let observationInsertCount = 0;
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -285,16 +242,9 @@ describe('/api/records/activity', () => {
     });
 
     it('AI内容抽出を各子供に対して実行すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -341,17 +291,10 @@ describe('/api/records/activity', () => {
     });
 
     it('個別記録に元の保育日誌IDを保存すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       let observationData: any = null;
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -402,14 +345,7 @@ describe('/api/records/activity', () => {
 
   describe('バリデーション', () => {
     it('必須フィールドが未指定の場合は400を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
       };
       (createClient as jest.Mock).mockResolvedValue(mockSupabase);
 
@@ -431,14 +367,7 @@ describe('/api/records/activity', () => {
     });
 
     it('contentが空文字の場合は400を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
       };
       (createClient as jest.Mock).mockResolvedValue(mockSupabase);
 
@@ -461,14 +390,7 @@ describe('/api/records/activity', () => {
     });
 
     it('mentioned_childrenが配列でない場合は400を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
       };
       (createClient as jest.Mock).mockResolvedValue(mockSupabase);
 
@@ -493,15 +415,8 @@ describe('/api/records/activity', () => {
 
   describe('エラーハンドリング', () => {
     it('保育日誌保存エラーの場合は500を返すこと', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn(() => ({
           insert: jest.fn(() => ({
             select: jest.fn().mockReturnThis(),
@@ -527,7 +442,6 @@ describe('/api/records/activity', () => {
     });
 
     it('トークン復号化エラーの場合でも処理を継続すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       const dataWithInvalidToken = {
@@ -536,12 +450,6 @@ describe('/api/records/activity', () => {
       };
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -590,16 +498,9 @@ describe('/api/records/activity', () => {
     });
 
     it('AI抽出エラーの場合でも処理を継続すること', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockRejectedValue(new Error('AI error'));
 
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -657,17 +558,10 @@ describe('/api/records/activity', () => {
 
     describe('POST - 新規フィールドを含む保育日誌の保存', () => {
       it('すべての新規フィールドを含む保育日誌を正しく保存できること', async () => {
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+          (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
         let insertedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -723,17 +617,10 @@ describe('/api/records/activity', () => {
       });
 
       it('新規フィールドがnull/undefinedでも保存が成功すること（既存データとの互換性）', async () => {
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+          (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
         let insertedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -794,17 +681,10 @@ describe('/api/records/activity', () => {
       });
 
       it('daily_scheduleが正しいJSON配列形式で保存されること', async () => {
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+          (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
         let insertedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -866,17 +746,10 @@ describe('/api/records/activity', () => {
       });
 
       it('role_assignmentsが正しいJSON配列形式で保存されること', async () => {
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+          (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
         let insertedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -939,17 +812,10 @@ describe('/api/records/activity', () => {
       });
 
       it('mealが正しいJSONオブジェクト形式で保存されること', async () => {
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+          (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
         let insertedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -1013,17 +879,10 @@ describe('/api/records/activity', () => {
       });
 
       it('meal.items_to_bringとmeal.notesがオプションフィールドとして機能すること', async () => {
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-        (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
+          (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
         let insertedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -1086,16 +945,9 @@ describe('/api/records/activity', () => {
       // PUTメソッドのモック（ファイルには実装済み）
       it('新規フィールドの更新が成功すること', async () => {
         const { PUT } = await import('@/app/api/records/activity/route');
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-
+  
         let updatedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -1105,8 +957,8 @@ describe('/api/records/activity', () => {
                       single: jest.fn().mockResolvedValue({
                         data: {
                           id: 'existing-activity-id',
-                          facility_id: mockSession.current_facility_id,
-                          created_by: mockSession.user_id,
+                          facility_id: mockMetadata.current_facility_id,
+                          created_by: mockMetadata.user_id,
                         },
                         error: null,
                       }),
@@ -1166,16 +1018,9 @@ describe('/api/records/activity', () => {
 
       it('新規フィールドのみの部分更新が成功すること', async () => {
         const { PUT } = await import('@/app/api/records/activity/route');
-        (getUserSession as jest.Mock).mockResolvedValue(mockSession);
-
+  
         let updatedActivity: any = null;
         const mockSupabase: Record<string, unknown> = {
-          auth: {
-            getUser: jest.fn().mockResolvedValue({
-              data: { user: mockUser },
-              error: null,
-            }),
-          },
           from: jest.fn((tableName: string) => {
             if (tableName === 'r_activity') {
               return {
@@ -1185,8 +1030,8 @@ describe('/api/records/activity', () => {
                       single: jest.fn().mockResolvedValue({
                         data: {
                           id: 'existing-activity-id',
-                          facility_id: mockSession.current_facility_id,
-                          created_by: mockSession.user_id,
+                          facility_id: mockMetadata.current_facility_id,
+                          created_by: mockMetadata.user_id,
                         },
                         error: null,
                       }),
@@ -1245,17 +1090,10 @@ describe('/api/records/activity', () => {
 
   describe('todo_items の保存・更新', () => {
     it('POST: todo_itemsを含む保存リクエストでDBに正しく挿入される', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       let insertedActivity: any = null;
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -1300,17 +1138,10 @@ describe('/api/records/activity', () => {
     });
 
     it('POST: todo_itemsを省略した場合、todo_items: nullとして保存される', async () => {
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
       (extractChildContent as jest.Mock).mockResolvedValue('抽出された内容');
 
       let insertedActivity: any = null;
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -1356,16 +1187,9 @@ describe('/api/records/activity', () => {
 
     it('PUT: todo_itemsを含む更新リクエストでDBに正しく更新される', async () => {
       const { PUT } = await import('@/app/api/records/activity/route');
-      (getUserSession as jest.Mock).mockResolvedValue(mockSession);
 
       let updatedActivity: any = null;
       const mockSupabase: Record<string, unknown> = {
-        auth: {
-          getUser: jest.fn().mockResolvedValue({
-            data: { user: mockUser },
-            error: null,
-          }),
-        },
         from: jest.fn((tableName: string) => {
           if (tableName === 'r_activity') {
             return {
@@ -1375,8 +1199,8 @@ describe('/api/records/activity', () => {
                     single: jest.fn().mockResolvedValue({
                       data: {
                         id: 'existing-activity-id',
-                        facility_id: mockSession.current_facility_id,
-                        created_by: mockSession.user_id,
+                        facility_id: mockMetadata.current_facility_id,
+                        created_by: mockMetadata.user_id,
                       },
                       error: null,
                     }),

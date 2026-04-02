@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { formatTimeJST, getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
+import { SESSION_STORAGE_KEY } from "@/lib/auth/storage-keys"
+import { UserSession } from "@/lib/auth/session"
 import { normalizeSearch } from "@/lib/utils/kana"
 import { Button } from "@/components/ui/button"
 import {
@@ -263,17 +265,17 @@ export default function AttendanceListPage() {
     if (!selectedDate) {
       setSelectedDate(getTomorrowDateJST())
     }
-    // sessionStorageからロールを取得して時刻編集権限を判定
+    // localStorageからロールを取得して時刻編集権限を判定
     try {
-      const raw = sessionStorage.getItem('user_session')
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY)
       if (raw) {
-        const session = JSON.parse(raw)
-        const role = session.role as string
+        const session: UserSession = JSON.parse(raw)
+        const role = session.role
         setCanEditTime(['site_admin', 'company_admin', 'facility_admin'].includes(role))
         setCanCancel(['site_admin', 'company_admin', 'facility_admin'].includes(role))
       }
     } catch {
-      // sessionStorageが使えない場合は権限なし
+      // localStorageが使えない場合は権限なし
     }
   }, [selectedDate])
 

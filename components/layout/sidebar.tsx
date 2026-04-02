@@ -25,6 +25,7 @@ import { LogoutButton } from "@/components/LogoutButton"
 type NavChildItem = {
   label: string
   href: string
+  matchHref?: string // アクティブ判定に使うhref（省略時はhrefを使用）
   hidden?: boolean
   target?: string
   roles?: string[] // 指定した場合、そのロールのユーザーにのみ表示
@@ -48,7 +49,7 @@ const staffNavItems: NavItem[] = [
       { label: "記録状況一覧", href: "/records/status" },
       { label: "保育日誌", href: "/records/activity" },
       { label: "記録履歴", href: "/records/activity/history" },
-      { label: "児童記録", href: "/records/personal/new" },
+      { label: "児童記録", href: "/records/personal/new", matchHref: "/records/personal" },
     ],
   },
   {
@@ -155,18 +156,22 @@ export function Sidebar({ type, role, companyId, userName, isOpen = false, onClo
 
   /**
    * 子メニュー項目のアクティブ状態を判定する。
+   * matchHref が指定されている場合はそちらをアクティブ判定に使用する。
    * 同一親メニュー内の兄弟アイテムでより具体的にマッチするものがある場合はそちらを優先する。
-   * @param href - メニュー項目のhref
-   * @param siblings - 同一親メニュー内の兄弟アイテムのhref配列
+   * @param item - メニュー項目
+   * @param siblings - 同一親メニュー内の兄弟アイテム配列
    * @returns アクティブ状態かどうか
    */
-  const isChildActive = (href: string, siblings: { href: string }[]) => {
-    if (pathname === href) return true
-    if (!pathname.startsWith(href + "/")) return false
+  const isChildActive = (item: NavChildItem, siblings: NavChildItem[]) => {
+    const activeHref = item.matchHref ?? item.href
+    if (pathname === activeHref) return true
+    if (!pathname.startsWith(activeHref + "/")) return false
     // 自分よりも具体的にマッチする兄弟がいればfalse
-    return !siblings.some(
-      (sibling) => sibling.href !== href && (pathname === sibling.href || pathname.startsWith(sibling.href + "/"))
-    )
+    return !siblings.some((sibling) => {
+      if (sibling.href === item.href) return false
+      const siblingActiveHref = sibling.matchHref ?? sibling.href
+      return pathname === siblingActiveHref || pathname.startsWith(siblingActiveHref + "/")
+    })
   }
 
   const handleNavClick = () => {
@@ -241,7 +246,7 @@ export function Sidebar({ type, role, companyId, userName, isOpen = false, onClo
                           className={cn(
                             "block rounded-lg px-3 py-2 text-sm text-sidebar-foreground",
                             "hover:bg-sidebar-accent active:scale-95 active:bg-sidebar-accent/80 transition-[transform,background-color] duration-150",
-                            isChildActive(child.href, item.children ?? []) && "bg-sidebar-accent font-medium",
+                            isChildActive(child, item.children ?? []) && "bg-sidebar-accent font-medium",
                             child.hidden && "hidden",
                           )}
                         >

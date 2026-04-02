@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { UserSession } from '@/lib/auth/session';
 import { createClient } from '@/utils/supabase/client';
+import { SESSION_STORAGE_KEY } from '@/lib/auth/storage-keys';
 
 export function useSession(): UserSession | null {
     const [session, setSession] = useState<UserSession | null>(null);
@@ -10,19 +11,19 @@ export function useSession(): UserSession | null {
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        // 1. まず sessionStorage から読む（既存ロジック）
-        const stored = sessionStorage.getItem('user_session');
+        // 1. まず localStorage から読む（既存ロジック）
+        const stored = localStorage.getItem(SESSION_STORAGE_KEY);
         if (stored) {
             try {
                 setSession(JSON.parse(stored));
                 return; // データがあればそのまま使用
             } catch (e) {
                 console.error('Failed to parse session data', e);
-                sessionStorage.removeItem('user_session');
+                localStorage.removeItem(SESSION_STORAGE_KEY);
             }
         }
 
-        // 2. sessionStorage が空 → Supabase Auth から復旧を試みる
+        // 2. localStorage が空 → Supabase Auth から復旧を試みる
         const restoreSession = async () => {
             try {
                 const supabase = createClient();
@@ -42,7 +43,7 @@ export function useSession(): UserSession | null {
                 if (!response.ok) return;
 
                 const sessionData: UserSession = await response.json();
-                sessionStorage.setItem('user_session', JSON.stringify(sessionData));
+                localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
                 setSession(sessionData);
             } catch (e) {
                 console.error('Failed to restore session', e);

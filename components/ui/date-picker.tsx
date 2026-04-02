@@ -7,6 +7,7 @@ import { ja } from 'date-fns/locale'
 import { Calendar } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { getJSTTodayAsDate } from '@/lib/utils/timezone'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
@@ -27,8 +28,8 @@ export function DatePicker({
   date,
   onSelect,
   disabled = false,
-  maxDate = new Date(),
-  minDate = subYears(new Date(), 1),
+  maxDate = getJSTTodayAsDate(),
+  minDate = subYears(getJSTTodayAsDate(), 1),
   placeholder = '日付を選択',
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)

@@ -1,16 +1,29 @@
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/schools/route';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthenticatedUserMetadata } from '@/lib/auth/jwt';
 
 jest.mock('@/utils/supabase/server', () => ({
   createClient: jest.fn(),
 }));
+
+jest.mock('@/lib/auth/jwt', () => ({
+  getAuthenticatedUserMetadata: jest.fn(),
+}));
+
+const mockedGetAuthenticatedUserMetadata = getAuthenticatedUserMetadata as jest.MockedFunction<typeof getAuthenticatedUserMetadata>;
 
 describe('GET /api/schools', () => {
   const mockedCreateClient = createClient as jest.MockedFunction<typeof createClient>;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockedGetAuthenticatedUserMetadata.mockResolvedValue({
+      user_id: 'user-123',
+      role: 'facility_admin',
+      company_id: 'company-1',
+      current_facility_id: 'facility-1',
+    });
   });
 
   it('returns schools for the current facility', async () => {
@@ -59,21 +72,6 @@ describe('GET /api/schools', () => {
     };
 
     const mockSupabase = {
-      auth: {
-        getClaims: jest.fn().mockResolvedValue({
-          data: {
-            claims: {
-              sub: 'user-123',
-              app_metadata: {
-                role: 'facility_admin',
-                company_id: 'company-1',
-                current_facility_id: 'facility-1',
-              },
-            },
-          },
-          error: null,
-        }),
-      },
       from: jest.fn((table: string) => {
         if (table === 'm_schools') return schoolsQuery;
         if (table === 's_school_schedules') return schedulesQuery;
