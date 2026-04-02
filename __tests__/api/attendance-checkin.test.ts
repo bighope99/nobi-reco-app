@@ -392,12 +392,11 @@ describe('POST /api/attendance/checkin', () => {
       expect(json.error).toBe('Unauthorized');
     });
 
-    it('should return 401 when mockedGetUserSession returns a session without current_facility_id', async () => {
+    it('should return 401 when getAuthenticatedUserMetadata returns null', async () => {
       const childId = 'child-123';
       const facilityId = 'facility-456';
-      const userId = 'user-789';
 
-      // Mock JWT returning null (no current_facility_id case handled in getAuthenticatedUserMetadata)
+      // Mock JWT returning null (authentication failed)
       mockedGetAuthenticatedUserMetadata.mockResolvedValue(null);
 
       const mockSupabase = {
