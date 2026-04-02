@@ -153,10 +153,10 @@ export default function SelfCheckInPage() {
   }
 
   const goToFeedback = (child: ChildRecord) => {
-    if (child.status === 'checked_in' || child.status === 'checked_out') {
+    if (child.status === 'checked_out') {
       setSelectedChild(child)
-      setCheckinAction(child.status === 'checked_in' ? 'check_in' : 'check_out')
-      setCheckinTime(formatTimeJST(child.status === 'checked_out' ? child.checkedOutAt : child.checkedInAt) ?? '')
+      setCheckinAction('check_out')
+      setCheckinTime(formatTimeJST(child.checkedOutAt) ?? '')
       setCheckinHour(new Date().getHours())
       setAttendanceId(child.attendanceId ?? null)
       setCountdown(3)
