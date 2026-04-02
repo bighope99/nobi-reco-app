@@ -56,18 +56,17 @@ function formatMeal(meal: unknown): string {
   return parts.join('\n')
 }
 
-/** role_assignments JSONからスタッフ名カンマ区切り文字列を生成 */
-function formatStaffNames(roleAssignments: unknown): string {
-  if (!Array.isArray(roleAssignments)) return ''
-  return roleAssignments
-    .map((ra: unknown) => {
-      if (ra && typeof ra === 'object' && 'user_name' in ra) {
-        return (ra as { user_name?: string }).user_name ?? ''
-      }
-      return ''
-    })
-    .filter(Boolean)
-    .join('、')
+/** セルに値をセットし、左上詰めアライメントを適用する */
+function setCellValue(
+  sheet: ExcelJS.Worksheet,
+  cellRef: string | [number, number],
+  value: ExcelJS.CellValue
+): void {
+  const cell = typeof cellRef === 'string'
+    ? sheet.getCell(cellRef)
+    : sheet.getCell(cellRef[0], cellRef[1])
+  cell.value = value
+  cell.alignment = { ...(cell.alignment ?? {}), vertical: 'top', horizontal: 'left' }
 }
 
 /**
@@ -253,9 +252,15 @@ export async function GET(request: NextRequest) {
     const outputWb = new ExcelJS.Workbook()
 
     for (const date of dates) {
-      const sheetName = formatSheetName(date)
       const activity = activityByDate.get(date) ?? null
       const attendance = attendanceByDate.get(date) ?? { presentCount: 0, absentCount: 0 }
+
+      // 記録なし＋通所ゼロの日はスキップ
+      if (!activity && attendance.presentCount === 0) {
+        continue
+      }
+
+      const sheetName = formatSheetName(date)
 
       // テンプレートを毎回読み込んでシートを複製
       const tmpWb = new ExcelJS.Workbook()
@@ -268,27 +273,23 @@ export async function GET(request: NextRequest) {
 
       // データを書き込む
       // ヘッダー: 月日（例: "7月21日（月）"）
-      newSheet.getCell(TEMPLATE_CELLS.header).value = formatDateJa(date)
+      setCellValue(newSheet, TEMPLATE_CELLS.header, formatDateJa(date))
 
       if (activity) {
         // 一日の保育活動と内容
-        newSheet.getCell(TEMPLATE_CELLS.activity).value = activity.content ?? ''
+        setCellValue(newSheet, TEMPLATE_CELLS.activity, activity.content ?? '')
 
         // 今日のごはん・おやつ
         const mealText = formatMeal(activity.meal)
         const snackText = activity.snack ?? ''
         const mealSnackText = [mealText, snackText].filter(Boolean).join('\n')
-        newSheet.getCell(TEMPLATE_CELLS.meal).value = mealSnackText
+        setCellValue(newSheet, TEMPLATE_CELLS.meal, mealSnackText)
 
         // 出勤スタッフへの連絡事項
-        const staffNotesText = activity.handover ?? activity.special_notes ?? ''
-        newSheet.getCell(TEMPLATE_CELLS.staffNotes).value = staffNotesText
+        setCellValue(newSheet, TEMPLATE_CELLS.staffNotes, activity.handover ?? activity.special_notes ?? '')
 
-        // 今日の予定
-        newSheet.getCell(TEMPLATE_CELLS.eventName).value = activity.event_name ?? ''
-
-        // スタッフ名一覧
-        newSheet.getCell(TEMPLATE_CELLS.staffNames).value = formatStaffNames(activity.role_assignments)
+        // 行事名（10行目）
+        setCellValue(newSheet, TEMPLATE_CELLS.eventNameCell, activity.event_name?.trim() || 'なし')
 
         // daily_schedule → 時間軸マッピング
         if (Array.isArray(activity.daily_schedule)) {
@@ -296,15 +297,36 @@ export async function GET(request: NextRequest) {
             if (!item?.time) continue
             const row = timeToRow(item.time)
             if (row !== null) {
-              newSheet.getCell(row, TEMPLATE_CELLS.scheduleContentCol).value = item.content ?? ''
+              setCellValue(newSheet, [row, TEMPLATE_CELLS.scheduleContentCol], item.content ?? '')
+            }
+          }
+
+          // 最初のスケジュールエントリより前の行をクリア
+          const schedule = activity.daily_schedule as { time: string; content: string }[]
+          const rows = schedule
+            .map(item => item?.time ? timeToRow(item.time) : null)
+            .filter((r): r is number => r !== null)
+          if (rows.length > 0) {
+            const firstRow = Math.min(...rows)
+            for (let r = TEMPLATE_CELLS.scheduleStartRow; r < firstRow; r++) {
+              newSheet.getCell(r, TEMPLATE_CELLS.scheduleTimeCol).value = ''
+              newSheet.getCell(r, TEMPLATE_CELLS.scheduleContentCol).value = ''
             }
           }
         }
       }
 
       // 出席集計（activityの有無に関わらず書き込む）
-      newSheet.getCell(TEMPLATE_CELLS.attendancePresent).value = attendance.presentCount
-      newSheet.getCell(TEMPLATE_CELLS.attendanceAbsent).value = attendance.absentCount
+      setCellValue(newSheet, TEMPLATE_CELLS.attendancePresent, attendance.presentCount)
+      setCellValue(newSheet, TEMPLATE_CELLS.attendanceAbsent, attendance.absentCount)
+    }
+
+    // 全ワークブックが空の場合
+    if (outputWb.worksheets.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '該当するデータがありません' },
+        { status: 404 }
+      )
     }
 
     // Excelバイナリを返却

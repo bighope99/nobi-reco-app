@@ -17,10 +17,8 @@ export const TEMPLATE_CELLS = {
   attendanceAbsent: 'H4',
   /** 出勤スタッフへの連絡事項（A7） */
   staffNotes: 'A7',
-  /** 今日の予定（結合 B9:C9） */
-  eventName: 'B9',
-  /** スタッフ名一覧（結合 D9:H9） */
-  staffNames: 'D9',
+  /** 今日の予定（結合 B10:C10） */
+  eventNameCell: 'B10',
   /** スケジュール開始行（11行目） */
   scheduleStartRow: 11,
   /** スケジュール時刻列: A列（1始まり） */
