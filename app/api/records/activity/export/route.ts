@@ -96,7 +96,7 @@ function copyTemplateSheet(
       const newCell = newRow.getCell(colNum)
       newCell.value = cell.value
       // スタイルをディープコピー
-      newCell.style = JSON.parse(JSON.stringify(cell.style))
+      newCell.style = structuredClone(cell.style)
     })
 
     newRow.commit()
@@ -114,8 +114,8 @@ function copyTemplateSheet(
     for (const merge of model.merges) {
       try {
         targetSheet.mergeCells(merge)
-      } catch {
-        // 既にマージ済み・範囲エラーは無視
+      } catch (mergeErr) {
+        console.warn('Failed to merge cells (skipped):', merge, mergeErr)
       }
     }
   }
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
     // パラメータ必須チェック
     if (!from_date || !to_date) {
       return NextResponse.json(
-        { success: false, error: 'from_date and to_date are required' },
+        { success: false, error: '開始日と終了日を指定してください' },
         { status: 400 }
       )
     }
@@ -155,19 +155,19 @@ export async function GET(request: NextRequest) {
     // 形式バリデーション
     if (!isValidDateParam(from_date)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid from_date format. Use YYYY-MM-DD.' },
+        { success: false, error: '開始日の形式が不正です（YYYY-MM-DD）' },
         { status: 400 }
       )
     }
     if (!isValidDateParam(to_date)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid to_date format. Use YYYY-MM-DD.' },
+        { success: false, error: '終了日の形式が不正です（YYYY-MM-DD）' },
         { status: 400 }
       )
     }
     if (from_date > to_date) {
       return NextResponse.json(
-        { success: false, error: 'from_date must not be after to_date.' },
+        { success: false, error: '開始日は終了日以前で指定してください' },
         { status: 400 }
       )
     }
@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
     const [checkedInResult, absentResult] = await Promise.all([
       supabase
         .from('h_attendance')
-        .select('child_id, checked_in_date')
+        .select('checked_in_date')
         .eq('facility_id', facility_id)
         .gte('checked_in_date', from_date)
         .lte('checked_in_date', to_date)
@@ -251,11 +251,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 日付ごとの出席マップを構築
-    const presentByDate = new Map<string, Set<string>>()
+    // 日付ごとの出席カウントを構築
+    const presentCountByDate = new Map<string, number>()
     for (const row of checkedInResult.data ?? []) {
-      if (!presentByDate.has(row.checked_in_date)) presentByDate.set(row.checked_in_date, new Set())
-      presentByDate.get(row.checked_in_date)!.add(row.child_id)
+      presentCountByDate.set(row.checked_in_date, (presentCountByDate.get(row.checked_in_date) ?? 0) + 1)
     }
 
     const absentCountByDate = new Map<string, number>()
@@ -267,7 +266,7 @@ export async function GET(request: NextRequest) {
       dates.map(date => [
         date,
         {
-          presentCount: presentByDate.get(date)?.size ?? 0,
+          presentCount: presentCountByDate.get(date) ?? 0,
           absentCount: absentCountByDate.get(date) ?? 0,
         },
       ])
@@ -287,6 +286,13 @@ export async function GET(request: NextRequest) {
     const tmpWb = new ExcelJS.Workbook()
     await tmpWb.xlsx.load(new Uint8Array(templateBuffer).buffer as ArrayBuffer)
     const templateSheet = tmpWb.worksheets[0]
+    if (!templateSheet) {
+      console.error('Template file has no worksheets:', TEMPLATE_PATH)
+      return NextResponse.json(
+        { success: false, error: 'テンプレートファイルが不正です（シートが存在しません）' },
+        { status: 500 }
+      )
+    }
 
     // 出力ワークブック作成
     const outputWb = new ExcelJS.Workbook()
@@ -335,7 +341,7 @@ export async function GET(request: NextRequest) {
           const writtenRows: number[] = []
 
           for (const item of activity.daily_schedule as { time: string; content: string }[]) {
-            if (!item?.time) continue
+            if (!item?.time || typeof item.time !== 'string') continue
             const match = item.time.match(/^(\d{2}):(\d{2})$/)
             if (!match) continue
 
@@ -390,7 +396,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Unexpected error in activity export:', error)
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: '予期しないエラーが発生しました' },
       { status: 500 }
     )
   }

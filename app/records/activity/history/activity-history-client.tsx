@@ -36,12 +36,14 @@ export default function ActivityHistoryClient() {
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const latestRequestRef = useRef(0)
 
   const fetchActivities = useCallback(async (newOffset: number, append: boolean) => {
     const requestId = ++latestRequestRef.current
     setLoading(true)
+    setFetchError(null)
     try {
       const params = new URLSearchParams({ limit: '20', offset: String(newOffset) })
       if (fromDate) params.set('from_date', fromDate)
@@ -80,6 +82,7 @@ export default function ActivityHistoryClient() {
       setOffset(newOffset)
     } catch (err) {
       console.error('Failed to fetch activities:', err)
+      setFetchError('記録の取得に失敗しました。ページを再読み込みしてください。')
     } finally {
       if (requestId === latestRequestRef.current) {
         setLoading(false)
@@ -113,7 +116,7 @@ export default function ActivityHistoryClient() {
       a.href = url
       a.download = `保育日誌_${fromDate}_${toDate}.xlsx`
       a.click()
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (err) {
       console.error(err)
       alert(err instanceof Error ? err.message : 'エクスポートに失敗しました。')
@@ -236,6 +239,12 @@ export default function ActivityHistoryClient() {
             全 <span className="font-bold text-slate-800">{total}</span> 件中{' '}
             <span className="font-bold text-slate-800">{items.length}</span> 件を表示
           </div>
+
+          {fetchError && (
+            <div className="py-4 px-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl">
+              {fetchError}
+            </div>
+          )}
 
           {loading && items.length === 0 ? (
             <div className="py-12 text-center text-slate-500 border border-slate-200 rounded-xl bg-white">
