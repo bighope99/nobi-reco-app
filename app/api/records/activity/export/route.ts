@@ -293,12 +293,24 @@ export async function GET(request: NextRequest) {
 
         // daily_schedule → 時間軸マッピング
         if (Array.isArray(activity.daily_schedule)) {
+          const scheduleEndRow =
+            TEMPLATE_CELLS.scheduleStartRow + (19 * 60 - 8 * 60) / 15 // 11 + 44 = 55
           for (const item of activity.daily_schedule as { time: string; content: string }[]) {
             if (!item?.time) continue
             const row = timeToRow(item.time)
-            if (row !== null) {
-              setCellValue(newSheet, [row, TEMPLATE_CELLS.scheduleContentCol], item.content ?? '')
-            }
+            // timeToRow が null（範囲外）の場合は先頭/末尾行にクランプして書き込む
+            const clampedRow =
+              row !== null
+                ? row
+                : (() => {
+                    const match = item.time.match(/^(\d{2}):(\d{2})$/)
+                    if (!match) return TEMPLATE_CELLS.scheduleStartRow
+                    const totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
+                    return totalMinutes < 8 * 60
+                      ? TEMPLATE_CELLS.scheduleStartRow
+                      : scheduleEndRow
+                  })()
+            setCellValue(newSheet, [clampedRow, TEMPLATE_CELLS.scheduleContentCol], item.content ?? '')
           }
 
           // 最初のスケジュールエントリより前の行をクリア
