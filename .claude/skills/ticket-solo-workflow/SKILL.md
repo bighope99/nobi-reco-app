@@ -158,8 +158,8 @@ git push origin --delete <ブランチ名> 2>/dev/null || true
 # ローカルに同名ブランチが存在する場合は削除
 git branch -D <ブランチ名> 2>/dev/null || true
 # mainの最新から新規作成
-git gtr new <ブランチ名> --base main --yes
-# 例: git gtr new fix/records-status-improvements --base main --yes
+git gtr new <ブランチ名> --from origin/main --yes
+# 例: git gtr new fix/records-status-improvements --from origin/main --yes
 ```
 
 > ※ git gtr が使えない環境（Codex等）では `git worktree add` で代替:

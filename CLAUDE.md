@@ -59,6 +59,7 @@ const { isAdmin, isFacilityAdmin, isStaff, hasRole } = useRole()
 - **Rules & skills**: New rules and skills are added to this file (CLAUDE.md).
 - **PR fix workflow**: PR番号 (`/pull/123`) またはブランチ指定で修正する場合は `fix-pr` スキルを使う。原則、同じPRにプッシュ。新PRは「分けて」と明示された場合のみ。修正完了後、ユーザーから「終了」「完了」など作業終了の意思表示があればワークツリーを削除する。
 - **Session start — PR check**: セッション開始時、main以外のブランチにいる場合は `gh pr view --json number,title,url 2>/dev/null` を実行し、PRが存在すれば番号・タイトル・URLをユーザーに提示する。これにより前回どの作業をしていたか把握できる。
+- **Test failure triage**: テストが失敗した場合、まず「実装バグ」か「テストのバグ」かを明示的に判断してから修正する。バグ修正後に既存テストが失敗した場合は、テストが旧バグの挙動を前提に書かれている可能性を疑う。
 - **Code change workflow**: 実装完了後は以下の順で実行する
   1. （任意）`pr-review` スキル — セキュリティ・品質・パフォーマンスを網羅的に確認したい場合のみ実行。軽微な変更や CodeRabbit で十分な場合は不要。
   2. `create-pr` スキル — PR作成 → CodeRabbitレビューループ（最大3回）
