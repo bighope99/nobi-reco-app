@@ -10,18 +10,23 @@ const TEMPLATE_PATH = path.join(process.cwd(), 'lib/templates/daily-journal-temp
 
 /** YYYY-MM-DD 形式のバリデーション */
 const isValidDateParam = (value: string): boolean => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const d = new Date(value)
-  return !isNaN(d.getTime())
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return false
+  const [, year, month, day] = match
+  const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+  return (
+    parsed.getUTCFullYear() === Number(year) &&
+    parsed.getUTCMonth() === Number(month) - 1 &&
+    parsed.getUTCDate() === Number(day)
+  )
 }
 
 /** 日付文字列から日本語の月日曜日表記を生成（例: "7月21日（月）"） */
 function formatDateJa(dateStr: string): string {
-  const date = new Date(`${dateStr}T00:00:00+09:00`)
-  const month = date.getMonth() + 1
-  const day = date.getDate()
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
   const weekdays = ['日', '月', '火', '水', '木', '金', '土']
-  const weekday = weekdays[date.getDay()]
+  const weekday = weekdays[date.getUTCDay()]
   return `${month}月${day}日（${weekday}）`
 }
 
@@ -29,6 +34,12 @@ function formatDateJa(dateStr: string): string {
 function formatSheetName(dateStr: string): string {
   const [, month, day] = dateStr.split('-')
   return `${month}月${day}日`
+}
+
+/** 年またぎエクスポート用：YYYY/MM月DD日 形式のシート名 */
+function formatSheetNameWithYear(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-')
+  return `${year}/${month}月${day}日`
 }
 
 /** from_date〜to_date の日付一覧を生成 */
@@ -114,10 +125,17 @@ export async function GET(request: NextRequest) {
   try {
     // 認証チェック
     const metadata = await getAuthenticatedUserMetadata()
-    if (!metadata || !metadata.current_facility_id) {
+    if (!metadata) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
+        { success: false, error: '認証情報が確認できません' },
         { status: 401 }
+      )
+    }
+
+    if (!metadata.current_facility_id) {
+      return NextResponse.json(
+        { success: false, error: '施設を選択してください' },
+        { status: 400 }
       )
     }
 
@@ -150,6 +168,15 @@ export async function GET(request: NextRequest) {
     if (from_date > to_date) {
       return NextResponse.json(
         { success: false, error: 'from_date must not be after to_date.' },
+        { status: 400 }
+      )
+    }
+
+    const MAX_EXPORT_DAYS = 31
+    const dates = generateDateRange(from_date, to_date)
+    if (dates.length > MAX_EXPORT_DAYS) {
+      return NextResponse.json(
+        { success: false, error: `エクスポート期間は${MAX_EXPORT_DAYS}日以内で指定してください` },
         { status: 400 }
       )
     }
@@ -191,49 +218,58 @@ export async function GET(request: NextRequest) {
       activityByDate.set(activity.activity_date, activity)
     }
 
-    // 日付範囲内の全日付一覧
-    const dates = generateDateRange(from_date, to_date)
+    // 出席集計: バッチクエリで全日付を一括取得
+    const [checkedInResult, absentResult] = await Promise.all([
+      supabase
+        .from('h_attendance')
+        .select('child_id, checked_in_date')
+        .eq('facility_id', facility_id)
+        .gte('checked_in_date', from_date)
+        .lte('checked_in_date', to_date)
+        .is('deleted_at', null),
+      supabase
+        .from('r_daily_attendance')
+        .select('attendance_date')
+        .eq('facility_id', facility_id)
+        .gte('attendance_date', from_date)
+        .lte('attendance_date', to_date)
+        .eq('status', 'absent'),
+    ])
 
-    // 出席集計: 通所（h_attendance）とお休み（r_daily_attendance）を並列取得
-    const attendanceResults = await Promise.all(
-      dates.map(async (date) => {
-        const [checkedInResult, absentResult] = await Promise.all([
-          supabase
-            .from('h_attendance')
-            .select('child_id')
-            .eq('facility_id', facility_id)
-            .eq('checked_in_date', date)
-            .is('deleted_at', null),
-          supabase
-            .from('r_daily_attendance')
-            .select('id', { count: 'exact', head: true })
-            .eq('facility_id', facility_id)
-            .eq('attendance_date', date)
-            .eq('status', 'absent'),
-        ])
+    if (checkedInResult.error) {
+      console.error('Failed to fetch h_attendance:', checkedInResult.error)
+      return NextResponse.json(
+        { success: false, error: 'データの取得に失敗しました' },
+        { status: 500 }
+      )
+    }
+    if (absentResult.error) {
+      console.error('Failed to fetch r_daily_attendance:', absentResult.error)
+      return NextResponse.json(
+        { success: false, error: 'データの取得に失敗しました' },
+        { status: 500 }
+      )
+    }
 
-        if (checkedInResult.error) {
-          console.error(`Failed to fetch h_attendance for ${date}:`, checkedInResult.error)
-        }
-        if (absentResult.error) {
-          console.error(`Failed to fetch r_daily_attendance for ${date}:`, absentResult.error)
-        }
+    // 日付ごとの出席マップを構築
+    const presentByDate = new Map<string, Set<string>>()
+    for (const row of checkedInResult.data ?? []) {
+      if (!presentByDate.has(row.checked_in_date)) presentByDate.set(row.checked_in_date, new Set())
+      presentByDate.get(row.checked_in_date)!.add(row.child_id)
+    }
 
-        // 通所: ユニーク child_id の数
-        const uniqueChildIds = new Set(
-          (checkedInResult.data ?? []).map((row) => row.child_id)
-        )
-        const presentCount = uniqueChildIds.size
-        const absentCount = absentResult.count ?? 0
-
-        return { date, presentCount, absentCount }
-      })
-    )
+    const absentCountByDate = new Map<string, number>()
+    for (const row of absentResult.data ?? []) {
+      absentCountByDate.set(row.attendance_date, (absentCountByDate.get(row.attendance_date) ?? 0) + 1)
+    }
 
     const attendanceByDate = new Map(
-      attendanceResults.map(({ date, presentCount, absentCount }) => [
+      dates.map(date => [
         date,
-        { presentCount, absentCount },
+        {
+          presentCount: presentByDate.get(date)?.size ?? 0,
+          absentCount: absentCountByDate.get(date) ?? 0,
+        },
       ])
     )
 
@@ -248,8 +284,14 @@ export async function GET(request: NextRequest) {
 
     const templateBuffer = fs.readFileSync(TEMPLATE_PATH)
 
+    const tmpWb = new ExcelJS.Workbook()
+    await tmpWb.xlsx.load(new Uint8Array(templateBuffer).buffer as ArrayBuffer)
+    const templateSheet = tmpWb.worksheets[0]
+
     // 出力ワークブック作成
     const outputWb = new ExcelJS.Workbook()
+
+    const spansMultipleYears = from_date.split('-')[0] !== to_date.split('-')[0]
 
     for (const date of dates) {
       const activity = activityByDate.get(date) ?? null
@@ -260,12 +302,7 @@ export async function GET(request: NextRequest) {
         continue
       }
 
-      const sheetName = formatSheetName(date)
-
-      // テンプレートを毎回読み込んでシートを複製
-      const tmpWb = new ExcelJS.Workbook()
-      await tmpWb.xlsx.load(new Uint8Array(templateBuffer).buffer as ArrayBuffer)
-      const templateSheet = tmpWb.worksheets[0]
+      const sheetName = spansMultipleYears ? formatSheetNameWithYear(date) : formatSheetName(date)
 
       // 出力ワークブックに新シートを追加してコピー
       const newSheet = outputWb.addWorksheet(sheetName)
@@ -295,31 +332,30 @@ export async function GET(request: NextRequest) {
         if (Array.isArray(activity.daily_schedule)) {
           const scheduleEndRow =
             TEMPLATE_CELLS.scheduleStartRow + (19 * 60 - 8 * 60) / 15 // 11 + 44 = 55
+          const writtenRows: number[] = []
+
           for (const item of activity.daily_schedule as { time: string; content: string }[]) {
             if (!item?.time) continue
-            const row = timeToRow(item.time)
-            // timeToRow が null（範囲外）の場合は先頭/末尾行にクランプして書き込む
-            const clampedRow =
-              row !== null
-                ? row
-                : (() => {
-                    const match = item.time.match(/^(\d{2}):(\d{2})$/)
-                    if (!match) return TEMPLATE_CELLS.scheduleStartRow
-                    const totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
-                    return totalMinutes < 8 * 60
-                      ? TEMPLATE_CELLS.scheduleStartRow
-                      : scheduleEndRow
-                  })()
-            setCellValue(newSheet, [clampedRow, TEMPLATE_CELLS.scheduleContentCol], item.content ?? '')
+            const match = item.time.match(/^(\d{2}):(\d{2})$/)
+            if (!match) continue
+
+            const totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
+            const resolvedRow =
+              totalMinutes < 8 * 60
+                ? TEMPLATE_CELLS.scheduleStartRow
+                : totalMinutes > 19 * 60
+                  ? scheduleEndRow
+                  : timeToRow(item.time)
+
+            if (resolvedRow === null) continue
+
+            setCellValue(newSheet, [resolvedRow, TEMPLATE_CELLS.scheduleContentCol], item.content ?? '')
+            writtenRows.push(resolvedRow)
           }
 
-          // 最初のスケジュールエントリより前の行をクリア
-          const schedule = activity.daily_schedule as { time: string; content: string }[]
-          const rows = schedule
-            .map(item => item?.time ? timeToRow(item.time) : null)
-            .filter((r): r is number => r !== null)
-          if (rows.length > 0) {
-            const firstRow = Math.min(...rows)
+          // 最初の書き込み行より前の行をクリア（書き込んだ行をトラッキング済み）
+          if (writtenRows.length > 0) {
+            const firstRow = Math.min(...writtenRows)
             for (let r = TEMPLATE_CELLS.scheduleStartRow; r < firstRow; r++) {
               newSheet.getCell(r, TEMPLATE_CELLS.scheduleTimeCol).value = ''
               newSheet.getCell(r, TEMPLATE_CELLS.scheduleContentCol).value = ''

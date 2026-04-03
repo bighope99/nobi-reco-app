@@ -59,7 +59,16 @@ export function timeToRow(time: string): number | null {
   const hours = parseInt(match[1], 10)
   const minutes = parseInt(match[2], 10)
 
-  if (isNaN(hours) || isNaN(minutes)) return null
+  if (
+    Number.isNaN(hours) ||
+    Number.isNaN(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null
+  }
 
   const totalMinutes = hours * 60 + minutes
 

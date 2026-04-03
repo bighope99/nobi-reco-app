@@ -95,13 +95,18 @@ export default function ActivityHistoryClient() {
     fetchActivities(offset + 20, true)
   }
 
+  const hasInvalidRange = Boolean(fromDate && toDate && fromDate > toDate)
+
   const handleExport = async () => {
-    if (!fromDate || !toDate) return
+    if (!fromDate || !toDate || hasInvalidRange) return
     setExporting(true)
     try {
       const params = new URLSearchParams({ from_date: fromDate, to_date: toDate })
       const res = await fetch(`/api/records/activity/export?${params}`)
-      if (!res.ok) throw new Error('エクスポートに失敗しました')
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => null)
+        throw new Error(errorBody?.error ?? 'エクスポートに失敗しました')
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -111,7 +116,7 @@ export default function ActivityHistoryClient() {
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error(err)
-      alert('エクスポートに失敗しました。')
+      alert(err instanceof Error ? err.message : 'エクスポートに失敗しました。')
     } finally {
       setExporting(false)
     }
@@ -210,8 +215,14 @@ export default function ActivityHistoryClient() {
               variant="outline"
               className="whitespace-nowrap border-slate-300 text-slate-600 hover:bg-slate-50 bg-white gap-2"
               onClick={handleExport}
-              disabled={exporting || !fromDate || !toDate}
-              title={!fromDate || !toDate ? '日付を指定してください' : undefined}
+              disabled={exporting || !fromDate || !toDate || hasInvalidRange}
+              title={
+                !fromDate || !toDate
+                  ? '日付を指定してください'
+                  : hasInvalidRange
+                    ? '日付範囲を確認してください'
+                    : undefined
+              }
             >
               <Download className="w-4 h-4" />
               {exporting ? 'エクスポート中...' : '日誌エクスポート'}
