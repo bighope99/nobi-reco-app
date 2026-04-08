@@ -263,7 +263,7 @@ export default function AttendanceListPage() {
   // クライアント側でのみ初期日付・ロールを設定
   useEffect(() => {
     if (!selectedDate) {
-      setSelectedDate(getTomorrowDateJST())
+      setSelectedDate(getCurrentDateJST())
     }
     // localStorageからロールを取得して時刻編集権限を判定
     try {
@@ -449,9 +449,7 @@ export default function AttendanceListPage() {
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
 
-      if (isPastDate(currentDate)) {
-        await fetchAttendance(true)
-      }
+      await fetchAttendance(true)
     } catch (err) {
       console.error('Failed to update attendance status:', err)
       // エラー時はロールバック

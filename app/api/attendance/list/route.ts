@@ -145,11 +145,12 @@ export async function GET(request: NextRequest) {
 
       if (attendance?.checked_in_at) {
         const checkedInTime = new Date(attendance.checked_in_at);
-        const hour = checkedInTime.getHours();
-        const minute = checkedInTime.getMinutes();
+        // getHours/getMinutes はサーバーのローカルタイム（UTC）を返すため JST に変換して判定
+        const jstHour = Number(checkedInTime.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', hour12: false }));
+        const jstMinute = Number(checkedInTime.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', minute: '2-digit' }));
 
         // 9:30以降をチェックイン遅刻とみなす
-        if (hour > 9 || (hour === 9 && minute >= 30)) {
+        if (jstHour > 9 || (jstHour === 9 && jstMinute >= 30)) {
           status = 'late';
         } else {
           status = 'present';
