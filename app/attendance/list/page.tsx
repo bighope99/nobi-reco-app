@@ -662,7 +662,7 @@ export default function AttendanceListPage() {
               <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full -mr-4 -mt-4"></div>
               <div className="flex items-center gap-2 mb-2 relative z-10">
                 <CheckCircle2 size={16} className="text-emerald-600" />
-                <h3 className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">出席</h3>
+                <h3 className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">出席（遅刻含む）</h3>
               </div>
               <div className="flex items-baseline gap-1 relative z-10">
                 <span className="text-2xl sm:text-3xl font-bold text-emerald-700">{attendanceData.summary.present_count}</span>

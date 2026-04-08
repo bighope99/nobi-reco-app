@@ -208,7 +208,7 @@ export async function GET(request: NextRequest) {
     // サマリー計算
     const summary = {
       total_children: formattedChildren.length,
-      present_count: formattedChildren.filter((c: any) => c.status === 'present').length,
+      present_count: formattedChildren.filter((c: any) => c.status === 'present' || c.status === 'late').length,
       absent_count: formattedChildren.filter((c: any) => c.status === 'absent').length,
       late_count: formattedChildren.filter((c: any) => c.status === 'late').length,
       not_checked_in_count: formattedChildren.filter((c: any) => c.status === 'not_arrived' && c.is_expected).length,
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
       return {
         class_id: cls.id,
         class_name: cls.name,
-        present_count: classChildren.filter((c: any) => c.status === 'present').length,
+        present_count: classChildren.filter((c: any) => c.status === 'present' || c.status === 'late').length,
         total_count: classChildren.length,
       };
     });
