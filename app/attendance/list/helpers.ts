@@ -213,7 +213,7 @@ export const applyOptimisticStatusUpdate = (
 
   const summary = {
     total_children: updatedChildren.length,
-    present_count: updatedChildren.filter(c => c.status === 'present').length,
+    present_count: updatedChildren.filter(c => c.status === 'present' || c.status === 'late').length,
     absent_count: updatedChildren.filter(c => c.status === 'absent').length,
     late_count: updatedChildren.filter(c => c.status === 'late').length,
     not_checked_in_count: updatedChildren.filter(c => c.status === 'not_arrived' && c.is_expected).length,
@@ -281,7 +281,7 @@ export const applyOptimisticCancelUpdate = (
 
   const summary = {
     total_children: updatedChildren.length,
-    present_count: updatedChildren.filter(c => c.status === 'present').length,
+    present_count: updatedChildren.filter(c => c.status === 'present' || c.status === 'late').length,
     absent_count: updatedChildren.filter(c => c.status === 'absent').length,
     late_count: updatedChildren.filter(c => c.status === 'late').length,
     not_checked_in_count: updatedChildren.filter(c => c.status === 'not_arrived' && c.is_expected).length,

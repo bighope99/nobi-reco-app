@@ -86,14 +86,13 @@ export const getCurrentTimeJST = (): string => {
  * Get tomorrow's date in JST (Japan Standard Time) in YYYY-MM-DD format
  */
 export const getTomorrowDateJST = (): string => {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return tomorrow.toLocaleDateString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).replace(/\//g, '-');
+  const today = getCurrentDateJST(); // "YYYY-MM-DD"
+  const [year, month, day] = today.split('-').map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day + 1));
+  const newYear = utcDate.getUTCFullYear();
+  const newMonth = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+  const newDay = String(utcDate.getUTCDate()).padStart(2, '0');
+  return `${newYear}-${newMonth}-${newDay}`;
 };
 
 /**

@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
 
     const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
+    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateParam && !DATE_REGEX.test(dateParam)) {
+      return NextResponse.json({ success: false, error: 'Invalid date format' }, { status: 400 });
+    }
     const class_id = searchParams.get('class_id');
     const statusFilter = searchParams.get('status');
     const search = searchParams.get('search');
@@ -145,11 +149,14 @@ export async function GET(request: NextRequest) {
 
       if (attendance?.checked_in_at) {
         const checkedInTime = new Date(attendance.checked_in_at);
-        const hour = checkedInTime.getHours();
-        const minute = checkedInTime.getMinutes();
+        // UTC+9 固定オフセットで JST 時刻を計算（toLocaleString は ICU 環境依存のため使用しない）
+        // UTC+9 固定オフセット加算（日本は夏時間なし・固定UTC+9のため安全）
+        const jstTime = new Date(checkedInTime.getTime() + 9 * 60 * 60 * 1000);
+        const jstHour = jstTime.getUTCHours();
+        const jstMinute = jstTime.getUTCMinutes();
 
         // 9:30以降をチェックイン遅刻とみなす
-        if (hour > 9 || (hour === 9 && minute >= 30)) {
+        if (jstHour > 9 || (jstHour === 9 && jstMinute >= 30)) {
           status = 'late';
         } else {
           status = 'present';
@@ -201,7 +208,7 @@ export async function GET(request: NextRequest) {
     // サマリー計算
     const summary = {
       total_children: formattedChildren.length,
-      present_count: formattedChildren.filter((c: any) => c.status === 'present').length,
+      present_count: formattedChildren.filter((c: any) => c.status === 'present' || c.status === 'late').length,
       absent_count: formattedChildren.filter((c: any) => c.status === 'absent').length,
       late_count: formattedChildren.filter((c: any) => c.status === 'late').length,
       not_checked_in_count: formattedChildren.filter((c: any) => c.status === 'not_arrived' && c.is_expected).length,
@@ -220,7 +227,7 @@ export async function GET(request: NextRequest) {
       return {
         class_id: cls.id,
         class_name: cls.name,
-        present_count: classChildren.filter((c: any) => c.status === 'present').length,
+        present_count: classChildren.filter((c: any) => c.status === 'present' || c.status === 'late').length,
         total_count: classChildren.length,
       };
     });
