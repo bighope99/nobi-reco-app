@@ -1,10 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useRole } from "@/hooks/useRole"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { formatTimeJST, getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
-import { SESSION_STORAGE_KEY } from "@/lib/auth/storage-keys"
-import { UserSession } from "@/lib/auth/session"
 import { normalizeSearch } from "@/lib/utils/kana"
 import { Button } from "@/components/ui/button"
 import {
@@ -242,6 +241,10 @@ const CancelActionButtons = ({
 }
 
 export default function AttendanceListPage() {
+  const { hasRole } = useRole()
+  const canEditTime = hasRole('site_admin', 'company_admin', 'facility_admin')
+  const canCancel = hasRole('site_admin', 'company_admin', 'facility_admin')
+
   // 初期値は空文字列にして、useEffectでクライアント側のみで設定
   // SSR時のタイムゾーン不一致を防ぐため
   const [selectedDate, setSelectedDate] = useState<string>('')
@@ -251,8 +254,6 @@ export default function AttendanceListPage() {
   const [filterClass, setFilterClass] = useState<string>('all')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
-  const [canEditTime, setCanEditTime] = useState(false)
-  const [canCancel, setCanCancel] = useState(false)
   const [editingTime, setEditingTime] = useState<{ childId: string; field: TimeField; value: string } | null>(null)
   const [timeLoading, setTimeLoading] = useState<{ childId: string; field: TimeField } | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; order: 'asc' | 'desc' }>({ key: 'grade', order: 'desc' })
@@ -260,22 +261,11 @@ export default function AttendanceListPage() {
   const [committedSearchTerm, setCommittedSearchTerm] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null)
 
-  // クライアント側でのみ初期日付・ロールを設定
+  // クライアント側でのみ初期日付を設定
+  // SSR時のタイムゾーン不一致を防ぐため
   useEffect(() => {
     if (!selectedDate) {
       setSelectedDate(getTomorrowDateJST())
-    }
-    // localStorageからロールを取得して時刻編集権限を判定
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY)
-      if (raw) {
-        const session: UserSession = JSON.parse(raw)
-        const role = session.role
-        setCanEditTime(['site_admin', 'company_admin', 'facility_admin'].includes(role))
-        setCanCancel(['site_admin', 'company_admin', 'facility_admin'].includes(role))
-      }
-    } catch {
-      // localStorageが使えない場合は権限なし
     }
   }, [selectedDate])
 
@@ -448,15 +438,21 @@ export default function AttendanceListPage() {
       if (!response.ok || !result.success) {
         throw new Error(result.error || '出席ステータスの更新に失敗しました')
       }
-
-      await fetchAttendance(true)
     } catch (err) {
       console.error('Failed to update attendance status:', err)
       // エラー時はロールバック
       setAttendanceData(previousData)
       setActionError(err instanceof Error ? err.message : '出席ステータスの更新に失敗しました')
-    } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))
+      return
+    }
+
+    // API 成功後の再フェッチ（失敗してもロールバックしない）
+    setActionLoading(prev => ({ ...prev, [childId]: false }))
+    try {
+      await fetchAttendance(true)
+    } catch (fetchErr) {
+      console.error('Failed to refresh attendance after status update:', fetchErr)
     }
   }
 
@@ -488,8 +484,16 @@ export default function AttendanceListPage() {
       console.error('Failed to cancel attendance:', err)
       setAttendanceData(previousData)
       setActionError(err instanceof Error ? err.message : '取消に失敗しました')
-    } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))
+      return
+    }
+
+    // API 成功後の再フェッチ（失敗してもロールバックしない）
+    setActionLoading(prev => ({ ...prev, [childId]: false }))
+    try {
+      await fetchAttendance(true)
+    } catch (fetchErr) {
+      console.error('Failed to refresh attendance after cancel:', fetchErr)
     }
   }
 
@@ -518,14 +522,21 @@ export default function AttendanceListPage() {
       if (!response.ok || !result.success) {
         throw new Error(result.error || '時刻の更新に失敗しました')
       }
-
-      await fetchAttendance(true)
     } catch (err) {
       console.error('Failed to update time:', err)
       setActionError(err instanceof Error ? err.message : '時刻の更新に失敗しました')
-    } finally {
       setActionLoading(prev => ({ ...prev, [childId]: false }))
       setTimeLoading(null)
+      return
+    }
+
+    // API 成功後の再フェッチ（失敗してもエラー扱いにしない）
+    setActionLoading(prev => ({ ...prev, [childId]: false }))
+    setTimeLoading(null)
+    try {
+      await fetchAttendance(true)
+    } catch (fetchErr) {
+      console.error('Failed to refresh attendance after time update:', fetchErr)
     }
   }
 

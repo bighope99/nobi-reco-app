@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
 
     const facility_id = metadata.current_facility_id;
     const dateParam = searchParams.get('date');
+    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateParam && !DATE_REGEX.test(dateParam)) {
+      return NextResponse.json({ success: false, error: 'Invalid date format' }, { status: 400 });
+    }
     const class_id = searchParams.get('class_id');
     const statusFilter = searchParams.get('status');
     const search = searchParams.get('search');
@@ -145,9 +149,11 @@ export async function GET(request: NextRequest) {
 
       if (attendance?.checked_in_at) {
         const checkedInTime = new Date(attendance.checked_in_at);
-        // getHours/getMinutes はサーバーのローカルタイム（UTC）を返すため JST に変換して判定
-        const jstHour = Number(checkedInTime.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', hour12: false }));
-        const jstMinute = Number(checkedInTime.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', minute: '2-digit' }));
+        // UTC+9 固定オフセットで JST 時刻を計算（toLocaleString は ICU 環境依存のため使用しない）
+        // UTC+9 固定オフセット加算（日本は夏時間なし・固定UTC+9のため安全）
+        const jstTime = new Date(checkedInTime.getTime() + 9 * 60 * 60 * 1000);
+        const jstHour = jstTime.getUTCHours();
+        const jstMinute = jstTime.getUTCMinutes();
 
         // 9:30以降をチェックイン遅刻とみなす
         if (jstHour > 9 || (jstHour === 9 && jstMinute >= 30)) {
