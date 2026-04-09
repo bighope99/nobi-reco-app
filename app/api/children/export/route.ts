@@ -12,20 +12,6 @@ function formatGender(gender: string | null): string {
   return gender === 'other' ? 'その他' : '';
 }
 
-function formatEnrollmentStatus(status: string | null): string {
-  if (!status) return '';
-  if (status === 'withdrawn') return '退所';
-  if (status === 'suspended') return '休所';
-  return status === 'enrolled' ? '在籍' : '';
-}
-
-function formatEnrollmentType(type: string | null): string {
-  if (!type) return '';
-  if (type === 'temporary') return '一時';
-  if (type === 'spot') return 'スポット';
-  return type === 'regular' ? '通年' : '';
-}
-
 function formatDate(isoDate: string | null): string {
   if (!isoDate) return '';
   // Handle both ISO datetime and date-only formats
@@ -135,8 +121,6 @@ export async function GET(request: NextRequest) {
         nickname,
         gender,
         birth_date,
-        enrollment_status,
-        enrollment_type,
         enrolled_at,
         withdrawn_at,
         allergies,
@@ -224,8 +208,6 @@ export async function GET(request: NextRequest) {
         escapeCsvField(child.nickname || ''),
         escapeCsvField(formatGender(child.gender)),
         escapeCsvField(child.birth_date || ''),
-        escapeCsvField(formatEnrollmentStatus(child.enrollment_status)),
-        escapeCsvField(formatEnrollmentType(child.enrollment_type)),
         escapeCsvField(formatDate(child.enrolled_at)),
         escapeCsvField(formatDate(child.withdrawn_at)),
         escapeCsvField(parentName),

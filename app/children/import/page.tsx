@@ -31,7 +31,6 @@ type PreviewRow = {
   given_name: string
   birth_date: string
   gender: string
-  enrollment_status: string
   enrolled_at: string
   parent_name: string
   errors: string[]
@@ -714,7 +713,6 @@ export default function ChildImportPage() {
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">氏名</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">生年月日</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 w-20">性別</th>
-                          <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[100px]">入所状況</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[120px]">入所日</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[140px]">保護者氏名</th>
                           <th className="px-4 py-3 text-left font-semibold text-foreground/80 min-w-[200px]">エラー</th>
@@ -792,15 +790,6 @@ export default function ChildImportPage() {
                                 'bg-gray-100 text-gray-700'
                               }`}>
                                 {row.gender}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                row.enrollment_status === '在籍' ? 'bg-green-100 text-green-700' :
-                                row.enrollment_status === '退所' ? 'bg-gray-100 text-gray-600' :
-                                'bg-yellow-100 text-yellow-700'
-                              }`}>
-                                {row.enrollment_status}
                               </span>
                             </td>
                             <td className="px-4 py-3 font-mono text-xs">{row.enrolled_at}</td>

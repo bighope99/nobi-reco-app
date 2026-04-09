@@ -1,6 +1,5 @@
 import {
   buildChildPayload,
-  normalizeEnrollmentStatus,
   normalizeGender,
   parseCsvText,
 } from '@/lib/children/import-csv';
@@ -19,11 +18,6 @@ describe('children import csv helpers', () => {
     expect(normalizeGender('female')).toBe('female');
     expect(normalizeGender('女')).toBe('female');
     expect(normalizeGender('M')).toBe('male');
-  });
-
-  it('defaults enrollment status to enrolled', () => {
-    expect(normalizeEnrollmentStatus('')).toBe('enrolled');
-    expect(normalizeEnrollmentStatus('在籍')).toBe('enrolled');
   });
 
   it('builds payload with defaults and required checks', () => {
