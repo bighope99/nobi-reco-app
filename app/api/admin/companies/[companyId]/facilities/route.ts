@@ -134,8 +134,8 @@ export async function POST(
       // パスワード未設定 → 再招待フロー
       const originalAppMetadata = authUserData.user.app_metadata;
 
-      // Re-invite Step 1: 新しい施設を作成
-      const { data: newFacility, error: facilityError } = await supabase
+      // Re-invite Step 1: 新しい施設を作成（RLSバイパスのためadminクライアントを使用）
+      const { data: newFacility, error: facilityError } = await supabaseAdmin
         .from('m_facilities')
         .insert({
           company_id: companyId,
@@ -165,7 +165,7 @@ export async function POST(
 
       if (updateMetaError) {
         console.error('Failed to update user app_metadata for reinvite:', updateMetaError);
-        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
@@ -188,7 +188,7 @@ export async function POST(
         } catch (rollbackErr) {
           console.error('Failed to rollback app_metadata:', rollbackErr);
         }
-        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         throw reinviteLinkError || new Error('Failed to generate reinvite link');
       }
 
@@ -206,7 +206,7 @@ export async function POST(
         } catch (rollbackErr) {
           console.error('Failed to rollback app_metadata:', rollbackErr);
         }
-        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         return NextResponse.json(
           { success: false, error: 'Failed to generate valid invite link' },
           { status: 500 }
@@ -226,7 +226,7 @@ export async function POST(
 
       const hireDateValue = body.facility_admin.hire_date || getCurrentDateJST();
 
-      const { data: updatedUser, error: updateUserError } = await supabase
+      const { data: updatedUser, error: updateUserError } = await supabaseAdmin
         .from('m_users')
         .update({
           company_id: companyId,
@@ -241,7 +241,7 @@ export async function POST(
 
       if (updateUserError || !updatedUser) {
         console.error('Failed to update m_users for reinvite:', updateUserError);
-        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         // app_metadata を元に戻す
         try {
           await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
@@ -256,15 +256,15 @@ export async function POST(
         );
       }
 
-      // Re-invite Step 5: _user_facility に新施設を紐付け
+      // Re-invite Step 5: _user_facility に新施設を紐付け（RLSバイパスのためadminクライアントを使用）
       // 既存の is_primary を false に更新してから新レコードを挿入
-      await supabase
+      await supabaseAdmin
         .from('_user_facility')
         .update({ is_primary: false })
         .eq('user_id', existingUser.id)
         .eq('is_primary', true);
 
-      const { error: userFacilityError } = await supabase
+      const { error: userFacilityError } = await supabaseAdmin
         .from('_user_facility')
         .insert({
           user_id: existingUser.id,
@@ -279,12 +279,12 @@ export async function POST(
         // m_users を元に戻す
         if (originalMUser) {
           try {
-            await supabase.from('m_users').update(originalMUser).eq('id', existingUser.id);
+            await supabaseAdmin.from('m_users').update(originalMUser).eq('id', existingUser.id);
           } catch (rollbackErr) {
             console.error('Failed to rollback m_users:', rollbackErr);
           }
         }
-        try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+        try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
         // app_metadata を元に戻す
         try {
           await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
@@ -343,8 +343,10 @@ export async function POST(
       });
     }
 
-    // Step 1: 施設作成
-    const { data: newFacility, error: facilityError } = await supabase
+    // Step 1: 施設作成（RLSバイパスのためadminクライアントを使用）
+    const supabaseAdmin = await createAdminClient();
+
+    const { data: newFacility, error: facilityError } = await supabaseAdmin
       .from('m_facilities')
       .insert({
         company_id: companyId,
@@ -364,8 +366,6 @@ export async function POST(
     }
 
     // Step 2: Supabase Auth ユーザー作成（facility_admin）
-    const supabaseAdmin = await createAdminClient();
-
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email: adminEmail,
       email_confirm: false,
@@ -378,7 +378,7 @@ export async function POST(
 
     if (authCreateError || !authData.user) {
       // ロールバック: 施設削除
-      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+      try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw authCreateError || new Error('Failed to create auth user');
     }
 
@@ -391,7 +391,7 @@ export async function POST(
     if (linkError || !linkData) {
       // ロールバック
       try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
-      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+      try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw linkError || new Error('Failed to generate invite link');
     }
 
@@ -403,7 +403,7 @@ export async function POST(
     if (!tokenHash) {
       console.error('Failed to extract token from invite link for facility admin user');
       try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
-      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+      try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       return NextResponse.json(
         { success: false, error: 'Failed to generate valid invite link' },
         { status: 500 }
@@ -416,7 +416,7 @@ export async function POST(
     // Step 4: m_users + _user_facility 作成
     const hireDateValue = body.facility_admin.hire_date || getCurrentDateJST();
 
-    const { data: newUser, error: createUserError } = await supabase
+    const { data: newUser, error: createUserError } = await supabaseAdmin
       .from('m_users')
       .insert({
         id: authData.user.id,
@@ -435,12 +435,12 @@ export async function POST(
     if (createUserError || !newUser) {
       // ロールバック
       try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
-      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+      try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw createUserError || new Error('Failed to create user');
     }
 
-    // _user_facility 作成
-    const { error: userFacilityError } = await supabase
+    // _user_facility 作成（RLSバイパスのためadminクライアントを使用）
+    const { error: userFacilityError } = await supabaseAdmin
       .from('_user_facility')
       .insert({
         user_id: newUser.id,
@@ -452,9 +452,9 @@ export async function POST(
 
     if (userFacilityError) {
       // ロールバック
-      try { await supabase.from('m_users').delete().eq('id', newUser.id); } catch (e) { console.error('Rollback failed (m_users):', e); }
+      try { await supabaseAdmin.from('m_users').delete().eq('id', newUser.id); } catch (e) { console.error('Rollback failed (m_users):', e); }
       try { await supabaseAdmin.auth.admin.deleteUser(authData.user.id); } catch (e) { console.error('Rollback failed (auth):', e); }
-      try { await supabase.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
+      try { await supabaseAdmin.from('m_facilities').delete().eq('id', newFacility.id); } catch (e) { console.error('Rollback failed (facility):', e); }
       throw userFacilityError;
     }
 

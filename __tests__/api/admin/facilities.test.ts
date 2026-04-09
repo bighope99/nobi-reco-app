@@ -162,14 +162,19 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         fromCallCount++;
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
-        if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
-        if (fromCallCount === 4 && table === 'm_users') return userInsertQuery;
-        if (fromCallCount === 5 && table === '_user_facility') return userFacilityInsertQuery;
-        throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
+        throw new Error(`Unexpected supabase table call ${fromCallCount}: ${table}`);
       }),
     };
 
+    let adminFromCallCount = 0;
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        adminFromCallCount++;
+        if (adminFromCallCount === 1 && table === 'm_facilities') return facilityInsertQuery;
+        if (adminFromCallCount === 2 && table === 'm_users') return userInsertQuery;
+        if (adminFromCallCount === 3 && table === '_user_facility') return userFacilityInsertQuery;
+        throw new Error(`Unexpected adminClient table call ${adminFromCallCount}: ${table}`);
+      }),
       auth: {
         admin: {
           createUser: jest.fn().mockResolvedValue({
@@ -446,16 +451,21 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         fromCallCount++;
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
-        if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
-        if (fromCallCount === 4 && table === 'm_users') return mUsersSelectQuery;
-        if (fromCallCount === 5 && table === 'm_users') return mUsersUpdateQuery;
-        if (fromCallCount === 6 && table === '_user_facility') return userFacilityUpdateQuery;
-        if (fromCallCount === 7 && table === '_user_facility') return userFacilityInsertQuery;
-        throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
+        if (fromCallCount === 3 && table === 'm_users') return mUsersSelectQuery;
+        throw new Error(`Unexpected supabase table call ${fromCallCount}: ${table}`);
       }),
     };
 
+    let adminFromCallCount = 0;
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        adminFromCallCount++;
+        if (adminFromCallCount === 1 && table === 'm_facilities') return facilityInsertQuery;
+        if (adminFromCallCount === 2 && table === 'm_users') return mUsersUpdateQuery;
+        if (adminFromCallCount === 3 && table === '_user_facility') return userFacilityUpdateQuery;
+        if (adminFromCallCount === 4 && table === '_user_facility') return userFacilityInsertQuery;
+        throw new Error(`Unexpected adminClient table call ${adminFromCallCount}: ${table}`);
+      }),
       auth: {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
@@ -550,14 +560,19 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         fromCallCount++;
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
-        if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
-        if (fromCallCount === 4 && table === 'm_users') return userInsertQuery;
-        if (fromCallCount === 5 && table === '_user_facility') return userFacilityInsertQuery;
-        throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
+        throw new Error(`Unexpected supabase table call ${fromCallCount}: ${table}`);
       }),
     };
 
+    let adminFromCallCount = 0;
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        adminFromCallCount++;
+        if (adminFromCallCount === 1 && table === 'm_facilities') return facilityInsertQuery;
+        if (adminFromCallCount === 2 && table === 'm_users') return userInsertQuery;
+        if (adminFromCallCount === 3 && table === '_user_facility') return userFacilityInsertQuery;
+        throw new Error(`Unexpected adminClient table call ${adminFromCallCount}: ${table}`);
+      }),
       auth: {
         admin: {
           createUser: jest.fn().mockResolvedValue({
@@ -646,13 +661,18 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         fromCallCount++;
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
-        if (fromCallCount === 3 && table === 'm_facilities') return facilityInsertQuery;
-        if (fromCallCount === 4 && table === 'm_facilities') return facilityDeleteQuery;
-        throw new Error(`Unexpected table call ${fromCallCount}: ${table}`);
+        throw new Error(`Unexpected supabase table call ${fromCallCount}: ${table}`);
       }),
     };
 
+    let adminFromCallCount = 0;
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        adminFromCallCount++;
+        if (adminFromCallCount === 1 && table === 'm_facilities') return facilityInsertQuery;
+        if (adminFromCallCount === 2 && table === 'm_facilities') return facilityDeleteQuery;
+        throw new Error(`Unexpected adminClient table call ${adminFromCallCount}: ${table}`);
+      }),
       auth: {
         admin: {
           createUser: jest.fn().mockResolvedValue({
