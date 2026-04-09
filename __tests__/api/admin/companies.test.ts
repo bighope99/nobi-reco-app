@@ -492,15 +492,9 @@ describe('POST /api/admin/companies', () => {
       }),
     };
 
-    let usersQueryCallCount = 0;
     const mockSupabase = {
       from: jest.fn((table: string) => {
-        if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_users') {
-          usersQueryCallCount++;
-          if (usersQueryCallCount === 1) return usersEmailCheckQuery;
-          return usersUpdateQuery;
-        }
+        if (table === 'm_users') return usersEmailCheckQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -508,6 +502,11 @@ describe('POST /api/admin/companies', () => {
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
 
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyInsertQuery;
+        if (table === 'm_users') return usersUpdateQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
       auth: {
         admin: {
           getUserById: jest.fn().mockResolvedValue({
@@ -604,14 +603,17 @@ describe('POST /api/admin/companies', () => {
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
-        if (table === 'm_users' && !companyInsertQuery.insert.mock.calls.length) return usersCheckQuery;
-        if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_users') return userInsertQuery;
+        if (table === 'm_users') return usersCheckQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
 
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyInsertQuery;
+        if (table === 'm_users') return userInsertQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
       auth: {
         admin: {
           createUser: jest.fn().mockResolvedValue({
@@ -705,9 +707,7 @@ describe('POST /api/admin/companies', () => {
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
-        if (table === 'm_users' && !companyInsertQuery.insert.mock.calls.length) return usersCheckQuery;
-        if (table === 'm_companies') return companyInsertQuery;
-        if (table === 'm_users') return userInsertQuery;
+        if (table === 'm_users') return usersCheckQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
@@ -718,6 +718,11 @@ describe('POST /api/admin/companies', () => {
     });
 
     const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyInsertQuery;
+        if (table === 'm_users') return userInsertQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
       auth: {
         admin: {
           createUser: mockCreateUser,
@@ -785,12 +790,22 @@ describe('POST /api/admin/companies', () => {
     const mockSupabase = {
       from: jest.fn((table: string) => {
         if (table === 'm_users') return usersCheckQuery;
-        if (table === 'm_companies') return companyInsertQuery;
         throw new Error(`Unexpected table: ${table}`);
       }),
     };
 
+    const mockAdminClient = {
+      from: jest.fn((table: string) => {
+        if (table === 'm_companies') return companyInsertQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+      auth: {
+        admin: {},
+      },
+    };
+
     mockedCreateClient.mockResolvedValue(mockSupabase as any);
+    mockedCreateAdminClient.mockResolvedValue(mockAdminClient as any);
 
     const request = buildRequest({
       company: { name: 'テスト株式会社' },

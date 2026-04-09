@@ -185,6 +185,8 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient();
+    // RLSバイパスのためadminクライアントを使用（site_adminのJWTはcurrent_facility_idが未設定のためWITH CHECKに失敗する）
+    const supabaseAdmin = await createAdminClient();
 
     // メールアドレス重複チェック
     const { data: existingUser } = await supabase
@@ -196,7 +198,6 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       // 既存ユーザーが存在する場合: last_sign_in_at を確認して再招待 or エラー
-      const supabaseAdmin = await createAdminClient();
 
       const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(existingUser.id);
 
@@ -217,8 +218,8 @@ export async function POST(request: NextRequest) {
       }
 
       // パスワード未設定 → 再招待フロー
-      // Step 1: 新しい会社を先に作成
-      const { data: newCompany, error: companyError } = await supabase
+      // Step 1: 新しい会社を先に作成（RLSバイパスのためadminクライアントを使用）
+      const { data: newCompany, error: companyError } = await supabaseAdmin
         .from('m_companies')
         .insert({
           name: companyName,
@@ -248,7 +249,7 @@ export async function POST(request: NextRequest) {
 
       if (updateMetaError) {
         console.error('Failed to update user app_metadata:', updateMetaError);
-        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
         return NextResponse.json(
           { success: false, error: 'Internal Server Error' },
           { status: 500 }
@@ -264,7 +265,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (reinviteLinkError || !reinviteLinkData) {
-        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
         try {
           await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
             app_metadata: originalAppMetadata,
@@ -282,7 +283,7 @@ export async function POST(request: NextRequest) {
 
       if (!reinviteTokenHash) {
         console.error('Failed to extract token from reinvite link');
-        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
         try {
           await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
             app_metadata: originalAppMetadata,
@@ -299,10 +300,10 @@ export async function POST(request: NextRequest) {
       const reinviteBaseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
       const inviteUrlForReinvite = `${reinviteBaseUrl}/password/setup?token_hash=${reinviteTokenHash}&type=${reinviteType}`;
 
-      // m_users の情報を更新
+      // m_users の情報を更新（RLSバイパスのためadminクライアントを使用）
       const hireDateValueReinvite = body.admin_user.hire_date || getCurrentDateJST();
 
-      const { data: updatedUser, error: updateUserError } = await supabase
+      const { data: updatedUser, error: updateUserError } = await supabaseAdmin
         .from('m_users')
         .update({
           company_id: newCompany.id,
@@ -317,7 +318,7 @@ export async function POST(request: NextRequest) {
 
       if (updateUserError || !updatedUser) {
         console.error('Failed to update m_users for reinvite:', updateUserError);
-        await supabase.from('m_companies').delete().eq('id', newCompany.id);
+        await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
         try {
           await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
             app_metadata: originalAppMetadata,
@@ -360,8 +361,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 1: 会社作成
-    const { data: newCompany, error: companyError } = await supabase
+    // Step 1: 会社作成（RLSバイパスのためadminクライアントを使用）
+    const { data: newCompany, error: companyError } = await supabaseAdmin
       .from('m_companies')
       .insert({
         name: companyName,
@@ -380,8 +381,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Supabase Auth ユーザー作成（current_facility_id は null: 施設はまだない）
-    const supabaseAdmin = await createAdminClient();
-
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email: adminEmail,
       email_confirm: false,
@@ -394,7 +393,7 @@ export async function POST(request: NextRequest) {
 
     if (authCreateError || !authData.user) {
       // ロールバック: 会社削除
-      await supabase.from('m_companies').delete().eq('id', newCompany.id);
+      await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
       throw authCreateError || new Error('Failed to create auth user');
     }
 
@@ -407,7 +406,7 @@ export async function POST(request: NextRequest) {
     if (linkError || !linkData) {
       // ロールバック
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_companies').delete().eq('id', newCompany.id);
+      await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
       throw linkError || new Error('Failed to generate invite link');
     }
 
@@ -419,7 +418,7 @@ export async function POST(request: NextRequest) {
     if (!tokenHash) {
       console.error('Failed to extract token from invite link for company admin user');
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_companies').delete().eq('id', newCompany.id);
+      await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
       return NextResponse.json(
         { success: false, error: 'Failed to generate valid invite link' },
         { status: 500 }
@@ -429,10 +428,10 @@ export async function POST(request: NextRequest) {
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     const inviteUrl = `${baseUrl}/password/setup?token_hash=${tokenHash}&type=${type}`;
 
-    // Step 4: m_users テーブルにユーザー情報を登録
+    // Step 4: m_users テーブルにユーザー情報を登録（RLSバイパスのためadminクライアントを使用）
     const hireDateValue = body.admin_user.hire_date || getCurrentDateJST();
 
-    const { data: newUser, error: createUserError } = await supabase
+    const { data: newUser, error: createUserError } = await supabaseAdmin
       .from('m_users')
       .insert({
         id: authData.user.id,
@@ -451,7 +450,7 @@ export async function POST(request: NextRequest) {
     if (createUserError) {
       // ロールバック
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('m_companies').delete().eq('id', newCompany.id);
+      await supabaseAdmin.from('m_companies').delete().eq('id', newCompany.id);
       throw createUserError;
     }
 
