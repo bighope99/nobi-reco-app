@@ -452,7 +452,6 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
         if (fromCallCount === 1 && table === 'm_companies') return companyCheckQuery;
         if (fromCallCount === 2 && table === 'm_users') return emailCheckQuery;
         if (fromCallCount === 3 && table === 'm_users') return mUsersSelectQuery;
-        if (fromCallCount === 4 && table === 'm_users') return mUsersUpdateQuery;
         throw new Error(`Unexpected supabase table call ${fromCallCount}: ${table}`);
       }),
     };
@@ -462,8 +461,9 @@ describe('POST /api/admin/companies/[companyId]/facilities', () => {
       from: jest.fn((table: string) => {
         adminFromCallCount++;
         if (adminFromCallCount === 1 && table === 'm_facilities') return facilityInsertQuery;
-        if (adminFromCallCount === 2 && table === '_user_facility') return userFacilityUpdateQuery;
-        if (adminFromCallCount === 3 && table === '_user_facility') return userFacilityInsertQuery;
+        if (adminFromCallCount === 2 && table === 'm_users') return mUsersUpdateQuery;
+        if (adminFromCallCount === 3 && table === '_user_facility') return userFacilityUpdateQuery;
+        if (adminFromCallCount === 4 && table === '_user_facility') return userFacilityInsertQuery;
         throw new Error(`Unexpected adminClient table call ${adminFromCallCount}: ${table}`);
       }),
       auth: {

@@ -226,7 +226,7 @@ export async function POST(
 
       const hireDateValue = body.facility_admin.hire_date || getCurrentDateJST();
 
-      const { data: updatedUser, error: updateUserError } = await supabase
+      const { data: updatedUser, error: updateUserError } = await supabaseAdmin
         .from('m_users')
         .update({
           company_id: companyId,
