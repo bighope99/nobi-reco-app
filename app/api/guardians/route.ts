@@ -44,8 +44,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id } = metadata;
-    if (!current_facility_id) {
+    const { current_facility_id, role, company_id } = metadata;
+    // company_admin は current_facility_id が null の可能性があるため、それ以外のロールのみチェック
+    if (role !== 'company_admin' && role !== 'site_admin' && !current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
     }
 
@@ -54,18 +55,42 @@ export async function GET(request: NextRequest) {
     const childId = searchParams.get('child_id')?.trim() ?? '';
     const childName = searchParams.get('child_name')?.trim() ?? '';
 
+    // company_admin は company_id スコープで全施設の保護者を取得
+    // m_guardians / m_children は facility_id を持つため、同一 company の施設ID一覧でフィルタする
+    type FacilityFilter = { type: 'facility'; id: string } | { type: 'facilities'; ids: string[] };
+    let facilityFilter: FacilityFilter;
+    if (role === 'company_admin') {
+      const { data: companyFacilities, error: facilitiesError } = await supabase
+        .from('m_facilities')
+        .select('id')
+        .eq('company_id', company_id)
+        .is('deleted_at', null);
+      if (facilitiesError) {
+        console.error('Error fetching company facilities:', facilitiesError.message);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      }
+      const facilityIds = (companyFacilities ?? []).map((f: { id: string }) => f.id);
+      facilityFilter = { type: 'facilities', ids: facilityIds };
+    } else {
+      facilityFilter = { type: 'facility', id: current_facility_id! };
+    }
+
     let guardianIds: string[] | null = null;
 
     // 子どもIDでフィルター
     if (childId) {
-      // child_id が自施設に属するか確認
-      const { data: childCheck } = await supabase
+      // child_id が自施設（company_admin の場合は同一 company 配下の施設）に属するか確認
+      let childCheckQuery = supabase
         .from('m_children')
         .select('id')
         .eq('id', childId)
-        .eq('facility_id', current_facility_id)
-        .is('deleted_at', null)
-        .single();
+        .is('deleted_at', null);
+      if (facilityFilter.type === 'facilities') {
+        childCheckQuery = childCheckQuery.in('facility_id', facilityFilter.ids);
+      } else {
+        childCheckQuery = childCheckQuery.eq('facility_id', facilityFilter.id);
+      }
+      const { data: childCheck } = await childCheckQuery.single();
       if (!childCheck) {
         return NextResponse.json({ error: '指定された子どもが見つかりません' }, { status: 400 });
       }
@@ -96,12 +121,17 @@ export async function GET(request: NextRequest) {
         s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
       const escapedKatakana = escapeForIlike(katakanaChildName);
       const escapedHiragana = escapeForIlike(hiraganaChildName);
-      const { data: kanaChildMatches, error: kanaError } = await supabase
+      let kanaChildQuery = supabase
         .from('m_children')
         .select('id')
-        .eq('facility_id', current_facility_id)
         .is('deleted_at', null)
         .or(`family_name_kana.ilike.%${escapedKatakana}%,given_name_kana.ilike.%${escapedKatakana}%,family_name_kana.ilike.%${escapedHiragana}%,given_name_kana.ilike.%${escapedHiragana}%`);
+      if (facilityFilter.type === 'facilities') {
+        kanaChildQuery = kanaChildQuery.in('facility_id', facilityFilter.ids);
+      } else {
+        kanaChildQuery = kanaChildQuery.eq('facility_id', facilityFilter.id);
+      }
+      const { data: kanaChildMatches, error: kanaError } = await kanaChildQuery;
       if (kanaError) {
         console.error('Kana child search error:', kanaError.message);
       }
@@ -169,9 +199,14 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq('facility_id', current_facility_id)
       .is('deleted_at', null)
       .order('updated_at', { ascending: false });
+
+    if (facilityFilter.type === 'facilities') {
+      dbQuery = dbQuery.in('facility_id', facilityFilter.ids);
+    } else {
+      dbQuery = dbQuery.eq('facility_id', facilityFilter.id);
+    }
 
     if (guardianIds !== null) {
       dbQuery = dbQuery.in('id', guardianIds);

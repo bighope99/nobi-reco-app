@@ -277,9 +277,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id } = metadata;
+    const { current_facility_id, role } = metadata;
     if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+    }
+
+    if (role !== 'company_admin' && role !== 'site_admin') {
+      return NextResponse.json({ error: '保護者の削除はcompany_admin以上の権限が必要です' }, { status: 403 });
     }
 
     // 写真パスを取得しておく（削除後にStorageからも削除するため）

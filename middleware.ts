@@ -137,18 +137,16 @@ export async function middleware(request: NextRequest) {
 
     // ログイン済みで /login にアクセス → role に基づいてリダイレクト
     if (session && request.nextUrl.pathname === '/login') {
-        // site_admin / company_admin → /admin, その他 → /dashboard
-        const redirectPath = (role === 'site_admin' || role === 'company_admin')
-            ? '/admin'
-            : '/dashboard';
+        // site_admin → /admin, company_admin → /dashboard, その他 → /dashboard
+        const redirectPath = role === 'site_admin' ? '/admin' : '/dashboard';
 
         return NextResponse.redirect(new URL(redirectPath, request.url));
     }
 
-    // /admin へのアクセス制御（site_admin / company_admin のみ許可）
+    // /admin へのアクセス制御（site_admin のみ許可）
     if (session && request.nextUrl.pathname.startsWith('/admin')) {
-        // site_admin / company_admin 以外は /dashboard にリダイレクト
-        if (role !== 'site_admin' && role !== 'company_admin') {
+        // site_admin 以外は /dashboard にリダイレクト
+        if (role !== 'site_admin') {
             return NextResponse.redirect(new URL('/dashboard', request.url));
         }
     }
