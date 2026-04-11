@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { DatePicker } from '@/components/ui/date-picker';
-import { getCurrentDateJST, getJSTTodayAsDate } from '@/lib/utils/timezone';
+import { getCurrentDateJST, getJSTTodayAsDate, toDateStringJST } from '@/lib/utils/timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1074,7 +1074,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(contentToSave !== undefined ? { content: contentToSave } : {}),
-          observation_date: observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST(),
+          observation_date: observationDate ? toDateStringJST(observationDate) : getCurrentDateJST(),
           recorded_by: selectedRecorder || null,
           child_id: selectedChildId || undefined,
         }),
@@ -1086,7 +1086,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         throw new Error(result.error || '更新に失敗しました');
       }
 
-      const nextObservationDate = observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST();
+      const nextObservationDate = observationDate ? toDateStringJST(observationDate) : getCurrentDateJST();
       const nextRecorderName =
         staffList.find((staff) => staff.user_id === selectedRecorder)?.name ?? '';
       const nextChildName = childOptions.find((c) => c.id === selectedChildId)?.name;
@@ -1159,7 +1159,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
         applyAiResult(aiResult);
       }
 
-      const observationDateStr = observationDate ? format(observationDate, 'yyyy-MM-dd') : getCurrentDateJST();
+      const observationDateStr = observationDate ? toDateStringJST(observationDate) : getCurrentDateJST();
 
       // APIに保存
       const response = await fetch('/api/records/personal', {

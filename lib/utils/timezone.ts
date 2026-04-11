@@ -136,7 +136,7 @@ export const getLastDayOfMonthJST = (year: number, month: number): string => {
 export const getJSTTodayAsDate = (): Date => {
   const jstDateStr = getCurrentDateJST(); // "YYYY-MM-DD"
   const [year, month, day] = jstDateStr.split('-').map(Number);
-  return new Date(year, month - 1, day);
+  return new Date(Date.UTC(year, month - 1, day));
 };
 
 /**

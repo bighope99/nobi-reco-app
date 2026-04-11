@@ -6,7 +6,7 @@
  * Then: Returns JST time in HH:mm format
  */
 
-import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST } from '../timezone';
+import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST, getJSTTodayAsDate } from '../timezone';
 
 describe('formatTimeJST', () => {
   describe('UTC to JST conversion', () => {
@@ -204,6 +204,55 @@ describe('getCurrentDateJST', () => {
 
     // Assert: Should be the new day in JST
     expect(result).toBe('2026-01-17');
+  });
+});
+
+describe('getJSTTodayAsDate', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it('should return a Date built with UTC so the UTC date components match JST date', () => {
+    // Arrange: UTC 2026-01-16 23:00:00 = JST 2026-01-17 08:00:00
+    jest.setSystemTime(new Date('2026-01-16T23:00:00Z'));
+
+    // Act
+    const result = getJSTTodayAsDate();
+
+    // Assert: UTC components should be 2026-01-17 (JST date)
+    expect(result.getUTCFullYear()).toBe(2026);
+    expect(result.getUTCMonth()).toBe(0); // January = 0
+    expect(result.getUTCDate()).toBe(17);
+  });
+
+  it('should not shift date in non-JST environments (UTC midnight)', () => {
+    // Arrange: UTC 2026-03-15 15:00:00 = JST 2026-03-16 00:00:00
+    jest.setSystemTime(new Date('2026-03-15T15:00:00Z'));
+
+    // Act
+    const result = getJSTTodayAsDate();
+
+    // Assert: JST date is 2026-03-16; UTC components must match
+    expect(result.getUTCFullYear()).toBe(2026);
+    expect(result.getUTCMonth()).toBe(2); // March = 2
+    expect(result.getUTCDate()).toBe(16);
+  });
+
+  it('should return Date with time set to UTC 00:00:00', () => {
+    // Arrange
+    jest.setSystemTime(new Date('2026-06-01T10:00:00Z')); // JST 2026-06-01 19:00:00
+
+    // Act
+    const result = getJSTTodayAsDate();
+
+    // Assert: time parts are all zero (UTC midnight)
+    expect(result.getUTCHours()).toBe(0);
+    expect(result.getUTCMinutes()).toBe(0);
+    expect(result.getUTCSeconds()).toBe(0);
   });
 });
 
