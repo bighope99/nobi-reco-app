@@ -6,7 +6,7 @@
  * Then: Returns JST time in HH:mm format
  */
 
-import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST } from '../timezone';
+import { formatTimeJST, getCurrentDateJST, getCurrentTimeJST, getJSTTodayAsDate } from '../timezone';
 
 describe('formatTimeJST', () => {
   describe('UTC to JST conversion', () => {
@@ -204,6 +204,55 @@ describe('getCurrentDateJST', () => {
 
     // Assert: Should be the new day in JST
     expect(result).toBe('2026-01-17');
+  });
+});
+
+describe('getJSTTodayAsDate', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it('should return a local Date whose calendar components match JST today', () => {
+    // Arrange: UTC 2026-01-16 23:00:00 = JST 2026-01-17 08:00:00
+    jest.setSystemTime(new Date('2026-01-16T23:00:00Z'));
+
+    // Act
+    const result = getJSTTodayAsDate();
+
+    // Assert: local calendar components match JST date (2026-01-17)
+    expect(result.getFullYear()).toBe(2026);
+    expect(result.getMonth()).toBe(0); // January = 0
+    expect(result.getDate()).toBe(17);
+  });
+
+  it('should return JST date at JST midnight boundary', () => {
+    // Arrange: UTC 2026-03-15 15:00:00 = JST 2026-03-16 00:00:00
+    jest.setSystemTime(new Date('2026-03-15T15:00:00Z'));
+
+    // Act
+    const result = getJSTTodayAsDate();
+
+    // Assert: JST date is 2026-03-16
+    expect(result.getFullYear()).toBe(2026);
+    expect(result.getMonth()).toBe(2); // March = 2
+    expect(result.getDate()).toBe(16);
+  });
+
+  it('should return Date with time set to local 00:00:00', () => {
+    // Arrange
+    jest.setSystemTime(new Date('2026-06-01T10:00:00Z')); // JST 2026-06-01 19:00:00
+
+    // Act
+    const result = getJSTTodayAsDate();
+
+    // Assert: time parts are local midnight
+    expect(result.getHours()).toBe(0);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getSeconds()).toBe(0);
   });
 });
 
