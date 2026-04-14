@@ -328,9 +328,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { current_facility_id } = metadata;
+    const { current_facility_id, role } = metadata;
     if (!current_facility_id) {
       return NextResponse.json({ error: 'Facility not found' }, { status: 404 });
+    }
+
+    // ロールチェック: facility_admin 以上のみ許可（staff は変更不可）
+    if (!role || role === 'staff') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id: child_id } = await params;
@@ -341,12 +346,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid enrollment_status' }, { status: 400 });
     }
 
+    const updates: Record<string, unknown> = {
+      enrollment_status,
+      updated_at: new Date().toISOString(),
+    };
+    if (enrollment_status !== 'withdrawn') {
+      updates.withdrawn_at = null;
+    }
+
     const { data: updatedRows, error: updateError } = await supabase
       .from('m_children')
-      .update({
-        enrollment_status,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', child_id)
       .eq('facility_id', current_facility_id)
       .is('deleted_at', null)

@@ -114,7 +114,7 @@ export default function ChildImportPage() {
         setSelectedFacilityId(session.current_facility_id)
       }
     }
-  }, [session])
+  }, [session, isFacilityAdmin, isStaff])
 
   // 施設変更時: 学校・クラスを再取得
   useEffect(() => {

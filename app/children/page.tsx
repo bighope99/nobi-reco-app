@@ -34,7 +34,6 @@ import {
 
 type ContractType = 'regular' | 'temporary' | 'spot';
 type EnrollmentStatus = 'enrolled' | 'withdrawn' | 'suspended';
-type StatusType = 'enrolled' | 'withdrawn' | 'suspended';
 
 interface APIChild {
     child_id: string;
@@ -67,6 +66,7 @@ interface ChildrenAPIResponse {
         summary: {
             total_children: number;
             enrolled_count: number;
+            suspended_count: number;
             withdrawn_count: number;
             has_allergy_count: number;
         };
@@ -96,7 +96,7 @@ interface Student {
     allergyDetail?: string;
     photoAllowed: boolean;
     reportAllowed: boolean;
-    status: StatusType;
+    status: EnrollmentStatus;
     contractType: ContractType;
 }
 
@@ -110,7 +110,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
     const gradeOrder = gradeValue ?? 0;
 
     // Map enrollment_status to status
-    const status: StatusType = apiChild.enrollment_status;
+    const status: EnrollmentStatus = apiChild.enrollment_status;
 
     return {
         id: apiChild.child_id,
@@ -146,9 +146,16 @@ export default function StudentList() {
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterClass, setFilterClass] = useState('all');
-    const [activeTab, setActiveTab] = useState<StatusType>('enrolled');
+    const [activeTab, setActiveTab] = useState<EnrollmentStatus>('enrolled');
     const [classOptions, setClassOptions] = useState<Array<{ class_id: string; class_name: string }>>([]);
-    const [totalCount, setTotalCount] = useState(0);
+    const [summary, setSummary] = useState<ChildrenAPIResponse['data']['summary'] | null>(null);
+    const totalCount = summary
+        ? activeTab === 'enrolled'
+            ? summary.enrolled_count
+            : activeTab === 'suspended'
+            ? summary.suspended_count
+            : summary.withdrawn_count
+        : 0;
     const [qrGeneratingId, setQrGeneratingId] = useState<string | null>(null);
     const [batchGenerating, setBatchGenerating] = useState(false);
 
@@ -209,7 +216,7 @@ export default function StudentList() {
 
                 const params = new URLSearchParams();
 
-                // Map activeTab to enrollment status (StatusType now matches DB value directly)
+                // Map activeTab to enrollment status (EnrollmentStatus matches DB value directly)
                 params.append('status', activeTab);
 
                 if (filterClass !== 'all') {
@@ -239,7 +246,7 @@ export default function StudentList() {
                     const convertedStudents = result.data.children.map(convertAPIChildToStudent);
                     setStudents(convertedStudents);
                     setClassOptions(result.data?.filters?.classes || []);
-                    setTotalCount(result.data?.summary?.total_children || 0);
+                    setSummary(result.data?.summary ?? null);
                 }
             } catch (err) {
                 if (err instanceof DOMException && err.name === 'AbortError') {
@@ -262,7 +269,7 @@ export default function StudentList() {
     }, [activeTab, filterClass, debouncedSearch, isCompanyAdmin, selectedFacilityId, facilityOptions]);
 
     // Status label helper
-    const getStatusLabel = (status: StatusType) => {
+    const getStatusLabel = (status: EnrollmentStatus) => {
         switch (status) {
             case 'enrolled': return '在籍中';
             case 'suspended': return '休園中';
@@ -271,7 +278,7 @@ export default function StudentList() {
     };
 
     // Change Status Function (3-value: enrolled / suspended / withdrawn)
-    const changeStatus = async (id: string, newStatus: StatusType, currentStatus: StatusType) => {
+    const changeStatus = async (id: string, newStatus: EnrollmentStatus, currentStatus: EnrollmentStatus) => {
         if (newStatus === currentStatus) return;
 
         const label = getStatusLabel(newStatus);
