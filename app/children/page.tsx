@@ -292,14 +292,22 @@ export default function StudentList() {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to update status');
+                const body = await response.json().catch(() => ({}));
+                const message = body?.error ?? 'ステータスの更新に失敗しました';
+                throw new Error(`[${response.status}] ${message}`);
             }
 
             // Remove from current tab list (status changed away from activeTab)
             setStudents(prev => prev.filter(s => s.id !== id));
+            setSummary(prev => {
+                if (!prev) return prev;
+                const countKey = `${activeTab}_count` as keyof typeof prev;
+                return { ...prev, [countKey]: Math.max(0, (prev[countKey] as number) - 1) };
+            });
         } catch (err) {
             console.error('Failed to update status:', err);
-            alert('ステータスの更新に失敗しました');
+            const detail = err instanceof Error ? err.message : String(err);
+            alert(`ステータスの更新に失敗しました: ${detail}`);
         }
     };
 
@@ -716,50 +724,65 @@ export default function StudentList() {
                                                 >
                                                     {/* Status Dropdown */}
                                                     <td className="px-2 py-4 text-center" >
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <button
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className={`inline-flex items-center gap-1 px-2 py-1.5 rounded border text-xs font-bold transition-all ${
-                                                                        student.status === 'enrolled'
-                                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                                                                            : student.status === 'suspended'
-                                                                            ? 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
-                                                                            : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                                                                    }`}
-                                                                    title="ステータスを変更"
-                                                                >
-                                                                    <MoreVertical size={14} />
-                                                                </button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                                                                <DropdownMenuItem
-                                                                    className={`gap-2 cursor-pointer ${student.status === 'enrolled' ? 'font-bold text-emerald-700' : ''}`}
-                                                                    onSelect={() => changeStatus(student.id, 'enrolled', student.status)}
-                                                                >
-                                                                    <UserCheck size={14} className="text-emerald-600" />
-                                                                    {student.status === 'enrolled' && <span className="text-emerald-600 mr-1">✓</span>}
-                                                                    在籍中
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem
-                                                                    className={`gap-2 cursor-pointer ${student.status === 'suspended' ? 'font-bold text-orange-700' : ''}`}
-                                                                    onSelect={() => changeStatus(student.id, 'suspended', student.status)}
-                                                                >
-                                                                    <UserMinus size={14} className="text-orange-500" />
-                                                                    {student.status === 'suspended' && <span className="text-orange-500 mr-1">✓</span>}
-                                                                    休園中
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem
-                                                                    className={`gap-2 cursor-pointer ${student.status === 'withdrawn' ? 'font-bold text-slate-700' : ''}`}
-                                                                    onSelect={() => changeStatus(student.id, 'withdrawn', student.status)}
-                                                                >
-                                                                    <UserX size={14} className="text-slate-500" />
-                                                                    {student.status === 'withdrawn' && <span className="text-slate-500 mr-1">✓</span>}
-                                                                    退所済み
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
+                                                        {(isAdmin || isFacilityAdmin) ? (
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className={`inline-flex items-center gap-1 px-2 py-1.5 rounded border text-xs font-bold transition-all ${
+                                                                            student.status === 'enrolled'
+                                                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                                                                                : student.status === 'suspended'
+                                                                                ? 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
+                                                                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                                                                        }`}
+                                                                        title="ステータスを変更"
+                                                                    >
+                                                                        <MoreVertical size={14} />
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                                                                    <DropdownMenuItem
+                                                                        className={`gap-2 cursor-pointer ${student.status === 'enrolled' ? 'font-bold text-emerald-700' : ''}`}
+                                                                        onSelect={() => changeStatus(student.id, 'enrolled', student.status)}
+                                                                    >
+                                                                        <UserCheck size={14} className="text-emerald-600" />
+                                                                        {student.status === 'enrolled' && <span className="text-emerald-600 mr-1">✓</span>}
+                                                                        在籍中
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem
+                                                                        className={`gap-2 cursor-pointer ${student.status === 'suspended' ? 'font-bold text-orange-700' : ''}`}
+                                                                        onSelect={() => changeStatus(student.id, 'suspended', student.status)}
+                                                                    >
+                                                                        <UserMinus size={14} className="text-orange-500" />
+                                                                        {student.status === 'suspended' && <span className="text-orange-500 mr-1">✓</span>}
+                                                                        休園中
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem
+                                                                        className={`gap-2 cursor-pointer ${student.status === 'withdrawn' ? 'font-bold text-slate-700' : ''}`}
+                                                                        onSelect={() => changeStatus(student.id, 'withdrawn', student.status)}
+                                                                    >
+                                                                        <UserX size={14} className="text-slate-500" />
+                                                                        {student.status === 'withdrawn' && <span className="text-slate-500 mr-1">✓</span>}
+                                                                        退所済み
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        ) : (
+                                                            <span
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className={`inline-flex items-center gap-1 px-2 py-1.5 rounded border text-xs font-bold ${
+                                                                    student.status === 'enrolled'
+                                                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                                                        : student.status === 'suspended'
+                                                                        ? 'bg-orange-50 text-orange-600 border-orange-200'
+                                                                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                                                                }`}
+                                                            >
+                                                                {getStatusLabel(student.status)}
+                                                            </span>
+                                                        )}
                                                     </td>
 
                                                     {/* Name */}
