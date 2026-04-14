@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const status = searchParams.get('status') || 'enrolled'; // enrolled / withdrawn
+    const status = searchParams.get('status') || 'enrolled'; // enrolled / suspended / withdrawn
     const class_id = searchParams.get('class_id') || null;
     const search = searchParams.get('search') || null;
     const has_allergy = searchParams.get('has_allergy');
@@ -106,6 +106,7 @@ export async function GET(request: NextRequest) {
       ]);
 
       const enrolledCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'enrolled').length;
+      const suspendedCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'suspended').length;
       const withdrawnCount = (summaryData || []).filter((c: any) => c.enrollment_status === 'withdrawn').length;
       const hasAllergyCount = (summaryData || []).filter((c: any) => c.allergies !== null).length;
 
@@ -126,8 +127,9 @@ export async function GET(request: NextRequest) {
 
       return {
         summary: {
-          total_children: enrolledCount + withdrawnCount,
+          total_children: enrolledCount + suspendedCount + withdrawnCount,
           enrolled_count: enrolledCount,
+          suspended_count: suspendedCount,
           withdrawn_count: withdrawnCount,
           has_allergy_count: hasAllergyCount,
         },

@@ -337,7 +337,7 @@ export async function PATCH(
     const body = await request.json();
     const { enrollment_status } = body;
 
-    if (!enrollment_status || !['enrolled', 'withdrawn'].includes(enrollment_status)) {
+    if (!enrollment_status || !['enrolled', 'withdrawn', 'suspended'].includes(enrollment_status)) {
       return NextResponse.json({ error: 'Invalid enrollment_status' }, { status: 400 });
     }
 
