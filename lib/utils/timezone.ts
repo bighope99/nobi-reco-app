@@ -58,15 +58,17 @@ export const formatTimeJST = (
 
 /**
  * Get current date in JST (Japan Standard Time) in YYYY-MM-DD format
+ * Uses explicit UTC+9 arithmetic to avoid locale-dependent toLocaleDateString format issues.
  */
 export const getCurrentDateJST = (): string => {
   const now = new Date();
-  return now.toLocaleDateString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).replace(/\//g, '-'); // "YYYY/MM/DD" → "YYYY-MM-DD"
+  // Convert to JST by adding 9 hours (UTC+9)
+  const jstMs = now.getTime() + 9 * 60 * 60 * 1000;
+  const jstDate = new Date(jstMs);
+  const year = jstDate.getUTCFullYear();
+  const month = String(jstDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(jstDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
@@ -97,14 +99,15 @@ export const getTomorrowDateJST = (): string => {
 
 /**
  * Convert a Date object to JST date string in YYYY-MM-DD format
+ * Uses explicit UTC+9 arithmetic to avoid locale-dependent toLocaleDateString format issues.
  */
 export const toDateStringJST = (date: Date): string => {
-  return date.toLocaleDateString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).replace(/\//g, '-');
+  const jstMs = date.getTime() + 9 * 60 * 60 * 1000;
+  const jstDate = new Date(jstMs);
+  const year = jstDate.getUTCFullYear();
+  const month = String(jstDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(jstDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**

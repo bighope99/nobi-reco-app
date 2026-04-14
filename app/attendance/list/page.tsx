@@ -261,13 +261,13 @@ export default function AttendanceListPage() {
   const [committedSearchTerm, setCommittedSearchTerm] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null)
 
-  // クライアント側でのみ初期日付を設定
-  // SSR時のタイムゾーン不一致を防ぐため
+  // クライアント側でのみ初期日付を設定（マウント時のみ）
+  // SSR時のタイムゾーン不一致を防ぐため、初期値は空文字列にして
+  // useEffectでクライアント側のみで設定する
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!selectedDate) {
-      setSelectedDate(getTomorrowDateJST())
-    }
-  }, [selectedDate])
+    setSelectedDate(getTomorrowDateJST())
+  }, [])
 
   const fetchAttendance = useCallback(async (silent = false) => {
     // 日付が設定されるまで待つ
