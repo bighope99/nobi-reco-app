@@ -1209,7 +1209,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                               </div>
                               <div>
                                 <p className="text-sm font-bold text-slate-900">{candidate.name} <span className="text-xs font-normal text-slate-500">（{candidate.kana}）</span></p>
-                                <p className="text-xs text-slate-500">{candidate.class_name}{candidate.age ? ` (${candidate.age}歳)` : ''} | {candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済'}</p>
+                                <p className="text-xs text-slate-500">{candidate.class_name}{candidate.age ? ` (${candidate.age}歳)` : ''} | {candidate.enrollment_status === 'enrolled' ? '在園中' : candidate.enrollment_status === 'suspended' ? '休園中' : '退所済'}</p>
                               </div>
                             </div>
                             <div className="flex gap-2 shrink-0">
@@ -1290,7 +1290,7 @@ export default function ChildForm({ mode, childId, onSuccess, readOnly = false }
                                     </div>
                                     <div>
                                       <p className="text-sm font-bold text-slate-900">{candidate.name} <span className="text-xs font-normal text-slate-500">（{candidate.kana}）</span></p>
-                                      <p className="text-xs text-slate-500">{candidate.class_name}{candidate.age ? ` (${candidate.age}歳)` : ''} | {candidate.enrollment_status === 'enrolled' ? '在園中' : '退所済'}</p>
+                                      <p className="text-xs text-slate-500">{candidate.class_name}{candidate.age ? ` (${candidate.age}歳)` : ''} | {candidate.enrollment_status === 'enrolled' ? '在園中' : candidate.enrollment_status === 'suspended' ? '休園中' : '退所済'}</p>
                                     </div>
                                   </div>
                                   <button

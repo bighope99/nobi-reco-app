@@ -740,4 +740,114 @@ describe('GET /api/children', () => {
       expect(json.error).toBe('Facility not found');
     });
   });
+
+  describe('suspended_count', () => {
+    // summaryData: enrolled 1件 + suspended 2件 + withdrawn 1件
+    const summaryDataMixed = [
+      { enrollment_status: 'enrolled', allergies: null },
+      { enrollment_status: 'suspended', allergies: null },
+      { enrollment_status: 'suspended', allergies: null },
+      { enrollment_status: 'withdrawn', allergies: null },
+    ];
+
+    const buildMixedSupabase = (statusFilter = 'enrolled') => {
+      const childrenQuery: any = {
+        select: jest.fn(() => childrenQuery),
+        eq: jest.fn(() => childrenQuery),
+        in: jest.fn(() => childrenQuery),
+        is: jest.fn(() => childrenQuery),
+        order: jest.fn(() => childrenQuery),
+        range: jest.fn().mockResolvedValue({
+          data: [],
+          error: null,
+          count: 0,
+        }),
+      };
+
+      const summaryQuery: any = {
+        select: jest.fn(() => summaryQuery),
+        eq: jest.fn(() => summaryQuery),
+        in: jest.fn(() => summaryQuery),
+        is: jest.fn(() => summaryQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
+          data: summaryDataMixed,
+          error: null,
+        })),
+      };
+
+      const classesQuery: any = {
+        select: jest.fn(() => classesQuery),
+        eq: jest.fn(() => classesQuery),
+        in: jest.fn(() => classesQuery),
+        is: jest.fn(() => classesQuery),
+        order: jest.fn(() => classesQuery),
+        then: jest.fn((resolve: (v: any) => any) => resolve({
+          data: [],
+          error: null,
+        })),
+      };
+
+      const classChildrenQuery: any = {
+        select: jest.fn(() => classChildrenQuery),
+        eq: jest.fn(() => classChildrenQuery),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
+      let callCount = 0;
+      return {
+        from: jest.fn((table: string) => {
+          callCount++;
+          if (table === 'm_children' && callCount === 1) return childrenQuery;
+          if (table === 'm_children' && callCount === 2) return summaryQuery;
+          if (table === 'm_classes') return classesQuery;
+          if (table === '_child_class') return classChildrenQuery;
+          throw new Error(`Unexpected table: ${table} (call ${callCount})`);
+        }),
+        _childrenQuery: childrenQuery,
+      };
+    };
+
+    it('summaryData に enrolled 1件 + suspended 2件 + withdrawn 1件がある場合、suspended_count: 2 を返すこと', async () => {
+      // Given
+      const mockSupabase = buildMixedSupabase();
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      // When
+      const request = buildRequest({ status: 'enrolled' });
+      const response = await GET(request);
+      const json = await response.json();
+
+      // Then
+      expect(response.status).toBe(200);
+      expect(json.data.summary.suspended_count).toBe(2);
+    });
+
+    it('summaryData に enrolled 1件 + suspended 2件 + withdrawn 1件がある場合、total_children: 4 を返すこと', async () => {
+      // Given
+      const mockSupabase = buildMixedSupabase();
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      // When
+      const request = buildRequest({ status: 'enrolled' });
+      const response = await GET(request);
+      const json = await response.json();
+
+      // Then
+      expect(response.status).toBe(200);
+      expect(json.data.summary.total_children).toBe(4);
+    });
+
+    it('status=suspended クエリパラメータで .eq("enrollment_status", "suspended") が呼ばれること', async () => {
+      // Given
+      const mockSupabase = buildMixedSupabase('suspended');
+      mockedCreateClient.mockResolvedValue(mockSupabase as any);
+
+      // When
+      const request = buildRequest({ status: 'suspended' });
+      await GET(request);
+
+      // Then: children クエリに enrollment_status=suspended フィルターが渡されること
+      expect(mockSupabase._childrenQuery.eq).toHaveBeenCalledWith('enrollment_status', 'suspended');
+    });
+  });
 });

@@ -281,6 +281,7 @@ CREATE TYPE gender_type AS ENUM (
 ```sql
 CREATE TYPE enrollment_status_type AS ENUM (
   'enrolled',   -- 在籍中
+  'suspended',  -- 休園中
   'withdrawn'   -- 退所
 );
 ```

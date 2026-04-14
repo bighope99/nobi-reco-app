@@ -114,7 +114,7 @@ export default function ChildImportPage() {
         setSelectedFacilityId(session.current_facility_id)
       }
     }
-  }, [session])
+  }, [session, isFacilityAdmin, isStaff])
 
   // 施設変更時: 学校・クラスを再取得
   useEffect(() => {
@@ -798,6 +798,7 @@ export default function ChildImportPage() {
                               <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                                 row.enrollment_status === '在籍' ? 'bg-green-100 text-green-700' :
                                 row.enrollment_status === '退所' ? 'bg-gray-100 text-gray-600' :
+                                row.enrollment_status === '休園' ? 'bg-orange-100 text-orange-600' :
                                 'bg-yellow-100 text-yellow-700'
                               }`}>
                                 {row.enrollment_status}

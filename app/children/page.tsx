@@ -11,21 +11,29 @@ import {
     Phone,
     ChevronRight,
     ArrowUpDown,
-    Power,
-    RotateCcw,
     Download,
     Upload,
     Loader2,
     CameraOff,
     Building2,
-    ArrowLeftRight
+    ArrowLeftRight,
+    UserCheck,
+    UserMinus,
+    UserX,
+    MoreVertical
 } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 
 // --- Types ---
 
 type ContractType = 'regular' | 'temporary' | 'spot';
 type EnrollmentStatus = 'enrolled' | 'withdrawn' | 'suspended';
-type StatusType = 'active' | 'inactive';
 
 interface APIChild {
     child_id: string;
@@ -58,6 +66,7 @@ interface ChildrenAPIResponse {
         summary: {
             total_children: number;
             enrolled_count: number;
+            suspended_count: number;
             withdrawn_count: number;
             has_allergy_count: number;
         };
@@ -87,7 +96,7 @@ interface Student {
     allergyDetail?: string;
     photoAllowed: boolean;
     reportAllowed: boolean;
-    status: StatusType;
+    status: EnrollmentStatus;
     contractType: ContractType;
 }
 
@@ -101,7 +110,7 @@ const convertAPIChildToStudent = (apiChild: APIChild): Student => {
     const gradeOrder = gradeValue ?? 0;
 
     // Map enrollment_status to status
-    const status: StatusType = apiChild.enrollment_status === 'enrolled' ? 'active' : 'inactive';
+    const status: EnrollmentStatus = apiChild.enrollment_status;
 
     return {
         id: apiChild.child_id,
@@ -137,9 +146,16 @@ export default function StudentList() {
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterClass, setFilterClass] = useState('all');
-    const [activeTab, setActiveTab] = useState<StatusType>('active');
+    const [activeTab, setActiveTab] = useState<EnrollmentStatus>('enrolled');
     const [classOptions, setClassOptions] = useState<Array<{ class_id: string; class_name: string }>>([]);
-    const [totalCount, setTotalCount] = useState(0);
+    const [summary, setSummary] = useState<ChildrenAPIResponse['data']['summary'] | null>(null);
+    const totalCount = summary
+        ? activeTab === 'enrolled'
+            ? summary.enrolled_count
+            : activeTab === 'suspended'
+            ? summary.suspended_count
+            : summary.withdrawn_count
+        : 0;
     const [qrGeneratingId, setQrGeneratingId] = useState<string | null>(null);
     const [batchGenerating, setBatchGenerating] = useState(false);
 
@@ -200,12 +216,8 @@ export default function StudentList() {
 
                 const params = new URLSearchParams();
 
-                // Map activeTab to enrollment status
-                if (activeTab === 'active') {
-                    params.append('status', 'enrolled');
-                } else {
-                    params.append('status', 'withdrawn');
-                }
+                // Map activeTab to enrollment status (EnrollmentStatus matches DB value directly)
+                params.append('status', activeTab);
 
                 if (filterClass !== 'all') {
                     params.append('class_id', filterClass);
@@ -234,7 +246,7 @@ export default function StudentList() {
                     const convertedStudents = result.data.children.map(convertAPIChildToStudent);
                     setStudents(convertedStudents);
                     setClassOptions(result.data?.filters?.classes || []);
-                    setTotalCount(result.data?.summary?.total_children || 0);
+                    setSummary(result.data?.summary ?? null);
                 }
             } catch (err) {
                 if (err instanceof DOMException && err.name === 'AbortError') {
@@ -256,31 +268,46 @@ export default function StudentList() {
         };
     }, [activeTab, filterClass, debouncedSearch, isCompanyAdmin, selectedFacilityId, facilityOptions]);
 
-    // Toggle Status Function (Now updates via API)
-    const toggleStatus = async (id: string, currentStatus: StatusType) => {
-        const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-        const newEnrollmentStatus = newStatus === 'active' ? 'enrolled' : 'withdrawn';
+    // Status label helper
+    const getStatusLabel = (status: EnrollmentStatus) => {
+        switch (status) {
+            case 'enrolled': return '在籍中';
+            case 'suspended': return '休園中';
+            case 'withdrawn': return '退所済み';
+        }
+    };
 
-        if (confirm(`${currentStatus === 'active' ? '退所済みに変更' : '所属中に復帰'}しますか？`)) {
-            try {
-                const response = await fetch(`/api/children/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enrollment_status: newEnrollmentStatus }),
-                });
+    // Change Status Function (3-value: enrolled / suspended / withdrawn)
+    const changeStatus = async (id: string, newStatus: EnrollmentStatus, currentStatus: EnrollmentStatus) => {
+        if (newStatus === currentStatus) return;
 
-                if (!response.ok) {
-                    throw new Error('Failed to update status');
-                }
+        const label = getStatusLabel(newStatus);
+        if (!confirm(`ステータスを「${label}」に変更しますか？`)) return;
 
-                // Optimistically update UI
-                setStudents(prev => prev.map(s =>
-                    s.id === id ? { ...s, status: newStatus } : s
-                ));
-            } catch (err) {
-                console.error('Failed to update status:', err);
-                alert('ステータスの更新に失敗しました');
+        try {
+            const response = await fetch(`/api/children/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enrollment_status: newStatus }),
+            });
+
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                const message = body?.error ?? 'ステータスの更新に失敗しました';
+                throw new Error(`[${response.status}] ${message}`);
             }
+
+            // Remove from current tab list (status changed away from activeTab)
+            setStudents(prev => prev.filter(s => s.id !== id));
+            setSummary(prev => {
+                if (!prev) return prev;
+                const countKey = `${activeTab}_count` as keyof typeof prev;
+                return { ...prev, [countKey]: Math.max(0, (prev[countKey] as number) - 1) };
+            });
+        } catch (err) {
+            console.error('Failed to update status:', err);
+            const detail = err instanceof Error ? err.message : String(err);
+            alert(`ステータスの更新に失敗しました: ${detail}`);
         }
     };
 
@@ -484,7 +511,7 @@ export default function StudentList() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6" >
                         <div>
                             <p className="text-sm text-slate-500 mt-1" >
-                                {loading ? '読み込み中...' : `全 ${totalCount} 名の児童情報を管理 （${activeTab === 'active' ? '所属中' : '退所済み'} 表示中）`}
+                                {loading ? '読み込み中...' : `全 ${totalCount} 名の児童情報を管理 （${activeTab === 'enrolled' ? '所属中' : activeTab === 'suspended' ? '休園中' : '退所済み'} 表示中）`}
                             </p>
                         </div>
 
@@ -500,17 +527,26 @@ export default function StudentList() {
                     {/* Tab Navigation */}
                     <div className="flex items-center gap-1 mb-0 border-b border-gray-200" >
                         <button
-                            onClick={() => setActiveTab('active')}
-                            className={`px-6 py-2.5 text-sm font-bold border-b-2 transition-colors ${activeTab === 'active'
+                            onClick={() => setActiveTab('enrolled')}
+                            className={`px-6 py-2.5 text-sm font-bold border-b-2 transition-colors ${activeTab === 'enrolled'
                                 ? 'border-indigo-600 text-indigo-600'
                                 : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                                 }`}
                         >
-                            所属中
+                            在籍中
                         </button>
                         <button
-                            onClick={() => setActiveTab('inactive')}
-                            className={`px-6 py-2.5 text-sm font-bold border-b-2 transition-colors ${activeTab === 'inactive'
+                            onClick={() => setActiveTab('suspended')}
+                            className={`px-6 py-2.5 text-sm font-bold border-b-2 transition-colors ${activeTab === 'suspended'
+                                ? 'border-orange-500 text-orange-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                }`}
+                        >
+                            休園中
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('withdrawn')}
+                            className={`px-6 py-2.5 text-sm font-bold border-b-2 transition-colors ${activeTab === 'withdrawn'
                                 ? 'border-indigo-600 text-indigo-600'
                                 : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                                 }`}
@@ -683,40 +719,85 @@ export default function StudentList() {
                                             processedStudents.map((student) => (
                                                 <tr
                                                     key={student.id}
-                                                    className={`group transition-colors cursor-pointer ${student.status === 'inactive' ? 'bg-slate-50/50' : 'hover:bg-indigo-50/30'}`}
+                                                    className={`group transition-colors cursor-pointer ${student.status === 'withdrawn' ? 'bg-slate-50/50' : student.status === 'suspended' ? 'bg-orange-50/30' : 'hover:bg-indigo-50/30'}`}
                                                     onClick={() => window.location.href = `/children/${student.id}/edit`}
                                                 >
-                                                    {/* Status Toggle */}
+                                                    {/* Status Dropdown */}
                                                     <td className="px-2 py-4 text-center" >
-                                                        <button
-                                                            onClick={
-                                                                (e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleStatus(student.id, student.status);
-                                                                }
-                                                            }
-                                                            className={`p-1.5 rounded-full border transition-all ${student.status === 'active'
-                                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
-                                                                : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'
+                                                        {(isAdmin || isFacilityAdmin) ? (
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className={`inline-flex items-center gap-1 px-2 py-1.5 rounded border text-xs font-bold transition-all ${
+                                                                            student.status === 'enrolled'
+                                                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                                                                                : student.status === 'suspended'
+                                                                                ? 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
+                                                                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                                                                        }`}
+                                                                        title="ステータスを変更"
+                                                                    >
+                                                                        <MoreVertical size={14} />
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                                                                    <DropdownMenuItem
+                                                                        className={`gap-2 cursor-pointer ${student.status === 'enrolled' ? 'font-bold text-emerald-700' : ''}`}
+                                                                        onSelect={() => changeStatus(student.id, 'enrolled', student.status)}
+                                                                    >
+                                                                        <UserCheck size={14} className="text-emerald-600" />
+                                                                        {student.status === 'enrolled' && <span className="text-emerald-600 mr-1">✓</span>}
+                                                                        在籍中
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem
+                                                                        className={`gap-2 cursor-pointer ${student.status === 'suspended' ? 'font-bold text-orange-700' : ''}`}
+                                                                        onSelect={() => changeStatus(student.id, 'suspended', student.status)}
+                                                                    >
+                                                                        <UserMinus size={14} className="text-orange-500" />
+                                                                        {student.status === 'suspended' && <span className="text-orange-500 mr-1">✓</span>}
+                                                                        休園中
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem
+                                                                        className={`gap-2 cursor-pointer ${student.status === 'withdrawn' ? 'font-bold text-slate-700' : ''}`}
+                                                                        onSelect={() => changeStatus(student.id, 'withdrawn', student.status)}
+                                                                    >
+                                                                        <UserX size={14} className="text-slate-500" />
+                                                                        {student.status === 'withdrawn' && <span className="text-slate-500 mr-1">✓</span>}
+                                                                        退所済み
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        ) : (
+                                                            <span
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className={`inline-flex items-center gap-1 px-2 py-1.5 rounded border text-xs font-bold ${
+                                                                    student.status === 'enrolled'
+                                                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                                                        : student.status === 'suspended'
+                                                                        ? 'bg-orange-50 text-orange-600 border-orange-200'
+                                                                        : 'bg-slate-100 text-slate-500 border-slate-200'
                                                                 }`}
-                                                            title={student.status === 'active' ? "退所にする" : "復帰させる"}
-                                                        >
-                                                            {student.status === 'active' ? <Power size={16} /> : <RotateCcw size={16} />}
-                                                        </button>
+                                                            >
+                                                                {getStatusLabel(student.status)}
+                                                            </span>
+                                                        )}
                                                     </td>
 
                                                     {/* Name */}
                                                     <td className="px-3 py-4" >
                                                         <div>
                                                             <div className="flex items-center gap-2 flex-wrap" >
-                                                                <span className={`font-bold text-base ${student.status === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>
+                                                                <span className={`font-bold text-base ${student.status === 'withdrawn' ? 'text-slate-400' : student.status === 'suspended' ? 'text-orange-700' : 'text-slate-800'}`}>
                                                                     {student.name}
                                                                 </span>
-                                                                {
-                                                                    student.status === 'inactive' && (
-                                                                        <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold" > 退所 </span>
-                                                                    )
-                                                                }
+                                                                {student.status === 'withdrawn' && (
+                                                                    <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded font-bold">退所</span>
+                                                                )}
+                                                                {student.status === 'suspended' && (
+                                                                    <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-[10px] rounded font-bold">休園</span>
+                                                                )}
                                                             </div>
                                                             <div className="text-xs text-slate-400 mt-0.5 font-mono" >
                                                                 {student.kana}
