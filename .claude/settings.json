@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "CwdChanged": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/cwd-changed.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "wts=$(git -C \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" worktree list --porcelain 2>/dev/null | grep '^worktree' | awk '{print $2}'); failures=\"\"; for wt in $wts; do branch=$(git -C \"$wt\" rev-parse --abbrev-ref HEAD 2>/dev/null); [ -z \"$branch\" ] || [ \"$branch\" = \"HEAD\" ] || [ \"$branch\" = \"main\" ] || [ \"$branch\" = \"master\" ] && continue; pr_num=$(gh pr view \"$branch\" --json number -q .number 2>/dev/null); [ -z \"$pr_num\" ] && continue; result=$(gh pr checks \"$branch\" --watch 2>&1 || true); f=$(echo \"$result\" | grep -iE \"(型チェック|tsc|Jest)\" | grep -iE \"(fail|×)\" || true); [ -n \"$f\" ] && failures=\"${failures}PR#${pr_num}(${branch}): ${f}\\n\"; done; [ -z \"$failures\" ] && exit 0; printf '{\"systemMessage\": \"\\u274c CI失敗:\\n%s\"}' \"$(printf '%b' \"$failures\")\"; exit 2",
+            "timeout": 600000,
+            "statusMessage": "CI監視中...",
+            "asyncRewake": true
+          }
+        ]
+      }
+    ]
+  }
+}
