@@ -665,9 +665,6 @@ CREATE TABLE IF NOT EXISTS r_activity (
   handover_completed_by UUID REFERENCES m_users(id), -- 完了操作者
   todo_items JSONB,                                  -- 明日やることリスト（配列）
 
-  -- 明日やることリスト
-  todo_items JSONB,                                  -- 明日やることリスト（配列）
-
   -- リアルタイム編集用
   last_edited_by UUID REFERENCES m_users(id),    -- 最後に編集した人
   last_edited_at TIMESTAMP WITH TIME ZONE,       -- 最後の編集日時
@@ -688,6 +685,16 @@ CREATE INDEX idx_activity_facility_date ON r_activity(facility_id, activity_date
 CREATE INDEX idx_activity_mentioned_children ON r_activity USING GIN (mentioned_children);
 CREATE INDEX idx_activity_handover_completed ON r_activity(handover_completed) WHERE deleted_at IS NULL AND handover IS NOT NULL;
 CREATE INDEX idx_activity_todo_items ON r_activity(id) WHERE deleted_at IS NULL AND todo_items IS NOT NULL;
+
+-- 同一施設×クラス×日付での活動記録重複を防ぐPartial Unique Index（削除済みレコードは除外）
+CREATE UNIQUE INDEX idx_r_activity_unique_facility_class_date
+  ON r_activity (facility_id, class_id, activity_date)
+  WHERE deleted_at IS NULL AND class_id IS NOT NULL;
+
+-- class_id なし（クラスなし施設）の場合も1件のみ許可
+CREATE UNIQUE INDEX idx_r_activity_unique_facility_null_class_date
+  ON r_activity (facility_id, activity_date)
+  WHERE deleted_at IS NULL AND class_id IS NULL;
 ```
 
 **JSONBカラムのスキーマ定義**:

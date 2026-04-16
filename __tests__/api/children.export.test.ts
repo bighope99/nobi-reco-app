@@ -63,9 +63,11 @@ const buildMockSupabase = (options: {
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
             is: jest.fn().mockReturnValue({
-              order: jest.fn().mockResolvedValue({
-                data: childrenData,
-                error: childrenError,
+              eq: jest.fn().mockReturnValue({
+                order: jest.fn().mockResolvedValue({
+                  data: childrenData,
+                  error: childrenError,
+                }),
               }),
             }),
           }),

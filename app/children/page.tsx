@@ -149,7 +149,7 @@ export default function StudentList() {
 
     // Sort State
     const [sortKey, setSortKey] = useState<SortKey>('grade');
-    const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
     // Debounced search term
     const [debouncedSearch, setDebouncedSearch] = useState('');
