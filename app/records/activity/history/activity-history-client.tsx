@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useHistoryFilters } from "@/hooks/useHistoryFilters"
 import { StaffLayout } from "@/components/layout/staff-layout"
 import { HistoryTabs } from "../../_components/history-tabs"
-import { Search, ChevronDown } from "lucide-react"
+import { Search, ChevronDown, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
@@ -36,11 +36,14 @@ export default function ActivityHistoryClient() {
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const latestRequestRef = useRef(0)
 
   const fetchActivities = useCallback(async (newOffset: number, append: boolean) => {
     const requestId = ++latestRequestRef.current
     setLoading(true)
+    setFetchError(null)
     try {
       const params = new URLSearchParams({ limit: '20', offset: String(newOffset) })
       if (fromDate) params.set('from_date', fromDate)
@@ -79,6 +82,7 @@ export default function ActivityHistoryClient() {
       setOffset(newOffset)
     } catch (err) {
       console.error('Failed to fetch activities:', err)
+      setFetchError('記録の取得に失敗しました。ページを再読み込みしてください。')
     } finally {
       if (requestId === latestRequestRef.current) {
         setLoading(false)
@@ -92,6 +96,33 @@ export default function ActivityHistoryClient() {
 
   const handleLoadMore = () => {
     fetchActivities(offset + 20, true)
+  }
+
+  const hasInvalidRange = Boolean(fromDate && toDate && fromDate > toDate)
+
+  const handleExport = async () => {
+    if (!fromDate || !toDate || hasInvalidRange) return
+    setExporting(true)
+    try {
+      const params = new URLSearchParams({ from_date: fromDate, to_date: toDate })
+      const res = await fetch(`/api/records/activity/export?${params}`)
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => null)
+        throw new Error(errorBody?.error ?? 'エクスポートに失敗しました')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `保育日誌_${fromDate}_${toDate}.xlsx`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'エクスポートに失敗しました。')
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -180,6 +211,26 @@ export default function ActivityHistoryClient() {
               />
             </div>
           </div>
+
+          <div className="flex flex-col gap-1.5 justify-end">
+            <label className="text-xs font-bold text-slate-500 invisible">エクスポート</label>
+            <Button
+              variant="outline"
+              className="whitespace-nowrap border-slate-300 text-slate-600 hover:bg-slate-50 bg-white gap-2"
+              onClick={handleExport}
+              disabled={exporting || !fromDate || !toDate || hasInvalidRange}
+              title={
+                !fromDate || !toDate
+                  ? '日付を指定してください'
+                  : hasInvalidRange
+                    ? '日付範囲を確認してください'
+                    : undefined
+              }
+            >
+              <Download className="w-4 h-4" />
+              {exporting ? 'エクスポート中...' : '日誌エクスポート'}
+            </Button>
+          </div>
         </div>
 
         {/* List */}
@@ -188,6 +239,12 @@ export default function ActivityHistoryClient() {
             全 <span className="font-bold text-slate-800">{total}</span> 件中{' '}
             <span className="font-bold text-slate-800">{items.length}</span> 件を表示
           </div>
+
+          {fetchError && (
+            <div className="py-4 px-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl">
+              {fetchError}
+            </div>
+          )}
 
           {loading && items.length === 0 ? (
             <div className="py-12 text-center text-slate-500 border border-slate-200 rounded-xl bg-white">
