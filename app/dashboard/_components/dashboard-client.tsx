@@ -38,6 +38,7 @@ import {
   RecordSupportSkeleton,
 } from './skeletons';
 import { updateAlertsAndKpi } from '@/lib/dashboard/optimistic-updates';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export default function DashboardClient() {
   // Phase 1: Priority data (KPI + Alerts + Action Required)
@@ -62,6 +63,11 @@ export default function DashboardClient() {
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [checkedInDialogOpen, setCheckedInDialogOpen] = useState(false);
   const [checkedInSortBy, setCheckedInSortBy] = useState<'grade' | 'time'>('grade');
+  const [cancelConfirmTarget, setCancelConfirmTarget] = useState<{
+    childId: string
+    childName: string
+    action: 'cancel_check_in' | 'cancel_check_out'
+  } | null>(null);
 
   // 二次データ取得済みフラグ（無限ループ防止）
   const hasFetchedSecondaryData = useRef(false);
@@ -536,7 +542,7 @@ export default function DashboardClient() {
             帰宅
           </button>
           <button
-            onClick={() => handleCancelCheckIn(child.child_id)}
+            onClick={() => setCancelConfirmTarget({ childId: child.child_id, childName: child.name, action: 'cancel_check_in' })}
             className="flex items-center gap-0.5 text-xs text-red-300 hover:text-red-500 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
             disabled={isPending}
           >
@@ -549,7 +555,7 @@ export default function DashboardClient() {
     if (child.status === 'checked_out') {
       return (
         <button
-          onClick={() => handleCancelCheckOut(child.child_id)}
+          onClick={() => setCancelConfirmTarget({ childId: child.child_id, childName: child.name, action: 'cancel_check_out' })}
           className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
           disabled={isPending}
         >
@@ -684,6 +690,29 @@ export default function DashboardClient() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={cancelConfirmTarget !== null}
+        onOpenChange={(open) => { if (!open) setCancelConfirmTarget(null) }}
+        title={cancelConfirmTarget?.action === 'cancel_check_in' ? '登所を取り消しますか？' : '帰宅を取り消しますか？'}
+        description={
+          cancelConfirmTarget
+            ? cancelConfirmTarget.action === 'cancel_check_in'
+              ? `${cancelConfirmTarget.childName} さんの登所記録を取り消します。この操作は元に戻せません。`
+              : `${cancelConfirmTarget.childName} さんの帰宅時刻を取り消します。`
+            : undefined
+        }
+        onConfirm={async () => {
+          if (!cancelConfirmTarget) return
+          if (cancelConfirmTarget.action === 'cancel_check_in') {
+            await handleCancelCheckIn(cancelConfirmTarget.childId)
+          } else {
+            await handleCancelCheckOut(cancelConfirmTarget.childId)
+          }
+          setCancelConfirmTarget(null)
+        }}
+        isConfirming={cancelConfirmTarget ? pendingActions.has(cancelConfirmTarget.childId) : false}
+      />
 
       <div className="min-h-screen text-slate-900 font-sans">
         <div className="max-w-[1600px] mx-auto">

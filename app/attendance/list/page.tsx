@@ -6,6 +6,7 @@ import { StaffLayout } from "@/components/layout/staff-layout"
 import { formatTimeJST, getCurrentDateJST, getTomorrowDateJST } from "@/lib/utils/timezone"
 import { normalizeSearch } from "@/lib/utils/kana"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
   Calendar,
   ChevronLeft,
@@ -260,6 +261,11 @@ export default function AttendanceListPage() {
   const [inputSearchTerm, setInputSearchTerm] = useState('')
   const [committedSearchTerm, setCommittedSearchTerm] = useState('')
   const dateInputRef = useRef<HTMLInputElement>(null)
+  const [cancelConfirmTarget, setCancelConfirmTarget] = useState<{
+    childId: string
+    childName: string
+    action: CancelAction
+  } | null>(null)
 
   // クライアント側でのみ初期日付を設定（マウント時のみ）
   // SSR時のタイムゾーン不一致を防ぐため、初期値は空文字列にして
@@ -495,6 +501,11 @@ export default function AttendanceListPage() {
     } catch (fetchErr) {
       console.error('Failed to refresh attendance after cancel:', fetchErr)
     }
+  }
+
+  const handleRequestCancel = (childId: string, action: CancelAction) => {
+    const child = attendanceData?.children.find(c => c.child_id === childId)
+    setCancelConfirmTarget({ childId, childName: child?.name ?? '', action })
   }
 
   const handleTimeEdit = async (childId: string, field: TimeField, timeValue: string) => {
@@ -780,7 +791,7 @@ export default function AttendanceListPage() {
                           child={child}
                           currentDate={currentDate}
                           canCancel={canCancel}
-                          onCancel={handleCancelAction}
+                          onCancel={handleRequestCancel}
                           isLoading={Boolean(actionLoading[child.child_id])}
                         />
                       </td>
@@ -854,7 +865,7 @@ export default function AttendanceListPage() {
                         child={child}
                         currentDate={currentDate}
                         canCancel={canCancel}
-                        onCancel={handleCancelAction}
+                        onCancel={handleRequestCancel}
                         isLoading={Boolean(actionLoading[child.child_id])}
                       />
                     </div>
@@ -909,6 +920,25 @@ export default function AttendanceListPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={cancelConfirmTarget !== null}
+        onOpenChange={(open) => { if (!open) setCancelConfirmTarget(null) }}
+        title={cancelConfirmTarget?.action === 'cancel_check_in' ? '登園を取り消しますか？' : '降園を取り消しますか？'}
+        description={
+          cancelConfirmTarget
+            ? cancelConfirmTarget.action === 'cancel_check_in'
+              ? `${cancelConfirmTarget.childName} さんの登園記録を取り消します。この操作は元に戻せません。`
+              : `${cancelConfirmTarget.childName} さんの降園記録を取り消します。`
+            : undefined
+        }
+        onConfirm={async () => {
+          if (!cancelConfirmTarget) return
+          await handleCancelAction(cancelConfirmTarget.childId, cancelConfirmTarget.action)
+          setCancelConfirmTarget(null)
+        }}
+        isConfirming={cancelConfirmTarget ? Boolean(actionLoading[cancelConfirmTarget.childId]) : false}
+      />
     </StaffLayout>
   )
 }
