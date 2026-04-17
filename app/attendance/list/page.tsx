@@ -582,13 +582,11 @@ export default function AttendanceListPage() {
                   <ChevronLeft size={18} className="text-slate-600" />
                 </button>
 
-                <button
-                  onClick={() => dateInputRef.current?.showPicker()}
+                <div
                   className="flex items-center gap-3 px-3 min-w-[200px] justify-center cursor-pointer hover:bg-gray-50 rounded transition-colors py-1 relative"
-                  aria-label="日付を選択"
                 >
-                  <Calendar size={16} className="text-indigo-600" />
-                  <span className="text-base font-bold text-slate-800">
+                  <Calendar size={16} className="text-indigo-600 pointer-events-none" />
+                  <span className="text-base font-bold text-slate-800 pointer-events-none">
                     {formatDisplayDate(selectedDate)}
                   </span>
                   <input
@@ -596,11 +594,10 @@ export default function AttendanceListPage() {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="absolute inset-0 opacity-0 w-0 h-0 pointer-events-none"
-                    tabIndex={-1}
-                    aria-hidden="true"
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    aria-label="日付を選択"
                   />
-                </button>
+                </div>
 
                 <button
                   onClick={() => changeDate(1)}
