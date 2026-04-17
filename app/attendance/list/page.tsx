@@ -926,9 +926,11 @@ export default function AttendanceListPage() {
         onOpenChange={(open) => { if (!open) setCancelConfirmTarget(null) }}
         title={cancelConfirmTarget?.action === 'cancel_check_in' ? '登園を取り消しますか？' : '降園を取り消しますか？'}
         description={
-          cancelConfirmTarget?.action === 'cancel_check_in'
-            ? `${cancelConfirmTarget.childName} さんの登園記録を取り消します。この操作は元に戻せません。`
-            : `${cancelConfirmTarget?.childName} さんの降園記録を取り消します。`
+          cancelConfirmTarget
+            ? cancelConfirmTarget.action === 'cancel_check_in'
+              ? `${cancelConfirmTarget.childName} さんの登園記録を取り消します。この操作は元に戻せません。`
+              : `${cancelConfirmTarget.childName} さんの降園記録を取り消します。`
+            : undefined
         }
         onConfirm={async () => {
           if (!cancelConfirmTarget) return

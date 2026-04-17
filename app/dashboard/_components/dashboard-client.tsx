@@ -696,9 +696,11 @@ export default function DashboardClient() {
         onOpenChange={(open) => { if (!open) setCancelConfirmTarget(null) }}
         title={cancelConfirmTarget?.action === 'cancel_check_in' ? '登所を取り消しますか？' : '帰宅を取り消しますか？'}
         description={
-          cancelConfirmTarget?.action === 'cancel_check_in'
-            ? `${cancelConfirmTarget.childName} さんの登所記録を取り消します。この操作は元に戻せません。`
-            : `${cancelConfirmTarget?.childName} さんの帰宅時刻を取り消します。`
+          cancelConfirmTarget
+            ? cancelConfirmTarget.action === 'cancel_check_in'
+              ? `${cancelConfirmTarget.childName} さんの登所記録を取り消します。この操作は元に戻せません。`
+              : `${cancelConfirmTarget.childName} さんの帰宅時刻を取り消します。`
+            : undefined
         }
         onConfirm={async () => {
           if (!cancelConfirmTarget) return
