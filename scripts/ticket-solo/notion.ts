@@ -64,18 +64,23 @@ export function queryTickets({
 
   const parsed: QueryOutput = JSON.parse(result.stdout);
 
-  return parsed.tickets.map((t) => ({
-    id: t.id,
-    url: t.url,
-    number: extractNumber(t.url),
-    name: t.properties['名前'],
-    status: t.properties['ステータス'],
-    tracker: t.properties['トラッカー'],
-    priority: t.properties['優先度'],
-    path: t.properties['パス'],
-    content: t.content,
-    comments: t.comments,
-  }));
+  return parsed.tickets.map((t) => {
+    const branchComment = t.comments.find((c) => c.text.startsWith('🌿 ブランチ: '));
+    const branch = branchComment ? branchComment.text.replace('🌿 ブランチ: ', '').trim() : undefined;
+    return {
+      id: t.id,
+      url: t.url,
+      number: extractNumber(t.url),
+      name: t.properties['名前'],
+      status: t.properties['ステータス'],
+      tracker: t.properties['トラッカー'],
+      priority: t.properties['優先度'],
+      path: t.properties['パス'],
+      branch,
+      content: t.content,
+      comments: t.comments,
+    };
+  });
 }
 
 export function updateStatus({
@@ -106,6 +111,31 @@ export function updateStatus({
 
   if (result.status !== 0) {
     throw new Error(`update-ticket-status failed for ${pageId}:\n${result.stderr}`);
+  }
+}
+
+export function saveBranch({
+  pageId,
+  branch,
+}: {
+  pageId: string;
+  branch: string;
+}): void {
+  const args = ['tsx', UPDATE_SCRIPT, '--page-id', pageId, '--branch', branch];
+
+  const result = spawnSync('npx', args, {
+    encoding: 'utf8',
+    timeout: 30_000,
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      NOTION_TOKEN: process.env.NOTION_TOKEN,
+      NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
+    } as unknown as NodeJS.ProcessEnv,
+  });
+
+  if (result.status !== 0) {
+    process.stderr.write(`警告: ブランチ保存に失敗しました (${pageId}): ${result.stderr}\n`);
   }
 }
 

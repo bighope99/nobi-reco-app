@@ -89,24 +89,13 @@ const DESTRUCTIVE_GUARD = async (name: string, input: Record<string, unknown>) =
   return { behavior: 'allow' as const };
 };
 
-// Project-specific rules extracted from pr-review SKILL.md
-const PROJECT_REVIEW_RULES = `
-## Project-Specific Rules (Next.js 15 + Supabase)
-- Supabase import: use \`@/utils/supabase/server\` NOT \`@/lib/supabase/server\`
-- Next.js 15 params: \`params\` is async — must use \`props: { params: Promise<T> }\` + \`await\`
-- Auth: \`supabase.auth.getSession()\` is FORBIDDEN — use \`getAuthenticatedUserMetadata()\` from \`@/lib/auth/jwt\`
-- Timezone: NEVER use \`new Date()\` directly — use functions from \`lib/utils/timezone.ts\`
-- Mention display: use \`replaceChildIdsWithNames\` for \`child:childId\` format in record content
-- Re-invite generateLink: use \`email_confirmed_at ? 'magiclink' : 'invite'\` (not always 'invite')
-`.trim();
-
-async function runReviewAgent(aspect: string, focus: string, diff: string, worktreePath: string): Promise<string> {
+async function runReviewAgent(aspect: string, focus: string, diff: string, worktreePath: string, projectRules: string): Promise<string> {
   return collectText({
     prompt: `You are a ${aspect} code reviewer for a Next.js 15 + Supabase SaaS project.
 
 Focus specifically on: ${focus}
 
-${PROJECT_REVIEW_RULES}
+${projectRules}
 
 ## Git diff to review:
 \`\`\`diff
@@ -204,7 +193,7 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
       options: {
         systemPrompt,
         tools: { type: 'preset', preset: 'claude_code' },
-        permissionMode: 'acceptEdits',
+        permissionMode: 'bypassPermissions',
         cwd: worktreePath,
         pathToClaudeCodeExecutable: CLAUDE_CODE_EXEC,
         allowedTools: ['mcp__orchestrator__escalate_to_user'],
@@ -219,7 +208,76 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
     }
 
     if (!implementationDone) {
-      throw new Error('実装エージェントが IMPLEMENTATION_DONE を出力せずに終了しました。コミットを確認してから再実行してください。');
+      const logResult = spawnSync('git', ['log', '--oneline', 'origin/main..HEAD'], {
+        encoding: 'utf8', cwd: worktreePath, stdio: 'pipe',
+      });
+      const hasCommits = logResult.status === 0 && logResult.stdout.trim().length > 0;
+      if (hasCommits) {
+        process.stderr.write('警告: IMPLEMENTATION_DONE が出力されませんでしたが、新しいコミットが検出されました。続行します。\n');
+      } else {
+        throw new Error('実装エージェントが IMPLEMENTATION_DONE を出力せず、新しいコミットも見つかりませんでした。コミットを確認してから再実行してください。');
+      }
+    }
+  },
+
+  async fix({
+    worktreePath,
+    reviewResult,
+    ask,
+  }: {
+    worktreePath: string;
+    reviewResult: string;
+    ask: (q: string) => Promise<string>;
+  }): Promise<void> {
+    const { mcpServer } = makeEscalateTool(ask);
+
+    const systemPrompt = `You are a senior full-stack developer fixing code review findings in a Next.js 15 project.
+
+Working directory: ${worktreePath}
+
+## Review findings to fix:
+${reviewResult}
+
+## Instructions:
+1. Fix all 🔴 Critical issues (required before merge)
+2. Fix 🟡 Important issues where reasonable
+3. Follow existing code patterns and TypeScript conventions
+4. Commit all fixes with a meaningful commit message (e.g. "fix: address review findings")
+5. Output exactly: IMPLEMENTATION_DONE when finished
+6. Do NOT create a PR
+7. Use escalate_to_user if you need human input
+
+IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`;
+
+    let done = false;
+
+    for await (const event of query({
+      prompt: 'Fix the review findings and commit as described in your system prompt.',
+      options: {
+        systemPrompt,
+        tools: { type: 'preset', preset: 'claude_code' },
+        permissionMode: 'bypassPermissions',
+        cwd: worktreePath,
+        pathToClaudeCodeExecutable: CLAUDE_CODE_EXEC,
+        allowedTools: ['mcp__orchestrator__escalate_to_user'],
+        mcpServers: { orchestrator: mcpServer },
+        canUseTool: DESTRUCTIVE_GUARD,
+      },
+    })) {
+      if (event.type === 'assistant') {
+        const text = collectAssistantText(event as SDKAssistantMessage);
+        if (text.includes('IMPLEMENTATION_DONE')) done = true;
+      }
+    }
+
+    if (!done) {
+      const logResult = spawnSync('git', ['log', '--oneline', 'origin/main..HEAD'], {
+        encoding: 'utf8', cwd: worktreePath, stdio: 'pipe',
+      });
+      const hasCommits = logResult.status === 0 && logResult.stdout.trim().length > 0;
+      if (!hasCommits) {
+        process.stderr.write('警告: 修正エージェントが IMPLEMENTATION_DONE を出力せず、新しいコミットも見つかりませんでした。\n');
+      }
     }
   },
 
@@ -236,6 +294,8 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
       encoding: 'utf8', cwd: worktreePath, stdio: 'pipe',
     });
     const changedFiles = changedFilesResult.stdout || '';
+
+    const projectRules = readSkill('pr-review');
 
     // Always-run agents (mirrors pr-review SKILL.md Step 2)
     const agents: { aspect: string; focus: string }[] = [
@@ -261,7 +321,7 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
     );
 
     const results = await Promise.all(
-      agents.map(({ aspect, focus }) => runReviewAgent(aspect, focus, diff, worktreePath))
+      agents.map(({ aspect, focus }) => runReviewAgent(aspect, focus, diff, worktreePath, projectRules))
     );
 
     return results.join('\n\n---\n\n');
@@ -310,7 +370,7 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
       options: {
         systemPrompt,
         tools: { type: 'preset', preset: 'claude_code' },
-        permissionMode: 'acceptEdits',
+        permissionMode: 'bypassPermissions',
         cwd: worktreePath,
         pathToClaudeCodeExecutable: CLAUDE_CODE_EXEC,
         allowedTools: ['mcp__orchestrator__escalate_to_user'],

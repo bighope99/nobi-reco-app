@@ -7,6 +7,7 @@ export interface Ticket {
   tracker: string;
   priority: string;
   path: string;
+  branch?: string;
   content: string;
   comments: { author: string; text: string; created_at: string }[];
 }

@@ -46,9 +46,10 @@ interface OutputResult {
 
 interface Args {
   pageId: string;
-  status: string;
+  status: string | null;
   prUrl: string | null;
   assigneeName: string | null;
+  branch: string | null;
 }
 
 function parseArgs(): Args {
@@ -57,6 +58,7 @@ function parseArgs(): Args {
   let status: string | null = null;
   let prUrl: string | null = null;
   let assigneeName: string | null = null;
+  let branch: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--page-id" && argv[i + 1]) {
@@ -71,6 +73,9 @@ function parseArgs(): Args {
     } else if (argv[i] === "--assignee-name" && argv[i + 1]) {
       assigneeName = argv[i + 1];
       i++;
+    } else if (argv[i] === "--branch" && argv[i + 1]) {
+      branch = argv[i + 1];
+      i++;
     }
   }
 
@@ -79,12 +84,12 @@ function parseArgs(): Args {
     process.exit(1);
   }
 
-  if (!status) {
-    process.stderr.write("Error: --status is required.\n");
+  if (!status && !branch && !prUrl && !assigneeName) {
+    process.stderr.write("Error: --status or at least one of --branch, --pr-url, --assignee-name is required.\n");
     process.exit(1);
   }
 
-  return { pageId, status, prUrl, assigneeName };
+  return { pageId, status, prUrl, assigneeName, branch };
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +144,28 @@ async function updatePrUrl(
   process.stderr.write(`PR URL set successfully.\n`);
 }
 
+async function addBranchComment(
+  token: string,
+  pageId: string,
+  branch: string
+): Promise<void> {
+  process.stderr.write(`Adding branch comment "${branch}" for page ${pageId}...\n`);
+
+  await notionFetch<{ id: string }>(
+    `${NOTION_API_BASE}/comments`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        parent: { page_id: pageId },
+        rich_text: [{ type: "text", text: { content: `🌿 ブランチ: ${branch}` } }],
+      }),
+    }
+  );
+
+  process.stderr.write(`Branch comment added successfully.\n`);
+}
+
 async function updateAssignee(
   token: string,
   pageId: string,
@@ -182,10 +209,12 @@ async function main(): Promise<void> {
 
   const args = parseArgs();
 
-  // Step 1: Update the page status
-  await updatePageStatus(token, args.pageId, args.status);
+  // Step 1: Update the page status (optional)
+  if (args.status !== null) {
+    await updatePageStatus(token, args.pageId, args.status);
+  }
 
-  // Step 2: Add PR URL comment if provided
+  // Step 2: Add PR URL if provided
   if (args.prUrl !== null) {
     await updatePrUrl(token, args.pageId, args.prUrl);
   }
@@ -195,9 +224,14 @@ async function main(): Promise<void> {
     await updateAssignee(token, args.pageId, args.assigneeName);
   }
 
+  // Step 4: Add branch comment if provided
+  if (args.branch !== null) {
+    await addBranchComment(token, args.pageId, args.branch);
+  }
+
   const output: OutputResult = {
     page_id: args.pageId,
-    status: args.status,
+    status: args.status ?? '',
     pr_url: args.prUrl,
     assignee_name: args.assigneeName,
     success: true,
