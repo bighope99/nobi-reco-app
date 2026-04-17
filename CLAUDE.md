@@ -24,11 +24,3 @@ You are a manager and agent orchestrator. Never implement directly—delegate al
 | Session Interface | `/lib/auth/session.ts` |
 | Role-based UI | `hooks/useRole.ts` |
 | Code Improvement | `.claude/skills/incremental-code-improvement` |
-
-# Rules
-
-@.claude/rules/domain-knowledge.md
-@.claude/rules/coding-standards.md
-@.claude/rules/api-patterns.md
-@.claude/rules/workflow.md
-@.claude/rules/agent-guidelines.md
