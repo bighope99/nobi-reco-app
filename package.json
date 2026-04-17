@@ -83,6 +83,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@playwright/test": "^1.51.1",
     "@swc/core": "^1.15.8",
     "@swc/jest": "^0.2.39",
