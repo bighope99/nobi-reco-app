@@ -36,8 +36,19 @@ function parseJsonBlock(text: string): Group[] | null {
   try {
     const parsed: unknown = JSON.parse(match[1]);
     if (!Array.isArray(parsed)) return null;
+    // branch と tickets フィールドの基本検証
+    const valid = (parsed as unknown[]).every(
+      (g) =>
+        typeof (g as Group).branch === 'string' &&
+        Array.isArray((g as Group).tickets)
+    );
+    if (!valid) {
+      process.stderr.write('Warning: grouping JSON missing required fields (branch/tickets)\n');
+      return null;
+    }
     return parsed as Group[];
-  } catch {
+  } catch (err) {
+    process.stderr.write(`Warning: grouping JSON parse failed: ${err instanceof Error ? err.message : err}\n`);
     return null;
   }
 }

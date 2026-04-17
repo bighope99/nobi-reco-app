@@ -19,6 +19,7 @@ function readSkill(name: string): string {
   try {
     return readFileSync(resolve(PROJECT_ROOT, `.claude/skills/${name}/SKILL.md`), 'utf8');
   } catch {
+    process.stderr.write(`Warning: skill file not found: .claude/skills/${name}/SKILL.md\n`);
     return '';
   }
 }
@@ -72,7 +73,16 @@ function makeEscalateTool(ask: (q: string) => Promise<string>) {
 const DESTRUCTIVE_GUARD = async (name: string, input: Record<string, unknown>) => {
   if (name === 'Bash') {
     const cmd = String(input['command'] ?? '');
-    if (/rm\s+-rf/.test(cmd) || /git\s+reset\s+--hard/.test(cmd) || /git\s+push\s+--force/.test(cmd)) {
+    // 連続スペースを正規化してからチェック（バイパス防止）
+    const normalized = cmd.replace(/\s+/g, ' ');
+    const DENIED = [
+      /rm\s+-[a-zA-Z]*r[a-zA-Z]*f/,   // rm -rf, rm -fr, rm -Rf 等
+      /rm\s+--recursive/,
+      /git\s+reset\s+--hard/,
+      /git\s+push\s+(--force|-f)(\s|$)/, // --force と -f 両方
+      /git\s+push\s+\S+\s+--force/,
+    ];
+    if (DENIED.some((p) => p.test(normalized))) {
       return { behavior: 'deny' as const, message: 'Destructive git/rm commands are not allowed.' };
     }
   }
@@ -187,7 +197,9 @@ ${plan}
 
 IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`;
 
-    for await (const _ of query({
+    let implementationDone = false;
+
+    for await (const event of query({
       prompt: 'Implement the tickets and commit the changes as described in your system prompt. Do not create a PR.',
       options: {
         systemPrompt,
@@ -199,17 +211,31 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
         mcpServers: { orchestrator: mcpServer },
         canUseTool: DESTRUCTIVE_GUARD,
       },
-    })) { /* consume events */ }
+    })) {
+      if (event.type === 'assistant') {
+        const text = collectAssistantText(event as SDKAssistantMessage);
+        if (text.includes('IMPLEMENTATION_DONE')) implementationDone = true;
+      }
+    }
+
+    if (!implementationDone) {
+      throw new Error('実装エージェントが IMPLEMENTATION_DONE を出力せずに終了しました。コミットを確認してから再実行してください。');
+    }
   },
 
   async review({ worktreePath }: { worktreePath: string }): Promise<string> {
-    const diff = spawnSync('git', ['diff', 'main...HEAD'], {
+    const diffResult = spawnSync('git', ['diff', 'main...HEAD'], {
       encoding: 'utf8', cwd: worktreePath, stdio: 'pipe',
-    }).stdout || '(no diff)';
+    });
+    if (diffResult.status !== 0) {
+      throw new Error(`git diff failed:\n${diffResult.stderr}`);
+    }
+    const diff = diffResult.stdout || '(no diff)';
 
-    const changedFiles = spawnSync('git', ['diff', 'main...HEAD', '--name-only'], {
+    const changedFilesResult = spawnSync('git', ['diff', 'main...HEAD', '--name-only'], {
       encoding: 'utf8', cwd: worktreePath, stdio: 'pipe',
-    }).stdout || '';
+    });
+    const changedFiles = changedFilesResult.stdout || '';
 
     // Always-run agents (mirrors pr-review SKILL.md Step 2)
     const agents: { aspect: string; focus: string }[] = [
@@ -298,8 +324,12 @@ IMPORTANT: Never run \`rm -rf\`, \`git reset --hard\`, or \`git push --force\`.`
       }
     }
 
-    const lastText = lastMessages[lastMessages.length - 1] ?? '';
-    const urlMatch = lastText.match(/PR_URL=(https?:\/\/\S+)/);
-    return { prUrl: urlMatch ? urlMatch[1] : '' };
+    // 全メッセージを結合して検索（最後以外に出力されるケースも拾う）
+    const allText = lastMessages.join('\n');
+    const urlMatch = allText.match(/PR_URL=(https?:\/\/github\.com\/\S+)/);
+    if (!urlMatch) {
+      throw new Error('createPr エージェントが PR_URL=... を出力せずに終了しました。PRが作成されたか確認してください。');
+    }
+    return { prUrl: urlMatch[1] };
   },
 };

@@ -14,13 +14,14 @@ const PROJECT_ROOT = resolve(__dirname, '../..');
 
 const ASSIGNEES = ['中村', '尼崎', 'かつはら', '小川'];
 
-const PRIORITY_MAP: Record<string, number> = {
-  '今すぐ': 5,
-  '急いで': 4,
-  '高め': 3,
-  '通常': 2,
-  '低い': 1,
-};
+// ブランチ名は fix/ feat/ chore/ refactor/ で始まり英数字とハイフンのみ
+const VALID_BRANCH_RE = /^(fix|feat|chore|refactor)\/[a-zA-Z0-9\-]{1,60}$/;
+
+function validateBranchName(branch: string): void {
+  if (!VALID_BRANCH_RE.test(branch)) {
+    throw new Error(`Invalid branch name: "${branch}". Must match ${VALID_BRANCH_RE}`);
+  }
+}
 
 function createReadline(): readline.Interface {
   return readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -64,14 +65,27 @@ function getWorktreePath(branch: string): string | null {
   return null;
 }
 
-function createWorktree(branch: string): string {
-  spawnGit(['fetch', 'origin'], PROJECT_ROOT);
-
-  spawnSync('git', ['push', 'origin', '--delete', branch], {
+function remoteHasBranch(branch: string): boolean {
+  const result = spawnSync('git', ['ls-remote', '--heads', 'origin', branch], {
     encoding: 'utf8',
     cwd: PROJECT_ROOT,
     stdio: 'pipe',
   });
+  return result.status === 0 && result.stdout.trim().length > 0;
+}
+
+function createWorktree(branch: string): string {
+  validateBranchName(branch);
+  spawnGit(['fetch', 'origin'], PROJECT_ROOT);
+
+  // リモートブランチが存在する場合のみ削除
+  if (remoteHasBranch(branch)) {
+    spawnSync('git', ['push', 'origin', '--delete', branch], {
+      encoding: 'utf8',
+      cwd: PROJECT_ROOT,
+      stdio: 'pipe',
+    });
+  }
 
   spawnSync('git', ['branch', '-D', branch], {
     encoding: 'utf8',
@@ -87,11 +101,14 @@ function createWorktree(branch: string): string {
 
   if (gtrResult.status !== 0) {
     const fallbackPath = resolve(PROJECT_ROOT, `../nobi-reco-app-${branch.replace(/\//g, '-')}`);
-    spawnSync(
+    const fallbackResult = spawnSync(
       'git',
       ['worktree', 'add', fallbackPath, '-b', branch, 'origin/main'],
-      { encoding: 'utf8', cwd: PROJECT_ROOT, stdio: 'inherit' }
+      { encoding: 'utf8', cwd: PROJECT_ROOT, stdio: 'pipe' }
     );
+    if (fallbackResult.status !== 0) {
+      throw new Error(`git worktree add failed:\n${fallbackResult.stderr}`);
+    }
   }
 
   const actual = getWorktreePath(branch);
@@ -167,7 +184,7 @@ async function main(): Promise<void> {
     }
 
     const groupIdx = parseInt(groupInput.trim(), 10) - 1;
-    if (groupIdx < 0 || groupIdx >= groups.length) {
+    if (isNaN(groupIdx) || groupIdx < 0 || groupIdx >= groups.length) {
       console.error('無効なグループ番号です');
       process.exit(1);
     }
@@ -183,71 +200,91 @@ async function main(): Promise<void> {
     }
     console.log('更新完了。');
 
-    // Phase 2-1: Create worktree
-    console.log(`\nWorktree を作成中 (${selectedGroup.branch})...`);
-    const worktreePath = createWorktree(selectedGroup.branch);
-    console.log(`Worktree: ${worktreePath}`);
-
-    // Phase 2-2: Plan
-    console.log('\n実装プランを作成中...');
-    const plan = await runImplementation.plan({ group: selectedGroup, worktreePath });
-
-    console.log('\n## 実装プラン\n');
-    console.log(plan);
-
-    const planOk = await prompt(rl, '\nこのプランで実装を開始しますか? (ok/no): ');
-    if (planOk.trim().toLowerCase() !== 'ok') {
-      console.log('実装をキャンセルしました。チケットを「承認OK」に戻します...');
+    // Phase 2-1 〜 2-6: 実装〜PR完了まで。失敗時はステータスをロールバック
+    let statusFinalized = false;
+    const rollbackStatus = () => {
+      if (statusFinalized) return;
+      statusFinalized = true;
+      console.error('\nチケットを「承認OK」に戻します...');
       for (const ticket of selectedGroup.tickets) {
-        updateStatus({ pageId: ticket.id, status: '承認OK' });
+        try { updateStatus({ pageId: ticket.id, status: '承認OK' }); } catch { /* best effort */ }
       }
-      return;
-    }
-
-    const ask = async (q: string): Promise<string> => {
-      return prompt(rl, `\n[Claude からの質問] ${q}\n> `);
     };
 
-    // Phase 2-3: Implement (commit only, no PR)
-    console.log('\n実装を開始します（コミットまで）...');
-    await runImplementation.implement({ group: selectedGroup, worktreePath, plan, ask });
-    console.log('\n実装・コミット完了。');
+    try {
+      // Phase 2-1: Create worktree
+      console.log(`\nWorktree を作成中 (${selectedGroup.branch})...`);
+      const worktreePath = createWorktree(selectedGroup.branch);
+      console.log(`Worktree: ${worktreePath}`);
 
-    // Phase 2-4: Review (pr-review スキルに準拠、常時実行)
-    console.log('\nレビューを実行中...');
-    const reviewResult = await runImplementation.review({ worktreePath });
+      // Phase 2-2: Plan
+      console.log('\n実装プランを作成中...');
+      const plan = await runImplementation.plan({ group: selectedGroup, worktreePath });
 
-    console.log('\n## レビュー結果\n');
-    console.log(reviewResult);
+      console.log('\n## 実装プラン\n');
+      console.log(plan);
 
-    const reviewOk = await prompt(rl, '\nこの状態でPRを作成しますか? (ok/cancel): ');
-    if (reviewOk.trim().toLowerCase() !== 'ok') {
-      console.log('PR作成をキャンセルしました。worktree は保持します。');
-      return;
+      const planOk = await prompt(rl, '\nこのプランで実装を開始しますか? (ok/no): ');
+      if (planOk.trim().toLowerCase() !== 'ok') {
+        rollbackStatus();
+        console.log('実装をキャンセルしました。');
+        return;
+      }
+
+      const ask = async (q: string): Promise<string> => {
+        return prompt(rl, `\n[Claude からの質問] ${q}\n> `);
+      };
+
+      // Phase 2-3: Implement (commit only, no PR)
+      console.log('\n実装を開始します（コミットまで）...');
+      await runImplementation.implement({ group: selectedGroup, worktreePath, plan, ask });
+      console.log('\n実装・コミット完了。');
+
+      // Phase 2-4: Review (pr-review スキルに準拠、常時実行)
+      console.log('\nレビューを実行中...');
+      const reviewResult = await runImplementation.review({ worktreePath });
+
+      console.log('\n## レビュー結果\n');
+      console.log(reviewResult);
+
+      const reviewOk = await prompt(rl, '\nこの状態でPRを作成しますか? (ok/cancel): ');
+      if (reviewOk.trim().toLowerCase() !== 'ok') {
+        rollbackStatus();
+        console.log('PR作成をキャンセルしました。worktree は保持します。');
+        return;
+      }
+
+      // Phase 2-5: Create PR + CodeRabbit loop
+      console.log('\nPRを作成・CodeRabbitループを実行中...');
+      const { prUrl } = await runImplementation.createPr({ group: selectedGroup, worktreePath, ask });
+
+      // Phase 2-6: Update status to レビュー依頼（ここまで来たらロールバック不要）
+      statusFinalized = true;
+      console.log('\nチケットのステータスを「レビュー依頼」に更新中...');
+      for (const ticket of selectedGroup.tickets) {
+        try {
+          updateStatus({ pageId: ticket.id, status: 'レビュー依頼', assigneeName, prUrl: prUrl || undefined });
+        } catch {
+          console.error(`警告: チケット "${ticket.name}" の更新に失敗しました。手動で「レビュー依頼」に変更してください。PR: ${prUrl}`);
+        }
+      }
+      console.log('更新完了。');
+
+      // Phase 3: Summary
+      console.log('\n## 完了サマリー\n');
+      console.log('| チケット | ステータス |');
+      console.log('|---------|-----------|');
+      for (const ticket of selectedGroup.tickets) {
+        console.log(`| ${ticket.name} | レビュー依頼 |`);
+      }
+      if (prUrl) {
+        console.log(`\nPR: ${prUrl}`);
+      }
+      console.log('\n完了しました。');
+    } catch (err) {
+      rollbackStatus();
+      throw err;
     }
-
-    // Phase 2-5: Create PR + CodeRabbit loop
-    console.log('\nPRを作成・CodeRabbitループを実行中...');
-    const { prUrl } = await runImplementation.createPr({ group: selectedGroup, worktreePath, ask });
-
-    // Phase 2-6: Update status to レビュー依頼
-    console.log('\nチケットのステータスを「レビュー依頼」に更新中...');
-    for (const ticket of selectedGroup.tickets) {
-      updateStatus({ pageId: ticket.id, status: 'レビュー依頼', assigneeName, prUrl: prUrl || undefined });
-    }
-    console.log('更新完了。');
-
-    // Phase 3: Summary
-    console.log('\n## 完了サマリー\n');
-    console.log('| チケット | ステータス |');
-    console.log('|---------|-----------|');
-    for (const ticket of selectedGroup.tickets) {
-      console.log(`| ${ticket.name} | レビュー依頼 |`);
-    }
-    if (prUrl) {
-      console.log(`\nPR: ${prUrl}`);
-    }
-    console.log('\n完了しました。');
   } finally {
     rl.close();
   }

@@ -46,7 +46,16 @@ export function queryTickets({
   const result = spawnSync(
     'npx',
     ['tsx', QUERY_SCRIPT, '--status', status, '--assignee-name', assigneeName],
-    { encoding: 'utf8', env: process.env }
+    {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        NOTION_TOKEN: process.env.NOTION_TOKEN,
+        NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
+      } as unknown as NodeJS.ProcessEnv,
+    }
   );
 
   if (result.status !== 0) {
@@ -84,7 +93,16 @@ export function updateStatus({
   if (assigneeName) args.push('--assignee-name', assigneeName);
   if (prUrl) args.push('--pr-url', prUrl);
 
-  const result = spawnSync('npx', args, { encoding: 'utf8', env: process.env });
+  const result = spawnSync('npx', args, {
+    encoding: 'utf8',
+    timeout: 30_000,
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      NOTION_TOKEN: process.env.NOTION_TOKEN,
+      NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
+    } as unknown as NodeJS.ProcessEnv,
+  });
 
   if (result.status !== 0) {
     throw new Error(`update-ticket-status failed for ${pageId}:\n${result.stderr}`);
