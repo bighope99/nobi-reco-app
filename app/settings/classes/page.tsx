@@ -2,14 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRole } from '@/hooks/useRole';
+import { useSession } from '@/hooks/useSession';
 import { StaffLayout } from "@/components/layout/staff-layout";
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   Users,
   Search,
   Building2,
   ChevronRight,
   UserCheck,
-  Filter
+  Filter,
+  Plus,
+  X,
 } from 'lucide-react';
 
 interface Class {
@@ -35,8 +39,25 @@ interface Facility {
   name: string;
 }
 
+interface AddClassForm {
+  name: string;
+  capacity: string;
+  age_group: string;
+  room_number: string;
+  facility_id: string;
+}
+
+const INITIAL_FORM: AddClassForm = {
+  name: '',
+  capacity: '',
+  age_group: '',
+  room_number: '',
+  facility_id: '',
+};
+
 export default function ClassesListPage() {
-  const { isStaff } = useRole();
+  const { isStaff, hasRole } = useRole();
+  const session = useSession();
   const router = useRouter();
   const [classes, setClasses] = useState<Class[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -44,6 +65,14 @@ export default function ClassesListPage() {
   const [filterFacility, setFilterFacility] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // モーダル状態
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [form, setForm] = useState<AddClassForm>(INITIAL_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const canAddClass = hasRole('facility_admin', 'company_admin', 'site_admin');
 
   useEffect(() => {
     if (isStaff) router.replace('/dashboard');
@@ -108,6 +137,64 @@ export default function ClassesListPage() {
     fetchClasses();
   };
 
+  // モーダルを開く（facility_id の初期値を設定）
+  const openDialog = () => {
+    const defaultFacilityId =
+      filterFacility !== 'all'
+        ? filterFacility
+        : (session?.current_facility_id ?? facilities[0]?.facility_id ?? '');
+    setForm({ ...INITIAL_FORM, facility_id: defaultFacilityId });
+    setFormError(null);
+    setDialogOpen(true);
+  };
+
+  // クラス追加送信
+  const handleAddClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!form.name.trim()) {
+      setFormError('クラス名を入力してください');
+      return;
+    }
+    const capacityNum = parseInt(form.capacity, 10);
+    if (!form.capacity || isNaN(capacityNum) || capacityNum < 1) {
+      setFormError('定員は1以上の数値を入力してください');
+      return;
+    }
+    if (!form.facility_id) {
+      setFormError('施設を選択してください');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          facility_id: form.facility_id,
+          name: form.name.trim(),
+          capacity: capacityNum,
+          age_group: form.age_group.trim() || undefined,
+          room_number: form.room_number.trim() || undefined,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'クラスの作成に失敗しました');
+      }
+
+      setDialogOpen(false);
+      fetchClasses();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'クラスの作成に失敗しました');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // 施設フィルタ変更時
   useEffect(() => {
     if (facilities.length > 0) {
@@ -133,6 +220,138 @@ export default function ClassesListPage() {
                 {loading ? '読み込み中...' : `全 ${classes.length} クラスを管理`}
               </p>
             </div>
+            {canAddClass && (
+              <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
+                <Dialog.Trigger asChild>
+                  <button
+                    onClick={openDialog}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors shrink-0"
+                  >
+                    <Plus size={16} />
+                    クラスを追加
+                  </button>
+                </Dialog.Trigger>
+
+                <Dialog.Portal>
+                  <Dialog.Overlay className="fixed inset-0 bg-black/40 z-40" />
+                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 focus:outline-none">
+                    <div className="flex items-center justify-between mb-5">
+                      <Dialog.Title className="text-lg font-bold text-slate-800">
+                        クラスを追加
+                      </Dialog.Title>
+                      <Dialog.Close className="text-slate-400 hover:text-slate-600 transition-colors">
+                        <X size={20} />
+                      </Dialog.Close>
+                    </div>
+
+                    <form onSubmit={handleAddClass} className="space-y-4">
+                      {/* 施設選択 */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          施設 <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={form.facility_id}
+                          onChange={(e) => setForm({ ...form, facility_id: e.target.value })}
+                          required
+                        >
+                          <option value="">施設を選択してください</option>
+                          {facilities.map((f) => (
+                            <option key={f.facility_id} value={f.facility_id}>
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* クラス名 */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          クラス名 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="例: ひまわり組"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={form.name}
+                          onChange={(e) => setForm({ ...form, name: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      {/* 定員 */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          定員 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="例: 20"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={form.capacity}
+                          onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      {/* 年齢グループ */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          年齢グループ
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="例: 小1〜小3"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={form.age_group}
+                          onChange={(e) => setForm({ ...form, age_group: e.target.value })}
+                        />
+                      </div>
+
+                      {/* 部屋番号 */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          部屋番号
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="例: 101"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={form.room_number}
+                          onChange={(e) => setForm({ ...form, room_number: e.target.value })}
+                        />
+                      </div>
+
+                      {formError && (
+                        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                          {formError}
+                        </p>
+                      )}
+
+                      <div className="flex justify-end gap-3 pt-2">
+                        <Dialog.Close asChild>
+                          <button
+                            type="button"
+                            className="px-4 py-2 text-sm font-medium text-slate-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                          >
+                            キャンセル
+                          </button>
+                        </Dialog.Close>
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {submitting ? '作成中...' : '追加する'}
+                        </button>
+                      </div>
+                    </form>
+                  </Dialog.Content>
+                </Dialog.Portal>
+              </Dialog.Root>
+            )}
           </div>
 
           {/* Filter Toolbar */}
