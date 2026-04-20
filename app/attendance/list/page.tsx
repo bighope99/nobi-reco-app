@@ -20,6 +20,8 @@ import {
   ArrowUp,
   ArrowDown,
   Undo2,
+  Check,
+  X,
 } from "lucide-react"
 import {
   type ChildAttendance,
@@ -119,7 +121,7 @@ const EditableTimeField = ({
   const textClassName = field === 'in' ? 'text-emerald-600' : 'text-slate-600'
   const editTitle = field === 'in' ? 'クリックして出席時刻を修正' : 'クリックして帰宅時刻を修正'
   const settingLabel = field === 'in' ? '出席時刻を設定' : '帰宅時刻を設定'
-  const cancelOnBlurRef = useRef(false)
+  const [localValue, setLocalValue] = useState<string>(timestamp ? formatTime(timestamp) : '')
 
   if (isUpdating) {
     return (
@@ -132,35 +134,41 @@ const EditableTimeField = ({
 
   if (isEditing) {
     return (
-      <input
-        type="time"
-        defaultValue={timestamp ? formatTime(timestamp) : ''}
-        className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-        onBlur={(e) => {
-          const cancelled = cancelOnBlurRef.current
-          cancelOnBlurRef.current = false
-
-          if (cancelled) {
-            onCancel()
-            return
-          }
-
-          if (editingTime?.childId === child.child_id && editingTime.field === field) {
-            if (e.target.value) onCommit(child.child_id, field, e.target.value)
-            else onCancel()
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            cancelOnBlurRef.current = true
-            onCancel()
-            e.currentTarget.blur()
-          }
-        }}
-        autoFocus
-      />
+      <div className="flex items-center gap-1">
+        <input
+          type="time"
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (localValue) onCommit(child.child_id, field, localValue)
+              else onCancel()
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              onCancel()
+            }
+          }}
+          autoFocus
+        />
+        <button
+          type="button"
+          onClick={() => { if (localValue) onCommit(child.child_id, field, localValue); else onCancel() }}
+          className="p-1 text-green-600 hover:text-green-800"
+          title="確定"
+        >
+          <Check className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="p-1 text-slate-400 hover:text-slate-600"
+          title="キャンセル"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     )
   }
 
@@ -264,9 +272,8 @@ export default function AttendanceListPage() {
   // クライアント側でのみ初期日付を設定（マウント時のみ）
   // SSR時のタイムゾーン不一致を防ぐため、初期値は空文字列にして
   // useEffectでクライアント側のみで設定する
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    setSelectedDate(getTomorrowDateJST())
+    setSelectedDate(getCurrentDateJST())
   }, [])
 
   const fetchAttendance = useCallback(async (silent = false) => {

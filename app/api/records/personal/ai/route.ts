@@ -5,6 +5,8 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage } from '@langchain/core/messages';
 import { buildPersonalRecordPrompt } from '@/lib/ai/prompts';
 
+export const maxDuration = 60;
+
 type ObservationTag = {
   id: string;
   name: string;
@@ -105,6 +107,7 @@ export async function POST(request: NextRequest) {
       apiKey,
       temperature: 0.2,
       maxOutputTokens: 1200,
+      maxRetries: 2,
     });
 
     const response = await model.invoke([new HumanMessage(prompt)]);
