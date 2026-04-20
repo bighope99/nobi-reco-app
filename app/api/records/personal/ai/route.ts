@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       apiKey,
       temperature: 0.2,
       maxOutputTokens: 1200,
-      maxRetries: 2,
+      maxRetries: 1,
     });
 
     const response = await model.invoke([new HumanMessage(prompt)]);

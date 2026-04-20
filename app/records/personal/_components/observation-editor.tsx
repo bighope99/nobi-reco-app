@@ -1226,6 +1226,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       clearTimeout(cancelTimer);
       setAiProcessingController(null);
       setShowCancelAiButton(false);
+      setAiProcessing(false);
     }
 
     try {
