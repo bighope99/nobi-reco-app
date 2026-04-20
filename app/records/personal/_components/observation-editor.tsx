@@ -61,7 +61,7 @@ const Alert = ({
   children: React.ReactNode;
 }) => {
   const baseClass = variant === 'destructive' ? 'border-red-200 bg-red-50 text-red-800' : 'border-blue-200 bg-blue-50 text-blue-800';
-  return <div className={`rounded-md border p-4 ${baseClass} ${className || ''}`}>{children}</div>;
+  return <div role="alert" className={`rounded-md border p-4 ${baseClass} ${className || ''}`}>{children}</div>;
 };
 
 const AlertDescription = ({ children, className }: { children: React.ReactNode; className?: string }) => (
@@ -864,7 +864,10 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     } catch (e) {
       // ユーザー手動キャンセルは即再スロー
       if (signal.aborted) throw e;
-      // タイムアウト or ネットワークエラーなら1回だけリトライ
+      // タイムアウト起因のAbortErrorのみリトライ（4xx・JSONエラー等は即スロー）
+      const isTimeoutAbort = e instanceof Error && e.name === 'AbortError';
+      if (!isTimeoutAbort) throw e;
+      // 30秒タイムアウト付きで1回リトライ
       result = await attemptFetch(combineSignals(signal, 30_000));
     }
 
@@ -1182,6 +1185,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     let aiAnalyzed = false;
 
     if (skipAi) {
+      setAiProcessing(false);
       // AI解析をスキップして空の結果を使う
       aiResult = { ai_action: '', ai_opinion: '', flags: {} as Record<string, boolean> };
     } else if (!forceAi && hasAiOutput) {
@@ -1558,19 +1562,29 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     <RequireAuth>
       <div className="space-y-6">
         {aiProcessing && (
-          <div className="fixed inset-0 z-50 bg-white/80 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
+          <div
+            className="fixed inset-0 z-50 bg-white/80 flex items-center justify-center"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI解析中"
+          >
+            <div className="flex flex-col items-center gap-3" role="status" aria-live="polite">
               <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
               <span className="text-lg font-medium text-gray-700">解析中...</span>
               {showCancelAiButton && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => aiProcessingController?.abort()}
-                  className="mt-2"
-                >
-                  解析をキャンセル
-                </Button>
+                <>
+                  <span className="text-sm text-gray-500">解析に時間がかかっています</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => aiProcessingController?.abort()}
+                    className="mt-2"
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
+                  >
+                    解析をキャンセル
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -1636,7 +1650,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           )}
           {isNew && !observation && aiFailedOrCancelled && (
             <Alert className="mt-2">
-              <AlertDescription className="flex items-center justify-between gap-2">
+              <AlertDescription className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <span>AI解析をスキップして保存できます。後から再解析することもできます。</span>
                 <Button
                   size="sm"

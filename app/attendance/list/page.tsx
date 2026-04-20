@@ -137,6 +137,7 @@ const EditableTimeField = ({
       <div className="flex items-center gap-1">
         <input
           type="time"
+          aria-label={field === 'in' ? '出席時刻' : '帰宅時刻'}
           value={localValue}
           onChange={(e) => setLocalValue(e.target.value)}
           className="border border-indigo-300 rounded px-1 py-0.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -155,7 +156,8 @@ const EditableTimeField = ({
         <button
           type="button"
           onClick={() => { if (localValue) onCommit(child.child_id, field, localValue); else onCancel() }}
-          className="p-1 text-green-600 hover:text-green-800"
+          className="p-2 text-green-600 hover:text-green-800"
+          aria-label="確定"
           title="確定"
         >
           <Check className="h-4 w-4" />
@@ -163,7 +165,8 @@ const EditableTimeField = ({
         <button
           type="button"
           onClick={onCancel}
-          className="p-1 text-slate-400 hover:text-slate-600"
+          className="p-2 text-slate-400 hover:text-slate-600"
+          aria-label="キャンセル"
           title="キャンセル"
         >
           <X className="h-4 w-4" />

@@ -79,8 +79,11 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const body = await request.json();
     const text = typeof body?.text === 'string' ? body.text.trim() : '';
-    if (!text) {
-      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    if (!text || text.length > 5000) {
+      return NextResponse.json(
+        { success: false, error: '本文は1〜5000文字で入力してください' },
+        { status: 400 }
+      );
     }
 
     const { data: tags, error: tagError } = await supabase
@@ -136,7 +139,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        prompt,
         objective,
         subjective,
         flags,
