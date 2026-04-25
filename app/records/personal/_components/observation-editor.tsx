@@ -61,10 +61,12 @@ const Alert = ({
   children: React.ReactNode;
 }) => {
   const baseClass = variant === 'destructive' ? 'border-red-200 bg-red-50 text-red-800' : 'border-blue-200 bg-blue-50 text-blue-800';
-  return <div className={`rounded-md border p-4 ${baseClass} ${className || ''}`}>{children}</div>;
+  return <div role="alert" className={`rounded-md border p-4 ${baseClass} ${className || ''}`}>{children}</div>;
 };
 
-const AlertDescription = ({ children }: { children: React.ReactNode }) => <div>{children}</div>;
+const AlertDescription = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <div className={className}>{children}</div>
+);
 const OBSERVATION_BODY_MAX = 5000
 const AI_RESULT_MAX = 5000
 
@@ -339,6 +341,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [showContinueButton, setShowContinueButton] = useState(false);
+  const [aiProcessingController, setAiProcessingController] = useState<AbortController | null>(null);
+  const [showCancelAiButton, setShowCancelAiButton] = useState(false);
+  const [aiFailedOrCancelled, setAiFailedOrCancelled] = useState(false);
 
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showReanalyzeConfirmDialog, setShowReanalyzeConfirmDialog] = useState(false);
@@ -723,7 +728,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setAiProcessing(true);
       setError('');
       try {
-        const aiResult = await runAiAnalysis(toIdText(editText.trim()));
+        const aiResult = await runAiAnalysis(toIdText(editText.trim()), new AbortController().signal);
         applyAiResult(aiResult);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'AI解析に失敗しました';
@@ -827,16 +832,46 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     );
   };
 
-  const runAiAnalysis = async (text: string) => {
-    const response = await fetch('/api/records/personal/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || 'AI解析に失敗しました');
+  const runAiAnalysis = async (text: string, signal: AbortSignal) => {
+    const attemptFetch = async (sig: AbortSignal) => {
+      const response = await fetch('/api/records/personal/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+        signal: sig,
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'AI解析に失敗しました');
+      }
+      return result;
+    };
+
+    // AbortSignal.any が利用可能な場合はタイムアウトと手動キャンセルを合成する
+    const combineSignals = (userSignal: AbortSignal, timeoutMs: number): AbortSignal => {
+      if (typeof AbortSignal.timeout === 'function' && typeof (AbortSignal as { any?: unknown }).any === 'function') {
+        const timeoutSignal = AbortSignal.timeout(timeoutMs);
+        return (AbortSignal as { any: (signals: AbortSignal[]) => AbortSignal }).any([userSignal, timeoutSignal]);
+      }
+      // フォールバック: ユーザーキャンセルのみ（タイムアウトは効かないが許容範囲）
+      return userSignal;
+    };
+
+    let result;
+    try {
+      // 30秒タイムアウト付きで1回目
+      result = await attemptFetch(combineSignals(signal, 30_000));
+    } catch (e) {
+      // ユーザー手動キャンセルは即再スロー
+      if (signal.aborted) throw e;
+      // タイムアウト起因のAbortError/TimeoutErrorのみリトライ（4xx・JSONエラー等は即スロー）
+      // AbortSignal.timeout()はTimeoutError(WHATWG仕様)を投げるが旧ブラウザではAbortErrorの場合もある
+      const isTimeoutAbort = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      if (!isTimeoutAbort) throw e;
+      // 30秒タイムアウト付きで1回リトライ
+      result = await attemptFetch(combineSignals(signal, 30_000));
     }
+
     const objective = result.data?.objective ?? result.data?.ai_action ?? '';
     const subjective = result.data?.subjective ?? result.data?.ai_opinion ?? '';
     const flags = normalizeTagFlags(observationTags, result.data?.flags as Record<string, unknown>);
@@ -1123,7 +1158,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
   };
 
-  const handleCreateObservation = async ({ forceAi = false }: { forceAi?: boolean } = {}) => {
+  const handleCreateObservation = async ({ forceAi = false, skipAi = false }: { forceAi?: boolean; skipAi?: boolean } = {}) => {
     if (savingEdit) return;
     const displayText = editText.trim();
     const text = toIdText(displayText).trim();
@@ -1141,24 +1176,61 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     }
     setSavingEdit(true);
     setError('');
-    try {
-      const hasAiOutput =
-        aiEditForm.ai_action.trim() ||
-        aiEditForm.ai_opinion.trim() ||
-        Object.values(aiEditForm.flags).some(Boolean);
-      let aiResult: AiAnalysisResult;
-      if (!forceAi && hasAiOutput) {
-        aiResult = {
-          ai_action: toIdText(aiEditForm.ai_action),
-          ai_opinion: toIdText(aiEditForm.ai_opinion),
-          flags: aiEditForm.flags,
-        };
-      } else {
-        setAiProcessing(true);
-        aiResult = await runAiAnalysis(text);
-        applyAiResult(aiResult);
-      }
 
+    const hasAiOutput =
+      aiEditForm.ai_action.trim() ||
+      aiEditForm.ai_opinion.trim() ||
+      Object.values(aiEditForm.flags).some(Boolean);
+
+    let aiResult: AiAnalysisResult;
+    let aiAnalyzed = false;
+
+    if (skipAi) {
+      setAiProcessing(false);
+      // AI解析をスキップして空の結果を使う
+      aiResult = { ai_action: '', ai_opinion: '', flags: {} as Record<string, boolean> };
+    } else if (!forceAi && hasAiOutput) {
+      aiResult = {
+        ai_action: toIdText(aiEditForm.ai_action),
+        ai_opinion: toIdText(aiEditForm.ai_opinion),
+        flags: aiEditForm.flags,
+      };
+      aiAnalyzed = true;
+    } else {
+      // AI解析を実行
+      const controller = new AbortController();
+      setAiProcessingController(controller);
+      setShowCancelAiButton(false);
+      setAiFailedOrCancelled(false);
+      setAiProcessing(true);
+
+      const cancelTimer = setTimeout(() => setShowCancelAiButton(true), 8_000);
+
+      try {
+        aiResult = await runAiAnalysis(text, controller.signal);
+        applyAiResult(aiResult);
+        aiAnalyzed = true;
+      } catch (e) {
+        clearTimeout(cancelTimer);
+        setAiProcessing(false);
+        setAiProcessingController(null);
+        setShowCancelAiButton(false);
+        setAiFailedOrCancelled(true);
+        const isUserAbort = e instanceof Error && e.name === 'AbortError' && controller.signal.aborted;
+        if (!isUserAbort) {
+          const errorMessage = e instanceof Error ? e.message : 'AI解析に失敗しました';
+          setError(errorMessage);
+        }
+        setSavingEdit(false);
+        return;
+      }
+      clearTimeout(cancelTimer);
+      setAiProcessingController(null);
+      setShowCancelAiButton(false);
+      setAiProcessing(false);
+    }
+
+    try {
       const observationDateStr = observationDate ? toDateStringJST(observationDate) : getCurrentDateJST();
 
       // APIに保存
@@ -1205,6 +1277,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
       setObservation(newObservation);
       setIsEditing(false);
       setEditText('');
+      setAiFailedOrCancelled(false);
 
       if (!draftId) {
         // 保存成功後はAI解析結果を表示し「続けて入力」ボタンを表示する
@@ -1219,6 +1292,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           tag_ids: Object.entries(aiResult.flags)
             .filter(([, v]) => v)
             .map(([k]) => k),
+          is_ai_analyzed: aiAnalyzed,
         };
         setRecentObservations((prev) => [newRecentItem, ...prev.slice(0, 9)]);
         return;
@@ -1312,7 +1386,7 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     if (!sourceText.trim()) return;
     setAiProcessing(true);
     try {
-      const aiResult = await runAiAnalysis(toIdText(sourceText.trim()));
+      const aiResult = await runAiAnalysis(toIdText(sourceText.trim()), new AbortController().signal);
       applyAiResult(aiResult);
     } finally {
       setAiProcessing(false);
@@ -1490,10 +1564,30 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     <RequireAuth>
       <div className="space-y-6">
         {aiProcessing && (
-          <div className="fixed inset-0 z-50 bg-white/80 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
+          <div
+            className="fixed inset-0 z-50 bg-white/80 flex items-center justify-center"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI解析中"
+          >
+            <div className="flex flex-col items-center gap-3" role="status" aria-live="polite">
               <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
               <span className="text-lg font-medium text-gray-700">解析中...</span>
+              {showCancelAiButton && (
+                <>
+                  <span className="text-sm text-gray-500">解析に時間がかかっています</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => aiProcessingController?.abort()}
+                    className="mt-2"
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
+                  >
+                    解析をキャンセル
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1554,6 +1648,13 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           {childOptionsError && (
             <Alert variant="destructive">
               <AlertDescription>{childOptionsError}</AlertDescription>
+            </Alert>
+          )}
+          {isNew && !observation && aiFailedOrCancelled && (
+            <Alert className="mt-2">
+              <AlertDescription>
+                AI解析に失敗しました。本文を編集して「AI解析して保存」または「AIなしで保存」を選んでください。
+              </AlertDescription>
             </Alert>
           )}
         </div>
@@ -1740,28 +1841,54 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           onChange={(e) => setEditText(e.target.value)}
                           maxLength={OBSERVATION_BODY_MAX}
                         />
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 flex-wrap">
                           {!isNew && (
                             <Button variant="outline" onClick={() => setIsEditing(false)}>
                               <X className="h-4 w-4 mr-2" /> キャンセル
                             </Button>
                           )}
-                          <Button
-                            data-testid="observation-save"
-                            className="bg-blue-600 hover:bg-blue-700"
-                            onClick={handleSaveEdit}
-                            disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
-                          >
-                            {savingEdit ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="h-4 w-4 mr-2" /> 保存
-                              </>
-                            )}
-                          </Button>
+                          {isNew && aiFailedOrCancelled ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                className="border-gray-300"
+                                onClick={() => {
+                                  setAiFailedOrCancelled(false);
+                                  void handleCreateObservation({ skipAi: true });
+                                }}
+                                disabled={savingEdit || !editText.trim() || !selectedChildId}
+                              >
+                                <Save className="h-4 w-4 mr-2" /> AIなしで保存
+                              </Button>
+                              <Button
+                                className="bg-purple-600 hover:bg-purple-700"
+                                onClick={() => {
+                                  setAiFailedOrCancelled(false);
+                                  void handleCreateObservation({ forceAi: true });
+                                }}
+                                disabled={savingEdit || !editText.trim() || !selectedChildId}
+                              >
+                                {savingEdit ? (
+                                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> 処理中...</>
+                                ) : (
+                                  <><RefreshCw className="h-4 w-4 mr-2" /> AI解析して保存</>
+                                )}
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              data-testid="observation-save"
+                              className="bg-blue-600 hover:bg-blue-700"
+                              onClick={handleSaveEdit}
+                              disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
+                            >
+                              {savingEdit ? (
+                                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...</>
+                              ) : (
+                                <><Save className="h-4 w-4 mr-2" /> 保存</>
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </>
                     )}
@@ -2069,6 +2196,11 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                                     </span>
                                     {item.recorded_by_name && (
                                       <span className="text-xs text-gray-500 whitespace-nowrap">{item.recorded_by_name}</span>
+                                    )}
+                                    {item.is_ai_analyzed === false && (
+                                      <Badge variant="secondary" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        AI未解析
+                                      </Badge>
                                     )}
                                     {tagBadges.map((tag) => (
                                       <Badge

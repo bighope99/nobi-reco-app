@@ -5,6 +5,8 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage } from '@langchain/core/messages';
 import { buildPersonalRecordPrompt } from '@/lib/ai/prompts';
 
+export const maxDuration = 60;
+
 type ObservationTag = {
   id: string;
   name: string;
@@ -77,8 +79,11 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const body = await request.json();
     const text = typeof body?.text === 'string' ? body.text.trim() : '';
-    if (!text) {
-      return NextResponse.json({ success: false, error: '本文を入力してください' }, { status: 400 });
+    if (!text || text.length > 5000) {
+      return NextResponse.json(
+        { success: false, error: '本文は1〜5000文字で入力してください' },
+        { status: 400 }
+      );
     }
 
     const { data: tags, error: tagError } = await supabase
@@ -105,6 +110,7 @@ export async function POST(request: NextRequest) {
       apiKey,
       temperature: 0.2,
       maxOutputTokens: 1200,
+      maxRetries: 1,
     });
 
     const response = await model.invoke([new HumanMessage(prompt)]);
@@ -133,7 +139,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        prompt,
         objective,
         subjective,
         flags,
