@@ -864,8 +864,9 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
     } catch (e) {
       // ユーザー手動キャンセルは即再スロー
       if (signal.aborted) throw e;
-      // タイムアウト起因のAbortErrorのみリトライ（4xx・JSONエラー等は即スロー）
-      const isTimeoutAbort = e instanceof Error && e.name === 'AbortError';
+      // タイムアウト起因のAbortError/TimeoutErrorのみリトライ（4xx・JSONエラー等は即スロー）
+      // AbortSignal.timeout()はTimeoutError(WHATWG仕様)を投げるが旧ブラウザではAbortErrorの場合もある
+      const isTimeoutAbort = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
       if (!isTimeoutAbort) throw e;
       // 30秒タイムアウト付きで1回リトライ
       result = await attemptFetch(combineSignals(signal, 30_000));
