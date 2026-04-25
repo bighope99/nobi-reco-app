@@ -144,7 +144,7 @@ const EditableTimeField = ({
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               if (localValue) onCommit(child.child_id, field, localValue)
-              else onCancel()
+              // 空のときは何もしない
             }
             if (e.key === 'Escape') {
               e.preventDefault()
@@ -182,6 +182,7 @@ const EditableTimeField = ({
         className={`${textClassName} font-medium hover:underline`}
         onClick={() => onStartEdit(child.child_id, field, formatTime(timestamp))}
         title={editTitle}
+        aria-label={editTitle}
       >
         {formatTime(timestamp)}
       </button>

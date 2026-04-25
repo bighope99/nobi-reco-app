@@ -1651,19 +1651,8 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
           )}
           {isNew && !observation && aiFailedOrCancelled && (
             <Alert className="mt-2">
-              <AlertDescription className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span>AI解析をスキップして保存できます。後から再解析することもできます。</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setAiFailedOrCancelled(false);
-                    void handleCreateObservation({ skipAi: true });
-                  }}
-                  disabled={savingEdit}
-                >
-                  AI分類なしで保存
-                </Button>
+              <AlertDescription>
+                AI解析に失敗しました。本文を編集して「AI解析して保存」または「AIなしで保存」を選んでください。
               </AlertDescription>
             </Alert>
           )}
@@ -1851,28 +1840,54 @@ export function ObservationEditor({ mode, observationId, initialChildId }: Obser
                           onChange={(e) => setEditText(e.target.value)}
                           maxLength={OBSERVATION_BODY_MAX}
                         />
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 flex-wrap">
                           {!isNew && (
                             <Button variant="outline" onClick={() => setIsEditing(false)}>
                               <X className="h-4 w-4 mr-2" /> キャンセル
                             </Button>
                           )}
-                          <Button
-                            data-testid="observation-save"
-                            className="bg-blue-600 hover:bg-blue-700"
-                            onClick={handleSaveEdit}
-                            disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
-                          >
-                            {savingEdit ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="h-4 w-4 mr-2" /> 保存
-                              </>
-                            )}
-                          </Button>
+                          {isNew && aiFailedOrCancelled ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                className="border-gray-300"
+                                onClick={() => {
+                                  setAiFailedOrCancelled(false);
+                                  void handleCreateObservation({ skipAi: true });
+                                }}
+                                disabled={savingEdit || !editText.trim() || !selectedChildId}
+                              >
+                                <Save className="h-4 w-4 mr-2" /> AIなしで保存
+                              </Button>
+                              <Button
+                                className="bg-purple-600 hover:bg-purple-700"
+                                onClick={() => {
+                                  setAiFailedOrCancelled(false);
+                                  void handleCreateObservation({ forceAi: true });
+                                }}
+                                disabled={savingEdit || !editText.trim() || !selectedChildId}
+                              >
+                                {savingEdit ? (
+                                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> 処理中...</>
+                                ) : (
+                                  <><RefreshCw className="h-4 w-4 mr-2" /> AI解析して保存</>
+                                )}
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              data-testid="observation-save"
+                              className="bg-blue-600 hover:bg-blue-700"
+                              onClick={handleSaveEdit}
+                              disabled={savingEdit || !editText.trim() || (isNew && !selectedChildId)}
+                            >
+                              {savingEdit ? (
+                                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> 保存中...</>
+                              ) : (
+                                <><Save className="h-4 w-4 mr-2" /> 保存</>
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </>
                     )}
